@@ -9,6 +9,10 @@ import { Cadastro } from '@/pages/Cadastro'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { NovaReuniaoPage } from '@/pages/reunioes/NovaReuniaoPage'
+import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
+import { IncidenteDetalhePage } from '@/pages/incidentes/IncidenteDetalhePage'
+import { MesAnalisePage } from '@/pages/incidentes/MesAnalisePage'
+import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 
 const queryClient = new QueryClient()
 
@@ -44,12 +48,32 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
-              {/* Semana 4 */}
-              <Route path="/incidentes"       element={<EmConstrucao label="Incidentes" />} />
-              <Route path="/incidentes/:id"   element={<EmConstrucao label="Detalhe do Incidente" />} />
-              <Route path="/mes-analise"      element={<EmConstrucao label="Análise Mensal" />} />
-              <Route path="/relatorios"       element={<EmConstrucao label="Relatórios" />} />
-              <Route path="/admin/aprovacoes" element={<EmConstrucao label="Aprovações" />} />
+              {/* Suporte */}
+              <Route path="/incidentes" element={
+                <ProtectedRoute roles={['suporte', 'suporte_aluno', 'admin']}>
+                  <IncidentesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/incidentes/:id" element={
+                <ProtectedRoute roles={['suporte', 'suporte_aluno', 'admin']}>
+                  <IncidenteDetalhePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/mes-analise" element={
+                <ProtectedRoute roles={['suporte', 'admin']}>
+                  <MesAnalisePage />
+                </ProtectedRoute>
+              } />
+
+              {/* Admin */}
+              <Route path="/admin/aprovacoes" element={
+                <ProtectedRoute roles={['admin']}>
+                  <AprovacoesPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Semana 5 */}
+              <Route path="/relatorios" element={<EmConstrucao label="Relatórios" />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/login" replace />} />
