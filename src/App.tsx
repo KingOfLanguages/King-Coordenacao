@@ -13,12 +13,10 @@ import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { IncidenteDetalhePage } from '@/pages/incidentes/IncidenteDetalhePage'
 import { MesAnalisePage } from '@/pages/incidentes/MesAnalisePage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
+import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
 
 const queryClient = new QueryClient()
 
-const EmConstrucao = ({ label }: { label: string }) => (
-  <div className="flex h-64 items-center justify-center text-white/40">{label} — em construção</div>
-)
 
 export default function App() {
   return (
@@ -72,8 +70,11 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
-              {/* Semana 5 */}
-              <Route path="/relatorios" element={<EmConstrucao label="Relatórios" />} />
+              <Route path="/relatorios" element={
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'admin']}>
+                  <RelatoriosPage />
+                </ProtectedRoute>
+              } />
             </Route>
 
             <Route path="*" element={<Navigate to="/login" replace />} />
