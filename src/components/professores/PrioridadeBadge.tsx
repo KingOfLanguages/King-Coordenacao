@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge'
-import { Professor } from '@/types'
+import type { Professor } from '@/types'
 
 interface Props { professor: Professor }
 

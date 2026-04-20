@@ -28,7 +28,7 @@ export function MesAnalisePage() {
   const aprovados = incidentes?.filter(i => i.status === 'aprovado').length ?? 0
   const pendentes = incidentes?.filter(i => i.status === 'pendente').length ?? 0
 
-  const porTipo = incidentes?.reduce((acc, inc) => {
+  const porTipo = incidentes?.reduce((acc: Record<string, number>, inc) => {
     acc[inc.tipo] = (acc[inc.tipo] ?? 0) + 1
     return acc
   }, {} as Record<string, number>) ?? {}

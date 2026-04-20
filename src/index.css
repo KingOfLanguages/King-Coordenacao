@@ -148,9 +148,10 @@
     --font-heading: 'Inter Variable', sans-serif
   }
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
   }
   html {
-    @apply font-sans;
+    font-family: 'Sora', sans-serif;
   }
 }

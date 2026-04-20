@@ -130,7 +130,7 @@ export function IncidenteDetalhePage() {
           <div>
             <p className="text-white/40 text-sm mb-2">Imagens</p>
             <div className="flex flex-wrap gap-2">
-              {incidente.imagens.map((url, i) => (
+              {incidente.imagens.map((url: string, i: number) => (
                 <a key={i} href={url} target="_blank" rel="noreferrer">
                   <img src={url} alt={`imagem-${i}`}
                     className="h-20 w-20 rounded object-cover border border-king-border hover:border-king-red transition-colors" />
