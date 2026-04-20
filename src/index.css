@@ -1,8 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
-@import "@fontsource-variable/roboto";
-@import "@fontsource-variable/inter";
 
 @tailwind base;
 @tailwind components;
@@ -10,7 +7,9 @@
 
 @layer base {
   body {
-    @apply font-sans bg-background text-foreground;
+    background-color: #0d0d0d;
+    color: white;
+    font-family: 'Sora', sans-serif;
   }
   :root {
 
