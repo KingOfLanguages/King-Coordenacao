@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
-import { Professor } from '@/types'
+import type { Professor } from '@/types'
 
 export function ProfessoresPage() {
   const { data: professores, isLoading } = useProfessoresAtivos()
