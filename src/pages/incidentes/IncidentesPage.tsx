@@ -8,6 +8,7 @@ import { useIncidentes } from '@/hooks/useIncidentes'
 import type { FiltrosIncidente } from '@/hooks/useIncidentes'
 import type { UrgenciaNivel } from '@/types'
 import { NovoIncidentePanel } from '@/components/incidentes/NovoIncidentePanel'
+import type { Categoria } from '@/components/incidentes/NovoIncidentePanel'
 import { StatCard } from '@/components/incidentes/StatCard'
 import { FrequencyBars } from '@/components/incidentes/FrequencyBars'
 import { UrgencyBadge, urgencyFromIncidente } from '@/components/incidentes/IncidenteStatusBadge'
@@ -18,32 +19,74 @@ import { cn } from '@/lib/utils'
 type TabKey = 'recentes' | 'solucionados' | 'controle' | 'ci-solucionados'
 type UrgFilter = 'todas' | UrgenciaNivel
 
-const TIPO_OPTS = ['Todos', 'Suporte', 'Didático', 'Plataforma', 'Aluno', 'Administrativo', 'Financeiro', 'Dúvida', 'Ocorrência']
+// Suporte types (shown when tab is recentes/solucionados)
+const TIPOS_SUPORTE = [
+  'Suporte', 'Didático', 'Plataforma', 'Aluno',
+  'Administrativo', 'Financeiro', 'Dúvida', 'Ocorrência',
+]
+
+// Controle Interno types (shown when tab is controle/ci-solucionados)
+const TIPOS_CI = [
+  'Mês de análise', 'No-Show', 'Muitas pendências', 'Muitas faltas',
+  'Reclamação', 'Profissionalismo', 'Organização', 'Erros de lançamento',
+]
+
+function isCITipo(tipo: string) {
+  return TIPOS_CI.some(t => tipo?.toLowerCase() === t.toLowerCase())
+}
 
 type IncidenteRow = {
   id: string
   tipo: string
   descricao: string
   status: string
+  urgencia?: string
   created_at: string
   professores: { nome: string } | null
   criador: { nome: string } | null
+  responsavel?: string | null
 }
 
 export function IncidentesPage() {
   const navigate = useNavigate()
-  const [filtros, setFiltros] = useState<FiltrosIncidente>({})
-  const [tab, setTab] = useState<TabKey>('recentes')
-  const [periodo, setPeriodo] = useState<'hoje' | 'mes'>('hoje')
+  const [filtros, setFiltros]       = useState<FiltrosIncidente>({})
+  const [tab, setTab]               = useState<TabKey>('recentes')
+  const [categoria, setCategoria]   = useState<Categoria>('Suporte')
+  const [periodo, setPeriodo]       = useState<'hoje' | 'mes'>('hoje')
   const [tipoFilter, setTipoFilter] = useState<string>('Todos')
-  const [urgFilter, setUrgFilter] = useState<UrgFilter>('todas')
+  const [urgFilter, setUrgFilter]   = useState<UrgFilter>('todas')
   const [respFilter, setRespFilter] = useState('')
   const [toastDismissed, setToastDismissed] = useState(false)
 
-  // Merge local urgência pill into server-side filtros
+  // Tab → categoria sync (CI tabs flip the form panel)
+  function handleTabChange(t: TabKey) {
+    setTab(t)
+    setTipoFilter('Todos')
+    if (t === 'controle' || t === 'ci-solucionados') {
+      setCategoria('Controle Interno')
+    } else {
+      setCategoria('Suporte')
+    }
+  }
+
+  // Categoria → tab sync (form panel toggle flips to matching tab)
+  function handleCategoriaChange(c: Categoria) {
+    setCategoria(c)
+    setTipoFilter('Todos')
+    if (c === 'Controle Interno' && tab !== 'controle' && tab !== 'ci-solucionados') {
+      setTab('controle')
+    } else if (c === 'Suporte' && (tab === 'controle' || tab === 'ci-solucionados')) {
+      setTab('recentes')
+    }
+  }
+
+  const isCIMode = tab === 'controle' || tab === 'ci-solucionados'
+  const tipoOpts = ['Todos', ...(isCIMode ? TIPOS_CI : TIPOS_SUPORTE)]
+
+  // Server-side filters
   const filtrosComUrg: FiltrosIncidente = {
     ...filtros,
-    urgencia: urgFilter !== 'todas' ? urgFilter : undefined,
+    urgencia:   urgFilter !== 'todas' ? urgFilter : undefined,
     responsavel: respFilter.trim() || undefined,
   }
   const { data: incidentes, isLoading } = useIncidentes(filtrosComUrg)
@@ -53,68 +96,92 @@ export function IncidentesPage() {
   const metricas = useMemo(() => {
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
     const mesInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-    const basePeriodo = rows.filter(i => {
+    const base = rows.filter(i => {
       const d = new Date(i.created_at)
       return periodo === 'hoje' ? d >= hoje : d >= mesInicio
     })
-    const total = basePeriodo.length
-    const pendentes = rows.filter(i => i.status === 'pendente').length
-    const resolvidos = rows.filter(i => i.status === 'aprovado').length
-    const urgentes = rows.filter(i => urgencyFromIncidente(i) === 'alta' && i.status !== 'aprovado').length
-    const plataforma = rows.filter(i => i.tipo?.toLowerCase().includes('plataforma')).length
-    const pct = rows.length > 0 ? Math.round((plataforma / rows.length) * 100) : 0
+    const ciBase = base.filter(i => isCITipo(i.tipo))
+    const baseAtivo = isCIMode ? ciBase : base
 
-    return { total, pctPlataforma: pct, pendentes, resolvidos, urgentes }
-  }, [rows, periodo])
+    const total     = baseAtivo.length
+    const pendentes = rows.filter(i => i.status === 'pendente' && (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))).length
+    const resolvidos = rows.filter(i => i.status === 'aprovado' && (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))).length
+    const urgentes  = rows.filter(i =>
+      urgencyFromIncidente(i) === 'alta' &&
+      i.status !== 'aprovado' &&
+      (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))
+    ).length
 
-  // Frequency bars
+    // % plataforma (suporte) vs % análise (CI)
+    const pctBase = isCIMode
+      ? ciBase.filter(i => i.tipo?.toLowerCase() === 'mês de análise').length
+      : base.filter(i => i.tipo?.toLowerCase().includes('plataforma')).length
+    const pct = baseAtivo.length > 0 ? Math.round((pctBase / baseAtivo.length) * 100) : 0
+
+    return { total, pct, pendentes, resolvidos, urgentes }
+  }, [rows, periodo, isCIMode])
+
+  // Frequency bars — categories change with mode
   const frequencia = useMemo(() => {
+    const list = isCIMode ? TIPOS_CI : TIPOS_SUPORTE
     const buckets: Record<string, number> = {}
-    TIPO_OPTS.slice(1).forEach(t => { buckets[t] = 0 })
+    list.forEach(t => { buckets[t] = 0 })
     rows.forEach(i => {
-      const base = i.tipo?.split(' · ')[0] ?? ''
-      const match = TIPO_OPTS.slice(1).find(t => base.toLowerCase() === t.toLowerCase())
+      const match = list.find(t => i.tipo?.toLowerCase() === t.toLowerCase())
       if (match) buckets[match]++
     })
-    return Object.entries(buckets).map(([label, value]) => ({ label, value }))
-  }, [rows])
+    return list.map(label => ({ label, value: buckets[label] }))
+  }, [rows, isCIMode])
 
-  // Table — apply local tab + pill filters
+  // Table — tab + tipo pill filter
   const filtradas = useMemo(() => {
     let list = rows
-    if (tab === 'recentes')        list = list.filter(i => i.status === 'pendente')
-    if (tab === 'solucionados')    list = list.filter(i => i.status === 'aprovado')
-    if (tab === 'controle')        list = list.filter(i => i.tipo?.toLowerCase().includes('administrativo') || i.tipo?.toLowerCase().includes('financeiro'))
-    if (tab === 'ci-solucionados') list = list.filter(i => i.status === 'aprovado' && (i.tipo?.toLowerCase().includes('administrativo') || i.tipo?.toLowerCase().includes('financeiro')))
 
-    if (tipoFilter !== 'Todos') list = list.filter(i => i.tipo?.toLowerCase().startsWith(tipoFilter.toLowerCase()))
-    // urgFilter and respFilter are now applied server-side via filtrosComUrg
+    // Tab filter
+    if (tab === 'recentes')        list = list.filter(i => i.status === 'pendente' && !isCITipo(i.tipo))
+    if (tab === 'solucionados')    list = list.filter(i => i.status === 'aprovado'  && !isCITipo(i.tipo))
+    if (tab === 'controle')        list = list.filter(i => isCITipo(i.tipo))
+    if (tab === 'ci-solucionados') list = list.filter(i => i.status === 'aprovado'  && isCITipo(i.tipo))
+
+    // Tipo pill
+    if (tipoFilter !== 'Todos') {
+      list = list.filter(i => i.tipo?.toLowerCase() === tipoFilter.toLowerCase())
+    }
 
     return list
-  }, [rows, tab, tipoFilter, urgFilter, respFilter])
+  }, [rows, tab, tipoFilter])
 
+  // Tab counts
   const tabCounts = useMemo(() => ({
-    recentes:        rows.filter(i => i.status === 'pendente').length,
-    solucionados:    rows.filter(i => i.status === 'aprovado').length,
-    controle:        rows.filter(i => i.tipo?.toLowerCase().includes('administrativo') || i.tipo?.toLowerCase().includes('financeiro')).length,
-    'ci-solucionados': rows.filter(i => i.status === 'aprovado' && (i.tipo?.toLowerCase().includes('administrativo') || i.tipo?.toLowerCase().includes('financeiro'))).length,
+    recentes:        rows.filter(i => i.status === 'pendente' && !isCITipo(i.tipo)).length,
+    solucionados:    rows.filter(i => i.status === 'aprovado'  && !isCITipo(i.tipo)).length,
+    controle:        rows.filter(i => isCITipo(i.tipo)).length,
+    'ci-solucionados': rows.filter(i => i.status === 'aprovado' && isCITipo(i.tipo)).length,
   }), [rows])
 
   const hasPills = tipoFilter !== 'Todos' || urgFilter !== 'todas' || respFilter.trim() || filtros.busca
   const pendentesList = rows.filter(i => i.status === 'pendente' && urgencyFromIncidente(i) !== 'baixa').slice(0, 3)
 
+  const pctLabel = isCIMode ? '% em análise' : '% plataforma'
+
   return (
     <div className="px-6 py-6">
       <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5 max-w-[1500px] mx-auto">
-        {/* LEFT — Novo Incidente form */}
+
+        {/* LEFT — Novo Incidente form (controlled) */}
         <div className="xl:block">
-          <NovoIncidentePanel />
+          <NovoIncidentePanel
+            categoria={categoria}
+            onCategoriaChange={handleCategoriaChange}
+          />
         </div>
 
-        {/* RIGHT — dashboard content */}
+        {/* RIGHT — dashboard */}
         <div className="space-y-5 min-w-0">
+
           {/* Metrics row */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            {/* Total card with Hoje/Mês toggle */}
             <div className="col-span-2 md:col-span-3 xl:col-span-1 card-surface p-4 flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -143,10 +210,10 @@ export function IncidentesPage() {
               </span>
             </div>
 
-            <StatCard icon={BarChart3}     label="% plataforma" value={`${metricas.pctPlataforma}%`} tone="info" />
-            <StatCard icon={Clock}         label="Pendentes"    value={metricas.pendentes} tone="warn" />
-            <StatCard icon={CheckCircle2}  label="Resolvidos"   value={metricas.resolvidos} tone="ok" />
-            <StatCard icon={AlertOctagon}  label="Urgentes"     value={metricas.urgentes} tone="danger" />
+            <StatCard icon={BarChart3}    label={pctLabel}         value={`${metricas.pct}%`}     tone="info" />
+            <StatCard icon={Clock}        label="Pendentes"        value={metricas.pendentes}     tone="warn" />
+            <StatCard icon={CheckCircle2} label="Resolvidos"       value={metricas.resolvidos}    tone="ok" />
+            <StatCard icon={AlertOctagon} label="Urgentes"         value={metricas.urgentes}      tone="danger" />
           </div>
 
           {/* Frequency chart */}
@@ -162,7 +229,7 @@ export function IncidentesPage() {
             <header className="flex items-center justify-between mb-3">
               <h3 className="label-micro">Evolução temporal</h3>
               <div className="flex rounded-md bg-surface-subtle p-0.5 text-[11px] font-medium">
-                {['Semana', 'Mês'].map(opt => (
+                {(['Semana', 'Mês'] as const).map(opt => (
                   <button
                     key={opt}
                     className={cn(
@@ -181,16 +248,16 @@ export function IncidentesPage() {
           {/* Tabs + actions */}
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <nav className="flex items-center gap-0 border-b border-line-soft">
+              <nav className="flex items-center border-b border-line-soft">
                 {([
-                  ['recentes',         'Registros Recentes', tabCounts.recentes],
-                  ['solucionados',     'Solucionados',       tabCounts.solucionados],
-                  ['controle',         'Controle Interno',   tabCounts.controle],
-                  ['ci-solucionados',  'Solucionados CI',    tabCounts['ci-solucionados']],
+                  ['recentes',        'Registros Recentes', tabCounts.recentes],
+                  ['solucionados',    'Solucionados',       tabCounts.solucionados],
+                  ['controle',        'Controle Interno',   tabCounts.controle],
+                  ['ci-solucionados', 'Solucionados CI',    tabCounts['ci-solucionados']],
                 ] as const).map(([k, label, count]) => (
                   <button
                     key={k}
-                    onClick={() => setTab(k)}
+                    onClick={() => handleTabChange(k)}
                     className={cn(
                       'btn-press relative px-3 py-2 text-[13px] font-medium -mb-px border-b-2',
                       tab === k
@@ -198,7 +265,7 @@ export function IncidentesPage() {
                         : 'text-ink-muted border-transparent hover:text-ink-secondary',
                     )}
                   >
-                    {label}<span className="text-ink-muted">({count})</span>
+                    {label}<span className="text-ink-muted ml-0.5">({count})</span>
                   </button>
                 ))}
               </nav>
@@ -226,11 +293,11 @@ export function IncidentesPage() {
               />
             </div>
 
-            {/* Filter pills */}
+            {/* Filter pills — types change with mode */}
             <div className="space-y-2 text-[12px]">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="label-micro text-[10px]">Tipo:</span>
-                {TIPO_OPTS.map(t => (
+                {tipoOpts.map(t => (
                   <button
                     key={t}
                     onClick={() => setTipoFilter(t)}
@@ -313,8 +380,12 @@ export function IncidentesPage() {
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="border-b border-line-soft">
-                      <th className="w-8 px-3 py-2.5"><input type="checkbox" className="accent-accentBlue" /></th>
-                      <th className="w-8 px-3 py-2.5"><input type="checkbox" className="accent-accentBlue" /></th>
+                      <th className="w-8 px-3 py-2.5">
+                        <input type="checkbox" className="accent-accentBlue" />
+                      </th>
+                      <th className="w-8 px-3 py-2.5">
+                        <input type="checkbox" className="accent-accentBlue" />
+                      </th>
                       <th className="text-left px-3 py-2.5 label-micro text-[10px]">Urgência</th>
                       <th className="text-left px-3 py-2.5 label-micro text-[10px]">Professor</th>
                       <th className="text-left px-3 py-2.5 label-micro text-[10px]">Responsável</th>
@@ -325,14 +396,15 @@ export function IncidentesPage() {
                   <tbody>
                     {filtradas.map(inc => {
                       const urg = urgencyFromIncidente(inc)
-                      const tipoBase = inc.tipo?.split(' · ')[0] ?? inc.tipo
                       return (
                         <tr
                           key={inc.id}
                           onClick={() => navigate(`/incidentes/${inc.id}`)}
                           className={cn(
                             'group cursor-pointer border-t border-line-soft transition-colors',
-                            urg === 'alta' ? 'bg-urg-highBg/25 hover:bg-urg-highBg/45' : 'hover:bg-surface-subtle/55',
+                            urg === 'alta'
+                              ? 'bg-urg-highBg/25 hover:bg-urg-highBg/45'
+                              : 'hover:bg-surface-subtle/55',
                           )}
                         >
                           <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
@@ -344,16 +416,19 @@ export function IncidentesPage() {
                           <td className="px-3 py-2.5">
                             <UrgencyBadge level={urg} />
                           </td>
-                          <td className="px-3 py-2.5 text-ink font-medium truncate max-w-[180px]">
+                          <td className="px-3 py-2.5 font-medium text-ink truncate max-w-[180px]">
                             {inc.professores?.nome ?? '—'}
                           </td>
                           <td className="px-3 py-2.5 text-ink-secondary truncate max-w-[140px]">
-                            {inc.criador?.nome ?? '—'}
+                            {inc.responsavel ?? inc.criador?.nome ?? '—'}
                           </td>
                           <td className="px-3 py-2.5">
                             <span className="inline-flex items-center gap-1.5 text-ink-secondary">
-                              <span className="h-1.5 w-1.5 rounded-full bg-accentBlue/70" />
-                              {tipoBase}
+                              <span className={cn(
+                                'h-1.5 w-1.5 rounded-full flex-shrink-0',
+                                isCIMode ? 'bg-urg-medFg/70' : 'bg-accentBlue/70',
+                              )} />
+                              {inc.tipo}
                             </span>
                           </td>
                           <td className="px-3 py-2.5 text-ink-secondary truncate max-w-md">
@@ -370,7 +445,7 @@ export function IncidentesPage() {
         </div>
       </div>
 
-      {/* Floating notification toast */}
+      {/* Floating notification */}
       {metricas.urgentes > 0 && !toastDismissed && (
         <div className="fixed bottom-5 right-5 z-40 w-80 card-surface p-4 shadow-elevated animate-slide-in-right">
           <div className="flex items-start gap-3">
@@ -379,7 +454,9 @@ export function IncidentesPage() {
             </span>
             <div className="flex-1 min-w-0 space-y-1.5">
               <p className="text-[13px] text-ink leading-snug">
-                Você tem <strong className="font-semibold">{metricas.urgentes} incidente{metricas.urgentes !== 1 ? 's' : ''}</strong> pendente{metricas.urgentes !== 1 ? 's' : ''} de acompanhamento
+                Você tem{' '}
+                <strong className="font-semibold">{metricas.urgentes} incidente{metricas.urgentes !== 1 ? 's' : ''}</strong>{' '}
+                pendente{metricas.urgentes !== 1 ? 's' : ''} de acompanhamento
               </p>
               <ul className="text-[12px] text-ink-muted space-y-0.5 max-h-24 overflow-hidden">
                 {pendentesList.map(p => (
@@ -392,7 +469,7 @@ export function IncidentesPage() {
                 )}
               </ul>
               <button
-                onClick={() => { setTab('recentes'); setUrgFilter('alta') }}
+                onClick={() => { handleTabChange('recentes'); setUrgFilter('alta') }}
                 className="btn-press text-[12px] font-medium text-accentBlue hover:text-accentBlue-hov"
               >
                 Ver pendentes
