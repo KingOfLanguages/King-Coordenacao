@@ -1,20 +1,29 @@
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { useIncidentesPorMes } from '@/hooks/useIncidentes'
 import { IncidenteStatusBadge } from '@/components/incidentes/IncidenteStatusBadge'
+import { StatCard } from '@/components/incidentes/StatCard'
 
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-const CORES = ['#C41230','#e34d6a','#f28095','#fbaab6','#fdd0d7']
+const CORES = ['#2a5cff','#6585ff','#8ea5ff','#b3c2ff','#d4dcff']
+
+type IncidenteRow = {
+  id: string
+  tipo: string
+  status: 'pendente' | 'aprovado' | 'rejeitado'
+  created_at: string
+  professores: { nome: string } | null
+}
 
 export function MesAnalisePage() {
   const hoje = new Date()
-  const [ano, setAno]   = useState(hoje.getFullYear())
-  const [mes, setMes]   = useState(hoje.getMonth() + 1)
+  const [ano, setAno] = useState(hoje.getFullYear())
+  const [mes, setMes] = useState(hoje.getMonth() + 1)
 
-  const { data: incidentes, isLoading } = useIncidentesPorMes(ano, mes)
+  const { data, isLoading } = useIncidentesPorMes(ano, mes)
+  const incidentes = (data ?? []) as unknown as IncidenteRow[]
 
   function navegar(delta: number) {
     let novoMes = mes + delta
@@ -24,101 +33,122 @@ export function MesAnalisePage() {
     setMes(novoMes); setAno(novoAno)
   }
 
-  const total     = incidentes?.length ?? 0
-  const aprovados = incidentes?.filter(i => i.status === 'aprovado').length ?? 0
-  const pendentes = incidentes?.filter(i => i.status === 'pendente').length ?? 0
+  const total     = incidentes.length
+  const aprovados = incidentes.filter(i => i.status === 'aprovado').length
+  const pendentes = incidentes.filter(i => i.status === 'pendente').length
 
-  const porTipo = incidentes?.reduce((acc: Record<string, number>, inc) => {
-    acc[inc.tipo] = (acc[inc.tipo] ?? 0) + 1
-    return acc
-  }, {} as Record<string, number>) ?? {}
+  const chartData = useMemo(() => {
+    const buckets = incidentes.reduce((acc, inc) => {
+      const key = inc.tipo?.split(' · ')[0] ?? inc.tipo
+      acc[key] = (acc[key] ?? 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+    return Object.entries(buckets)
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, value]) => ({ name, value }))
+  }, [incidentes])
 
-  const chartData = Object.entries(porTipo)
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, value]) => ({ name, value }))
+  const isFuturo = ano === hoje.getFullYear() && mes === hoje.getMonth() + 1
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Análise Mensal</h1>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navegar(-1)}
-            className="text-white/50 hover:text-white">
-            <ChevronLeft className="h-5 w-5" />
+    <div className="px-6 py-6 space-y-5 max-w-[1200px] mx-auto">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Mês de análise</h1>
+          <p className="text-[13px] text-ink-muted">Visão consolidada dos incidentes no período.</p>
+        </div>
+
+        <div className="flex items-center gap-1 card-surface p-1">
+          <Button variant="ghost" size="icon"
+            onClick={() => navegar(-1)}
+            className="btn-press h-8 w-8 text-ink-secondary hover:text-ink hover:bg-surface-subtle">
+            <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-white font-medium w-28 text-center">
+          <span className="inline-flex items-center gap-2 px-3 text-[13px] text-ink font-medium tabular-nums min-w-[9rem] justify-center">
+            <CalendarDays className="h-3.5 w-3.5 text-ink-muted" />
             {MESES[mes - 1]} {ano}
           </span>
-          <Button variant="ghost" size="icon" onClick={() => navegar(1)}
-            className="text-white/50 hover:text-white"
-            disabled={ano === hoje.getFullYear() && mes === hoje.getMonth() + 1}>
-            <ChevronRight className="h-5 w-5" />
+          <Button variant="ghost" size="icon"
+            onClick={() => navegar(1)}
+            disabled={isFuturo}
+            className="btn-press h-8 w-8 text-ink-secondary hover:text-ink hover:bg-surface-subtle disabled:opacity-40">
+            <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-      </div>
+      </header>
 
       {isLoading ? (
-        <div className="flex h-48 items-center justify-center text-white/40">Carregando...</div>
+        <div className="card-surface p-12 text-center text-[13px] text-ink-muted">Carregando…</div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Total', value: total, cor: 'text-white' },
-              { label: 'Aprovados', value: aprovados, cor: 'text-green-400' },
-              { label: 'Pendentes', value: pendentes, cor: 'text-yellow-400' },
-            ].map(({ label, value, cor }) => (
-              <Card key={label} className="bg-king-card border-king-border p-4 text-center">
-                <p className="text-white/40 text-sm">{label}</p>
-                <p className={`text-3xl font-bold mt-1 ${cor}`}>{value}</p>
-              </Card>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <StatCard icon={CalendarDays} label="Total no mês" value={total}     tone="info" />
+            <StatCard icon={CheckCircle2} label="Resolvidos"   value={aprovados} tone="ok" />
+            <StatCard icon={Clock}        label="Pendentes"    value={pendentes} tone="warn" />
           </div>
 
-          {chartData.length > 0 && (
-            <Card className="bg-king-card border-king-border p-4">
-              <p className="text-white/60 text-sm font-medium mb-4">Incidentes por tipo</p>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={chartData} barSize={32}>
-                  <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8 }}
-                    labelStyle={{ color: 'white' }}
-                    itemStyle={{ color: '#C41230' }}
+          <section className="card-surface p-5">
+            <h2 className="label-micro mb-3">Incidentes por tipo</h2>
+            {chartData.length === 0 ? (
+              <div className="h-40 flex items-center justify-center text-[13px] text-ink-muted">
+                Nenhum dado no período.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={chartData} barSize={28} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: 'var(--fg-muted)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
                   />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {chartData.map((_, i) => (
-                      <Cell key={i} fill={CORES[i % CORES.length]} />
-                    ))}
+                  <YAxis
+                    tick={{ fill: 'var(--fg-muted)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'var(--bg-subtle)' }}
+                    contentStyle={{
+                      background: 'var(--bg-canvas)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 8,
+                      boxShadow: '0 4px 14px -4px rgba(23,25,31,.08)',
+                      fontSize: 12,
+                    }}
+                    labelStyle={{ color: 'var(--fg-primary)', fontWeight: 500 }}
+                    itemStyle={{ color: 'var(--accent-blue)' }}
+                  />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                    {chartData.map((_, i) => <Cell key={i} fill={CORES[i % CORES.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </Card>
-          )}
+            )}
+          </section>
 
-          <Card className="bg-king-card border-king-border p-4 space-y-3">
-            <p className="text-white/60 text-sm font-medium">Registros do mês</p>
-            {incidentes?.length === 0 ? (
-              <p className="text-white/30 text-sm">Nenhum incidente neste mês.</p>
+          <section className="card-surface p-5 space-y-3">
+            <h2 className="label-micro">Registros do mês</h2>
+            {incidentes.length === 0 ? (
+              <p className="text-[13px] text-ink-muted">Nenhum incidente neste mês.</p>
             ) : (
-              <div className="space-y-2">
-                {incidentes?.map(inc => (
-                  <div key={inc.id} className="flex items-center justify-between text-sm py-1 border-b border-king-border last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/40">
-                        {new Date(inc.created_at).toLocaleDateString('pt-BR')}
+              <ul className="divide-y divide-line-soft">
+                {incidentes.map(inc => (
+                  <li key={inc.id} className="flex items-center justify-between py-2 text-[13px]">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-ink-muted tabular-nums w-20 flex-shrink-0">
+                        {new Date(inc.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                       </span>
-                      <span className="text-white/80">{inc.tipo}</span>
-                      {(inc as any).professores && (
-                        <span className="text-white/40">{(inc as any).professores.nome}</span>
-                      )}
+                      <span className="text-ink font-medium">{inc.tipo}</span>
+                      {inc.professores && <span className="text-ink-muted truncate">· {inc.professores.nome}</span>}
                     </div>
                     <IncidenteStatusBadge status={inc.status} />
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
-          </Card>
+          </section>
         </>
       )}
     </div>

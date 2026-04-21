@@ -1,14 +1,24 @@
-import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
-interface Props { status: 'pendente' | 'concluida' | 'cancelada' }
+type Status = 'pendente' | 'concluida' | 'cancelada'
 
-const config = {
-  pendente:  { label: 'Pendente',  className: 'border-yellow-600 text-yellow-400' },
-  concluida: { label: 'Concluída', className: 'border-green-600 text-green-400' },
-  cancelada: { label: 'Cancelada', className: 'border-zinc-600 text-zinc-400' },
+interface Props { status: Status; className?: string }
+
+const config: Record<Status, { label: string; cls: string }> = {
+  pendente:  { label: 'Pendente',  cls: 'bg-urg-medBg text-urg-medFg' },
+  concluida: { label: 'Concluída', cls: 'bg-urg-lowBg text-urg-lowFg' },
+  cancelada: { label: 'Cancelada', cls: 'bg-surface-muted text-ink-muted' },
 }
 
-export function StatusBadge({ status }: Props) {
-  const { label, className } = config[status]
-  return <Badge variant="outline" className={className}>{label}</Badge>
+export function StatusBadge({ status, className }: Props) {
+  const { label, cls } = config[status]
+  return (
+    <span className={cn(
+      'inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium',
+      cls,
+      className,
+    )}>
+      {label}
+    </span>
+  )
 }

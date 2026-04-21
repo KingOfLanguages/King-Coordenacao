@@ -1,36 +1,60 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Users, Calendar, AlertTriangle, BarChart2, LogOut, ShieldCheck } from 'lucide-react'
+import { LogOut, ChevronDown } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { Button } from '@/components/ui/button'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { cn } from '@/lib/utils'
+import { useState, useRef, useEffect } from 'react'
 
-const navCoordenacao = [
-  { to: '/professores',   label: 'Professores',  icon: Users },
-  { to: '/reunioes/nova', label: 'Nova Reunião', icon: Calendar },
+type NavItem = { to: string; label: string; exact?: boolean }
+
+const navCoordenacao: NavItem[] = [
+  { to: '/professores',   label: 'Professores' },
+  { to: '/reunioes/nova', label: 'Nova Reunião' },
 ]
 
-const navSuporte = [
-  { to: '/incidentes',  label: 'Incidentes', icon: AlertTriangle },
-  { to: '/mes-analise', label: 'Análise',    icon: BarChart2 },
+const navSuporte: NavItem[] = [
+  { to: '/incidentes',  label: 'Incidentes' },
+  { to: '/mes-analise', label: 'Mês de Análise' },
 ]
 
-const navComum = [
-  { to: '/relatorios', label: 'Relatórios', icon: BarChart2 },
+const navComum: NavItem[] = [
+  { to: '/relatorios', label: 'Relatórios' },
 ]
+
+function roleLabel(role?: string) {
+  switch (role) {
+    case 'admin':         return 'Admin'
+    case 'coordenacao':   return 'Coordenação'
+    case 'suporte':       return 'Suporte'
+    case 'suporte_aluno': return 'Suporte · Aluno'
+    default:              return '—'
+  }
+}
 
 export function AppLayout() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
-  const isCoordenacao = profile?.role === 'coordenacao' || profile?.role === 'admin'
-  const isSuporte     = profile?.role === 'suporte' || profile?.role === 'suporte_aluno' || profile?.role === 'admin'
-  const isAdmin       = profile?.role === 'admin'
+  const isCoord   = profile?.role === 'coordenacao' || profile?.role === 'admin'
+  const isSuporte = profile?.role === 'suporte' || profile?.role === 'suporte_aluno' || profile?.role === 'admin'
+  const isAdmin   = profile?.role === 'admin'
 
-  const links = [
-    ...(isCoordenacao ? navCoordenacao : []),
-    ...(isSuporte     ? navSuporte     : []),
+  const links: NavItem[] = [
+    ...(isCoord   ? navCoordenacao : []),
+    ...(isSuporte ? navSuporte     : []),
     ...navComum,
+    ...(isAdmin ? [{ to: '/admin/aprovacoes', label: 'Aprovações' }] : []),
   ]
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
 
   async function handleLogout() {
     await signOut()
@@ -38,64 +62,77 @@ export function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-king-dark flex">
-      <aside className="w-56 flex-shrink-0 border-r border-king-border bg-king-card flex flex-col">
-        <div className="p-5 border-b border-king-border">
-          <span className="font-bold text-white text-lg tracking-tight">King</span>
-          <span className="text-king-red font-bold text-lg"> SaaS</span>
-        </div>
+    <div className="min-h-[100dvh] bg-surface-app text-ink">
+      <header className="sticky top-0 z-30 border-b border-line-soft bg-surface-canvas/85 backdrop-blur-md">
+        <div className="flex h-14 items-center gap-6 px-6">
+          {/* Brand */}
+          <NavLink to="/" className="flex items-center gap-2.5 group">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-white shadow-[0_1px_2px_rgba(209,51,58,0.35),inset_0_1px_0_rgba(255,255,255,0.25)]">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                <path d="M4 19l2-9 4 5 4-8 4 8 4-5 2 9z" />
+              </svg>
+            </span>
+            <span className="text-[13px] font-semibold tracking-[0.24em] text-ink">
+              KING <span className="text-brand">NEXUS</span>
+            </span>
+          </NavLink>
 
-        <nav className="flex-1 p-3 space-y-1">
-          {links.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) => cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                isActive
-                  ? 'bg-king-red/15 text-king-red font-medium'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              )}
+          {/* Nav */}
+          <nav className="hidden md:flex items-center gap-1 ml-2">
+            {links.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.exact}
+                className={({ isActive }) => cn(
+                  'btn-press px-3 py-1.5 rounded-md text-[13px] font-medium',
+                  isActive
+                    ? 'bg-surface-subtle text-ink'
+                    : 'text-ink-secondary hover:text-ink hover:bg-surface-subtle/60'
+                )}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="flex-1" />
+
+          <ThemeToggle />
+
+          {/* Profile */}
+          <div ref={menuRef} className="relative">
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              className="btn-press flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-md hover:bg-surface-subtle"
             >
-              <Icon className="h-4 w-4" />
-              {label}
-            </NavLink>
-          ))}
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accentBlue-soft text-accentBlue text-[11px] font-semibold">
+                {profile?.nome?.slice(0, 2).toUpperCase() ?? '—'}
+              </span>
+              <span className="text-[13px] font-medium text-ink">{roleLabel(profile?.role)}</span>
+              <ChevronDown className="h-3.5 w-3.5 text-ink-muted" />
+            </button>
 
-          {isAdmin && (
-            <NavLink
-              to="/admin/aprovacoes"
-              className={({ isActive }) => cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                isActive
-                  ? 'bg-king-red/15 text-king-red font-medium'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              )}
-            >
-              <ShieldCheck className="h-4 w-4" />
-              Aprovações
-            </NavLink>
-          )}
-        </nav>
-
-        <div className="p-3 border-t border-king-border">
-          <div className="px-3 py-2 mb-1">
-            <p className="text-xs text-white/40 truncate">{profile?.nome}</p>
-            <p className="text-xs text-white/20 capitalize">{profile?.role}</p>
+            {menuOpen && (
+              <div className="absolute right-0 top-[calc(100%+6px)] w-56 rounded-xl border border-line bg-surface-canvas shadow-popover animate-fade-up overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-line-soft">
+                  <p className="text-[13px] font-medium text-ink truncate">{profile?.nome ?? '—'}</p>
+                  <p className="text-xs text-ink-muted mt-0.5">{roleLabel(profile?.role)}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-ink-secondary hover:bg-surface-subtle hover:text-brand transition-colors"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sair
+                </button>
+              </div>
+            )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="w-full justify-start gap-3 text-white/50 hover:text-white"
-          >
-            <LogOut className="h-4 w-4" />
-            Sair
-          </Button>
         </div>
-      </aside>
+      </header>
 
-      <main className="flex-1 overflow-auto">
+      <main className="relative">
         <Outlet />
       </main>
     </div>

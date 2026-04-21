@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { FileDown, FileSpreadsheet, FileText } from 'lucide-react'
+import { FileDown, FileSpreadsheet, FileText, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { supabase } from '@/lib/supabase'
@@ -49,6 +48,9 @@ const configs: Record<TipoRelatorio, {
   },
 }
 
+type ReuniaoExport = { data: string; professores: { nome: string } | null; profiles: { nome: string } | null; status: string; notas: string | null }
+type ProfessorExport = { nome: string; tempo_na_king: string | null; data_inicio: string | null; monitoramento: boolean; reunioes?: unknown[]; observacoes?: unknown[] }
+
 export function RelatoriosPage() {
   const hoje = new Date()
   const [config, setConfig] = useState<ConfigRelatorio>({
@@ -75,7 +77,6 @@ export function RelatoriosPage() {
       const { data, error } = await query
       if (error) throw error
       return data ?? []
-
     } else if (tipo === 'professores') {
       const { data, error } = await supabase
         .from('professores')
@@ -83,7 +84,6 @@ export function RelatoriosPage() {
         .order('nome')
       if (error) throw error
       return data ?? []
-
     } else {
       let query = supabase
         .from('reunioes')
@@ -118,7 +118,7 @@ export function RelatoriosPage() {
         ? formatarIncidentesXLSX(dados)
         : config.tipo === 'professores'
           ? formatarProfessoresXLSX(dados)
-          : dados.map((r: any) => ({
+          : (dados as ReuniaoExport[]).map(r => ({
               Data:        new Date(r.data).toLocaleDateString('pt-BR'),
               Professor:   r.professores?.nome ?? '—',
               Coordenador: r.profiles?.nome ?? '—',
@@ -146,7 +146,7 @@ export function RelatoriosPage() {
         ? formatarIncidentesPDF(dados)
         : config.tipo === 'reunioes'
           ? formatarReunioesPDF(dados)
-          : dados.map((p: any) => [
+          : (dados as ProfessorExport[]).map(p => [
               p.nome,
               p.tempo_na_king ?? '—',
               p.data_inicio ? new Date(p.data_inicio).toLocaleDateString('pt-BR') : '—',
@@ -173,59 +173,59 @@ export function RelatoriosPage() {
   const cfg = configs[config.tipo]
 
   return (
-    <div className="space-y-6 p-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Relatórios</h1>
-        <p className="text-sm text-white/40 mt-0.5">Exporte dados em XLSX ou PDF</p>
-      </div>
+    <div className="px-6 py-6 max-w-2xl mx-auto space-y-5">
+      <header className="space-y-0.5">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Relatórios</h1>
+        <p className="text-[13px] text-ink-muted">Exporte dados em XLSX ou PDF.</p>
+      </header>
 
-      <Card className="bg-king-card border-king-border p-6 space-y-5">
-        <div className="space-y-1">
-          <Label>Tipo de relatório</Label>
+      <section className="card-surface p-6 space-y-5">
+        <div className="space-y-1.5">
+          <Label className="label-micro">Tipo de relatório</Label>
           <Select
             value={config.tipo}
             onValueChange={v => setConfig(c => ({ ...c, tipo: v as TipoRelatorio }))}
           >
-            <SelectTrigger className="bg-king-dark border-king-border text-white">
+            <SelectTrigger className="bg-surface-canvas border-line text-ink">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-king-card border-king-border text-white">
+            <SelectContent className="bg-surface-canvas border-line text-ink">
               {Object.entries(configs).map(([key, val]) => (
                 <SelectItem key={key} value={key}>{val.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-white/40 pt-1">{cfg.descricao}</p>
+          <p className="text-[12px] text-ink-muted pt-0.5">{cfg.descricao}</p>
         </div>
 
         {cfg.temFiltroMes && (
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Mês</Label>
+            <div className="space-y-1.5">
+              <Label className="label-micro">Mês</Label>
               <Select
                 value={String(config.mes ?? '')}
                 onValueChange={v => setConfig(c => ({ ...c, mes: Number(v) }))}
               >
-                <SelectTrigger className="bg-king-dark border-king-border text-white">
+                <SelectTrigger className="bg-surface-canvas border-line text-ink">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
-                <SelectContent className="bg-king-card border-king-border text-white">
+                <SelectContent className="bg-surface-canvas border-line text-ink">
                   {MESES.map((m, i) => (
                     <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label>Ano</Label>
+            <div className="space-y-1.5">
+              <Label className="label-micro">Ano</Label>
               <Select
                 value={String(config.ano)}
                 onValueChange={v => setConfig(c => ({ ...c, ano: Number(v) }))}
               >
-                <SelectTrigger className="bg-king-dark border-king-border text-white">
+                <SelectTrigger className="bg-surface-canvas border-line text-ink">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-king-card border-king-border text-white">
+                <SelectContent className="bg-surface-canvas border-line text-ink">
                   {[2024, 2025, 2026].map(a => (
                     <SelectItem key={a} value={String(a)}>{a}</SelectItem>
                   ))}
@@ -235,36 +235,39 @@ export function RelatoriosPage() {
           </div>
         )}
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex gap-3 pt-1">
           <Button
             onClick={handleXLSX}
             disabled={!!loading}
-            className="flex-1 bg-emerald-700 hover:bg-emerald-600 gap-2"
+            className="btn-press flex-1 h-10 bg-urg-lowFg hover:bg-urg-lowFg/90 text-white gap-2"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            {loading === 'xlsx' ? 'Gerando...' : 'Exportar XLSX'}
+            {loading === 'xlsx' ? 'Gerando…' : 'Exportar XLSX'}
           </Button>
           <Button
             onClick={handlePDF}
             disabled={!!loading}
             variant="outline"
-            className="flex-1 border-king-border text-white/70 hover:text-white gap-2"
+            className="btn-press flex-1 h-10 border-line text-ink-secondary hover:bg-surface-subtle gap-2"
           >
             <FileText className="h-4 w-4" />
-            {loading === 'pdf' ? 'Gerando...' : 'Exportar PDF'}
+            {loading === 'pdf' ? 'Gerando…' : 'Exportar PDF'}
           </Button>
         </div>
-      </Card>
+      </section>
 
-      <Card className="bg-king-card border-king-border p-4">
-        <div className="flex items-start gap-3">
-          <FileDown className="h-5 w-5 text-white/30 mt-0.5 flex-shrink-0" />
-          <div className="space-y-1 text-sm text-white/40">
-            <p>Os arquivos são gerados e baixados diretamente no seu navegador.</p>
-            <p>XLSX pode ser aberto no Excel ou Google Sheets. PDF inclui cabeçalho King of Languages.</p>
-          </div>
+      <aside className="flex items-start gap-3 rounded-xl border border-accentBlue/20 bg-accentBlue-soft/40 p-4">
+        <span className="h-7 w-7 rounded-md bg-accentBlue-soft text-accentBlue flex items-center justify-center flex-shrink-0">
+          <Info className="h-3.5 w-3.5" />
+        </span>
+        <div className="space-y-1 text-[13px] text-ink-secondary leading-relaxed">
+          <p>Os arquivos são gerados e baixados diretamente no navegador.</p>
+          <p className="inline-flex items-center gap-1.5 text-ink-muted">
+            <FileDown className="h-3 w-3" />
+            XLSX abre no Excel ou Google Sheets. PDF inclui cabeçalho King of Languages.
+          </p>
         </div>
-      </Card>
+      </aside>
     </div>
   )
 }

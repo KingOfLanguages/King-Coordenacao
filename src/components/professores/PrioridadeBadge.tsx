@@ -1,14 +1,22 @@
-import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import type { Professor } from '@/types'
 
-interface Props { professor: Professor }
+interface Props { professor: Professor; className?: string }
 
-export function PrioridadeBadge({ professor }: Props) {
-  if (professor.saiu)
-    return <Badge variant="outline" className="border-zinc-600 text-zinc-400">Saiu</Badge>
-  if (professor.pausa)
-    return <Badge variant="outline" className="border-yellow-600 text-yellow-400">Pausa</Badge>
-  if (professor.monitoramento)
-    return <Badge className="bg-king-red/20 text-king-red border border-king-red/30">Monitoramento</Badge>
-  return <Badge variant="outline" className="border-green-600 text-green-400">Ativo</Badge>
+function Chip({ label, className }: { label: string; className: string }) {
+  return (
+    <span className={cn(
+      'inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium',
+      className,
+    )}>
+      {label}
+    </span>
+  )
+}
+
+export function PrioridadeBadge({ professor, className }: Props) {
+  if (professor.saiu)           return <Chip label="Saiu"          className={cn('bg-surface-muted text-ink-muted', className)} />
+  if (professor.pausa)          return <Chip label="Pausa"         className={cn('bg-urg-medBg text-urg-medFg', className)} />
+  if (professor.monitoramento)  return <Chip label="Monitoramento" className={cn('bg-urg-highBg text-urg-highFg', className)} />
+  return <Chip label="Ativo" className={cn('bg-urg-lowBg text-urg-lowFg', className)} />
 }

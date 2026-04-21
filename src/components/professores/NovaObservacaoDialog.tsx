@@ -36,45 +36,45 @@ export function NovaObservacaoDialog({ open, onOpenChange, professorId, reuniaoI
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-king-card border-king-border text-white">
+      <DialogContent className="bg-surface-canvas border-line text-ink max-w-md">
         <DialogHeader>
-          <DialogTitle>Nova Observação</DialogTitle>
+          <DialogTitle className="text-ink font-semibold">Nova observação</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-1">
-            <Label>Tipo</Label>
+          <div className="space-y-1.5">
+            <Label className="label-micro">Tipo</Label>
             <Select value={tipo} onValueChange={setTipo}>
-              <SelectTrigger className="bg-king-dark border-king-border text-white">
+              <SelectTrigger className="bg-surface-canvas border-line text-ink">
                 <SelectValue placeholder="Selecione o tipo" />
               </SelectTrigger>
-              <SelectContent className="bg-king-card border-king-border text-white">
+              <SelectContent className="bg-surface-canvas border-line text-ink">
                 <SelectItem value="reuniao">Reunião</SelectItem>
                 <SelectItem value="ocorrencia">Ocorrência</SelectItem>
-                <SelectItem value="feedback_positivo">Feedback Positivo</SelectItem>
-                <SelectItem value="feedback_negativo">Feedback Negativo</SelectItem>
+                <SelectItem value="feedback_positivo">Feedback positivo</SelectItem>
+                <SelectItem value="feedback_negativo">Feedback negativo</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label>Texto</Label>
+          <div className="space-y-1.5">
+            <Label className="label-micro">Texto</Label>
             <textarea
               value={texto}
               onChange={e => setTexto(e.target.value)}
               rows={4}
-              className="w-full rounded-md border border-king-border bg-king-dark px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-king-red"
-              placeholder="Descreva a observação..."
+              className="w-full resize-none rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue transition-colors"
+              placeholder="Descreva a observação…"
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-white/50">
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-ink-secondary">
               Cancelar
             </Button>
             <Button
               onClick={handleSalvar}
               disabled={!tipo || !texto.trim() || salvar.isPending}
-              className="bg-king-red hover:bg-king-red/90"
+              className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
             >
-              {salvar.isPending ? 'Salvando...' : 'Salvar'}
+              {salvar.isPending ? 'Salvando…' : 'Salvar'}
             </Button>
           </div>
         </div>

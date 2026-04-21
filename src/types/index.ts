@@ -45,12 +45,18 @@ export interface Observacao {
   created_at: string
 }
 
+export type UrgenciaNivel = 'baixa' | 'media' | 'alta'
+
 export interface Incidente {
   id: string
   professor_id: string | null
   tipo: string
   descricao: string
   status: StatusIncidente
+  urgencia: UrgenciaNivel
+  solucao: string | null
+  responsavel: string | null
+  precisa_acompanhamento: boolean
   imagens: string[]
   criado_por: string | null
   aprovado_por: string | null

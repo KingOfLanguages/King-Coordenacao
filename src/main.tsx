@@ -14,11 +14,12 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   render() {
     if (this.state.error) {
       return (
-        <div className="flex h-screen items-center justify-center bg-king-dark p-6">
-          <div className="max-w-md space-y-3 text-center">
-            <p className="text-king-red font-bold text-lg">Erro de configuração</p>
-            <p className="text-white/60 text-sm">{(this.state.error as Error).message}</p>
-            <p className="text-white/30 text-xs">Verifique as variáveis de ambiente no Vercel.</p>
+        <div className="flex min-h-[100dvh] items-center justify-center bg-surface-app p-6">
+          <div className="max-w-md space-y-3 text-center card-surface p-8">
+            <div className="mx-auto h-10 w-10 rounded-full bg-brand/10 text-brand flex items-center justify-center text-lg font-semibold">!</div>
+            <p className="text-ink font-semibold text-base">Erro de configuração</p>
+            <p className="text-ink-secondary text-sm">{(this.state.error as Error).message}</p>
+            <p className="text-ink-muted text-xs">Verifique as variáveis de ambiente no Vercel.</p>
           </div>
         </div>
       )
