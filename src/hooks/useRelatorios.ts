@@ -1,51 +1,50 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import type { UrgenciaNivel } from '@/types'
 
-export function useDadosRelatorio(tipo: 'incidentes' | 'professores' | 'reunioes', mes?: number, ano?: number) {
+export interface PeriodoRelatorio {
+  inicio: string   // ISO date-time
+  fim:    string   // ISO date-time
+}
+
+const INCIDENTE_SELECT = `
+  *,
+  professores (nome),
+  criador:profiles!incidentes_criado_por_fkey (nome)
+`
+
+export type IncidenteRel = {
+  id:                     string
+  tipo:                   string
+  descricao:              string
+  status:                 string
+  urgencia:               UrgenciaNivel
+  solucao:                string | null
+  responsavel:            string | null
+  precisa_acompanhamento: boolean
+  created_at:             string
+  updated_at?:            string
+  professores:            { nome: string } | null
+  criador:                { nome: string } | null
+}
+
+/**
+ * Fetches incidentes filtered to a date range.
+ * Used by RelatoriosPage to compute all metrics.
+ */
+export function useIncidentesPeriodo(periodo: PeriodoRelatorio) {
   return useQuery({
-    queryKey: ['relatorio', tipo, mes, ano],
+    queryKey: ['relatorios', 'incidentes', periodo.inicio, periodo.fim],
     queryFn: async () => {
-      if (tipo === 'incidentes') {
-        let query = supabase
-          .from('incidentes')
-          .select('*, professores(nome), criador:profiles!incidentes_criado_por_fkey(nome)')
-          .order('created_at', { ascending: false })
-
-        if (mes && ano) {
-          const inicio = new Date(ano, mes - 1, 1).toISOString()
-          const fim    = new Date(ano, mes, 0, 23, 59, 59).toISOString()
-          query = query.gte('created_at', inicio).lte('created_at', fim)
-        }
-
-        const { data, error } = await query
-        if (error) throw error
-        return data
-
-      } else if (tipo === 'professores') {
-        const { data, error } = await supabase
-          .from('professores')
-          .select('*, reunioes(id, status), observacoes(id, tipo)')
-          .order('nome')
-        if (error) throw error
-        return data
-
-      } else {
-        let query = supabase
-          .from('reunioes')
-          .select('*, professores(nome), profiles(nome)')
-          .order('data', { ascending: false })
-
-        if (mes && ano) {
-          const inicio = new Date(ano, mes - 1, 1).toISOString()
-          const fim    = new Date(ano, mes, 0, 23, 59, 59).toISOString()
-          query = query.gte('data', inicio).lte('data', fim)
-        }
-
-        const { data, error } = await query
-        if (error) throw error
-        return data
-      }
+      const { data, error } = await supabase
+        .from('incidentes')
+        .select(INCIDENTE_SELECT)
+        .gte('created_at', periodo.inicio)
+        .lte('created_at', periodo.fim)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data as IncidenteRel[]
     },
-    enabled: false, // só carrega quando o usuário solicita
+    enabled: !!(periodo.inicio && periodo.fim),
   })
 }

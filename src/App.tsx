@@ -10,6 +10,7 @@ import { Cadastro } from '@/pages/Cadastro'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { NovaReuniaoPage } from '@/pages/reunioes/NovaReuniaoPage'
+import { ReunioesPage } from '@/pages/reunioes/ReunioesPage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { IncidenteDetalhePage } from '@/pages/incidentes/IncidenteDetalhePage'
 import { MesAnalisePage } from '@/pages/incidentes/MesAnalisePage'
@@ -40,6 +41,11 @@ export default function App() {
               <Route path="/professores/:id" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
                   <ProfessorDetalhePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/reunioes" element={
+                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                  <ReunioesPage />
                 </ProtectedRoute>
               } />
               <Route path="/reunioes/nova" element={
