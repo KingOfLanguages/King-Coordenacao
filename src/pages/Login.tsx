@@ -24,7 +24,7 @@ export function Login() {
       setLoading(false)
       return
     }
-    navigate('/dashboard')
+    navigate('/')
   }
 
   return (
