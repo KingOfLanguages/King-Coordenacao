@@ -356,67 +356,51 @@ export function ReunioesPage() {
     toast.success('Atualizado.')
   }
 
-  // ── Google Calendar import ──────────────────────────────────────────────────
+  async function buscarEventosDia(token) {
+  const now = new Date()
 
-  async function handleImportar() {
-    setImportState({ phase: 'loading' })
+  const startOfDay = new Date(now)
+  startOfDay.setHours(0, 0, 0, 0)
+
+  const endOfDay = new Date(now)
+  endOfDay.setHours(23, 59, 59, 999)
+
+  // 1. Buscar TODOS os calendários
+  const calendarListRes = await fetch(
+    'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  )
+
+  const calendarListData = await calendarListRes.json()
+  const calendars = calendarListData.items
+
+  let allEvents = []
+
+  // 2. Buscar eventos de cada calendário
+  for (const calendar of calendars) {
     try {
-      const token  = await obterTokenGoogle()
-      const events = await buscarEventosDia(token)
+      const eventsRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?timeMin=${startOfDay.toISOString()}&timeMax=${endOfDay.toISOString()}&singleEvents=true&orderBy=startTime`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
 
-      // filter out all-day / very short events
-      const meetings = events.filter(e => e.start.dateTime)
-
-      const matched = new Map<string, string | null>()
-      meetings.forEach(ev => {
-        const prof = matchProfessor(ev, professores)
-        matched.set(ev.id, prof?.id ?? null)
-      })
-
-      if (!meetings.length) {
-        toast.info('Nenhuma reunião encontrada no calendário de hoje.')
-        setImportState({ phase: 'idle' })
-        return
-      }
-
-      setImportState({ phase: 'review', events: meetings, matched })
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao importar do Google Calendar.')
-      setImportState({ phase: 'idle' })
+      const eventsData = await eventsRes.json()
+      allEvents = allEvents.concat(eventsData.items || [])
+    } catch (e) {
+      console.log('Erro no calendário:', calendar.id)
     }
   }
 
-  async function handleConfirmarImporte() {
-    if (importState.phase !== 'review') return
-    setImportState({ phase: 'saving' })
-
-    let saved = 0
-    let skipped = 0
-
-    for (const ev of importState.events) {
-      const profId = importState.matched.get(ev.id)
-      if (!profId) { skipped++; continue }
-
-      try {
-        await criarReuniao.mutateAsync({
-          professor_id:    profId,
-          coordenador_id:  profile!.id,
-          data:            ev.start.dateTime!,
-          titulo:          ev.summary,
-          google_event_id: ev.id,
-        })
-        saved++
-      } catch {
-        skipped++
-      }
-    }
-
-    toast.success(
-      `${saved} reunião(ões) importada(s).${skipped ? ` ${skipped} ignorada(s).` : ''}`
-    )
-    setImportState({ phase: 'idle' })
-    refetchHoje()
-  }
+  return allEvents
+}
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
