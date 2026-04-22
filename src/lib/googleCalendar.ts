@@ -1,21 +1,11 @@
-/**
- * Google Calendar integration via Google Identity Services (GIS)
- *
- * Setup (one-time):
- *  1. Create a project at console.cloud.google.com
- *  2. Enable the "Google Calendar API"
- *  3. Create an OAuth 2.0 Web Client ID
- *  4. Add the app's origin to "Authorized JavaScript origins"
- *  5. Set VITE_GOOGLE_CLIENT_ID in .env.local
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// lib/googleCalendar.ts
+// ─────────────────────────────────────────────────────────────────────────────
 
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
 const CALENDAR_API   = 'https://www.googleapis.com/calendar/v3'
 
-// In-memory token (not persisted — user re-grants each session)
 let _accessToken: string | null = null
-
-// ─── GIS script loader ────────────────────────────────────────────────────────
 
 function loadGIS(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -40,9 +30,6 @@ function loadGIS(): Promise<void> {
   })
 }
 
-// ─── OAuth token ─────────────────────────────────────────────────────────────
-
-/** Prompts the user to grant Calendar read access and returns an access token. */
 export async function obterTokenGoogle(): Promise<string> {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
   if (!clientId) {
@@ -79,8 +66,6 @@ export function limparTokenGoogle() {
   }
 }
 
-// ─── Calendar API types ───────────────────────────────────────────────────────
-
 export interface CalendarEvent {
   id: string
   summary: string
@@ -92,47 +77,64 @@ export interface CalendarEvent {
   organizer?: { email: string; displayName?: string }
 }
 
-// ─── Fetch events ─────────────────────────────────────────────────────────────
+// ─── CORRIGIDO: agora busca TODOS os calendários ─────────────────────────────
 
-/** Fetches events from the user's primary calendar for a given date. */
 export async function buscarEventosDia(
   token: string,
   data: Date = new Date()
 ): Promise<CalendarEvent[]> {
   const inicio = new Date(data)
   inicio.setHours(0, 0, 0, 0)
+
   const fim = new Date(data)
   fim.setHours(23, 59, 59, 999)
 
   const params = new URLSearchParams({
-    timeMin:       inicio.toISOString(),
-    timeMax:       fim.toISOString(),
-    singleEvents:  'true',
-    orderBy:       'startTime',
-    maxResults:    '100',
+    timeMin:      inicio.toISOString(),
+    timeMax:      fim.toISOString(),
+    singleEvents: 'true',
+    orderBy:      'startTime',
+    maxResults:   '100',
   })
 
-  const res = await fetch(
-    `${CALENDAR_API}/calendars/primary/events?${params}`,
+  // 1. Buscar todos calendários
+  const listRes = await fetch(
+    `${CALENDAR_API}/users/me/calendarList`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message ?? `Google Calendar API error ${res.status}`)
+
+  if (!listRes.ok) {
+    throw new Error('Erro ao buscar lista de calendários')
   }
 
-  const json = await res.json()
-  return (json.items ?? []) as CalendarEvent[]
+  const listJson = await listRes.json()
+  const calendars = (listJson.items ?? []).filter((c: any) => c.selected !== false)
+
+  let allEvents: CalendarEvent[] = []
+
+  // 2. Buscar eventos de cada calendário
+  for (const cal of calendars) {
+    try {
+      const res = await fetch(
+        `${CALENDAR_API}/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      if (!res.ok) continue
+
+      const json = await res.json()
+      allEvents = allEvents.concat(json.items ?? [])
+
+    } catch (e) {
+      console.log('Erro no calendário:', cal.id)
+    }
+  }
+
+  return allEvents
 }
 
-// ─── Professor matching ───────────────────────────────────────────────────────
+// ─── Matching ────────────────────────────────────────────────────────────────
 
-/**
- * Tries to find a matching professor for a Calendar event.
- * Strategy (in order):
- *  1. Attendee displayName matches a professor name (all parts)
- *  2. Event summary contains the professor's first name
- */
 export function matchProfessor<T extends { id: string; nome: string }>(
   event: CalendarEvent,
   professores: T[]
@@ -146,17 +148,14 @@ export function matchProfessor<T extends { id: string; nome: string }>(
   for (const prof of professores) {
     const parts = prof.nome.toLowerCase().split(/\s+/).filter(Boolean)
 
-    // Full name in attendees
     const inAttendees = attendeeNames.some(an =>
       parts.every(part => an.includes(part))
     )
     if (inAttendees) return prof
 
-    // All name parts in summary
     const inSummary = parts.every(part => summaryLow.includes(part))
     if (inSummary) return prof
 
-    // First name + last name in summary (common "1:1 com Fulano" pattern)
     if (parts.length >= 2) {
       const first = parts[0]
       const last  = parts[parts.length - 1]
@@ -167,13 +166,11 @@ export function matchProfessor<T extends { id: string; nome: string }>(
   return null
 }
 
-/** Extracts the start time as a Date from a CalendarEvent. */
 export function eventStartDate(event: CalendarEvent): Date {
   const raw = event.start.dateTime ?? event.start.date ?? ''
   return new Date(raw)
 }
 
-/** Returns HH:MM string from a CalendarEvent start time. */
 export function eventStartTime(event: CalendarEvent): string {
   const d = eventStartDate(event)
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
