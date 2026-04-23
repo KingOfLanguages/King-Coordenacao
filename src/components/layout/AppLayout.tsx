@@ -8,9 +8,8 @@ import { useState, useRef, useEffect } from 'react'
 type NavItem = { to: string; label: string; exact?: boolean }
 
 const navCoordenacao: NavItem[] = [
-  { to: '/professores',   label: 'Professores' },
-  { to: '/reunioes',      label: 'Reuniões' },
-  { to: '/reunioes/nova', label: 'Nova Reunião' },
+  { to: '/professores', label: 'Professores' },
+  { to: '/reunioes',    label: 'Reuniões' },
 ]
 
 const navSuporte: NavItem[] = [

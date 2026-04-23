@@ -8,11 +8,12 @@ export type MonitoramentoResultado = 'normal' | 'alta_prioridade' | 'baixa_prior
 
 export type ReuniaoCompleta = {
   id: string
-  professor_id: string
+  professor_id: string | null
   coordenador_id: string | null
   data: string
   status: 'pendente' | 'concluida' | 'cancelada'
   google_event_id: string | null
+  meet_link: string | null
   notas: string | null
   titulo: string | null
   aconteceu: boolean | null
@@ -135,12 +136,13 @@ export function useCriarReuniao() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (reuniao: {
-      professor_id: string
+      professor_id?: string | null
       coordenador_id: string
       data: string
       notas?: string
       titulo?: string
       google_event_id?: string
+      meet_link?: string | null
     }) => {
       // Upsert on google_event_id to avoid duplicates when re-importing
       if (reuniao.google_event_id) {

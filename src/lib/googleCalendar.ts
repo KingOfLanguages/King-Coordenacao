@@ -73,6 +73,7 @@ export interface CalendarEvent {
   summary: string
   description?: string
   htmlLink?: string
+  hangoutLink?: string          // Google Meet URL (when conference is attached)
   start: { dateTime?: string; date?: string; timeZone?: string }
   end:   { dateTime?: string; date?: string; timeZone?: string }
   attendees?: { email: string; displayName?: string; self?: boolean }[]

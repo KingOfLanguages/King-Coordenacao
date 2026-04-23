@@ -26,11 +26,12 @@ export interface Professor {
 
 export interface Reuniao {
   id: string
-  professor_id: string
+  professor_id: string | null
   coordenador_id: string | null
   data: string
   status: StatusReuniao
   google_event_id: string | null
+  meet_link: string | null
   notas: string | null
   created_at: string
 }
