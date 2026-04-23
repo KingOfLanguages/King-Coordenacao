@@ -25,18 +25,38 @@ export function Cadastro() {
       options: { data: { nome } },
     })
 
-    if (error || !data.user) {
-      setErro('Não conseguimos criar sua conta. Tente novamente.')
+    if (error) {
+      if (error.message.includes('already registered') || error.message.includes('already been registered')) {
+        setErro('Este e-mail já possui uma conta cadastrada.')
+      } else {
+        setErro(`Erro ao criar conta: ${error.message}`)
+      }
       setLoading(false)
       return
     }
 
-    await supabase.from('pending_approvals').insert({
+    if (!data.user) {
+      setErro('Conta criada mas não foi possível confirmar. Verifique seu e-mail.')
+      setLoading(false)
+      return
+    }
+
+    const { error: insertError } = await supabase.from('pending_approvals').insert({
       user_id: data.user.id,
       email,
       nome,
       role_solicitada: 'suporte',
     })
+
+    if (insertError) {
+      // Conta foi criada no Auth mas a solicitação não foi registrada
+      setErro(
+        `Conta criada, mas houve um erro ao registrar a solicitação: ${insertError.message}. ` +
+        `Entre em contato com o administrador informando seu e-mail.`
+      )
+      setLoading(false)
+      return
+    }
 
     setEnviado(true)
     setLoading(false)
