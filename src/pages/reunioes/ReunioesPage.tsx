@@ -387,13 +387,14 @@ export function ReunioesPage() {
   const [aba,         setAba]         = useState<Aba>('hoje')
   const [importState, setImportState] = useState<ImportState>({ phase: 'idle' })
  
-  const { data: hoje      = [], isLoading: loadHoje,      refetch: refetchHoje      } = useReunioesHoje()
-  const { data: atrasadas = [], isLoading: loadAtrasadas, refetch: refetchAtrasadas } = useReunioesAtrasadas()
+  const { data: hoje      = [], isLoading: loadHoje,      isError: errHoje,      refetch: refetchHoje      } = useReunioesHoje()
+  const { data: atrasadas = [], isLoading: loadAtrasadas, isError: errAtrasadas, refetch: refetchAtrasadas } = useReunioesAtrasadas()
   const { data: professores = [] } = useProfessoresAtivos()
   const criarReuniao = useCriarReuniao()
  
   const reunioes  = aba === 'hoje' ? hoje      : atrasadas
   const isLoading = aba === 'hoje' ? loadHoje  : loadAtrasadas
+  const isError   = aba === 'hoje' ? errHoje   : errAtrasadas
  
   // ── Handlers ──
  
@@ -518,9 +519,17 @@ export function ReunioesPage() {
       {importState.phase === 'review' && (
         <div className="card-surface border border-accentBlue/25 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-semibold text-ink">
-              {importState.events.length} evento(s) encontrado(s) no Google Calendar
-            </p>
+            <div>
+              <p className="text-[13px] font-semibold text-ink">
+                {importState.events.length} evento(s) encontrado(s) no Google Calendar
+              </p>
+              <p className="text-[11px] text-ink-muted mt-0.5">
+                {professores.length > 0
+                  ? `${professores.length} professores disponíveis para match`
+                  : <span className="text-urg-highFg font-medium">⚠ Nenhum professor carregado — matches impossíveis</span>
+                }
+              </p>
+            </div>
             <button
               onClick={() => setImportState({ phase: 'idle' })}
               className="text-ink-muted hover:text-ink"
@@ -635,9 +644,29 @@ export function ReunioesPage() {
           <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando reuniões…
         </div>
       )}
- 
+
+      {/* ── Error state ── */}
+      {!isLoading && isError && (
+        <div className="flex items-start gap-3 rounded-xl border border-urg-highFg/20 bg-urg-highBg p-4">
+          <AlertCircle className="h-4 w-4 text-urg-highFg mt-0.5 shrink-0" />
+          <div className="text-[12px] space-y-1">
+            <p className="font-medium text-ink">Erro ao carregar reuniões</p>
+            <p className="text-ink-secondary">
+              Verifique a conexão com o banco de dados e as permissões RLS da tabela{' '}
+              <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[11px]">reunioes</code>.
+            </p>
+            <button
+              onClick={() => { refetchHoje(); refetchAtrasadas() }}
+              className="text-urg-highFg underline underline-offset-2 text-[12px]"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Empty state ── */}
-      {!isLoading && reunioes.length === 0 && (
+      {!isLoading && !isError && reunioes.length === 0 && (
         <div className="card-surface p-10 text-center space-y-2">
           {aba === 'hoje' ? (
             <>
@@ -680,7 +709,7 @@ export function ReunioesPage() {
       )}
  
       {/* ── Cards de reunião ── */}
-      {!isLoading && reunioes.length > 0 && (
+      {!isLoading && !isError && reunioes.length > 0 && (
         <div className="space-y-4">
           {reunioes.map(r => <MeetingCard key={r.id} reuniao={r} />)}
         </div>

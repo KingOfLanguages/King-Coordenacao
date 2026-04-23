@@ -38,7 +38,7 @@ export type ReuniaoCompleta = {
 const REUNIAO_SELECT = `
   *,
   professores (id, nome, monitoramento, data_inicio, tempo_na_king),
-  coordenador:profiles!reunioes_coordenador_id_fkey (nome)
+  coordenador:profiles!coordenador_id (nome)
 `
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

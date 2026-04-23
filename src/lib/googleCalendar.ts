@@ -307,35 +307,69 @@ export function matchProfessor<T extends { id: string; nome: string }>(
     .map(a => norm(a.displayName ?? ''))
     .filter(Boolean)
 
+  // Two-pass: collect scored matches, return best ≥ threshold
+  const scores: Array<{ prof: T; score: number }> = []
+
   for (const prof of professores) {
     const nomeNorm  = norm(prof.nome)
-    const nameParts = nomeNorm.split(' ').filter(p => p.length > 1 && !['de','da','do','dos','das','e'].includes(p))
+    const nameParts = nomeNorm
+      .split(' ')
+      .filter(p => p.length > 1 && !['de','da','do','dos','das','e'].includes(p))
 
-    // 1 — match exato no nome extraído
+    // ── Tier 1 — exact match ──────────────────────────────────────────────────
     if (extracted.some(e => e === nomeNorm)) return prof
-
-    // 2 — match exato no attendee name
     if (attendeeNorm.some(a => a === nomeNorm)) return prof
 
-    // 3 — nome extraído contém todas as partes do nome do professor
+    // ── Tier 2 — extracted / attendee contains ALL parts ─────────────────────
     if (extracted.some(e => nameParts.every(p => e.includes(p)))) return prof
-
-    // 4 — attendee name contém todas as partes
     if (attendeeNorm.some(a => nameParts.every(p => a.includes(p)))) return prof
 
-    // 5 — título completo contém todas as partes
+    // ── Tier 3 — full title contains ALL parts ────────────────────────────────
     if (nameParts.every(p => titleNorm.includes(p))) return prof
 
-    // 6 — primeiras 2 palavras batem (primeiro + último nome)
-    if (nameParts.length >= 2) {
-      const first = nameParts[0]
-      const last  = nameParts[nameParts.length - 1]
-      if (extracted.some(e => e.includes(first) && e.includes(last))) return prof
-      if (titleNorm.includes(first) && titleNorm.includes(last))       return prof
+    if (nameParts.length < 2) continue
+
+    const first  = nameParts[0]
+    const second = nameParts[1]
+    const last   = nameParts[nameParts.length - 1]
+
+    // ── Tier 4 — first+second OR first+last in extracted / title ─────────────
+    if (extracted.some(e => e.includes(first) && e.includes(second))) return prof
+    if (extracted.some(e => e.includes(first) && e.includes(last)))   return prof
+    if (titleNorm.includes(first) && titleNorm.includes(second))       return prof
+    if (titleNorm.includes(first) && titleNorm.includes(last))         return prof
+
+    // ── Tier 5 — attendee first+second OR first+last ──────────────────────────
+    if (attendeeNorm.some(a => a.includes(first) && a.includes(second))) return prof
+    if (attendeeNorm.some(a => a.includes(first) && a.includes(last)))   return prof
+
+    // ── Fuzzy score — used as last resort across all professors ──────────────
+    const matchInExtracted = extracted.reduce((best, e) => {
+      const count = nameParts.filter(p => e.includes(p)).length
+      return count > best ? count : best
+    }, 0)
+    const matchInTitle = nameParts.filter(p => titleNorm.includes(p)).length
+    const matchInAttendee = attendeeNorm.reduce((best, a) => {
+      const count = nameParts.filter(p => a.includes(p)).length
+      return count > best ? count : best
+    }, 0)
+    const bestMatch = Math.max(matchInExtracted, matchInTitle, matchInAttendee)
+
+    // Must match first name + at least one other word to score
+    const hasFirstInExtracted = extracted.some(e => e.includes(first))
+    const hasFirstInTitle     = titleNorm.includes(first)
+    const hasFirstInAttendee  = attendeeNorm.some(a => a.includes(first))
+    const hasFirst            = hasFirstInExtracted || hasFirstInTitle || hasFirstInAttendee
+
+    if (hasFirst && bestMatch >= 2) {
+      scores.push({ prof, score: bestMatch })
     }
   }
 
-  return null
+  // Return the best fuzzy match (if any)
+  if (scores.length === 0) return null
+  scores.sort((a, b) => b.score - a.score)
+  return scores[0].prof
 }
 
 // ─── Utilitários de data/hora ─────────────────────────────────────────────────
