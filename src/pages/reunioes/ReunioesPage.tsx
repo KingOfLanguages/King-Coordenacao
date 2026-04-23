@@ -470,44 +470,109 @@ export function ReunioesPage() {
     if (importState.phase !== 'review') return
 
     const { events, matched } = importState
+    setImportState({ phase: 'saving' })
 
-    try {
-      setImportState({ phase: 'saving' })
+    let saved    = 0
+    let skipped  = 0
+    let needsMig = false   // professor_id NOT NULL still in DB
+    let firstErr = ''
 
-      // Import ALL events — matched AND unmatched (agenda)
-      for (const ev of events) {
-        const profId   = matched.get(ev.id) ?? null
-        const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
+    function parseErr(e: unknown): string {
+      if (e && typeof e === 'object') {
+        if ('message' in e) return String((e as { message: unknown }).message)
+      }
+      return e instanceof Error ? e.message : String(e)
+    }
 
-        await criarReuniao.mutateAsync({
-          professor_id:    profId,
-          coordenador_id:  profile!.id,
-          data:            eventStartDate(ev).toISOString(),
-          titulo:          ev.summary,
-          google_event_id: ev.id,
-          meet_link:       meetHref,
-        })
+    for (const ev of events) {
+      const profId   = matched.get(ev.id) ?? null
+      const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
+
+      // Build payload: omit nullable fields when they're null so we don't
+      // fail on columns that may not exist in the DB yet (meet_link)
+      const base = {
+        coordenador_id:  profile!.id,
+        data:            eventStartDate(ev).toISOString(),
+        titulo:          ev.summary,
+        google_event_id: ev.id,
+      }
+      const payload = {
+        ...base,
+        ...(profId   ? { professor_id: profId }   : {}),
+        ...(meetHref ? { meet_link:    meetHref }  : {}),
       }
 
+      try {
+        await criarReuniao.mutateAsync(payload)
+        saved++
+      } catch (err1: unknown) {
+        const msg1 = parseErr(err1)
+        console.warn(`[import] "${ev.summary}" — tentativa 1:`, msg1)
+
+        // Fallback 1: meet_link column may not exist yet → retry without it
+        if (meetHref && /meet_link|column/.test(msg1)) {
+          try {
+            await criarReuniao.mutateAsync({ ...base, ...(profId ? { professor_id: profId } : {}) })
+            saved++
+            continue
+          } catch (err2: unknown) {
+            const msg2 = parseErr(err2)
+            console.warn(`[import] "${ev.summary}" — tentativa 2 (sem meet_link):`, msg2)
+            // If professor_id is still NOT NULL, skip silently and flag migration
+            if (/not.null|professor_id/.test(msg2.toLowerCase())) {
+              needsMig = true; skipped++; continue
+            }
+            if (!firstErr) firstErr = msg2
+            skipped++
+          }
+          continue
+        }
+
+        // professor_id column is still NOT NULL → migration not applied
+        if (/not.null|professor_id/.test(msg1.toLowerCase())) {
+          needsMig = true; skipped++; continue
+        }
+
+        if (!firstErr) firstErr = msg1
+        skipped++
+      }
+    }
+
+    // ── Toast summary ──
+    if (saved === 0) {
+      if (needsMig) {
+        toast.error(
+          'Nenhum evento importado. Execute a migration no Supabase (SQL Editor):\n' +
+          'ALTER TABLE reunioes ALTER COLUMN professor_id DROP NOT NULL;\n' +
+          'ALTER TABLE reunioes ADD COLUMN IF NOT EXISTS meet_link TEXT;',
+          { duration: 10000 }
+        )
+      } else {
+        toast.error(`Erro ao importar: ${firstErr || 'desconhecido'}`, { duration: 8000 })
+      }
+    } else {
       const nMatched   = [...matched.values()].filter(Boolean).length
-      const nUnmatched = events.length - nMatched
+      const nUnmatched = saved - nMatched
 
       if (nMatched > 0 && nUnmatched > 0) {
-        toast.success(`${nMatched} reunião(ões) vinculada(s), ${nUnmatched} adicionada(s) à agenda.`)
+        toast.success(`${nMatched} vinculada(s), ${nUnmatched} na agenda.`)
       } else if (nMatched > 0) {
-        toast.success(`${nMatched} reunião(ões) importada(s) com sucesso.`)
+        toast.success(`${saved} reunião(ões) importada(s).`)
       } else {
-        toast.info(`${nUnmatched} evento(s) adicionado(s) à agenda sem vínculo com professor.`)
+        toast.info(`${saved} evento(s) adicionado(s) à agenda.`)
       }
 
-      setImportState({ phase: 'idle' })
-      refetchHoje()
-      refetchAtrasadas()
-    } catch (err) {
-      console.error(err)
-      toast.error('Erro ao salvar reuniões.')
-      setImportState({ phase: 'idle' })
+      if (skipped > 0 && needsMig) {
+        toast.warning(
+          `${skipped} evento(s) sem vínculo não foram salvos — execute a migration no Supabase para habilitar a agenda completa.`,
+          { duration: 8000 }
+        )
+      }
     }
+
+    setImportState({ phase: 'idle' })
+    refetchHoje()
+    refetchAtrasadas()
   }
 
   const hoje_label = new Date().toLocaleDateString('pt-BR', {
