@@ -442,9 +442,11 @@ export function ReunioesPage() {
         if (!profId) continue
  
         await criarReuniao.mutateAsync({
-          professor_id: profId,
-          data:         eventStartDate(ev).toISOString(),
-          titulo:       ev.summary,
+          professor_id:    profId,
+          coordenador_id:  profile!.id,
+          data:            eventStartDate(ev).toISOString(),
+          titulo:          ev.summary,
+          google_event_id: ev.id,
         })
       }
  
@@ -562,7 +564,7 @@ export function ReunioesPage() {
               disabled={isBusy}
               className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
             >
-              {importState.phase === 'saving'
+              {isBusy
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Salvando…</>
                 : 'Confirmar importação'}
             </Button>
