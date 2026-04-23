@@ -47,7 +47,7 @@ export function AprovacoesPage() {
       if (acao === 'aprovado') {
         await supabase
           .from('profiles')
-          .update({ role: role ?? aprovacao.role_solicitada })
+          .update({ role: role ?? aprovacao.role_solicitada, ativo: true })
           .eq('id', aprovacao.user_id)
       }
     },
