@@ -144,11 +144,17 @@ export function useCriarReuniao() {
       google_event_id?: string
       meet_link?: string | null
     }) => {
-      // Upsert on google_event_id to avoid duplicates when re-importing
+      // Se tiver google_event_id, evitar duplicata sem precisar de UNIQUE constraint
       if (reuniao.google_event_id) {
-        const { error } = await supabase
+        const { data: existing } = await supabase
           .from('reunioes')
-          .upsert(reuniao, { onConflict: 'google_event_id', ignoreDuplicates: true })
+          .select('id')
+          .eq('google_event_id', reuniao.google_event_id)
+          .maybeSingle()
+
+        if (existing) return  // já importado, ignorar silenciosamente
+
+        const { error } = await supabase.from('reunioes').insert(reuniao)
         if (error) throw error
       } else {
         const { error } = await supabase.from('reunioes').insert(reuniao)
