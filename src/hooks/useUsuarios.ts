@@ -25,6 +25,18 @@ export function useUsuarios() {
   })
 }
 
+/** Exclui permanentemente o usuário (profile + conta Auth via RPC). */
+export function useExcluirUsuario() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('delete_user', { target_user_id: id })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'usuarios'] }),
+  })
+}
+
 /** Atualiza role e/ou ativo de um usuário. */
 export function useAtualizarUsuario() {
   const qc = useQueryClient()
