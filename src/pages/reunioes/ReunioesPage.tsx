@@ -22,6 +22,7 @@ import {
 import {
   obterTokenGoogle,
   buscarEventosDia,
+  isReuniaoComProfessor,
   matchProfessor,
   eventStartTime,
   eventEndTime,
@@ -406,21 +407,24 @@ export function ReunioesPage() {
     try {
       setImportState({ phase: 'loading' })
  
-      const token  = await obterTokenGoogle()
-      const events = await buscarEventosDia(token)
- 
+      const token     = await obterTokenGoogle()
+      const rawEvents = await buscarEventosDia(token)
+
+      // Filtra apenas reuniões reais — descarta expediente, almoço, médico, plantão, etc.
+      const events = rawEvents.filter(isReuniaoComProfessor)
+
       if (!events.length) {
-        toast.error('Nenhum evento encontrado no calendário.')
+        toast.info('Nenhuma reunião com professor encontrada no calendário de hoje.')
         setImportState({ phase: 'idle' })
         return
       }
- 
+
       const matched = new Map<string, string | null>()
       events.forEach(ev => {
         const prof = matchProfessor(ev, professores)
         matched.set(ev.id, prof?.id ?? null)
       })
- 
+
       setImportState({ phase: 'review', events, matched })
     } catch (err) {
       console.error(err)
