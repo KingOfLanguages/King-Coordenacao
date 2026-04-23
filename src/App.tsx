@@ -15,6 +15,7 @@ import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { IncidenteDetalhePage } from '@/pages/incidentes/IncidenteDetalhePage'
 import { MesAnalisePage } from '@/pages/incidentes/MesAnalisePage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
+import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
 
 const queryClient = new QueryClient()
@@ -75,6 +76,11 @@ export default function App() {
               <Route path="/admin/aprovacoes" element={
                 <ProtectedRoute roles={['admin']}>
                   <AprovacoesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/usuarios" element={
+                <ProtectedRoute roles={['admin']}>
+                  <UsuariosPage />
                 </ProtectedRoute>
               } />
 

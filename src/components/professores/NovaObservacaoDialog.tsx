@@ -50,8 +50,9 @@ export function NovaObservacaoDialog({ open, onOpenChange, professorId, reuniaoI
               <SelectContent className="bg-surface-canvas border-line text-ink">
                 <SelectItem value="reuniao">Reunião</SelectItem>
                 <SelectItem value="ocorrencia">Ocorrência</SelectItem>
-                <SelectItem value="feedback_positivo">Feedback positivo</SelectItem>
-                <SelectItem value="feedback_negativo">Feedback negativo</SelectItem>
+                <SelectItem value="feedback_positivo">🟢 Feedback positivo</SelectItem>
+                <SelectItem value="feedback_negativo">🔴 Feedback negativo</SelectItem>
+                <SelectItem value="feedback_neutro">⚪ Feedback neutro</SelectItem>
               </SelectContent>
             </Select>
           </div>

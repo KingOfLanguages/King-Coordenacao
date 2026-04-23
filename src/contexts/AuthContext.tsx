@@ -40,6 +40,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('id', userId)
       .single()
+
+    if (data && data.ativo === false) {
+      // Conta bloqueada — força logout imediatamente
+      await supabase.auth.signOut()
+      setProfile(null)
+      setLoading(false)
+      return
+    }
+
     setProfile(data)
     setLoading(false)
   }

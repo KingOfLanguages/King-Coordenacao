@@ -46,7 +46,10 @@ export function AppLayout() {
     ...(isCoord   ? navCoordenacao : []),
     ...(isSuporte ? navSuporte     : []),
     ...navComum,
-    ...(isAdmin ? [{ to: '/admin/aprovacoes', label: 'Aprovações' }] : []),
+    ...(isAdmin ? [
+      { to: '/admin/aprovacoes', label: 'Aprovações' },
+      { to: '/admin/usuarios',   label: 'Usuários' },
+    ] : []),
   ]
 
   useEffect(() => {

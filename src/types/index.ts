@@ -1,6 +1,6 @@
 export type RoleUsuario = 'admin' | 'coordenacao' | 'suporte' | 'suporte_aluno'
 export type StatusReuniao = 'pendente' | 'concluida' | 'cancelada'
-export type TipoObservacao = 'reuniao' | 'ocorrencia' | 'feedback_positivo' | 'feedback_negativo'
+export type TipoObservacao = 'reuniao' | 'ocorrencia' | 'feedback_positivo' | 'feedback_negativo' | 'feedback_neutro'
 export type StatusIncidente = 'pendente' | 'aprovado' | 'rejeitado'
 
 export interface Profile {

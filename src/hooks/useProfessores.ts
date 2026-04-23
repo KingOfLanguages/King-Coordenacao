@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Professor } from '@/types'
 
+// ─── Basic list ───────────────────────────────────────────────────────────────
+
 export function useProfessores() {
   return useQuery({
     queryKey: ['professores'],
@@ -32,6 +34,44 @@ export function useProfessoresAtivos() {
   })
 }
 
+// ─── List with counters ───────────────────────────────────────────────────────
+
+export type ProfessorComContadores = Professor & {
+  _negativos:  number
+  _incidentes: number
+}
+
+export function useProfessoresComContadores() {
+  return useQuery({
+    queryKey: ['professores', 'contadores'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('professores')
+        .select(`
+          *,
+          observacoes (id, tipo),
+          incidentes  (id, status)
+        `)
+        .eq('saiu', false)
+        .eq('pausa', false)
+        .order('nome')
+      if (error) throw error
+
+      return (data ?? []).map(p => {
+        const obs       = (p.observacoes ?? []) as { id: string; tipo: string }[]
+        const incidents = (p.incidentes  ?? []) as { id: string; status: string }[]
+        return {
+          ...p,
+          _negativos:  obs.filter(o => o.tipo === 'feedback_negativo').length,
+          _incidentes: incidents.filter(i => i.status !== 'rejeitado').length,
+        } as ProfessorComContadores
+      })
+    },
+  })
+}
+
+// ─── Detail ───────────────────────────────────────────────────────────────────
+
 export function useProfessor(id: string) {
   return useQuery({
     queryKey: ['professores', id],
@@ -47,6 +87,9 @@ export function useProfessor(id: string) {
           observacoes (
             id, tipo, texto, created_at,
             profiles (nome)
+          ),
+          incidentes (
+            id, tipo, descricao, status, urgencia, solucao, created_at
           )
         `)
         .eq('id', id)
@@ -57,6 +100,8 @@ export function useProfessor(id: string) {
     enabled: !!id,
   })
 }
+
+// ─── Mutations ────────────────────────────────────────────────────────────────
 
 export function useAtualizarMonitoramento() {
   const queryClient = useQueryClient()
