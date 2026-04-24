@@ -16,7 +16,8 @@ const navSuporte: NavItem[] = [
   { to: '/mes-analise', label: 'Mês de Análise' },
 ]
 const navComum: NavItem[] = [
-  { to: '/relatorios', label: 'Relatórios' },
+  { to: '/acompanhamento', label: 'Acompanhamento' },
+  { to: '/relatorios',     label: 'Relatórios' },
 ]
 
 function roleLabel(role?: string) {

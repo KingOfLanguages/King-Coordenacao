@@ -16,6 +16,7 @@ import { MesAnalisePage } from '@/pages/incidentes/MesAnalisePage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
+import { AcompanhamentoPage } from '@/pages/reunioes/AcompanhamentoPage'
 
 const queryClient = new QueryClient()
 
@@ -81,6 +82,13 @@ export default function App() {
               <Route path="/relatorios" element={
                 <ProtectedRoute roles={['coordenacao', 'suporte', 'admin']}>
                   <RelatoriosPage />
+                </ProtectedRoute>
+              } />
+
+              {/* Monitoring */}
+              <Route path="/acompanhamento" element={
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno', 'admin']}>
+                  <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
             </Route>
