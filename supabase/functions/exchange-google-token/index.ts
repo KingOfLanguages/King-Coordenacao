@@ -2,7 +2,8 @@
 // Edge Function: exchange-google-token
 //
 // Recebe o authorization code do frontend (GIS code flow), troca pelos tokens
-// do Google OAuth2 e persiste o refresh_token em google_tokens.
+// do Google OAuth2, captura o email Google real via userinfo API e persiste
+// tudo em google_tokens para uso no daily-import.
 //
 // Secrets necessários (Supabase Dashboard > Edge Functions > Secrets):
 //   GOOGLE_CLIENT_ID     — OAuth 2.0 Client ID
@@ -52,7 +53,9 @@ serve(async (req) => {
     const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')
 
     if (!clientId || !clientSecret) {
-      return json({ error: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET não configurados nos secrets da Edge Function.' }, 500)
+      return json({
+        error: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET não configurados nos secrets da Edge Function.',
+      }, 500)
     }
 
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -82,7 +85,25 @@ serve(async (req) => {
       }, 400)
     }
 
-    // ── Salva o refresh_token (service role ignora RLS) ─────────────────────
+    // ── Captura o email Google real via userinfo API ─────────────────────────
+    // Isso resolve a atribuição correta de coordenador_id no daily-import:
+    // ex. access_token pertence a coordenacaoking7@gmail.com → Ariel
+    let googleEmail: string | null = null
+    try {
+      const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v1/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      })
+      if (userinfoRes.ok) {
+        const info = await userinfoRes.json()
+        googleEmail = info.email ?? null
+        console.log('[exchange-google-token] Google email capturado:', googleEmail)
+      }
+    } catch (e) {
+      // Não crítico — salva o token mesmo sem email
+      console.warn('[exchange-google-token] Não foi possível capturar o email Google:', e)
+    }
+
+    // ── Salva o refresh_token + google_email (service role ignora RLS) ──────
     const admin = createClient(supabaseUrl, serviceKey)
 
     const { error: upsertErr } = await admin
@@ -90,6 +111,7 @@ serve(async (req) => {
       .upsert({
         user_id:       user.id,
         refresh_token: tokens.refresh_token,
+        google_email:  googleEmail,
         updated_at:    new Date().toISOString(),
       })
 
@@ -98,8 +120,8 @@ serve(async (req) => {
       return json({ error: upsertErr.message }, 500)
     }
 
-    console.log('[exchange-google-token] Token salvo para usuário', user.id)
-    return json({ success: true })
+    console.log('[exchange-google-token] Token salvo — usuário:', user.id, '/ Google:', googleEmail)
+    return json({ success: true, google_email: googleEmail })
 
   } catch (err) {
     console.error('[exchange-google-token] Unhandled error:', err)

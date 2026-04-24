@@ -6,8 +6,15 @@
 //   1. Obtém um access_token novo via Google OAuth2
 //   2. Busca eventos do Google Calendar do dia
 //   3. Filtra reuniões reais com professores
-//   4. Faz match de professores pelo nome
-//   5. Insere na tabela reunioes (ignora duplicatas pelo google_event_id)
+//   4. Determina o coordenador_id correto pelo email do organizador/participante
+//   5. Faz match de professores pelo nome
+//   6. Insere na tabela reunioes (ignora duplicatas pelo google_event_id)
+//
+// Atribuição de coordenador:
+//   Cada evento tem um organizer.email e attendees[].email.
+//   O mapa emailToUserId (construído a partir de google_tokens.google_email)
+//   resolve ex: coordenacaoking7@gmail.com → UUID da Ariel no Supabase.
+//   Prioridade: organizer > attendee conhecido > dono do token (fallback).
 //
 // Secrets necessários:
 //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
@@ -28,6 +35,7 @@ interface CalEvent {
   hangoutLink?: string
   start: { dateTime?: string; date?: string }
   end:   { dateTime?: string; date?: string }
+  organizer?: { email: string; displayName?: string; self?: boolean }
   attendees?: { email: string; displayName?: string; self?: boolean }[]
 }
 
@@ -61,7 +69,7 @@ async function buscarEventosDia(token: string, data: Date): Promise<CalEvent[]> 
     maxResults:   '100',
   })
 
-  // Lista todos os calendários
+  // Lista todos os calendários da conta
   const listRes = await fetch(`${CALENDAR_API}/users/me/calendarList`, {
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -109,6 +117,41 @@ function isReuniaoComProfessor(ev: CalEvent): boolean {
   return ext.length >= 1
 }
 
+// ─── Atribuição de coordenador ────────────────────────────────────────────────
+
+/**
+ * Determina qual coordenador é responsável pelo evento.
+ *
+ * Estratégia (ordem de prioridade):
+ *  1. Organizer do evento bate com um email Google conhecido
+ *  2. Um dos attendees (que não seja o calendário dono) bate com email conhecido
+ *  3. Fallback: dono do token (user_id do token atual)
+ *
+ * Isso garante que numa agenda compartilhada:
+ *   - evento criado por coordenacaoking7@gmail.com → Ariel
+ *   - evento com caio.velloso.king@gmail.com como attendee → Caio
+ */
+function resolveCoordId(
+  ev: CalEvent,
+  tokenUserId: string,
+  emailToUserId: Record<string, string>,
+): string {
+  const organizerEmail = ev.organizer?.email?.toLowerCase()
+  if (organizerEmail && emailToUserId[organizerEmail]) {
+    return emailToUserId[organizerEmail]
+  }
+
+  for (const att of ev.attendees ?? []) {
+    if (att.self) continue                    // ignora o próprio calendário
+    const email = att.email?.toLowerCase()
+    if (email && emailToUserId[email]) {
+      return emailToUserId[email]
+    }
+  }
+
+  return tokenUserId   // fallback: dono do token
+}
+
 // ─── Professor matching ───────────────────────────────────────────────────────
 
 function norm(s: string): string {
@@ -140,20 +183,20 @@ function matchProfessor<T extends { id: string; nome: string }>(ev: CalEvent, pr
     const nomeNorm  = norm(prof.nome)
     const nameParts = nomeNorm.split(' ').filter(p => p.length > 1 && !['de','da','do','dos','das','e'].includes(p))
 
-    if (extracted.some(e => e === nomeNorm))               return prof
-    if (attendeeNorm.some(a => a === nomeNorm))            return prof
-    if (extracted.some(e => nameParts.every(p => e.includes(p))))       return prof
-    if (attendeeNorm.some(a => nameParts.every(p => a.includes(p))))    return prof
-    if (nameParts.every(p => titleNorm.includes(p)))       return prof
+    if (extracted.some(e => e === nomeNorm))                              return prof
+    if (attendeeNorm.some(a => a === nomeNorm))                           return prof
+    if (extracted.some(e => nameParts.every(p => e.includes(p))))        return prof
+    if (attendeeNorm.some(a => nameParts.every(p => a.includes(p))))     return prof
+    if (nameParts.every(p => titleNorm.includes(p)))                      return prof
     if (nameParts.length < 2) continue
 
     const first = nameParts[0], second = nameParts[1], last = nameParts[nameParts.length - 1]
-    if (extracted.some(e => e.includes(first) && e.includes(second)))   return prof
-    if (extracted.some(e => e.includes(first) && e.includes(last)))     return prof
-    if (titleNorm.includes(first) && titleNorm.includes(second))        return prof
-    if (titleNorm.includes(first) && titleNorm.includes(last))          return prof
+    if (extracted.some(e => e.includes(first) && e.includes(second)))    return prof
+    if (extracted.some(e => e.includes(first) && e.includes(last)))      return prof
+    if (titleNorm.includes(first) && titleNorm.includes(second))         return prof
+    if (titleNorm.includes(first) && titleNorm.includes(last))           return prof
     if (attendeeNorm.some(a => a.includes(first) && a.includes(second))) return prof
-    if (attendeeNorm.some(a => a.includes(first) && a.includes(last)))  return prof
+    if (attendeeNorm.some(a => a.includes(first) && a.includes(last)))   return prof
 
     const bestScore = Math.max(
       extracted.reduce((b, e) => Math.max(b, nameParts.filter(p => e.includes(p)).length), 0),
@@ -181,15 +224,25 @@ serve(async (req) => {
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey)
 
-  // Carrega todos os coordenadores com token salvo
+  // ── Carrega tokens + emails de todos os coordenadores ──────────────────────
   const { data: tokenRows, error: tokenErr } = await admin
     .from('google_tokens')
-    .select('user_id, refresh_token')
+    .select('user_id, refresh_token, google_email')
 
   if (tokenErr) {
     console.error('[daily-import] Erro ao buscar tokens:', tokenErr.message)
     return new Response(JSON.stringify({ error: tokenErr.message }), { status: 500 })
   }
+
+  // Mapa: googleEmail (lower) → supabase user_id
+  // ex: { 'coordenacaoking7@gmail.com': 'uuid-ariel', 'caio.velloso.king@gmail.com': 'uuid-caio', ... }
+  const emailToUserId: Record<string, string> = {}
+  for (const row of tokenRows ?? []) {
+    if (row.google_email) {
+      emailToUserId[row.google_email.toLowerCase()] = row.user_id
+    }
+  }
+  console.log('[daily-import] Mapa de coordenadores:', Object.keys(emailToUserId))
 
   const today = new Date()
   let totalSaved = 0
@@ -197,7 +250,7 @@ serve(async (req) => {
 
   for (const row of tokenRows ?? []) {
     try {
-      console.log(`[daily-import] Processando usuário ${row.user_id}`)
+      console.log(`[daily-import] Processando: ${row.google_email ?? row.user_id}`)
 
       // 1 — Refresh access token
       const accessToken = await refreshAccessToken(row.refresh_token)
@@ -213,15 +266,17 @@ serve(async (req) => {
       const events   = await buscarEventosDia(accessToken, today)
       const meetings = events.filter(isReuniaoComProfessor)
 
-      console.log(`[daily-import] ${meetings.length} reunião(ões) encontrada(s) para ${row.user_id}`)
+      console.log(`[daily-import] ${meetings.length} reunião(ões) encontrada(s) para ${row.google_email ?? row.user_id}`)
 
-      // 4 — Insere reuniões não duplicadas
+      // 4 — Insere reuniões não duplicadas com coordenador correto
       for (const ev of meetings) {
+        // Resolve qual coordenador é responsável por este evento
+        const coordId = resolveCoordId(ev, row.user_id, emailToUserId)
         const prof     = matchProfessor(ev, professores ?? [])
         const startDt  = new Date(ev.start.dateTime ?? ev.start.date ?? '')
         const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
 
-        // Verifica duplicata
+        // Verifica duplicata pelo google_event_id (já importado antes?)
         const { data: existing } = await admin
           .from('reunioes')
           .select('id')
@@ -234,7 +289,7 @@ serve(async (req) => {
         }
 
         const { error: insertErr } = await admin.from('reunioes').insert({
-          coordenador_id:  row.user_id,
+          coordenador_id:  coordId,
           professor_id:    prof?.id ?? null,
           data:            startDt.toISOString(),
           titulo:          ev.summary,
@@ -247,7 +302,11 @@ serve(async (req) => {
           console.error(`[daily-import] Erro ao inserir "${ev.summary}":`, insertErr.message)
           totalErrors++
         } else {
-          console.log(`[daily-import] Importado: "${ev.summary}" → ${prof?.nome ?? 'sem vínculo'}`)
+          // Log detalhado: quem ficou responsável
+          const coordLog = coordId === row.user_id
+            ? (row.google_email ?? row.user_id)
+            : `${coordId} (via ${ev.organizer?.email ?? 'attendee'})`
+          console.log(`[daily-import] ✓ "${ev.summary}" → prof: ${prof?.nome ?? 'sem vínculo'} | coord: ${coordLog}`)
           totalSaved++
         }
       }
@@ -260,7 +319,7 @@ serve(async (req) => {
       // Token revogado → remove do banco para não tentar novamente
       if (msg.includes('invalid_grant')) {
         await admin.from('google_tokens').delete().eq('user_id', row.user_id)
-        console.warn(`[daily-import] Token inválido removido para usuário ${row.user_id}`)
+        console.warn(`[daily-import] Token inválido removido: ${row.google_email ?? row.user_id}`)
       }
     }
   }
