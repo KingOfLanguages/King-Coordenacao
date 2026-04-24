@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   RefreshCw, CalendarPlus, ChevronDown, ChevronUp, User,
   AlertCircle, Loader2, Check, X, Video, ExternalLink,
-  CalendarDays,
+  CalendarDays, Zap, ZapOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useReunioes'
 import {
   obterTokenGoogle,
+  solicitarCodigoGoogle,
   buscarEventosDia,
   isReuniaoComProfessor,
   matchProfessor,
@@ -30,6 +31,9 @@ import {
   eventStartDate,
   type CalendarEvent,
 } from '@/lib/googleCalendar'
+import { useGoogleAutomation, useDesativarAutomacao } from '@/hooks/useGoogleAutomation'
+import { supabase } from '@/lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -414,11 +418,15 @@ export function ReunioesPage() {
   const { profile } = useAuth()
   const [aba,         setAba]         = useState<Aba>('hoje')
   const [importState, setImportState] = useState<ImportState>({ phase: 'idle' })
+  const [ativando,    setAtivando]    = useState(false)
 
   const { data: hoje      = [], isLoading: loadHoje,      isError: errHoje,      refetch: refetchHoje      } = useReunioesHoje()
   const { data: atrasadas = [], isLoading: loadAtrasadas, isError: errAtrasadas, refetch: refetchAtrasadas } = useReunioesAtrasadas()
   const { data: professores = [] } = useProfessoresAtivos()
-  const criarReuniao = useCriarReuniao()
+  const criarReuniao   = useCriarReuniao()
+  const automation     = useGoogleAutomation()
+  const desativar      = useDesativarAutomacao()
+  const queryClient    = useQueryClient()
 
   // Split today's meetings: agenda (all) vs launch (professor-linked only)
   const agendaHoje   = hoje
@@ -434,6 +442,43 @@ export function ReunioesPage() {
     refetchHoje()
     refetchAtrasadas()
     toast.success('Atualizado.')
+  }
+
+  async function handleAtivarAutomacao() {
+    try {
+      setAtivando(true)
+      const code = await solicitarCodigoGoogle()
+
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data, error } = await supabase.functions.invoke('exchange-google-token', {
+        body:    { code },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+
+      if (error || data?.error) {
+        throw new Error(data?.error ?? error?.message ?? 'Erro desconhecido.')
+      }
+
+      toast.success('Importação automática ativada. Reuniões serão importadas todo dia às 8h.')
+      queryClient.invalidateQueries({ queryKey: ['google', 'automation'] })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // Se o usuário fechou o popup, não mostra erro
+      if (!msg.toLowerCase().includes('popup_closed') && !msg.toLowerCase().includes('access_denied')) {
+        toast.error(`Erro ao ativar: ${msg}`)
+      }
+    } finally {
+      setAtivando(false)
+    }
+  }
+
+  async function handleDesativarAutomacao() {
+    try {
+      await desativar.mutateAsync()
+      toast.success('Importação automática desativada.')
+    } catch {
+      toast.error('Erro ao desativar.')
+    }
   }
 
   async function handleImportar() {
@@ -620,6 +665,62 @@ export function ReunioesPage() {
           </Button>
         </div>
       </div>
+
+      {/* ── Automação ── */}
+      {!automation.isLoading && (
+        <div className={cn(
+          'flex items-center justify-between gap-4 rounded-xl border px-4 py-3',
+          automation.data
+            ? 'border-urg-lowFg/25 bg-urg-lowBg'
+            : 'border-line bg-surface-subtle/60',
+        )}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            {automation.data
+              ? <Zap    className="h-4 w-4 text-urg-lowFg flex-shrink-0" />
+              : <ZapOff className="h-4 w-4 text-ink-muted flex-shrink-0" />
+            }
+            <div className="min-w-0">
+              <p className={cn('text-[13px] font-medium', automation.data ? 'text-urg-lowFg' : 'text-ink')}>
+                Importação automática{' '}
+                {automation.data
+                  ? <span className="font-semibold">ativa</span>
+                  : <span className="text-ink-muted font-normal">inativa</span>
+                }
+              </p>
+              <p className="text-[11px] text-ink-muted mt-0.5">
+                {automation.data
+                  ? `Configurada em ${new Date(automation.data.updated_at).toLocaleDateString('pt-BR')} · importa todo dia de semana às 8:00`
+                  : 'Ative para importar reuniões automaticamente às 8:00 de cada dia de semana.'
+                }
+              </p>
+            </div>
+          </div>
+
+          {automation.data ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={desativar.isPending}
+              onClick={handleDesativarAutomacao}
+              className="btn-press shrink-0 h-7 text-[11px] border-urg-highFg/25 text-urg-highFg hover:bg-urg-highBg"
+            >
+              {desativar.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Desativar'}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={ativando}
+              onClick={handleAtivarAutomacao}
+              className="btn-press shrink-0 h-7 text-[11px] bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
+            >
+              {ativando
+                ? <><Loader2 className="h-3 w-3 animate-spin" />Aguardando…</>
+                : <><Zap className="h-3 w-3" />Ativar</>
+              }
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* ── Painel de revisão ── */}
       {importState.phase === 'review' && (

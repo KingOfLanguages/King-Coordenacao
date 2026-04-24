@@ -59,6 +59,47 @@ export async function obterTokenGoogle(): Promise<string> {
   })
 }
 
+/**
+ * Abre o popup de autorização Google (code flow com offline access).
+ * Retorna o authorization code para ser trocado por tokens no servidor.
+ * Necessário para ativar a importação automática diária.
+ */
+export async function solicitarCodigoGoogle(): Promise<string> {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+  if (!clientId) {
+    throw new Error(
+      'VITE_GOOGLE_CLIENT_ID não está configurado. ' +
+      'Adicione ao .env.local e configure o OAuth no Google Cloud Console.'
+    )
+  }
+
+  await loadGIS()
+
+  return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = (window.google.accounts.oauth2 as any).initCodeClient({
+      client_id: clientId,
+      scope:     CALENDAR_SCOPE,
+      ux_mode:   'popup',
+      callback:  (resp: { code?: string; error?: string; error_description?: string }) => {
+        if (resp.error) {
+          reject(new Error(resp.error_description ?? resp.error))
+          return
+        }
+        if (!resp.code) {
+          reject(new Error('Código de autorização não recebido.'))
+          return
+        }
+        resolve(resp.code)
+      },
+      error_callback: (err: { message?: string; type?: string }) => {
+        reject(new Error(err.message ?? err.type ?? 'Erro na autorização Google.'))
+      },
+    })
+    client.requestCode()
+  })
+}
+
 export function limparTokenGoogle() {
   if (_accessToken) {
     window.google?.accounts?.oauth2?.revoke(_accessToken)

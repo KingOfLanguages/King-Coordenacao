@@ -14,6 +14,7 @@ export interface Profile {
 export interface Professor {
   id: string
   nome: string
+  email: string | null
   monitoramento: boolean
   data_inicio: string | null
   tempo_na_king: string | null
