@@ -3,12 +3,14 @@
 //
 // Roda automaticamente via pg_cron (08:30 BRT), após daily-import.
 // Para cada reunião pendente de hoje com professor que tenha email cadastrado,
-// envia um lembrete via Resend com o link da reunião.
+// envia um lembrete via Brevo (Sendinblue) com o link da reunião.
+//
+// Brevo não exige domínio próprio — basta verificar um email de remetente.
 //
 // Secrets necessários (Supabase Dashboard > Edge Functions > Secrets):
-//   RESEND_API_KEY   — chave da API do Resend (https://resend.com)
-//   RESEND_FROM_EMAIL — email remetente verificado no Resend  (ex: no-reply@king.education)
-//   RESEND_FROM_NAME  — nome exibido no email (ex: King Education)
+//   BREVO_API_KEY    — chave da API do Brevo (Settings > API Keys)
+//   BREVO_FROM_EMAIL — email remetente verificado no Brevo (ex: coordenacaoking7@gmail.com)
+//   BREVO_FROM_NAME  — nome exibido no email (ex: King Education)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -122,23 +124,23 @@ serve(async (req) => {
     return new Response('Não autorizado.', { status: 401 })
   }
 
-  const resendKey = Deno.env.get('RESEND_API_KEY')
-  if (!resendKey) {
-    console.log('[send-reminders] RESEND_API_KEY não configurado — pulando envio.')
-    return new Response(JSON.stringify({ skipped: true, reason: 'RESEND_API_KEY ausente' }), {
+  const brevoKey = Deno.env.get('BREVO_API_KEY')
+  if (!brevoKey) {
+    console.log('[send-reminders] BREVO_API_KEY não configurado — pulando envio.')
+    return new Response(JSON.stringify({ skipped: true, reason: 'BREVO_API_KEY ausente' }), {
       headers: { 'Content-Type': 'application/json' },
     })
   }
 
-  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'noreply@king.education'
-  const fromName  = Deno.env.get('RESEND_FROM_NAME')  ?? 'King Education'
+  const fromEmail = Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking7@gmail.com'
+  const fromName  = Deno.env.get('BREVO_FROM_NAME')  ?? 'King Education'
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey)
 
   // ── Busca reuniões pendentes de hoje com professor que tenha email ─────────
-  const hoje       = new Date()
-  const inicioDia  = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0,  0,  0, 0).toISOString()
-  const fimDia     = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59, 999).toISOString()
+  const hoje      = new Date()
+  const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0,  0,  0, 0).toISOString()
+  const fimDia    = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59, 999).toISOString()
 
   const { data: reunioes, error } = await admin
     .from('reunioes')
@@ -173,25 +175,23 @@ serve(async (req) => {
     const coordNome = (r.coordenador as { nome: string } | null)?.nome ?? 'Coordenação'
     const titulo    = (r.titulo as string | null) ?? `1:1 com ${coordNome}`
 
-    const html = buildHtml({
-      professorNome: prof.nome,
-      titulo,
-      hora,
-      meetLink: r.meet_link as string | null,
-      coordNome,
-    })
+    const html = buildHtml({ professorNome: prof.nome, titulo, hora, meetLink: r.meet_link as string | null, coordNome })
 
-    const res = await fetch('https://api.resend.com/emails', {
+    // ── Brevo API (v3) ────────────────────────────────────────────────────────
+    // Diferente do Resend: usa header "api-key" em vez de "Authorization: Bearer"
+    // e o payload tem "sender", "to" como objetos, e "htmlContent" em vez de "html"
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
-        Authorization:  `Bearer ${resendKey}`,
+        'api-key':      brevoKey,
         'Content-Type': 'application/json',
+        'Accept':       'application/json',
       },
       body: JSON.stringify({
-        from:    `${fromName} <${fromEmail}>`,
-        to:      [prof.email],
-        subject: `Lembrete: reunião hoje às ${hora}`,
-        html,
+        sender:      { name: fromName, email: fromEmail },
+        to:          [{ email: prof.email, name: prof.nome }],
+        subject:     `Lembrete: reunião hoje às ${hora}`,
+        htmlContent: html,
       }),
     })
 
