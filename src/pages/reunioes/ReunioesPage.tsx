@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   RefreshCw, CalendarPlus, ChevronDown, ChevronUp, User,
   AlertCircle, Loader2, Check, X, Video, ExternalLink,
-  CalendarDays, Zap, ZapOff,
+  CalendarDays, Zap, ZapOff, Mail,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -32,6 +32,7 @@ import {
   type CalendarEvent,
 } from '@/lib/googleCalendar'
 import { useGoogleAutomation, useDesativarAutomacao } from '@/hooks/useGoogleAutomation'
+import { useSendLembretesGeral, useSendLembreteIndividual } from '@/hooks/useSendLembrete'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
@@ -175,8 +176,22 @@ function MeetingCard({ reuniao }: { reuniao: ReuniaoCompleta }) {
   const [aconteceu, setAconteceu] = useState<'sim' | 'nao' | ''>('')
   const [obs,       setObs]       = useState('')
 
-  const concluir = useConcluirReuniao()
-  const navigate = useNavigate()
+  const concluir        = useConcluirReuniao()
+  const sendIndividual  = useSendLembreteIndividual()
+  const navigate        = useNavigate()
+
+  async function handleEnviarLembrete() {
+    try {
+      const result = await sendIndividual.mutateAsync(reuniao.id)
+      if (result.sent > 0) {
+        toast.success('Lembrete enviado.')
+      } else {
+        toast.warning('Lembrete não enviado — email do professor não encontrado.')
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar lembrete.')
+    }
+  }
 
   const prof    = reuniao.professores
   const ultiObs = reuniao.ultima_observacao
@@ -233,6 +248,24 @@ function MeetingCard({ reuniao }: { reuniao: ReuniaoCompleta }) {
         </div>
         <div className="flex items-center gap-2">
           <MeetLinkButton href={reuniao.meet_link} />
+          {isPend && (
+            <button
+              onClick={handleEnviarLembrete}
+              disabled={sendIndividual.isPending}
+              title="Enviar lembrete por email"
+              className={cn(
+                'btn-press inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium',
+                'border border-line text-ink-secondary hover:border-accentBlue/40 hover:text-accentBlue hover:bg-accentBlue/5',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              {sendIndividual.isPending
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <Mail className="h-3 w-3" />
+              }
+              Lembrete
+            </button>
+          )}
           {statusBadge}
           <button
             onClick={() => setExpanded(e => !e)}
@@ -426,6 +459,7 @@ export function ReunioesPage() {
   const criarReuniao   = useCriarReuniao()
   const automation     = useGoogleAutomation()
   const desativar      = useDesativarAutomacao()
+  const sendGeral      = useSendLembretesGeral()
   const queryClient    = useQueryClient()
 
   // Split today's meetings: agenda (all) vs launch (professor-linked only)
@@ -442,6 +476,27 @@ export function ReunioesPage() {
     refetchHoje()
     refetchAtrasadas()
     toast.success('Atualizado.')
+  }
+
+  async function handleEnviarLembretesGeral() {
+    try {
+      const result = await sendGeral.mutateAsync()
+      if (result.sent > 0) {
+        toast.success(
+          result.skipped > 0
+            ? `${result.sent} lembrete(s) enviado(s). ${result.skipped} sem email.`
+            : `${result.sent} lembrete(s) enviado(s).`,
+        )
+      } else {
+        toast.warning(
+          result.skipped > 0
+            ? `Nenhum lembrete enviado — ${result.skipped} reunião(ões) sem email do professor.`
+            : 'Nenhuma reunião pendente para hoje.',
+        )
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar lembretes.')
+    }
   }
 
   async function handleAtivarAutomacao() {
@@ -651,6 +706,18 @@ export function ReunioesPage() {
             className="btn-press border-line text-ink-secondary gap-1.5 text-[12px]"
           >
             <RefreshCw className="h-3.5 w-3.5" />Recarregar
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleEnviarLembretesGeral}
+            disabled={sendGeral.isPending}
+            className="btn-press border-line text-ink-secondary gap-1.5 text-[12px]"
+          >
+            {sendGeral.isPending
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Enviando…</>
+              : <><Mail className="h-3.5 w-3.5" />Enviar lembretes</>}
           </Button>
 
           <Button

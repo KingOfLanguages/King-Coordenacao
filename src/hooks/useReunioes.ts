@@ -14,6 +14,7 @@ export type ReuniaoCompleta = {
   status: 'pendente' | 'concluida' | 'cancelada'
   google_event_id: string | null
   meet_link: string | null
+  professor_email: string | null
   notas: string | null
   titulo: string | null
   aconteceu: boolean | null
