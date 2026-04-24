@@ -36,7 +36,20 @@ interface CalEvent {
   start: { dateTime?: string; date?: string }
   end:   { dateTime?: string; date?: string }
   organizer?: { email: string; displayName?: string; self?: boolean }
-  attendees?: { email: string; displayName?: string; self?: boolean }[]
+  attendees?: { email: string; displayName?: string; self?: boolean; responseStatus?: string }[]
+}
+
+/**
+ * Extrai o email do professor (attendee externo) do evento.
+ * Ignora: o dono do calendário (self=true) e emails de coordenadores conhecidos.
+ */
+function extractProfessorEmail(ev: CalEvent, coordEmails: Set<string>): string | null {
+  const external = (ev.attendees ?? []).filter(a =>
+    !a.self &&
+    a.email &&
+    !coordEmails.has(a.email.toLowerCase())
+  )
+  return external[0]?.email ?? null
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<string> {
@@ -214,11 +227,10 @@ function matchProfessor<T extends { id: string; nome: string }>(ev: CalEvent, pr
 // ─── Servidor ─────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  // Aceita apenas requests com service role key no Authorization header
+  // Aceita requests com CRON_SECRET (se configurado) ou sem auth (pg_cron interno)
   const auth       = req.headers.get('Authorization') ?? ''
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-  if (auth !== `Bearer ${serviceKey}`) {
+  const cronSecret = Deno.env.get('CRON_SECRET')
+  if (cronSecret && auth !== `Bearer ${cronSecret}`) {
     return new Response('Não autorizado.', { status: 401 })
   }
 
@@ -242,7 +254,10 @@ serve(async (req) => {
       emailToUserId[row.google_email.toLowerCase()] = row.user_id
     }
   }
-  console.log('[daily-import] Mapa de coordenadores:', Object.keys(emailToUserId))
+
+  // Set de emails de coordenadores — usado para excluir da busca de email do professor
+  const coordEmails = new Set(Object.keys(emailToUserId))
+  console.log('[daily-import] Mapa de coordenadores:', [...coordEmails])
 
   const today = new Date()
   let totalSaved = 0
@@ -271,10 +286,11 @@ serve(async (req) => {
       // 4 — Insere reuniões não duplicadas com coordenador correto
       for (const ev of meetings) {
         // Resolve qual coordenador é responsável por este evento
-        const coordId = resolveCoordId(ev, row.user_id, emailToUserId)
-        const prof     = matchProfessor(ev, professores ?? [])
-        const startDt  = new Date(ev.start.dateTime ?? ev.start.date ?? '')
-        const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
+        const coordId      = resolveCoordId(ev, row.user_id, emailToUserId)
+        const prof         = matchProfessor(ev, professores ?? [])
+        const profEmail    = extractProfessorEmail(ev, coordEmails)
+        const startDt      = new Date(ev.start.dateTime ?? ev.start.date ?? '')
+        const meetHref     = ev.hangoutLink ?? ev.htmlLink ?? null
 
         // Verifica duplicata pelo google_event_id (já importado antes?)
         const { data: existing } = await admin
@@ -291,6 +307,7 @@ serve(async (req) => {
         const { error: insertErr } = await admin.from('reunioes').insert({
           coordenador_id:  coordId,
           professor_id:    prof?.id ?? null,
+          professor_email: profEmail,
           data:            startDt.toISOString(),
           titulo:          ev.summary,
           google_event_id: ev.id,

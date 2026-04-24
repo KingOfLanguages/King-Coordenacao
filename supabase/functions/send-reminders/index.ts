@@ -117,10 +117,10 @@ function buildHtml({
 // ─── Servidor ─────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  const auth       = req.headers.get('Authorization') ?? ''
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const auth = req.headers.get('Authorization') ?? ''
 
-  if (auth !== `Bearer ${serviceKey}`) {
+  const cronSecret = Deno.env.get('CRON_SECRET')
+  if (cronSecret && auth !== `Bearer ${cronSecret}`) {
     return new Response('Não autorizado.', { status: 401 })
   }
 
@@ -135,24 +135,25 @@ serve(async (req) => {
   const fromEmail = Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking7@gmail.com'
   const fromName  = Deno.env.get('BREVO_FROM_NAME')  ?? 'King Education'
 
-  const admin = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey)
+  const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
   // ── Busca reuniões pendentes de hoje com professor que tenha email ─────────
   const hoje      = new Date()
   const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0,  0,  0, 0).toISOString()
   const fimDia    = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59, 999).toISOString()
 
+  // Busca reuniões com professor_email preenchido (capturado automaticamente do Google Calendar)
+  // OU com email salvo no cadastro do professor — o que vier primeiro
   const { data: reunioes, error } = await admin
     .from('reunioes')
     .select(`
-      id, data, meet_link, titulo,
+      id, data, meet_link, titulo, professor_email,
       professores (nome, email),
       coordenador:profiles!coordenador_id (nome)
     `)
     .eq('status', 'pendente')
     .gte('data', inicioDia)
     .lte('data', fimDia)
-    .not('professor_id', 'is', null)
 
   if (error) {
     console.error('[send-reminders] Erro na query:', error.message)
@@ -163,8 +164,12 @@ serve(async (req) => {
   let skipped = 0
 
   for (const r of reunioes ?? []) {
-    const prof = r.professores as { nome: string; email: string | null } | null
-    if (!prof?.email) {
+    const prof      = r.professores as { nome: string; email: string | null } | null
+    // Prioridade: email capturado do Google Calendar > email do cadastro
+    const destEmail = (r.professor_email as string | null) ?? prof?.email ?? null
+    const destNome  = prof?.nome ?? 'Professor(a)'
+
+    if (!destEmail) {
       skipped++
       continue
     }
@@ -175,7 +180,7 @@ serve(async (req) => {
     const coordNome = (r.coordenador as { nome: string } | null)?.nome ?? 'Coordenação'
     const titulo    = (r.titulo as string | null) ?? `1:1 com ${coordNome}`
 
-    const html = buildHtml({ professorNome: prof.nome, titulo, hora, meetLink: r.meet_link as string | null, coordNome })
+    const html = buildHtml({ professorNome: destNome, titulo, hora, meetLink: r.meet_link as string | null, coordNome })
 
     // ── Brevo API (v3) ────────────────────────────────────────────────────────
     // Diferente do Resend: usa header "api-key" em vez de "Authorization: Bearer"
@@ -189,18 +194,18 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         sender:      { name: fromName, email: fromEmail },
-        to:          [{ email: prof.email, name: prof.nome }],
+        to:          [{ email: destEmail, name: destNome }],
         subject:     `Lembrete: reunião hoje às ${hora}`,
         htmlContent: html,
       }),
     })
 
     if (res.ok) {
-      console.log(`[send-reminders] Email enviado para ${prof.email} (${prof.nome})`)
+      console.log(`[send-reminders] Email enviado para ${destEmail} (${destNome})`)
       sent++
     } else {
       const errText = await res.text()
-      console.error(`[send-reminders] Falha ao enviar para ${prof.email}:`, errText)
+      console.error(`[send-reminders] Falha ao enviar para ${destEmail}:`, errText)
     }
   }
 
