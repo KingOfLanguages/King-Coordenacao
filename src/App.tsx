@@ -87,7 +87,7 @@ export default function App() {
 
               {/* Monitoring */}
               <Route path="/acompanhamento" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno', 'admin']}>
+                <ProtectedRoute roles={['coordenacao', 'admin']}>
                   <AcompanhamentoPage />
                 </ProtectedRoute>
               } />

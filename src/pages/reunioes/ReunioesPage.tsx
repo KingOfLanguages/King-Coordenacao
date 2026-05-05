@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   RefreshCw, CalendarPlus, ChevronDown, ChevronUp, User,
   AlertCircle, Loader2, Check, X, Video, ExternalLink,
-  CalendarDays, Zap, ZapOff, Mail,
+  CalendarDays, Zap, ZapOff, Mail, Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -34,7 +34,8 @@ import {
 import { useGoogleAutomation, useDesativarAutomacao } from '@/hooks/useGoogleAutomation'
 import { useSendLembretesGeral, useSendLembreteIndividual } from '@/hooks/useSendLembrete'
 import { supabase } from '@/lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { Professor } from '@/types'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -179,6 +180,21 @@ function MeetingCard({ reuniao }: { reuniao: ReuniaoCompleta }) {
   const concluir        = useConcluirReuniao()
   const sendIndividual  = useSendLembreteIndividual()
   const navigate        = useNavigate()
+
+  // BUG-10: lazy-fetch ALL observations for this professor when history panel opens
+  const { data: todasObs = [], isLoading: loadingObs } = useQuery({
+    queryKey: ['observacoes', 'professor', reuniao.professor_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('observacoes')
+        .select('id, tipo, texto, created_at, profiles(nome)')
+        .eq('professor_id', reuniao.professor_id!)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data ?? []
+    },
+    enabled: hist && !!reuniao.professor_id,
+  })
 
   async function handleEnviarLembrete() {
     try {
@@ -427,16 +443,47 @@ function MeetingCard({ reuniao }: { reuniao: ReuniaoCompleta }) {
             </div>
           )}
 
-          {/* Histórico */}
-          {hist && ultiObs && (
+          {/* BUG-10: Histórico — shows ALL observations, loaded lazily */}
+          {hist && (
             <div className="border-t border-line-soft pt-3 space-y-2">
               <p className="label-micro">Histórico de observações</p>
-              <div className="rounded-lg border border-line bg-surface-subtle p-3 text-[12px] text-ink-secondary">
-                {ultiObs.texto}
-                <p className="text-ink-muted mt-1 tabular-nums">
-                  {new Date(ultiObs.created_at).toLocaleDateString('pt-BR')}
-                </p>
-              </div>
+              {loadingObs ? (
+                <div className="flex items-center gap-2 text-[12px] text-ink-muted">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />Carregando…
+                </div>
+              ) : todasObs.length === 0 ? (
+                <p className="text-[12px] text-ink-muted italic">Sem observações registradas.</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {(todasObs as any[]).map((o) => {
+                    // profiles can come back as array or object depending on Supabase join
+                    const profNome: string | undefined = Array.isArray(o.profiles)
+                      ? o.profiles[0]?.nome
+                      : o.profiles?.nome
+                    return (
+                      <div key={o.id} className="rounded-lg border border-line bg-surface-subtle p-3 text-[12px] space-y-1.5">
+                        <span className={cn(
+                          'inline-block px-1.5 py-0.5 rounded text-[10px] font-medium',
+                          o.tipo === 'reuniao'            ? 'bg-accentBlue-soft text-accentBlue' :
+                          o.tipo === 'feedback_positivo'  ? 'bg-urg-lowBg text-urg-lowFg' :
+                          o.tipo === 'feedback_negativo'  ? 'bg-urg-highBg text-urg-highFg' :
+                                                            'bg-urg-medBg text-urg-medFg',
+                        )}>
+                          {o.tipo === 'reuniao'            ? 'Reunião' :
+                           o.tipo === 'feedback_positivo'  ? 'Feedback positivo' :
+                           o.tipo === 'feedback_negativo'  ? 'Feedback negativo' :
+                           'Ocorrência'}
+                        </span>
+                        <p className="text-ink-secondary leading-relaxed whitespace-pre-wrap">{o.texto}</p>
+                        <p className="text-ink-muted tabular-nums">
+                          {new Date(o.created_at).toLocaleDateString('pt-BR')}
+                          {profNome && ` · ${profNome}`}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -449,9 +496,10 @@ function MeetingCard({ reuniao }: { reuniao: ReuniaoCompleta }) {
 
 export function ReunioesPage() {
   const { profile } = useAuth()
-  const [aba,         setAba]         = useState<Aba>('hoje')
-  const [importState, setImportState] = useState<ImportState>({ phase: 'idle' })
-  const [ativando,    setAtivando]    = useState(false)
+  const [aba,              setAba]              = useState<Aba>('hoje')
+  const [importState,      setImportState]      = useState<ImportState>({ phase: 'idle' })
+  const [ativando,         setAtivando]         = useState(false)
+  const [novaReuniaoOpen,  setNovaReuniaoOpen]  = useState(false)  // BUG-17
 
   const { data: hoje      = [], isLoading: loadHoje,      isError: errHoje,      refetch: refetchHoje      } = useReunioesHoje()
   const { data: atrasadas = [], isLoading: loadAtrasadas, isError: errAtrasadas, refetch: refetchAtrasadas } = useReunioesAtrasadas()
@@ -584,14 +632,23 @@ export function ReunioesPage() {
       return e instanceof Error ? e.message : String(e)
     }
 
+    // BUG-09: resolve coordenador_id from the event organizer's email via google_tokens
+    const { data: googleTokens } = await supabase
+      .from('google_tokens')
+      .select('user_id, google_email')
+    const emailToUserId: Record<string, string> = {}
+    googleTokens?.forEach(t => { if (t.google_email) emailToUserId[t.google_email] = t.user_id })
+
     for (const ev of events) {
       const profId   = matched.get(ev.id) ?? null
       const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
+      const orgEmail = ev.organizer?.email
+      const resolvedCoordId = (orgEmail && emailToUserId[orgEmail]) ? emailToUserId[orgEmail] : profile!.id
 
       // Build payload: omit nullable fields when they're null so we don't
       // fail on columns that may not exist in the DB yet (meet_link)
       const base = {
-        coordenador_id:  profile!.id,
+        coordenador_id:  resolvedCoordId,
         data:            eventStartDate(ev).toISOString(),
         titulo:          ev.summary,
         google_event_id: ev.id,
@@ -729,6 +786,16 @@ export function ReunioesPage() {
             {importState.phase === 'loading'
               ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Importando…</>
               : <><CalendarPlus className="h-3.5 w-3.5" />Importar reuniões</>}
+          </Button>
+
+          {/* BUG-17: manual meeting creation */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setNovaReuniaoOpen(true)}
+            className="btn-press border-line text-ink-secondary gap-1.5 text-[12px]"
+          >
+            <Plus className="h-3.5 w-3.5" />Nova Reunião
           </Button>
         </div>
       </div>
@@ -992,6 +1059,132 @@ export function ReunioesPage() {
           <ExternalLink className="h-3 w-3" />
           Abrir Google Calendar
         </a>
+      </div>
+
+      {/* BUG-17: manual meeting dialog */}
+      {novaReuniaoOpen && (
+        <NovaReuniaoDialog
+          professores={professores}
+          onClose={() => setNovaReuniaoOpen(false)}
+          onSaved={() => { setNovaReuniaoOpen(false); refetchHoje(); refetchAtrasadas() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── NovaReuniaoDialog (BUG-17) ───────────────────────────────────────────────
+
+function NovaReuniaoDialog({
+  professores,
+  onClose,
+  onSaved,
+}: {
+  professores: Professor[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const { profile }              = useAuth()
+  const criar                    = useCriarReuniao()
+  const [professorId, setProfId] = useState('')
+  const [data,        setData]   = useState('')   // YYYY-MM-DD
+  const [hora,        setHora]   = useState('08:00')
+  const [notas,       setNotas]  = useState('')
+
+  async function handleSalvar() {
+    if (!data) { toast.error('Selecione uma data.'); return }
+    if (!hora) { toast.error('Informe o horário.'); return }
+
+    const isoDate = new Date(`${data}T${hora}:00`).toISOString()
+
+    try {
+      await criar.mutateAsync({
+        coordenador_id: profile!.id,
+        data:           isoDate,
+        ...(professorId ? { professor_id: professorId } : {}),
+        ...(notas.trim() ? { notas: notas.trim() } : {}),
+      })
+      toast.success('Reunião criada.')
+      onSaved()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao criar reunião.')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-surface-canvas border border-line rounded-xl shadow-elevated w-full max-w-md mx-4 p-6 space-y-5 animate-fade-up">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold text-ink">Nova Reunião</h2>
+          <button onClick={onClose} className="btn-press text-ink-subtle hover:text-ink-secondary">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {/* Professor */}
+          <div className="space-y-1.5">
+            <Label className="label-micro">Professor</Label>
+            <select
+              value={professorId}
+              onChange={e => setProfId(e.target.value)}
+              className="w-full h-9 rounded-md border border-line bg-surface-canvas px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue"
+            >
+              <option value="">— Sem vínculo (só agenda) —</option>
+              {professores.map(p => (
+                <option key={p.id} value={p.id}>{p.nome}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Data */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="label-micro">Data <span className="text-brand">*</span></Label>
+              <input
+                type="date"
+                value={data}
+                onChange={e => setData(e.target.value)}
+                className="w-full h-9 rounded-md border border-line bg-surface-canvas px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="label-micro">Horário <span className="text-brand">*</span></Label>
+              <input
+                type="time"
+                value={hora}
+                onChange={e => setHora(e.target.value)}
+                className="w-full h-9 rounded-md border border-line bg-surface-canvas px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue"
+              />
+            </div>
+          </div>
+
+          {/* Notas */}
+          <div className="space-y-1.5">
+            <Label className="label-micro">Notas (opcional)</Label>
+            <textarea
+              rows={3}
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              placeholder="Anotações sobre a reunião…"
+              className="w-full resize-none rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue transition-colors"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-ink-secondary">
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSalvar}
+            disabled={criar.isPending}
+            className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
+          >
+            {criar.isPending ? 'Salvando…' : 'Criar reunião'}
+          </Button>
+        </div>
       </div>
     </div>
   )

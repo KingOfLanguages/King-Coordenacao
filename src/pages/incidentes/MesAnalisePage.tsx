@@ -48,7 +48,8 @@ export function MesAnalisePage() {
       .map(([name, value]) => ({ name, value }))
   }, [incidentes])
 
-  const isFuturo = ano === hoje.getFullYear() && mes === hoje.getMonth() + 1
+  const isFuturo = ano > hoje.getFullYear() ||
+    (ano === hoje.getFullYear() && mes >= hoje.getMonth() + 1)
 
   return (
     <div className="px-6 py-6 space-y-5 max-w-[1200px] mx-auto">

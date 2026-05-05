@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   TrendingUp, BarChart3, Clock, CheckCircle2, AlertOctagon,
-  Search, FileSpreadsheet, Download, SlidersHorizontal, X, Bell,
+  Search, SlidersHorizontal, X, Bell,
 } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useIncidentes } from '@/hooks/useIncidentes'
 import type { FiltrosIncidente } from '@/hooks/useIncidentes'
 import type { UrgenciaNivel } from '@/types'
@@ -13,11 +14,11 @@ import { StatCard } from '@/components/incidentes/StatCard'
 import { FrequencyBars } from '@/components/incidentes/FrequencyBars'
 import { UrgencyBadge, urgencyFromIncidente } from '@/components/incidentes/IncidenteStatusBadge'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 type TabKey = 'recentes' | 'solucionados' | 'controle' | 'ci-solucionados'
 type UrgFilter = 'todas' | UrgenciaNivel
+type PeriodoTemporal = 'Semana' | 'Mês'
 
 // Suporte types (shown when tab is recentes/solucionados)
 const TIPOS_SUPORTE = [
@@ -56,7 +57,8 @@ export function IncidentesPage() {
   const [tipoFilter, setTipoFilter] = useState<string>('Todos')
   const [urgFilter, setUrgFilter]   = useState<UrgFilter>('todas')
   const [respFilter, setRespFilter] = useState('')
-  const [toastDismissed, setToastDismissed] = useState(false)
+  const [toastDismissed, setToastDismissed]       = useState(false)
+  const [periodoTemporal, setPeriodoTemporal]     = useState<PeriodoTemporal>('Semana')
 
   // Tab → categoria sync (CI tabs flip the form panel)
   function handleTabChange(t: TabKey) {
@@ -86,7 +88,7 @@ export function IncidentesPage() {
   // Server-side filters
   const filtrosComUrg: FiltrosIncidente = {
     ...filtros,
-    urgencia:   urgFilter !== 'todas' ? urgFilter : undefined,
+    urgencia:    urgFilter !== 'todas' ? urgFilter : undefined,
     responsavel: respFilter.trim() || undefined,
   }
   const { data: incidentes, isLoading } = useIncidentes(filtrosComUrg)
@@ -103,16 +105,15 @@ export function IncidentesPage() {
     const ciBase = base.filter(i => isCITipo(i.tipo))
     const baseAtivo = isCIMode ? ciBase : base
 
-    const total     = baseAtivo.length
-    const pendentes = rows.filter(i => i.status === 'pendente' && (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))).length
-    const resolvidos = rows.filter(i => i.status === 'aprovado' && (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))).length
-    const urgentes  = rows.filter(i =>
+    const total      = baseAtivo.length
+    const pendentes  = rows.filter(i => i.status === 'pendente' && (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))).length
+    const resolvidos = rows.filter(i => i.status === 'aprovado'  && (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))).length
+    const urgentes   = rows.filter(i =>
       urgencyFromIncidente(i) === 'alta' &&
       i.status !== 'aprovado' &&
       (isCIMode ? isCITipo(i.tipo) : !isCITipo(i.tipo))
     ).length
 
-    // % plataforma (suporte) vs % análise (CI)
     const pctBase = isCIMode
       ? ciBase.filter(i => i.tipo?.toLowerCase() === 'mês de análise').length
       : base.filter(i => i.tipo?.toLowerCase().includes('plataforma')).length
@@ -133,14 +134,34 @@ export function IncidentesPage() {
     return list.map(label => ({ label, value: buckets[label] }))
   }, [rows, isCIMode])
 
+  // Temporal chart data — grouped by day for the selected period
+  const chartDataTemporal = useMemo(() => {
+    const hoje = new Date()
+    const dias  = periodoTemporal === 'Semana' ? 7 : 30
+    const buckets: Record<string, number> = {}
+    for (let i = dias - 1; i >= 0; i--) {
+      const d = new Date(hoje)
+      d.setDate(d.getDate() - i)
+      buckets[d.toISOString().slice(0, 10)] = 0
+    }
+    rows.forEach(r => {
+      const key = r.created_at.slice(0, 10)
+      if (key in buckets) buckets[key]++
+    })
+    return Object.entries(buckets).map(([date, value]) => ({
+      name:  new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+      value,
+    }))
+  }, [rows, periodoTemporal])
+
   // Table — tab + tipo pill filter
   const filtradas = useMemo(() => {
     let list = rows
 
-    // Tab filter
+    // Tab filter — BUG-06: 'controle' shows only pending CI items
     if (tab === 'recentes')        list = list.filter(i => i.status === 'pendente' && !isCITipo(i.tipo))
     if (tab === 'solucionados')    list = list.filter(i => i.status === 'aprovado'  && !isCITipo(i.tipo))
-    if (tab === 'controle')        list = list.filter(i => isCITipo(i.tipo))
+    if (tab === 'controle')        list = list.filter(i => isCITipo(i.tipo) && i.status === 'pendente')
     if (tab === 'ci-solucionados') list = list.filter(i => i.status === 'aprovado'  && isCITipo(i.tipo))
 
     // Tipo pill
@@ -151,16 +172,18 @@ export function IncidentesPage() {
     return list
   }, [rows, tab, tipoFilter])
 
-  // Tab counts
+  // Tab counts — BUG-06: controle count matches filter (pending only)
   const tabCounts = useMemo(() => ({
-    recentes:        rows.filter(i => i.status === 'pendente' && !isCITipo(i.tipo)).length,
-    solucionados:    rows.filter(i => i.status === 'aprovado'  && !isCITipo(i.tipo)).length,
-    controle:        rows.filter(i => isCITipo(i.tipo)).length,
-    'ci-solucionados': rows.filter(i => i.status === 'aprovado' && isCITipo(i.tipo)).length,
+    recentes:          rows.filter(i => i.status === 'pendente' && !isCITipo(i.tipo)).length,
+    solucionados:      rows.filter(i => i.status === 'aprovado'  && !isCITipo(i.tipo)).length,
+    controle:          rows.filter(i => isCITipo(i.tipo) && i.status === 'pendente').length,
+    'ci-solucionados': rows.filter(i => i.status === 'aprovado'  && isCITipo(i.tipo)).length,
   }), [rows])
 
   const hasPills = tipoFilter !== 'Todos' || urgFilter !== 'todas' || respFilter.trim() || filtros.busca
-  const pendentesList = rows.filter(i => i.status === 'pendente' && urgencyFromIncidente(i) !== 'baixa').slice(0, 3)
+
+  // BUG-07: align urgency criterion with metricas.urgentes (both use === 'alta')
+  const pendentesList = rows.filter(i => i.status === 'pendente' && urgencyFromIncidente(i) === 'alta').slice(0, 3)
 
   const pctLabel = isCIMode ? '% em análise' : '% plataforma'
 
@@ -210,10 +233,10 @@ export function IncidentesPage() {
               </span>
             </div>
 
-            <StatCard icon={BarChart3}    label={pctLabel}         value={`${metricas.pct}%`}     tone="info" />
-            <StatCard icon={Clock}        label="Pendentes"        value={metricas.pendentes}     tone="warn" />
-            <StatCard icon={CheckCircle2} label="Resolvidos"       value={metricas.resolvidos}    tone="ok" />
-            <StatCard icon={AlertOctagon} label="Urgentes"         value={metricas.urgentes}      tone="danger" />
+            <StatCard icon={BarChart3}    label={pctLabel}    value={`${metricas.pct}%`}  tone="info" />
+            <StatCard icon={Clock}        label="Pendentes"   value={metricas.pendentes}  tone="warn" />
+            <StatCard icon={CheckCircle2} label="Resolvidos"  value={metricas.resolvidos} tone="ok" />
+            <StatCard icon={AlertOctagon} label="Urgentes"    value={metricas.urgentes}   tone="danger" />
           </div>
 
           {/* Frequency chart */}
@@ -224,7 +247,7 @@ export function IncidentesPage() {
             <FrequencyBars data={frequencia} />
           </section>
 
-          {/* Temporal evolution */}
+          {/* Temporal evolution — BUG-04: real chart */}
           <section className="card-surface p-5">
             <header className="flex items-center justify-between mb-3">
               <h3 className="label-micro">Evolução temporal</h3>
@@ -232,17 +255,52 @@ export function IncidentesPage() {
                 {(['Semana', 'Mês'] as const).map(opt => (
                   <button
                     key={opt}
+                    onClick={() => setPeriodoTemporal(opt)}
                     className={cn(
                       'btn-press px-2.5 py-0.5 rounded',
-                      opt === 'Semana' ? 'bg-surface-canvas text-ink shadow-card' : 'text-ink-muted',
+                      periodoTemporal === opt ? 'bg-surface-canvas text-ink shadow-card' : 'text-ink-muted',
                     )}
                   >{opt}</button>
                 ))}
               </div>
             </header>
-            <div className="h-32 flex items-center justify-center text-[13px] text-ink-muted">
-              {rows.length === 0 ? 'Nenhum dado disponível.' : `${rows.length} registros no período`}
-            </div>
+            {chartDataTemporal.every(d => d.value === 0) ? (
+              <div className="h-32 flex items-center justify-center text-[13px] text-ink-muted">
+                Nenhum dado no período.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={128}>
+                <BarChart data={chartDataTemporal} barSize={periodoTemporal === 'Semana' ? 24 : 8} margin={{ top: 6, right: 8, left: -28, bottom: 0 }}>
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: 'var(--fg-muted)', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={periodoTemporal === 'Semana' ? 0 : 4}
+                  />
+                  <YAxis
+                    tick={{ fill: 'var(--fg-muted)', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                    width={28}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'var(--bg-subtle)' }}
+                    contentStyle={{
+                      background: 'var(--bg-canvas)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                    labelStyle={{ color: 'var(--fg-primary)', fontWeight: 500 }}
+                    itemStyle={{ color: 'var(--accent-blue)' }}
+                    formatter={(v) => [(v as number) ?? 0, 'Incidentes']}
+                  />
+                  <Bar dataKey="value" fill="var(--accent-blue)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </section>
 
           {/* Tabs + actions */}
@@ -269,17 +327,6 @@ export function IncidentesPage() {
                   </button>
                 ))}
               </nav>
-
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="btn-press h-8 gap-1.5 border-line text-ink-secondary hover:bg-surface-subtle">
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  Google Sheets
-                </Button>
-                <Button size="sm" className="btn-press h-8 gap-1.5 bg-accentBlue hover:bg-accentBlue-hov text-white">
-                  <Download className="h-3.5 w-3.5" />
-                  Exportar Excel
-                </Button>
-              </div>
             </div>
 
             {/* Search */}
@@ -348,10 +395,22 @@ export function IncidentesPage() {
                     <X className="h-3 w-3" /> Limpar
                   </button>
                 )}
-                <span className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-urg-medBg px-2 py-0.5 text-[11px] text-urg-medFg font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-urg-medFg" />
+                {/* BUG-05: badge vira filtro ativo ao clicar */}
+                <button
+                  onClick={() => setFiltros(f => ({
+                    ...f,
+                    precisaAcompanhamento: f.precisaAcompanhamento ? undefined : true,
+                  }))}
+                  className={cn(
+                    'ml-auto btn-press inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors',
+                    filtros.precisaAcompanhamento
+                      ? 'bg-urg-medFg text-white'
+                      : 'bg-urg-medBg text-urg-medFg hover:bg-urg-medFg/20',
+                  )}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
                   Acompanhamento pendente
-                </span>
+                </button>
               </div>
             </div>
 
@@ -362,7 +421,7 @@ export function IncidentesPage() {
               <span className="text-ink-muted">de {rows.length} registros filtrados</span>
             </div>
 
-            {/* Table */}
+            {/* Table — BUG-08: removed duplicate checkbox column */}
             <div className="card-surface overflow-hidden">
               {isLoading ? (
                 <div className="p-12 flex items-center justify-center text-[13px] text-ink-muted">
@@ -380,9 +439,6 @@ export function IncidentesPage() {
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="border-b border-line-soft">
-                      <th className="w-8 px-3 py-2.5">
-                        <input type="checkbox" className="accent-accentBlue" />
-                      </th>
                       <th className="w-8 px-3 py-2.5">
                         <input type="checkbox" className="accent-accentBlue" />
                       </th>
@@ -407,9 +463,6 @@ export function IncidentesPage() {
                               : 'hover:bg-surface-subtle/55',
                           )}
                         >
-                          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                            <input type="checkbox" className="accent-accentBlue" />
-                          </td>
                           <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                             <input type="checkbox" className="accent-accentBlue" />
                           </td>
@@ -456,7 +509,7 @@ export function IncidentesPage() {
               <p className="text-[13px] text-ink leading-snug">
                 Você tem{' '}
                 <strong className="font-semibold">{metricas.urgentes} incidente{metricas.urgentes !== 1 ? 's' : ''}</strong>{' '}
-                pendente{metricas.urgentes !== 1 ? 's' : ''} de acompanhamento
+                urgente{metricas.urgentes !== 1 ? 's' : ''} pendente{metricas.urgentes !== 1 ? 's' : ''}
               </p>
               <ul className="text-[12px] text-ink-muted space-y-0.5 max-h-24 overflow-hidden">
                 {pendentesList.map(p => (

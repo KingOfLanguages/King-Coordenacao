@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
-  Upload,
   // Suporte icons
   LifeBuoy, BookOpen, LayoutGrid, UserRound, Building2, CircleDollarSign, HelpCircle, AlertOctagon,
   // Controle Interno icons
@@ -240,17 +239,6 @@ export function NovoIncidentePanel({ categoria, onCategoriaChange }: Props) {
           placeholder="O que foi feito?"
           className="w-full resize-none rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue transition-colors"
         />
-      </div>
-
-      {/* Upload */}
-      <div className="space-y-1.5">
-        <Label className="label-micro">Imagens e vídeos</Label>
-        <label className="flex items-center justify-center gap-2 rounded-md border border-dashed border-line-strong bg-surface-subtle/60 px-3 py-2.5 text-[12px] text-ink-secondary hover:bg-surface-subtle cursor-pointer transition-colors">
-          <Upload className="h-3.5 w-3.5" />
-          Anexar mídia
-          <input type="file" className="hidden" multiple accept="image/*,video/*" />
-        </label>
-        <p className="text-[11px] text-ink-subtle">Você também pode colar imagens (Ctrl+V)</p>
       </div>
 
       {/* Follow-up toggle */}

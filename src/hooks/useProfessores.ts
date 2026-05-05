@@ -101,7 +101,61 @@ export function useProfessor(id: string) {
   })
 }
 
+// ─── Professores em pausa (BUG-14) ───────────────────────────────────────────
+
+export function useProfessoresEmPausa() {
+  return useQuery({
+    queryKey: ['professores', 'pausa'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('professores')
+        .select(`
+          *,
+          observacoes (id, tipo),
+          incidentes  (id, status)
+        `)
+        .eq('saiu', false)
+        .eq('pausa', true)
+        .order('nome')
+      if (error) throw error
+
+      return (data ?? []).map(p => {
+        const obs       = (p.observacoes ?? []) as { id: string; tipo: string }[]
+        const incidents = (p.incidentes  ?? []) as { id: string; status: string }[]
+        return {
+          ...p,
+          _negativos:  obs.filter(o => o.tipo === 'feedback_negativo').length,
+          _incidentes: incidents.filter(i => i.status !== 'rejeitado').length,
+        } as ProfessorComContadores
+      })
+    },
+  })
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
+
+export function useCriarProfessor() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (professor: {
+      nome: string
+      data_inicio?: string | null
+      tempo_na_king?: string | null
+      renda?: string | null
+    }) => {
+      const { error } = await supabase.from('professores').insert({
+        ...professor,
+        monitoramento: false,
+        pausa:         false,
+        saiu:          false,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['professores'] })
+    },
+  })
+}
 
 export function useAtualizarMonitoramento() {
   const queryClient = useQueryClient()

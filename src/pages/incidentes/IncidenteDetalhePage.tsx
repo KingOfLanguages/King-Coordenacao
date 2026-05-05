@@ -41,9 +41,10 @@ export function IncidenteDetalhePage() {
   }
 
   const urgency = urgencyFromIncidente(incidente)
-  const professor = (incidente as { professores?: { nome: string } | null }).professores
-  const criador   = (incidente as { criador?: { nome: string } | null }).criador
-  const aprovador = (incidente as { aprovador?: { nome: string } | null }).aprovador
+  const professor   = (incidente as { professores?: { nome: string } | null }).professores
+  const professorId = incidente.professor_id
+  const criador     = (incidente as { criador?: { nome: string } | null }).criador
+  const aprovador   = (incidente as { aprovador?: { nome: string } | null }).aprovador
 
   return (
     <div className="px-6 py-6 max-w-3xl mx-auto space-y-5">
@@ -81,7 +82,17 @@ export function IncidenteDetalhePage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[13px]">
           <div className="space-y-0.5">
             <p className="label-micro">Professor</p>
-            <p className="text-ink">{professor?.nome ?? '—'}</p>
+            {/* BUG-16: professor name links to their profile */}
+            {professor && professorId ? (
+              <button
+                className="text-ink hover:underline text-left text-[13px] font-medium"
+                onClick={() => navigate(`/professores/${professorId}`)}
+              >
+                {professor.nome}
+              </button>
+            ) : (
+              <p className="text-ink">{professor?.nome ?? '—'}</p>
+            )}
           </div>
           <div className="space-y-0.5">
             <p className="label-micro">Registrado por</p>
@@ -123,7 +134,8 @@ export function IncidenteDetalhePage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="label-micro">Descrição</p>
-            {isSuporte && !editando && incidente.status === 'pendente' && (
+            {/* BUG-12/15: admin edita qualquer status; suporte edita apenas pendente */}
+            {!editando && (isAdmin || (isSuporte && incidente.status === 'pendente')) && (
               <button
                 className="btn-press text-[12px] text-ink-secondary hover:text-ink inline-flex items-center gap-1"
                 onClick={() => {

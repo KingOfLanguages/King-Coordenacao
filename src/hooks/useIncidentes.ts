@@ -109,7 +109,14 @@ export function useAtualizarIncidente() {
       precisa_acompanhamento?: boolean
     }) => {
       const updates: Record<string, unknown> = {}
-      if (status !== undefined)                  { updates.status = status; updates.aprovado_por = profile!.id }
+      if (status !== undefined) {
+        updates.status = status
+        if (status === 'aprovado' || status === 'rejeitado') {
+          updates.aprovado_por = profile!.id
+        } else {
+          updates.aprovado_por = null  // limpa ao reverter para pendente
+        }
+      }
       if (descricao !== undefined)               updates.descricao = descricao
       if (tipo !== undefined)                    updates.tipo = tipo
       if (urgencia !== undefined)                updates.urgencia = urgencia
