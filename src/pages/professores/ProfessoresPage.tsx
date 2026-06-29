@@ -1,32 +1,54 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, AlertCircle, CalendarDays, PauseCircle, Plus, X } from 'lucide-react'
+import { Search, AlertCircle, CalendarDays, PauseCircle, Plus, X, User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { useProfessoresComContadores, useProfessoresEmPausa, useCriarProfessor } from '@/hooks/useProfessores'
 import type { ProfessorComContadores } from '@/hooks/useProfessores'
+import { useGrupos } from '@/hooks/useGrupos'
+import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
-import { cn } from '@/lib/utils'
+import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { toast } from 'sonner'
+
+const TODOS = 'todos'
 
 export function ProfessoresPage() {
   const { data: professores, isLoading }  = useProfessoresComContadores()
   const { data: emPausa = [] }            = useProfessoresEmPausa()
+  const { data: grupos = [] }             = useGrupos()
+  const { data: coordenadores = [] }      = useCoordenadores()
   const [busca, setBusca]                 = useState('')
+  const [grupoFiltro, setGrupoFiltro]     = useState<string>(TODOS)
+  const [coordFiltro, setCoordFiltro]     = useState<string>(TODOS)
   const [dialogOpen, setDialogOpen]       = useState(false)
   const navigate = useNavigate()
 
-  const filtrados = useMemo(() => (professores ?? []).filter(p =>
-    p.nome.toLowerCase().includes(busca.toLowerCase())
-  ), [professores, busca])
+  const filtrados = useMemo(() =>
+    (professores ?? []).filter(p =>
+      p.nome.toLowerCase().includes(busca.toLowerCase()) &&
+      (grupoFiltro === TODOS || p.grupo_id === grupoFiltro) &&
+      (coordFiltro === TODOS || p.coordenador_id === coordFiltro)
+    ), [professores, busca, grupoFiltro, coordFiltro])
+
+  const emPausaFiltrados = useMemo(() =>
+    emPausa.filter(p =>
+      p.nome.toLowerCase().includes(busca.toLowerCase()) &&
+      (grupoFiltro === TODOS || p.grupo_id === grupoFiltro) &&
+      (coordFiltro === TODOS || p.coordenador_id === coordFiltro)
+    ), [emPausa, busca, grupoFiltro, coordFiltro])
 
   const emMonitoramento = filtrados.filter(p => p.monitoramento)
   const demais          = filtrados.filter(p => !p.monitoramento)
 
   return (
     <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
-      <header className="flex items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Professores</h1>
           <p className="text-[13px] text-ink-muted">
@@ -34,13 +56,13 @@ export function ProfessoresPage() {
             {emMonitoramento.length > 0 && (
               <> · <span className="text-urg-highFg font-medium">{emMonitoramento.length} em monitoramento</span></>
             )}
-            {emPausa.length > 0 && (
-              <> · <span className="text-ink-muted">{emPausa.length} em pausa</span></>
+            {emPausaFiltrados.length > 0 && (
+              <> · <span className="text-ink-muted">{emPausaFiltrados.length} em pausa</span></>
             )}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-52">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
             <Input
@@ -50,6 +72,33 @@ export function ProfessoresPage() {
               className="pl-9 h-9 bg-surface-canvas border-line"
             />
           </div>
+
+          {/* Filtro de grupo */}
+          <Select value={grupoFiltro} onValueChange={setGrupoFiltro}>
+            <SelectTrigger className="h-9 w-[150px] text-[12px] bg-surface-canvas border-line text-ink">
+              <SelectValue placeholder="Grupo" />
+            </SelectTrigger>
+            <SelectContent className="bg-surface-canvas border-line text-ink">
+              <SelectItem value={TODOS} className="text-[12px]">Todos os grupos</SelectItem>
+              {grupos.map(g => (
+                <SelectItem key={g.id} value={g.id} className="text-[12px]">{g.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Filtro de coordenador */}
+          <Select value={coordFiltro} onValueChange={setCoordFiltro}>
+            <SelectTrigger className="h-9 w-[170px] text-[12px] bg-surface-canvas border-line text-ink">
+              <SelectValue placeholder="Coordenador" />
+            </SelectTrigger>
+            <SelectContent className="bg-surface-canvas border-line text-ink">
+              <SelectItem value={TODOS} className="text-[12px]">Todos coordenadores</SelectItem>
+              {coordenadores.map(c => (
+                <SelectItem key={c.id} value={c.id} className="text-[12px]">{c.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           {/* BUG-13: botão novo professor */}
           <Button
             size="sm"
@@ -64,7 +113,7 @@ export function ProfessoresPage() {
 
       {isLoading ? (
         <SkeletonGrid />
-      ) : filtrados.length === 0 && emPausa.length === 0 ? (
+      ) : filtrados.length === 0 && emPausaFiltrados.length === 0 ? (
         <EmptyState onNovo={() => setDialogOpen(true)} />
       ) : (
         <>
@@ -89,13 +138,13 @@ export function ProfessoresPage() {
           )}
 
           {/* BUG-14: professores em pausa visíveis em seção separada */}
-          {emPausa.length > 0 && (
+          {emPausaFiltrados.length > 0 && (
             <Section
               label="Em pausa"
               icon={<PauseCircle className="h-3.5 w-3.5 text-ink-muted" />}
               tone="muted"
             >
-              {emPausa.map(p => (
+              {emPausaFiltrados.map(p => (
                 <CardProfessor key={p.id} professor={p} onClick={() => navigate(`/professores/${p.id}`)} muted />
               ))}
             </Section>
@@ -235,7 +284,8 @@ function Section({
 function CardProfessor({
   professor, onClick, emphasis, muted,
 }: { professor: ProfessorComContadores; onClick: () => void; emphasis?: boolean; muted?: boolean }) {
-  const hasAlerts = professor._negativos > 0 || professor._incidentes > 0
+  const hasAlerts = professor._negativos > 0
+  const tempo = tempoDeCasaLabel(professor.data_inicio) ?? professor.tempo_na_king
 
   return (
     <button
@@ -252,9 +302,26 @@ function CardProfessor({
         <PrioridadeBadge professor={professor} />
       </div>
 
+      {/* Grupo + coordenador */}
+      {(professor.grupo?.nome || professor.coordenador?.nome) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {professor.grupo?.nome && (
+            <span className="inline-flex items-center rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
+              {professor.grupo.nome}
+            </span>
+          )}
+          {professor.coordenador?.nome && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
+              <User className="h-3 w-3" />
+              {professor.coordenador.nome}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-muted">
-          {professor.tempo_na_king && <span>{professor.tempo_na_king}</span>}
+          {tempo && <span>{tempo}</span>}
           {professor.data_ultima_reuniao && (
             <span className="inline-flex items-center gap-1">
               <CalendarDays className="h-3 w-3" />
@@ -268,11 +335,6 @@ function CardProfessor({
             {professor._negativos > 0 && (
               <span className="inline-flex items-center gap-0.5 rounded-full bg-urg-highBg px-2 py-0.5 text-[11px] font-medium text-urg-highFg">
                 🔴 <span className="tabular-nums">{professor._negativos}</span>
-              </span>
-            )}
-            {professor._incidentes > 0 && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-urg-medBg px-2 py-0.5 text-[11px] font-medium text-urg-medFg">
-                ⚡ <span className="tabular-nums">{professor._incidentes}</span>
               </span>
             )}
           </div>

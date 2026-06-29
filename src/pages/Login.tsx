@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 const FEATURES = [
   { label: 'Gestão completa de professores e histórico' },
   { label: 'Importação automática do Google Calendar' },
-  { label: 'Relatórios e análises exportáveis' },
+  { label: 'Confirmação de reuniões e indicadores' },
 ]
 
 // ─── Login Page ───────────────────────────────────────────────────────────────

@@ -2,15 +2,22 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Eye, EyeOff,
-  CalendarDays, Clock, DollarSign, AlertTriangle,
-  CheckCircle2, XCircle, Hourglass,
+  CalendarDays, Clock, DollarSign, Users, User,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useProfessor, useAtualizarMonitoramento } from '@/hooks/useProfessores'
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor } from '@/hooks/useProfessores'
+import { useGrupos } from '@/hooks/useGrupos'
+import { useAuth } from '@/contexts/AuthContext'
+import { canEdit } from '@/lib/permissions'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
-import { cn } from '@/lib/utils'
+import { cn, tempoDeCasaLabel } from '@/lib/utils'
+import type { StatusProfessor } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,16 +35,6 @@ type ObservacaoRow = {
   texto: string
   created_at: string
   profiles?: { nome: string } | { nome: string }[] | null
-}
-
-type IncidenteRow = {
-  id: string
-  tipo: string
-  descricao: string
-  status: 'pendente' | 'aprovado' | 'rejeitado'
-  urgencia: 'baixa' | 'media' | 'alta'
-  solucao?: string | null
-  created_at: string
 }
 
 // ─── Observation labels/tones ─────────────────────────────────────────────────
@@ -66,20 +63,6 @@ const chipTipo: Record<string, string> = {
   feedback_neutro:   'bg-surface-subtle text-ink-secondary',
 }
 
-// ─── Incident helpers ─────────────────────────────────────────────────────────
-
-const urgLabel: Record<string, string> = { baixa: 'Baixa', media: 'Média', alta: 'Alta' }
-const urgChip: Record<string, string>  = {
-  baixa: 'bg-urg-lowBg  text-urg-lowFg',
-  media: 'bg-urg-medBg  text-urg-medFg',
-  alta:  'bg-urg-highBg text-urg-highFg',
-}
-const urgBorder: Record<string, string> = {
-  baixa: 'border-urg-lowFg/20',
-  media: 'border-urg-medFg/20',
-  alta:  'border-urg-highFg/20',
-}
-
 type ObsFiltro = 'todos' | 'feedback_positivo' | 'feedback_negativo' | 'feedback_neutro' | 'reuniao' | 'ocorrencia'
 
 const FILTROS: { value: ObsFiltro; label: string }[] = [
@@ -98,9 +81,12 @@ export function ProfessorDetalhePage() {
   const navigate   = useNavigate()
   const { data: professor, isLoading } = useProfessor(id!)
   const atualizarMonitoramento = useAtualizarMonitoramento()
+  const atualizarGrupo = useAtualizarGrupoProfessor()
+  const { profile } = useAuth()
+  const { data: grupos = [] } = useGrupos()
+  const podeEditar = canEdit(profile?.role)
   const [obsAberta, setObsAberta] = useState(false)
   const [obsFiltro, setObsFiltro] = useState<ObsFiltro>('todos')
-  const [abaAtiva, setAbaAtiva]   = useState<'observacoes' | 'incidentes'>('observacoes')
 
   if (isLoading) return (
     <div className="flex h-64 items-center justify-center text-ink-muted text-[13px]">
@@ -115,7 +101,10 @@ export function ProfessorDetalhePage() {
 
   const reunioes    = (professor.reunioes    ?? []) as ReuniaoRow[]
   const observacoes = (professor.observacoes ?? []) as ObservacaoRow[]
-  const incidentes  = (professor.incidentes  ?? []) as IncidenteRow[]
+
+  const grupoNome = resolverNomePerfil(professor.grupo)
+  const coordNome = resolverNomePerfil(professor.coordenador)
+  const tempoCasa = tempoDeCasaLabel(professor.data_inicio)
 
   const obsFiltered = obsFiltro === 'todos'
     ? observacoes
@@ -123,10 +112,6 @@ export function ProfessorDetalhePage() {
 
   const negativos  = observacoes.filter(o => o.tipo === 'feedback_negativo').length
   const positivos  = observacoes.filter(o => o.tipo === 'feedback_positivo').length
-  const pendentes  = incidentes.filter(i => i.status === 'pendente').length
-  const temAnalise = incidentes.some(i =>
-    /m[eê]s\s*de\s*an[aá]li/i.test(i.tipo) || /an[aá]lise/i.test(i.tipo)
-  )
 
   function resolverNomePerfil(profiles: { nome: string } | { nome: string }[] | null | undefined): string | null {
     if (!profiles) return null
@@ -150,22 +135,10 @@ export function ProfessorDetalhePage() {
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-semibold tracking-tight text-ink">{professor.nome}</h1>
             <PrioridadeBadge professor={professor} />
-            {temAnalise && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-urg-medBg px-2.5 py-1 text-[11px] font-medium text-urg-medFg">
-                <Hourglass className="h-3 w-3" />
-                Mês de Análise
-              </span>
-            )}
           </div>
 
           {/* Contadores rápidos */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-muted">
-            {professor.tempo_na_king && (
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {professor.tempo_na_king} na King
-              </span>
-            )}
             {professor.renda && (
               <span className="inline-flex items-center gap-1">
                 <DollarSign className="h-3 w-3" />
@@ -188,9 +161,41 @@ export function ProfessorDetalhePage() {
                 🟢 {positivos} positivo{positivos !== 1 ? 's' : ''}
               </span>
             )}
-            {pendentes > 0 && (
-              <span className="text-urg-medFg font-medium">
-                ⚡ {pendentes} incidente{pendentes !== 1 ? 's' : ''} pendente{pendentes !== 1 ? 's' : ''}
+          </div>
+
+          {/* KTM — grupo, coordenador, status, tempo de casa */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] pt-0.5">
+            <StatusProfessorChip status={professor.status} />
+
+            {podeEditar ? (
+              <Select
+                value={professor.grupo_id ?? ''}
+                onValueChange={v => atualizarGrupo.mutate({ id: professor.id, grupo_id: v })}
+                disabled={atualizarGrupo.isPending}
+              >
+                <SelectTrigger className="h-7 w-[150px] text-[12px] bg-surface-canvas border-line text-ink">
+                  <SelectValue placeholder="Sem grupo" />
+                </SelectTrigger>
+                <SelectContent className="bg-surface-canvas border-line text-ink">
+                  {grupos.map(g => (
+                    <SelectItem key={g.id} value={g.id} className="text-[12px]">{g.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : grupoNome && (
+              <span className="inline-flex items-center gap-1 text-ink-muted">
+                <Users className="h-3 w-3" />{grupoNome}
+              </span>
+            )}
+
+            {coordNome && (
+              <span className="inline-flex items-center gap-1 text-ink-muted">
+                <User className="h-3 w-3" />{coordNome}
+              </span>
+            )}
+            {tempoCasa && (
+              <span className="inline-flex items-center gap-1 text-ink-muted">
+                <Clock className="h-3 w-3" />{tempoCasa} de casa
               </span>
             )}
           </div>
@@ -248,150 +253,76 @@ export function ProfessorDetalhePage() {
           )}
         </section>
 
-        {/* Observações + Incidentes */}
+        {/* Observações */}
         <div className="space-y-4">
-          {/* Tabs */}
-          <div className="flex items-center gap-1 border-b border-line-soft">
-            {([
-              ['observacoes', `Observações (${observacoes.length})`],
-              ['incidentes',  `Incidentes (${incidentes.length})`],
-            ] as const).map(([tab, label]) => (
-              <button
-                key={tab}
-                onClick={() => setAbaAtiva(tab)}
-                className={cn(
-                  'px-3 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors',
-                  abaAtiva === tab
-                    ? 'border-accentBlue text-accentBlue'
-                    : 'border-transparent text-ink-secondary hover:text-ink',
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          <h2 className="label-micro">Observações ({observacoes.length})</h2>
+
+          {/* Filtros de tipo */}
+          <div className="flex flex-wrap gap-2">
+            {FILTROS.map(f => {
+              const count = f.value === 'todos'
+                ? observacoes.length
+                : observacoes.filter(o => o.tipo === f.value).length
+              return (
+                <button
+                  key={f.value}
+                  onClick={() => setObsFiltro(f.value)}
+                  className={cn(
+                    'btn-press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    obsFiltro === f.value
+                      ? 'bg-accentBlue text-white'
+                      : 'bg-surface-subtle text-ink-secondary hover:bg-surface-canvas hover:border-line border border-transparent',
+                  )}
+                >
+                  {f.label}
+                  <span className={cn(
+                    'tabular-nums',
+                    obsFiltro === f.value ? 'text-white/70' : 'text-ink-muted',
+                  )}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
           </div>
 
-          {/* ── Observações ── */}
-          {abaAtiva === 'observacoes' && (
-            <div className="space-y-4">
-              {/* Filtros de tipo */}
-              <div className="flex flex-wrap gap-2">
-                {FILTROS.map(f => {
-                  const count = f.value === 'todos'
-                    ? observacoes.length
-                    : observacoes.filter(o => o.tipo === f.value).length
-                  return (
-                    <button
-                      key={f.value}
-                      onClick={() => setObsFiltro(f.value)}
-                      className={cn(
-                        'btn-press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
-                        obsFiltro === f.value
-                          ? 'bg-accentBlue text-white'
-                          : 'bg-surface-subtle text-ink-secondary hover:bg-surface-canvas hover:border-line border border-transparent',
-                      )}
-                    >
-                      {f.label}
+          {obsFiltered.length === 0 ? (
+            <div className="card-surface p-8 text-center">
+              <p className="text-[13px] text-ink-muted">
+                {obsFiltro === 'todos'
+                  ? 'Nenhuma observação registrada.'
+                  : 'Nenhuma observação desse tipo.'}
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {obsFiltered.map(o => {
+                const autor = resolverNomePerfil(o.profiles)
+                return (
+                  <li
+                    key={o.id}
+                    className={cn(
+                      'card-surface p-4 space-y-2 border-l-2',
+                      borderTipo[o.tipo] ?? 'border-line',
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
                       <span className={cn(
-                        'tabular-nums',
-                        obsFiltro === f.value ? 'text-white/70' : 'text-ink-muted',
+                        'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium',
+                        chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
                       )}>
-                        {count}
+                        {labelTipo[o.tipo] ?? o.tipo}
                       </span>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {obsFiltered.length === 0 ? (
-                <div className="card-surface p-8 text-center">
-                  <p className="text-[13px] text-ink-muted">
-                    {obsFiltro === 'todos'
-                      ? 'Nenhuma observação registrada.'
-                      : 'Nenhuma observação desse tipo.'}
-                  </p>
-                </div>
-              ) : (
-                <ul className="space-y-3">
-                  {obsFiltered.map(o => {
-                    const autor = resolverNomePerfil(o.profiles)
-                    return (
-                      <li
-                        key={o.id}
-                        className={cn(
-                          'card-surface p-4 space-y-2 border-l-2',
-                          borderTipo[o.tipo] ?? 'border-line',
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={cn(
-                            'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium',
-                            chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
-                          )}>
-                            {labelTipo[o.tipo] ?? o.tipo}
-                          </span>
-                          <div className="flex items-center gap-2 text-[11px] text-ink-subtle tabular-nums">
-                            {autor && <span className="text-ink-muted">{autor}</span>}
-                            <span>{new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
-                          </div>
-                        </div>
-                        <p className="text-[13px] text-ink-secondary leading-relaxed">{o.texto}</p>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-
-          {/* ── Incidentes ── */}
-          {abaAtiva === 'incidentes' && (
-            <div className="space-y-3">
-              {incidentes.length === 0 ? (
-                <div className="card-surface p-8 text-center">
-                  <p className="text-[13px] text-ink-muted">Nenhum incidente vinculado.</p>
-                </div>
-              ) : (
-                <ul className="space-y-3">
-                  {incidentes.map(inc => (
-                    <li
-                      key={inc.id}
-                      className={cn(
-                        'card-surface p-4 space-y-2.5 border-l-2',
-                        urgBorder[inc.urgencia] ?? 'border-line',
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1 min-w-0">
-                          <p className="text-[13px] font-medium text-ink leading-snug">{inc.tipo}</p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={cn(
-                              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
-                              urgChip[inc.urgencia],
-                            )}>
-                              <AlertTriangle className="h-2.5 w-2.5" />
-                              {urgLabel[inc.urgencia]}
-                            </span>
-                            <IncStatusChip status={inc.status} />
-                            <span className="text-[11px] text-ink-muted tabular-nums">
-                              {new Date(inc.created_at).toLocaleDateString('pt-BR')}
-                            </span>
-                          </div>
-                        </div>
+                      <div className="flex items-center gap-2 text-[11px] text-ink-subtle tabular-nums">
+                        {autor && <span className="text-ink-muted">{autor}</span>}
+                        <span>{new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
                       </div>
-                      <p className="text-[13px] text-ink-secondary leading-relaxed line-clamp-3">
-                        {inc.descricao}
-                      </p>
-                      {inc.solucao && (
-                        <div className="rounded-md bg-urg-lowBg/40 border border-urg-lowFg/15 px-3 py-2 text-[12px] text-urg-lowFg">
-                          <span className="font-medium">Solução:</span> {inc.solucao}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                    </div>
+                    <p className="text-[13px] text-ink-secondary leading-relaxed">{o.texto}</p>
+                  </li>
+                )
+              })}
+            </ul>
           )}
         </div>
       </div>
@@ -405,22 +336,18 @@ export function ProfessorDetalhePage() {
   )
 }
 
-// ─── Incident status chip ─────────────────────────────────────────────────────
+// ─── Professor status chip ────────────────────────────────────────────────────
 
-function IncStatusChip({ status }: { status: 'pendente' | 'aprovado' | 'rejeitado' }) {
-  if (status === 'aprovado') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg px-2 py-0.5 text-[11px] font-medium text-urg-lowFg">
-      <CheckCircle2 className="h-2.5 w-2.5" />Aprovado
-    </span>
-  )
-  if (status === 'rejeitado') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-medium text-ink-muted">
-      <XCircle className="h-2.5 w-2.5" />Rejeitado
-    </span>
-  )
+function StatusProfessorChip({ status }: { status?: StatusProfessor | string | null }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    ativo:     { label: 'Ativo',     cls: 'bg-urg-lowBg text-urg-lowFg' },
+    pausa:     { label: 'Em pausa',  cls: 'bg-surface-subtle text-ink-secondary' },
+    desligado: { label: 'Desligado', cls: 'bg-urg-highBg text-urg-highFg' },
+  }
+  const s = map[status ?? 'ativo'] ?? map.ativo
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-urg-medBg px-2 py-0.5 text-[11px] font-medium text-urg-medFg">
-      <Hourglass className="h-2.5 w-2.5" />Pendente
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', s.cls)}>
+      {s.label}
     </span>
   )
 }

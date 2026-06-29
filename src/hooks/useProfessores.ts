@@ -38,7 +38,8 @@ export function useProfessoresAtivos() {
 
 export type ProfessorComContadores = Professor & {
   _negativos:  number
-  _incidentes: number
+  grupo?:       { id: string; nome: string } | null
+  coordenador?: { id: string; nome: string } | null
 }
 
 export function useProfessoresComContadores() {
@@ -49,8 +50,9 @@ export function useProfessoresComContadores() {
         .from('professores')
         .select(`
           *,
-          observacoes (id, tipo),
-          incidentes  (id, status)
+          grupo:grupos!grupo_id (id, nome),
+          coordenador:profiles!coordenador_id (id, nome),
+          observacoes (id, tipo)
         `)
         .eq('saiu', false)
         .eq('pausa', false)
@@ -58,12 +60,10 @@ export function useProfessoresComContadores() {
       if (error) throw error
 
       return (data ?? []).map(p => {
-        const obs       = (p.observacoes ?? []) as { id: string; tipo: string }[]
-        const incidents = (p.incidentes  ?? []) as { id: string; status: string }[]
+        const obs = (p.observacoes ?? []) as { id: string; tipo: string }[]
         return {
           ...p,
-          _negativos:  obs.filter(o => o.tipo === 'feedback_negativo').length,
-          _incidentes: incidents.filter(i => i.status !== 'rejeitado').length,
+          _negativos: obs.filter(o => o.tipo === 'feedback_negativo').length,
         } as ProfessorComContadores
       })
     },
@@ -80,6 +80,8 @@ export function useProfessor(id: string) {
         .from('professores')
         .select(`
           *,
+          grupo:grupos!grupo_id (id, nome),
+          coordenador:profiles!coordenador_id (id, nome),
           reunioes (
             id, data, status, notas,
             profiles (nome)
@@ -87,9 +89,6 @@ export function useProfessor(id: string) {
           observacoes (
             id, tipo, texto, created_at,
             profiles (nome)
-          ),
-          incidentes (
-            id, tipo, descricao, status, urgencia, solucao, created_at
           )
         `)
         .eq('id', id)
@@ -111,8 +110,9 @@ export function useProfessoresEmPausa() {
         .from('professores')
         .select(`
           *,
-          observacoes (id, tipo),
-          incidentes  (id, status)
+          grupo:grupos!grupo_id (id, nome),
+          coordenador:profiles!coordenador_id (id, nome),
+          observacoes (id, tipo)
         `)
         .eq('saiu', false)
         .eq('pausa', true)
@@ -120,12 +120,10 @@ export function useProfessoresEmPausa() {
       if (error) throw error
 
       return (data ?? []).map(p => {
-        const obs       = (p.observacoes ?? []) as { id: string; tipo: string }[]
-        const incidents = (p.incidentes  ?? []) as { id: string; status: string }[]
+        const obs = (p.observacoes ?? []) as { id: string; tipo: string }[]
         return {
           ...p,
-          _negativos:  obs.filter(o => o.tipo === 'feedback_negativo').length,
-          _incidentes: incidents.filter(i => i.status !== 'rejeitado').length,
+          _negativos: obs.filter(o => o.tipo === 'feedback_negativo').length,
         } as ProfessorComContadores
       })
     },
@@ -164,6 +162,32 @@ export function useAtualizarMonitoramento() {
       const { error } = await supabase
         .from('professores')
         .update({ monitoramento })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['professores'] })
+    },
+  })
+}
+
+// ─── Troca de grupo (herda o coordenador do novo grupo) ───────────────────────
+
+export function useAtualizarGrupoProfessor() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, grupo_id }: { id: string; grupo_id: string }) => {
+      // Busca o coordenador do grupo de destino para herdar como responsável.
+      const { data: grupo, error: gErr } = await supabase
+        .from('grupos')
+        .select('coordenador_id')
+        .eq('id', grupo_id)
+        .single()
+      if (gErr) throw gErr
+
+      const { error } = await supabase
+        .from('professores')
+        .update({ grupo_id, coordenador_id: grupo?.coordenador_id ?? null })
         .eq('id', id)
       if (error) throw error
     },

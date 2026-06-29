@@ -8,16 +8,11 @@ import { useState, useRef, useEffect } from 'react'
 type NavItem = { to: string; label: string; exact?: boolean }
 
 const navCoordenacao: NavItem[] = [
-  { to: '/professores', label: 'Professores' },
-  { to: '/reunioes',    label: 'Reuniões' },
-]
-const navSuporte: NavItem[] = [
-  { to: '/incidentes',  label: 'Incidentes' },
-  { to: '/mes-analise', label: 'Mês de Análise' },
+  { to: '/reunioes-dia', label: 'Reuniões do Dia' },
+  { to: '/professores',  label: 'Professores' },
 ]
 const navComum: NavItem[] = [
-  { to: '/acompanhamento', label: 'Acompanhamento' },
-  { to: '/relatorios',     label: 'Relatórios' },
+  { to: '/dashboard', label: 'Dashboard' },
 ]
 
 function roleLabel(role?: string) {
@@ -68,16 +63,15 @@ export function AppLayout() {
   const profileRef = useRef<HTMLDivElement>(null)
 
   const isCoord   = profile?.role === 'coordenacao' || profile?.role === 'admin'
-  const isSuporte = profile?.role === 'suporte' || profile?.role === 'suporte_aluno' || profile?.role === 'admin'
   const isAdmin   = profile?.role === 'admin'
 
   const links: NavItem[] = [
     ...(isCoord   ? navCoordenacao : []),
-    ...(isSuporte ? navSuporte     : []),
     ...navComum,
     ...(isAdmin ? [
-      { to: '/admin/aprovacoes', label: 'Aprovações' },
-      { to: '/admin/usuarios',   label: 'Usuários' },
+      { to: '/admin/aprovacoes',    label: 'Aprovações' },
+      { to: '/admin/usuarios',      label: 'Usuários' },
+      { to: '/admin/configuracoes', label: 'Configurações' },
     ] : []),
   ]
 

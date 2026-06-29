@@ -2,24 +2,28 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'sonner'
-import { AuthProvider } from '@/contexts/AuthContext'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Login } from '@/pages/Login'
 import { Cadastro } from '@/pages/Cadastro'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
-import { ReunioesPage } from '@/pages/reunioes/ReunioesPage'
-import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
-import { IncidenteDetalhePage } from '@/pages/incidentes/IncidenteDetalhePage'
-import { MesAnalisePage } from '@/pages/incidentes/MesAnalisePage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
-import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
-import { AcompanhamentoPage } from '@/pages/reunioes/AcompanhamentoPage'
+import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
+import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
+import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 
 const queryClient = new QueryClient()
 
+// Home: todos vão para o Dashboard da Coordenação.
+function IndexRedirect() {
+  const { profile, loading } = useAuth()
+  if (loading) return null
+  if (!profile) return <Navigate to="/login" replace />
+  return <Navigate to="/dashboard" replace />
+}
 
 export default function App() {
   return (
@@ -32,7 +36,13 @@ export default function App() {
             <Route path="/cadastro" element={<Cadastro />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-              <Route path="/" element={<Navigate to="/professores" replace />} />
+              <Route path="/" element={<IndexRedirect />} />
+
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <DashboardCoordPage />
+                </ProtectedRoute>
+              } />
 
               <Route path="/professores" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
@@ -44,26 +54,9 @@ export default function App() {
                   <ProfessorDetalhePage />
                 </ProtectedRoute>
               } />
-              <Route path="/reunioes" element={
+              <Route path="/reunioes-dia" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
-                  <ReunioesPage />
-                </ProtectedRoute>
-              } />
-
-              {/* Suporte */}
-              <Route path="/incidentes" element={
-                <ProtectedRoute roles={['suporte', 'suporte_aluno', 'admin']}>
-                  <IncidentesPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/incidentes/:id" element={
-                <ProtectedRoute roles={['suporte', 'suporte_aluno', 'admin']}>
-                  <IncidenteDetalhePage />
-                </ProtectedRoute>
-              } />
-              <Route path="/mes-analise" element={
-                <ProtectedRoute roles={['suporte', 'admin']}>
-                  <MesAnalisePage />
+                  <ReunioesDiaPage />
                 </ProtectedRoute>
               } />
 
@@ -78,17 +71,9 @@ export default function App() {
                   <UsuariosPage />
                 </ProtectedRoute>
               } />
-
-              <Route path="/relatorios" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'admin']}>
-                  <RelatoriosPage />
-                </ProtectedRoute>
-              } />
-
-              {/* Monitoring */}
-              <Route path="/acompanhamento" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
-                  <AcompanhamentoPage />
+              <Route path="/admin/configuracoes" element={
+                <ProtectedRoute roles={['admin']}>
+                  <ConfiguracoesPage />
                 </ProtectedRoute>
               } />
             </Route>

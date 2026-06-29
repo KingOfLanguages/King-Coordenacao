@@ -1,7 +1,7 @@
 export type RoleUsuario = 'admin' | 'coordenacao' | 'suporte' | 'suporte_aluno'
 export type StatusReuniao = 'pendente' | 'concluida' | 'cancelada'
 export type TipoObservacao = 'reuniao' | 'ocorrencia' | 'feedback_positivo' | 'feedback_negativo' | 'feedback_neutro'
-export type StatusIncidente = 'pendente' | 'aprovado' | 'rejeitado'
+export type StatusProfessor = 'ativo' | 'pausa' | 'desligado'
 
 export interface Profile {
   id: string
@@ -11,10 +11,26 @@ export interface Profile {
   created_at: string
 }
 
+export interface Grupo {
+  id: string
+  nome: string
+  coordenador_id: string | null
+  ativo: boolean
+  created_at: string
+}
+
+export type GrupoComCoordenador = Grupo & {
+  coordenador?: { id: string; nome: string } | null
+}
+
 export interface Professor {
   id: string
   nome: string
   email: string | null
+  kms_id: string | null
+  status: StatusProfessor
+  grupo_id: string | null
+  coordenador_id: string | null
   monitoramento: boolean
   data_inicio: string | null
   tempo_na_king: string | null
@@ -47,20 +63,24 @@ export interface Observacao {
   created_at: string
 }
 
-export type UrgenciaNivel = 'baixa' | 'media' | 'alta'
-
-export interface Incidente {
+export interface ProfessorEmail {
   id: string
+  professor_id: string
+  email: string
+  origem: string | null
+  created_at: string
+}
+
+export type StatusReuniaoProfessor = 'pendente' | 'realizada' | 'cancelada'
+
+export interface ReuniaoProfessor {
+  id: string
+  reuniao_id: string
   professor_id: string | null
-  tipo: string
-  descricao: string
-  status: StatusIncidente
-  urgencia: UrgenciaNivel
-  solucao: string | null
-  responsavel: string | null
-  precisa_acompanhamento: boolean
-  imagens: string[]
-  criado_por: string | null
-  aprovado_por: string | null
+  status: StatusReuniaoProfessor
+  numero: number | null
+  observacao: string | null
+  confirmado_em: string | null
+  confirmado_por: string | null
   created_at: string
 }
