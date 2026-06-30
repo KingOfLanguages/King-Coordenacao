@@ -1,5 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { dayRange } from '@/hooks/useReunioesDia'
+
+export type OcorrenciaComLink = {
+  id: string
+  data_hora: string
+  meet_link: string | null
+  inscritos: number
+}
 
 export type RecorrenciaComReservas = {
   id: string
@@ -9,6 +17,7 @@ export type RecorrenciaComReservas = {
   meet_link: string | null
   ativo: boolean
   proximas_reservas: number
+  proximas_ocorrencias: OcorrenciaComLink[]
 }
 
 export type AgendaComRecorrencias = {
@@ -36,7 +45,7 @@ export function useAgendas() {
           recorrencias:agenda_recorrencias (
             id, dia_semana, hora, capacidade, meet_link, ativo,
             horarios:agenda_horarios (
-              data_hora,
+              id, data_hora, meet_link,
               inscricoes:agenda_inscricoes (status)
             )
           )
@@ -48,9 +57,11 @@ export function useAgendas() {
       return (data ?? []).map((a: Record<string, unknown>) => ({
         ...a,
         recorrencias: (a.recorrencias as Record<string, unknown>[]).map(r => {
-          const horarios = r.horarios as { data_hora: string; inscricoes: { status: string }[] }[]
-          const proximas_reservas = horarios
+          const horarios = r.horarios as { id: string; data_hora: string; meet_link: string | null; inscricoes: { status: string }[] }[]
+          const futuros = horarios
             .filter(h => new Date(h.data_hora).getTime() > agora)
+            .sort((x, y) => x.data_hora.localeCompare(y.data_hora))
+          const proximas_reservas = futuros
             .reduce((soma, h) => soma + h.inscricoes.filter(i => i.status === 'confirmada').length, 0)
           return {
             id: r.id as string,
@@ -60,6 +71,12 @@ export function useAgendas() {
             meet_link: r.meet_link as string | null,
             ativo: r.ativo as boolean,
             proximas_reservas,
+            proximas_ocorrencias: futuros.map(h => ({
+              id: h.id,
+              data_hora: h.data_hora,
+              meet_link: h.meet_link,
+              inscritos: h.inscricoes.filter(i => i.status === 'confirmada').length,
+            })),
           }
         }),
       })) as AgendaComRecorrencias[]
@@ -227,5 +244,66 @@ export function useExcluirAgenda() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agendas'] })
     },
+  })
+}
+
+// ─── Reuniões de feedback (agendamento) do dia, para um coordenador ─────────
+
+export type ParticipanteAgendaCard = { id: string; nome: string }
+
+export type AgendaOcorrenciaCard = {
+  id: string
+  data_hora: string
+  capacidade: number
+  meet_link: string | null
+  titulo: string
+  participantes: ParticipanteAgendaCard[]
+}
+
+/** Reuniões de feedback (agendamento coletivo) já reservadas, do coordenador, no dia selecionado. */
+export function useAgendaReunioesDoDia(coordId: string | null, dia: Date = new Date()) {
+  const chaveData = dia.toISOString().slice(0, 10)
+  return useQuery({
+    queryKey: ['agenda-reunioes-dia', coordId, chaveData],
+    enabled: !!coordId,
+    queryFn: async (): Promise<AgendaOcorrenciaCard[]> => {
+      const { data: recorrencias, error: e1 } = await supabase
+        .from('agenda_recorrencias')
+        .select('id, agenda:agenda_reunioes!inner (titulo, coordenador_id)')
+        .eq('agenda.coordenador_id', coordId)
+      if (e1) throw e1
+
+      const recorrenciaIds = (recorrencias ?? []).map(r => r.id)
+      if (!recorrenciaIds.length) return []
+
+      const tituloPorRecorrencia = new Map(
+        (recorrencias ?? []).map(r => [r.id, (r.agenda as unknown as { titulo: string }).titulo]),
+      )
+
+      const { inicio, fim } = dayRange(dia)
+      const { data: horarios, error: e2 } = await supabase
+        .from('agenda_horarios')
+        .select(`
+          id, data_hora, capacidade, meet_link, recorrencia_id,
+          inscricoes:agenda_inscricoes (id, status, email_usado, professor:professores (nome))
+        `)
+        .in('recorrencia_id', recorrenciaIds)
+        .gte('data_hora', inicio)
+        .lte('data_hora', fim)
+        .order('data_hora')
+      if (e2) throw e2
+
+      return (horarios ?? []).map(h => ({
+        id: h.id,
+        data_hora: h.data_hora,
+        capacidade: h.capacidade,
+        meet_link: h.meet_link,
+        titulo: tituloPorRecorrencia.get(h.recorrencia_id as string) ?? 'Reunião de Feedback',
+        participantes: (h.inscricoes as unknown as { id: string; status: string; email_usado: string; professor: { nome: string } | null }[])
+          .filter(i => i.status === 'confirmada')
+          .map(i => ({ id: i.id, nome: i.professor?.nome ?? i.email_usado })),
+      }))
+    },
+    refetchInterval: 2 * 60 * 1000,
   })
 }

@@ -17,6 +17,7 @@ import {
   useReunioesDoDia, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
   useCriarReuniaoManual, sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
 } from '@/hooks/useReunioesDia'
+import { useAgendaReunioesDoDia, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useGoogleAutomation, useDesativarAutomacao } from '@/hooks/useGoogleAutomation'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
 import { solicitarCodigoGoogle } from '@/lib/googleCalendar'
@@ -41,8 +42,11 @@ export function ReunioesDiaPage() {
 
   const { data: reunioes, isLoading } = useReunioesDoDia(coordId || null, diaSelecionado)
   const { data: dados } = useDadosVinculo()
+  const { data: agendaOcorrencias, isLoading: isLoadingAgenda } = useAgendaReunioesDoDia(coordId || null, diaSelecionado)
 
   const lista = reunioes ?? []
+  const listaAgenda = agendaOcorrencias ?? []
+  const totalReunioes = lista.length + listaAgenda.length
   const hoje  = isMesmoDia(diaSelecionado, new Date())
 
   function mudarDia(deltaDias: number) {
@@ -79,7 +83,7 @@ export function ReunioesDiaPage() {
             <p className="text-[13px] text-ink-muted capitalize">
               {hoje ? 'Hoje · ' : ''}
               {diaSelecionado.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-              {' · '}{lista.length} {lista.length === 1 ? 'reunião' : 'reuniões'}
+              {' · '}{totalReunioes} {totalReunioes === 1 ? 'reunião' : 'reuniões'}
             </p>
 
             {!hoje && (
@@ -120,11 +124,11 @@ export function ReunioesDiaPage() {
 
       <Toolbar />
 
-      {isLoading ? (
+      {isLoading || isLoadingAgenda ? (
         <div className="space-y-3">
           {[1, 2, 3].map(i => <div key={i} className="card-surface h-28 animate-pulse" />)}
         </div>
-      ) : lista.length === 0 ? (
+      ) : totalReunioes === 0 ? (
         <div className="card-surface p-10 text-center">
           <p className="text-[14px] font-medium text-ink">
             {hoje ? 'Nenhuma reunião hoje' : 'Nenhuma reunião nesse dia'}
@@ -132,8 +136,24 @@ export function ReunioesDiaPage() {
           <p className="text-[13px] text-ink-muted mt-1">A agenda deste coordenador está livre.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {lista.map(r => <ReuniaoCardView key={r.id} reuniao={r} dados={dados} />)}
+        <div className="space-y-5">
+          {listaAgenda.length > 0 && (
+            <section className="space-y-2.5">
+              <p className="label-micro">Reuniões de feedback (agendamento)</p>
+              <div className="space-y-3">
+                {listaAgenda.map(r => <AgendaOcorrenciaCardView key={r.id} ocorrencia={r} />)}
+              </div>
+            </section>
+          )}
+
+          {lista.length > 0 && (
+            <section className="space-y-2.5">
+              {listaAgenda.length > 0 && <p className="label-micro">Reuniões 1:1</p>}
+              <div className="space-y-3">
+                {lista.map(r => <ReuniaoCardView key={r.id} reuniao={r} dados={dados} />)}
+              </div>
+            </section>
+          )}
         </div>
       )}
 
@@ -341,6 +361,48 @@ function NovaReuniaoDialog({ profs, onClose }: { profs: { id: string; nome: stri
             {criar.isPending ? 'Salvando…' : 'Criar reunião'}
           </Button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Card — reunião de feedback (agendamento coletivo) ─────────────────────────
+
+function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrenciaCard }) {
+  const hora = new Date(ocorrencia.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  return (
+    <div className="card-surface p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-ink tabular-nums">{hora}</span>
+            <span className="text-[12px] text-ink-muted truncate">{ocorrencia.titulo}</span>
+          </div>
+          <span className="flex items-center gap-1 text-[11px] text-ink-muted mt-0.5">
+            <Mail className="h-3 w-3" />
+            {ocorrencia.participantes.length}/{ocorrencia.capacidade} confirmado{ocorrencia.participantes.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        {ocorrencia.meet_link && (
+          <a
+            href={ocorrencia.meet_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-press inline-flex items-center gap-1.5 rounded-full bg-accentBlue px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accentBlue-hov flex-shrink-0"
+          >
+            <Video className="h-3.5 w-3.5" />Entrar
+          </a>
+        )}
+      </div>
+
+      <div className="border-t border-line-soft pt-3 flex flex-wrap gap-1.5">
+        {ocorrencia.participantes.map(p => (
+          <span key={p.id} className="rounded-full bg-surface-subtle px-2.5 py-1 text-[12px] text-ink-secondary">
+            {p.nome}
+          </span>
+        ))}
       </div>
     </div>
   )

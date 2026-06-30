@@ -38,7 +38,7 @@ export type CandidatoVinculo = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function dayRange(date: Date) {
+export function dayRange(date: Date) {
   const inicio = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
   const fim    = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
   return { inicio: inicio.toISOString(), fim: fim.toISOString() }

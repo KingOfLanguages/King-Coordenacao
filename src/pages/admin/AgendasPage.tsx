@@ -389,35 +389,56 @@ function RecorrenciaRow({ recorrencia }: { recorrencia: RecorrenciaComReservas }
     )
   }
 
+  const ocorrenciasComSala = recorrencia.proximas_ocorrencias.filter(o => o.meet_link)
+
   return (
     <div className={cn(
-      'flex flex-wrap items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5',
+      'rounded-xl border px-3.5 py-2.5 space-y-2',
       recorrencia.ativo ? 'border-line-soft bg-surface-subtle/60' : 'border-line-soft bg-surface-subtle/20 opacity-60',
     )}>
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-[13px] font-medium text-ink capitalize">
-          Toda {DIAS_PLENO[recorrencia.dia_semana]}
-        </span>
-        <span className="text-[13px] text-ink-secondary tabular-nums">{recorrencia.hora.slice(0, 5)}</span>
-        <span className="flex items-center gap-1 text-[11.5px] text-ink-muted">
-          <Users className="h-3 w-3" />
-          até {recorrencia.capacidade} vaga{recorrencia.capacidade === 1 ? '' : 's'} · {recorrencia.proximas_reservas} reservada{recorrencia.proximas_reservas === 1 ? '' : 's'}
-        </span>
-        {!recorrencia.ativo && (
-          <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] font-medium text-ink-muted">Pausado</span>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[13px] font-medium text-ink capitalize">
+            Toda {DIAS_PLENO[recorrencia.dia_semana]}
+          </span>
+          <span className="text-[13px] text-ink-secondary tabular-nums">{recorrencia.hora.slice(0, 5)}</span>
+          <span className="flex items-center gap-1 text-[11.5px] text-ink-muted">
+            <Users className="h-3 w-3" />
+            até {recorrencia.capacidade} vaga{recorrencia.capacidade === 1 ? '' : 's'} · {recorrencia.proximas_reservas} reservada{recorrencia.proximas_reservas === 1 ? '' : 's'}
+          </span>
+          {!recorrencia.ativo && (
+            <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] font-medium text-ink-muted">Pausado</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <Button size="icon-sm" variant="ghost" onClick={() => setEditando(true)} title="Editar">
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="icon-sm" variant="ghost" onClick={toggle} disabled={alternar.isPending} title={recorrencia.ativo ? 'Pausar' : 'Reativar'}>
+            <Power className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="icon-sm" variant="ghost" onClick={() => setConfirmandoExclusao(true)} title="Excluir" className="hover:text-brand-strong">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <Button size="icon-sm" variant="ghost" onClick={() => setEditando(true)} title="Editar">
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button size="icon-sm" variant="ghost" onClick={toggle} disabled={alternar.isPending} title={recorrencia.ativo ? 'Pausar' : 'Reativar'}>
-          <Power className="h-3.5 w-3.5" />
-        </Button>
-        <Button size="icon-sm" variant="ghost" onClick={() => setConfirmandoExclusao(true)} title="Excluir" className="hover:text-brand-strong">
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+
+      {ocorrenciasComSala.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          {ocorrenciasComSala.map(o => (
+            <a
+              key={o.id}
+              href={o.meet_link!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg border border-accentBlue/25 bg-accentBlue-soft/30 px-2.5 py-1 text-[11px] text-accentBlue hover:bg-accentBlue-soft/50"
+            >
+              <Video className="h-3 w-3" />
+              {new Date(o.data_hora).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} · {o.inscritos}/{recorrencia.capacidade}
+            </a>
+          ))}
+        </div>
+      )}
 
       <ConfirmarExclusao
         aberto={confirmandoExclusao}
