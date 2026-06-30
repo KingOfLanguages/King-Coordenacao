@@ -74,7 +74,7 @@ serve(async (req) => {
     .select(`
       id, titulo, descricao, meet_link, grupos_autorizados,
       coordenador:profiles!coordenador_id (id, nome),
-      horarios:agenda_horarios (id, data_hora, capacidade, ativo)
+      horarios:agenda_horarios (id, data_hora, capacidade, meet_link, ativo)
     `)
     .eq('ativo', true)
 
@@ -116,12 +116,13 @@ serve(async (req) => {
 
   const resultado = agendasAutorizadas
     .map(a => {
-      const horarios = (a.horarios as { id: string; data_hora: string; capacidade: number; ativo: boolean }[])
+      const horarios = (a.horarios as { id: string; data_hora: string; capacidade: number; meet_link: string | null; ativo: boolean }[])
         .filter(h => h.ativo && new Date(h.data_hora) > agora)
         .map(h => ({
           id:           h.id,
           data_hora:    h.data_hora,
           capacidade:   h.capacidade,
+          meet_link:    h.meet_link ?? a.meet_link,
           vagas:        h.capacidade - (contagemPorHorario.get(h.id) ?? 0),
           ja_inscrito:  inscritoPorHorario.has(h.id),
         }))

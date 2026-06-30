@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarPlus, Users, Plus, Trash2, Link2, Power } from 'lucide-react'
+import { CalendarPlus, Users, Plus, Trash2, Link2, Power, Video } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -99,6 +99,18 @@ function AgendaRow({ agenda }: { agenda: AgendaComContagem }) {
               <Users className="h-3 w-3" />
               {h.inscritos}/{h.capacidade}
             </span>
+            {h.meet_link ? (
+              <a href={h.meet_link} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-0.5 text-accentBlue hover:underline">
+                <Video className="h-3 w-3" />
+                Meet
+              </a>
+            ) : (
+              <span className="flex items-center gap-0.5 text-ink-muted/60">
+                <Video className="h-3 w-3" />
+                sem link
+              </span>
+            )}
           </span>
         ))}
       </div>
@@ -154,12 +166,16 @@ function NovaAgendaCard() {
         coordenador_id: coordId === NONE ? null : coordId,
         meet_link: meetLink,
         grupos_autorizados: publico === TODOS ? null : [publico],
-        horarios: validos.map(h => ({ data_hora: new Date(h.data_hora).toISOString(), capacidade: h.capacidade })),
+        horarios: validos.map(h => ({
+          data_hora: new Date(h.data_hora).toISOString(),
+          capacidade: h.capacidade,
+          meet_link: h.meet_link,
+        })),
       })
       toast.success('Agenda criada.')
       reset()
-    } catch {
-      toast.error('Erro ao criar agenda.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao criar agenda.')
     }
   }
 
@@ -181,10 +197,10 @@ function NovaAgendaCard() {
             className="h-9 text-[13px] bg-surface-canvas border-line" />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-[12px] text-ink-secondary font-medium">Link do Google Meet</Label>
+          <Label className="text-[12px] text-ink-secondary font-medium">Link de Meet de fallback (opcional)</Label>
           <div className="relative">
             <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
-            <Input value={meetLink} onChange={e => setMeetLink(e.target.value)} placeholder="https://meet.google.com/..."
+            <Input value={meetLink} onChange={e => setMeetLink(e.target.value)} placeholder="Gerado automaticamente por horário"
               className="h-9 text-[13px] bg-surface-canvas border-line pl-8" />
           </div>
         </div>
@@ -229,6 +245,9 @@ function NovaAgendaCard() {
 
       <div className="space-y-2">
         <Label className="text-[12px] text-ink-secondary font-medium">Horários disponíveis</Label>
+        <p className="text-[11.5px] text-ink-muted">
+          Cada horário ganha sua própria sala do Google Meet, criada automaticamente. Só preencha o link manual se quiser usar uma sala fixa.
+        </p>
         {horarios.map((h, i) => (
           <div key={i} className="flex items-center gap-2">
             <Input
@@ -243,6 +262,13 @@ function NovaAgendaCard() {
               value={h.capacidade}
               onChange={e => updateHorario(i, { capacidade: Math.max(1, Number(e.target.value) || 1) })}
               className="h-9 text-[13px] bg-surface-canvas border-line w-20"
+              title="Capacidade"
+            />
+            <Input
+              value={h.meet_link ?? ''}
+              onChange={e => updateHorario(i, { meet_link: e.target.value })}
+              placeholder="Link manual (opcional)"
+              className="h-9 text-[13px] bg-surface-canvas border-line w-44"
             />
             <Button size="icon-sm" variant="ghost" onClick={() => removeHorario(i)} disabled={horarios.length === 1}>
               <Trash2 className="h-3.5 w-3.5" />

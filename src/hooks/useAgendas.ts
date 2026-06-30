@@ -14,6 +14,7 @@ export type AgendaComContagem = {
     id: string
     data_hora: string
     capacidade: number
+    meet_link: string | null
     ativo: boolean
     inscritos: number
   }[]
@@ -30,7 +31,7 @@ export function useAgendas() {
           id, titulo, descricao, meet_link, grupos_autorizados, ativo, created_at,
           coordenador:profiles!coordenador_id (id, nome),
           horarios:agenda_horarios (
-            id, data_hora, capacidade, ativo,
+            id, data_hora, capacidade, meet_link, ativo,
             inscricoes:agenda_inscricoes (id, status)
           )
         `)
@@ -43,6 +44,7 @@ export function useAgendas() {
           id: h.id as string,
           data_hora: h.data_hora as string,
           capacidade: h.capacidade as number,
+          meet_link: h.meet_link as string | null,
           ativo: h.ativo as boolean,
           inscritos: (h.inscricoes as { status: string }[]).filter(i => i.status === 'confirmada').length,
         })),
@@ -51,9 +53,26 @@ export function useAgendas() {
   })
 }
 
-export type NovoHorario = { data_hora: string; capacidade: number }
+export type NovoHorario = { data_hora: string; capacidade: number; meet_link?: string }
 
-/** Cria uma agenda com seus horários iniciais. */
+/** Gera (via Google Calendar, conta-hub) o link de Meet para um horário específico. */
+async function gerarMeetLink(titulo: string, dataHoraIso: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('generate-meet-link', {
+    body: { titulo, data_hora: dataHoraIso },
+  })
+  if (error) {
+    const ctx = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context
+    if (ctx?.json) {
+      const body = await ctx.json().catch(() => null)
+      if (body?.error) throw new Error(body.error)
+    }
+    throw new Error(error.message)
+  }
+  return (data as { meet_link: string }).meet_link
+}
+
+/** Cria uma agenda com seus horários iniciais. Gera o Meet automaticamente para
+ *  horários sem link manual informado. */
 export function useCriarAgenda() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -79,13 +98,12 @@ export function useCriarAgenda() {
       if (e1) throw e1
 
       if (input.horarios.length) {
-        const { error: e2 } = await supabase
-          .from('agenda_horarios')
-          .insert(input.horarios.map(h => ({
-            agenda_id: agenda.id,
-            data_hora: h.data_hora,
-            capacidade: h.capacidade,
-          })))
+        const horariosComLink = await Promise.all(input.horarios.map(async h => {
+          const link = h.meet_link?.trim() || await gerarMeetLink(input.titulo, h.data_hora)
+          return { agenda_id: agenda.id, data_hora: h.data_hora, capacidade: h.capacidade, meet_link: link }
+        }))
+
+        const { error: e2 } = await supabase.from('agenda_horarios').insert(horariosComLink)
         if (e2) throw e2
       }
     },

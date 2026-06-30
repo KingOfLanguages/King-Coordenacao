@@ -2,7 +2,8 @@
 // lib/googleCalendar.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+// calendar.events permite criar eventos com Google Meet (usado em generate-meet-link).
+const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events'
 const CALENDAR_API   = 'https://www.googleapis.com/calendar/v3'
 
 let _accessToken: string | null = null

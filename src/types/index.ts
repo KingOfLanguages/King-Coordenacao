@@ -103,6 +103,8 @@ export interface AgendaHorario {
   agenda_id: string
   data_hora: string
   capacidade: number
+  meet_link: string | null
+  google_event_id: string | null
   ativo: boolean
   created_at: string
 }

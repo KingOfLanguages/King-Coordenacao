@@ -5,6 +5,7 @@ export type HorarioDisponivel = {
   id: string
   data_hora: string
   capacidade: number
+  meet_link: string | null
   vagas: number
   ja_inscrito: boolean
 }

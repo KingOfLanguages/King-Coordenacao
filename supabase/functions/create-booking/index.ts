@@ -143,7 +143,7 @@ serve(async (req) => {
   const { data: horario } = await admin
     .from('agenda_horarios')
     .select(`
-      id, data_hora, capacidade, ativo,
+      id, data_hora, capacidade, meet_link, ativo,
       agenda:agenda_reunioes (
         id, titulo, meet_link, ativo, grupos_autorizados,
         coordenador:profiles!coordenador_id (nome)
@@ -221,6 +221,7 @@ serve(async (req) => {
     timeZone: 'America/Sao_Paulo',
   })
   const coordNome = agenda.coordenador?.nome ?? 'Coordenação'
+  const meetLink  = horario.meet_link ?? agenda.meet_link
 
   if (brevoKey) {
     const fromEmail = Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking.agenda@gmail.com'
@@ -237,7 +238,7 @@ serve(async (req) => {
             professorNome: professor.nome,
             titulo:        agenda.titulo,
             dataHoraFmt,
-            meetLink:      agenda.meet_link,
+            meetLink,
             coordNome,
           }),
         }),
@@ -253,7 +254,7 @@ serve(async (req) => {
       titulo:           agenda.titulo,
       data_hora:         horario.data_hora,
       coordenador_nome: coordNome,
-      meet_link:        agenda.meet_link,
+      meet_link:        meetLink,
     },
   })
 })
