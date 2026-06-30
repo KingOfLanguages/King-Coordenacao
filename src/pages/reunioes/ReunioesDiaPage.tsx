@@ -11,6 +11,7 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
+import { canConfig } from '@/lib/permissions'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import {
   useReunioesDoDia, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
@@ -146,11 +147,14 @@ export function ReunioesDiaPage() {
 // ─── Toolbar — automação + lembretes ──────────────────────────────────────────
 
 function Toolbar() {
-  const automation  = useGoogleAutomation()
-  const desativar   = useDesativarAutomacao()
-  const sendGeral   = useSendLembretesGeral()
-  const queryClient = useQueryClient()
+  const { profile }  = useAuth()
+  const podeGerenciar = canConfig(profile?.role)
+  const automation    = useGoogleAutomation()
+  const desativar     = useDesativarAutomacao()
+  const sendGeral     = useSendLembretesGeral()
+  const queryClient   = useQueryClient()
   const [ativando, setAtivando] = useState(false)
+  const ativa = automation.data?.ativo ?? false
 
   async function handleAtivar() {
     try {
@@ -162,7 +166,7 @@ function Toolbar() {
         headers: { Authorization: `Bearer ${session?.access_token}` },
       })
       if (error || data?.error) throw new Error(data?.error ?? error?.message ?? 'Erro desconhecido.')
-      toast.success('Importação automática ativada. Reuniões serão importadas todo dia às 8h.')
+      toast.success('Importação automática ativada. Reuniões novas aparecem em até 10 minutos.')
       queryClient.invalidateQueries({ queryKey: ['google', 'automation'] })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -201,22 +205,24 @@ function Toolbar() {
   return (
     <div className={cn(
       'flex items-center justify-between gap-4 rounded-xl border px-4 py-3',
-      automation.data ? 'border-urg-lowFg/25 bg-urg-lowBg' : 'border-line bg-surface-subtle/60',
+      ativa ? 'border-urg-lowFg/25 bg-urg-lowBg' : 'border-line bg-surface-subtle/60',
     )}>
       <div className="flex items-center gap-2.5 min-w-0">
-        {automation.data
+        {ativa
           ? <Zap className="h-4 w-4 text-urg-lowFg flex-shrink-0" />
           : <ZapOff className="h-4 w-4 text-ink-muted flex-shrink-0" />}
         <div className="min-w-0">
-          <p className={cn('text-[13px] font-medium', automation.data ? 'text-urg-lowFg' : 'text-ink')}>
-            Importação automática {automation.data
+          <p className={cn('text-[13px] font-medium', ativa ? 'text-urg-lowFg' : 'text-ink')}>
+            Importação automática {ativa
               ? <span className="font-semibold">ativa</span>
               : <span className="text-ink-muted font-normal">inativa</span>}
           </p>
           <p className="text-[11px] text-ink-muted mt-0.5">
-            {automation.data
-              ? 'Importa os eventos do Calendar todo dia de semana às 8:00.'
-              : 'Ative para importar reuniões automaticamente do Google Calendar.'}
+            {ativa
+              ? 'Reuniões novas do Calendar aparecem aqui em até 10 minutos.'
+              : podeGerenciar
+                ? 'Ative para importar reuniões automaticamente do Google Calendar.'
+                : 'Fale com o admin para ativar a importação automática.'}
           </p>
         </div>
       </div>
@@ -233,7 +239,7 @@ function Toolbar() {
           Lembretes
         </Button>
 
-        {automation.data ? (
+        {!podeGerenciar ? null : ativa ? (
           <Button
             size="sm"
             variant="outline"
