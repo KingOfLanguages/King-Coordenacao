@@ -234,7 +234,10 @@ serve(async (req) => {
     return new Response('Não autorizado.', { status: 401 })
   }
 
-  const admin = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey)
+  const admin = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
 
   // ── Carrega tokens + emails de todos os coordenadores ──────────────────────
   const { data: tokenRows, error: tokenErr } = await admin
@@ -259,6 +262,23 @@ serve(async (req) => {
   const coordEmails = new Set(Object.keys(emailToUserId))
   console.log('[daily-import] Mapa de coordenadores:', [...coordEmails])
 
+  // Professores ativos (matching por nome) + e-mails conhecidos (matching por e-mail)
+  const { data: professores } = await admin
+    .from('professores')
+    .select('id, nome')
+    .eq('saiu',  false)
+    .eq('pausa', false)
+
+  const { data: emailRows } = await admin
+    .from('professor_emails')
+    .select('professor_id, email')
+
+  const emailToProfessorId: Record<string, string> = {}
+  for (const r of emailRows ?? []) {
+    if (r.email) emailToProfessorId[r.email.toLowerCase()] = r.professor_id
+  }
+  const professorNomeById = new Map((professores ?? []).map(p => [p.id, p.nome]))
+
   const today = new Date()
   let totalSaved = 0
   let totalErrors = 0
@@ -270,14 +290,7 @@ serve(async (req) => {
       // 1 — Refresh access token
       const accessToken = await refreshAccessToken(row.refresh_token)
 
-      // 2 — Busca professores ativos para matching
-      const { data: professores } = await admin
-        .from('professores')
-        .select('id, nome')
-        .eq('saiu',  false)
-        .eq('pausa', false)
-
-      // 3 — Busca eventos do dia
+      // 2 — Busca eventos do dia
       const events   = await buscarEventosDia(accessToken, today)
       const meetings = events.filter(isReuniaoComProfessor)
 
@@ -287,8 +300,16 @@ serve(async (req) => {
       for (const ev of meetings) {
         // Resolve qual coordenador é responsável por este evento
         const coordId      = resolveCoordId(ev, row.user_id, emailToUserId)
-        const prof         = matchProfessor(ev, professores ?? [])
         const profEmail    = extractProfessorEmail(ev, coordEmails)
+
+        // Match por e-mail exato (mais confiável) > match por nome no título (fallback)
+        const emailMatchId = profEmail ? emailToProfessorId[profEmail.toLowerCase()] : undefined
+        const profByName   = matchProfessor(ev, professores ?? [])
+        const resolvedProfId = emailMatchId ?? profByName?.id ?? null
+        const resolvedNome   = emailMatchId
+          ? professorNomeById.get(emailMatchId) ?? emailMatchId
+          : profByName?.nome
+
         const startDt      = new Date(ev.start.dateTime ?? ev.start.date ?? '')
         const meetHref     = ev.hangoutLink ?? ev.htmlLink ?? null
 
@@ -304,28 +325,43 @@ serve(async (req) => {
           continue
         }
 
-        const { error: insertErr } = await admin.from('reunioes').insert({
-          coordenador_id:  coordId,
-          professor_id:    prof?.id ?? null,
-          professor_email: profEmail,
-          data:            startDt.toISOString(),
-          titulo:          ev.summary,
-          google_event_id: ev.id,
-          meet_link:       meetHref,
-          status:          'pendente',
-        })
+        const { data: novaReuniao, error: insertErr } = await admin
+          .from('reunioes')
+          .insert({
+            coordenador_id:  coordId,
+            professor_id:    resolvedProfId,
+            professor_email: profEmail,
+            data:            startDt.toISOString(),
+            titulo:          ev.summary,
+            google_event_id: ev.id,
+            meet_link:       meetHref,
+            status:          'pendente',
+          })
+          .select('id')
+          .single()
 
-        if (insertErr) {
-          console.error(`[daily-import] Erro ao inserir "${ev.summary}":`, insertErr.message)
+        if (insertErr || !novaReuniao) {
+          console.error(`[daily-import] Erro ao inserir "${ev.summary}":`, insertErr?.message)
           totalErrors++
-        } else {
-          // Log detalhado: quem ficou responsável
-          const coordLog = coordId === row.user_id
-            ? (row.google_email ?? row.user_id)
-            : `${coordId} (via ${ev.organizer?.email ?? 'attendee'})`
-          console.log(`[daily-import] ✓ "${ev.summary}" → prof: ${prof?.nome ?? 'sem vínculo'} | coord: ${coordLog}`)
-          totalSaved++
+          continue
         }
+
+        // Cria o vínculo na tabela de participação (modelo multi-professor)
+        const { error: linkErr } = await admin.from('reuniao_professores').insert({
+          reuniao_id:   novaReuniao.id,
+          professor_id: resolvedProfId,
+          status:       'pendente',
+        })
+        if (linkErr) {
+          console.error(`[daily-import] Erro ao vincular professor em "${ev.summary}":`, linkErr.message)
+        }
+
+        // Log detalhado: quem ficou responsável
+        const coordLog = coordId === row.user_id
+          ? (row.google_email ?? row.user_id)
+          : `${coordId} (via ${ev.organizer?.email ?? 'attendee'})`
+        console.log(`[daily-import] ✓ "${ev.summary}" → prof: ${resolvedNome ?? 'sem vínculo'} | coord: ${coordLog}`)
+        totalSaved++
       }
 
     } catch (err) {
