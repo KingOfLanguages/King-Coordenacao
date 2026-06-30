@@ -12,8 +12,12 @@
 //
 // Atribuição de coordenador:
 //   Cada evento tem um organizer.email e attendees[].email.
-//   O mapa emailToUserId (construído a partir de google_tokens.google_email)
-//   resolve ex: coordenacaoking7@gmail.com → UUID da Ariel no Supabase.
+//   O mapa emailToUserId é construído a partir de DUAS fontes (mescladas):
+//     - google_tokens.google_email  (quem conectou a automação)
+//     - profiles.google_email       (e-mail Google pessoal cadastrado no perfil,
+//                                     usado quando a conexão é feita por uma conta
+//                                     única compartilhada, ex: agenda centralizada)
+//   ex: coordenacaoking7@gmail.com → UUID da Ariel no Supabase.
 //   Prioridade: organizer > attendee conhecido > dono do token (fallback).
 //
 // Secrets necessários:
@@ -258,6 +262,20 @@ serve(async (req) => {
     }
   }
 
+  // Também usa o e-mail Google pessoal cadastrado no perfil (profiles.google_email).
+  // Permite atribuir o coordenador correto mesmo quando a conexão OAuth é feita
+  // por uma conta única (ex: conta compartilhada que recebe todos os calendários).
+  const { data: coordProfiles } = await admin
+    .from('profiles')
+    .select('id, google_email')
+    .not('google_email', 'is', null)
+
+  for (const p of coordProfiles ?? []) {
+    if (p.google_email) {
+      emailToUserId[p.google_email.toLowerCase()] = p.id
+    }
+  }
+
   // Set de emails de coordenadores — usado para excluir da busca de email do professor
   const coordEmails = new Set(Object.keys(emailToUserId))
   console.log('[daily-import] Mapa de coordenadores:', [...coordEmails])
@@ -282,6 +300,7 @@ serve(async (req) => {
   const today = new Date()
   let totalSaved = 0
   let totalErrors = 0
+  const errorDetails: { coordenador: string; erro: string }[] = []
 
   for (const row of tokenRows ?? []) {
     try {
@@ -365,9 +384,10 @@ serve(async (req) => {
       }
 
     } catch (err) {
-      const msg = String(err)
+      const msg = err instanceof Error ? err.message : String(err)
       console.error(`[daily-import] Erro para usuário ${row.user_id}:`, msg)
       totalErrors++
+      errorDetails.push({ coordenador: row.google_email ?? row.user_id, erro: msg })
 
       // Token revogado → remove do banco para não tentar novamente
       if (msg.includes('invalid_grant')) {
@@ -377,7 +397,7 @@ serve(async (req) => {
     }
   }
 
-  const result = { saved: totalSaved, errors: totalErrors, date: today.toISOString() }
+  const result = { saved: totalSaved, errors: totalErrors, errorDetails, date: today.toISOString() }
   console.log('[daily-import] Concluído:', result)
 
   return new Response(JSON.stringify(result), {

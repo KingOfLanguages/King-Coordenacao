@@ -3,11 +3,12 @@ import { supabase } from '@/lib/supabase'
 import type { RoleUsuario } from '@/types'
 
 export type UsuarioAdmin = {
-  id:         string
-  nome:       string
-  role:       RoleUsuario
-  ativo:      boolean
-  created_at: string
+  id:           string
+  nome:         string
+  role:         RoleUsuario
+  ativo:        boolean
+  created_at:   string
+  google_email: string | null
 }
 
 /** Lista todos os usuários (apenas admin deve ter acesso via RLS). */
@@ -17,7 +18,7 @@ export function useUsuarios() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, nome, role, ativo, created_at')
+        .select('id, nome, role, ativo, created_at, google_email')
         .order('nome')
       if (error) throw error
       return data as UsuarioAdmin[]
@@ -37,16 +38,17 @@ export function useExcluirUsuario() {
   })
 }
 
-/** Atualiza role e/ou ativo de um usuário. */
+/** Atualiza role, ativo e/ou e-mail Google pessoal de um usuário. */
 export function useAtualizarUsuario() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({
-      id, role, ativo,
-    }: { id: string; role?: RoleUsuario; ativo?: boolean }) => {
+      id, role, ativo, google_email,
+    }: { id: string; role?: RoleUsuario; ativo?: boolean; google_email?: string | null }) => {
       const updates: Record<string, unknown> = {}
-      if (role  !== undefined) updates.role  = role
-      if (ativo !== undefined) updates.ativo = ativo
+      if (role         !== undefined) updates.role         = role
+      if (ativo        !== undefined) updates.ativo        = ativo
+      if (google_email !== undefined) updates.google_email = google_email || null
 
       const { error } = await supabase
         .from('profiles')

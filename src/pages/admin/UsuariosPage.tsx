@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Search, ShieldCheck, UserCheck, UserX, Info, Trash2, AlertTriangle } from 'lucide-react'
+import { Search, ShieldCheck, UserCheck, UserX, Info, Trash2, AlertTriangle, Mail, Check, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -46,6 +46,20 @@ export function UsuariosPage() {
       toast.success(`Perfil de ${usuario.nome} atualizado para ${roleLabel(role)}.`)
     } catch {
       toast.error('Erro ao atualizar perfil.')
+    }
+  }
+
+  async function handleGoogleEmail(usuario: UsuarioAdmin, google_email: string) {
+    try {
+      await atualizar.mutateAsync({ id: usuario.id, google_email })
+      toast.success(
+        google_email
+          ? `E-mail Google de ${usuario.nome} salvo.`
+          : `E-mail Google de ${usuario.nome} removido.`
+      )
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'Erro desconhecido'
+      toast.error(`Erro ao salvar e-mail: ${msg}`)
     }
   }
 
@@ -107,6 +121,11 @@ export function UsuariosPage() {
             </a>
             .
           </p>
+          <p>
+            O e-mail Google sob o nome de cada coordenador identifica de quem é cada
+            reunião importada do Calendar — útil quando a conexão automática usa uma
+            conta compartilhada em vez da conta pessoal de cada um.
+          </p>
         </div>
       </div>
 
@@ -147,6 +166,7 @@ export function UsuariosPage() {
                 usuario={u}
                 isSelf={u.id === profile?.id}
                 onRole={role => handleRole(u, role)}
+                onGoogleEmail={email => handleGoogleEmail(u, email)}
                 onToggleAtivo={() => handleToggleAtivo(u)}
                 onExcluir={() => handleExcluir(u)}
                 confirmingDelete={confirmDelete === u.id}
@@ -165,12 +185,13 @@ export function UsuariosPage() {
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
 function UsuarioRow({
-  usuario, isSelf, onRole, onToggleAtivo, onExcluir,
+  usuario, isSelf, onRole, onGoogleEmail, onToggleAtivo, onExcluir,
   confirmingDelete, onRequestDelete, onCancelDelete, isPending,
 }: {
   usuario: UsuarioAdmin
   isSelf: boolean
   onRole: (role: RoleUsuario) => void
+  onGoogleEmail: (email: string) => void
   onToggleAtivo: () => void
   onExcluir: () => void
   confirmingDelete: boolean
@@ -196,7 +217,14 @@ function UsuarioRow({
         <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accentBlue-soft text-accentBlue text-[11px] font-semibold select-none">
           {initials}
         </span>
-        <span className="text-[13px] font-medium text-ink truncate">{usuario.nome}</span>
+        <div className="min-w-0">
+          <span className="block text-[13px] font-medium text-ink truncate">{usuario.nome}</span>
+          <GoogleEmailField
+            value={usuario.google_email}
+            onSave={onGoogleEmail}
+            disabled={isPending}
+          />
+        </div>
       </div>
 
       {/* Perfil */}
@@ -299,6 +327,57 @@ function UsuarioRow({
         )}
       </div>
     </li>
+  )
+}
+
+// ─── Campo de e-mail Google (edição inline) ───────────────────────────────────
+
+function GoogleEmailField({ value, onSave, disabled }: {
+  value: string | null
+  onSave: (email: string) => void
+  disabled: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft]     = useState(value ?? '')
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setDraft(value ?? ''); setEditing(true) }}
+        className="btn-press flex items-center gap-1 text-[11px] text-ink-muted hover:text-accentBlue max-w-full"
+      >
+        <Mail className="h-2.5 w-2.5 flex-shrink-0" />
+        <span className="truncate">{value || 'Adicionar e-mail Google'}</span>
+      </button>
+    )
+  }
+
+  function commit() {
+    onSave(draft.trim())
+    setEditing(false)
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') commit()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        placeholder="email@gmail.com"
+        className="h-6 text-[11px] px-1.5 bg-surface-canvas border-line w-40"
+      />
+      <button onClick={commit} disabled={disabled} className="btn-press text-urg-lowFg">
+        <Check className="h-3 w-3" />
+      </button>
+      <button onClick={() => setEditing(false)} className="btn-press text-ink-muted">
+        <X className="h-3 w-3" />
+      </button>
+    </div>
   )
 }
 
