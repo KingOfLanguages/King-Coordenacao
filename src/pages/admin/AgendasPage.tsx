@@ -158,7 +158,7 @@ function AgendaCard({ agenda }: { agenda: AgendaComRecorrencias }) {
   const [adicionandoHorario, setAdicionandoHorario] = useState(false)
   const [coordId, setCoordId] = useState(agenda.coordenador?.id ?? NONE)
   const [publico, setPublico] = useState<string>(agenda.grupos_autorizados?.[0] ?? TODOS)
-  const [novoHorario, setNovoHorario] = useState<NovaRecorrencia>({ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO })
+  const [novoHorario, setNovoHorario] = useState<NovaRecorrencia>({ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO, meet_link: '' })
 
   async function toggle() {
     try {
@@ -198,7 +198,7 @@ function AgendaCard({ agenda }: { agenda: AgendaComRecorrencias }) {
     try {
       await adicionarRecorrencia.mutateAsync({ agendaId: agenda.id, recorrencia: novoHorario })
       toast.success('Horário adicionado.')
-      setNovoHorario({ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO })
+      setNovoHorario({ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO, meet_link: '' })
       setAdicionandoHorario(false)
     } catch {
       toast.error('Erro ao adicionar horário.')
@@ -301,6 +301,13 @@ function AgendaCard({ agenda }: { agenda: AgendaComRecorrencias }) {
               title="Capacidade"
               className="h-8 w-16 text-[12px] bg-surface-canvas border-line"
             />
+            <Input
+              type="url"
+              placeholder="Link da reunião (opcional)"
+              value={novoHorario.meet_link ?? ''}
+              onChange={e => setNovoHorario(h => ({ ...h, meet_link: e.target.value }))}
+              className="h-8 flex-1 min-w-[180px] text-[12px] bg-surface-canvas border-line"
+            />
             <Button size="sm" onClick={salvarNovoHorario} disabled={adicionarRecorrencia.isPending} className="btn-press h-7 text-[11px] bg-brand text-white hover:bg-brand-strong">
               Adicionar
             </Button>
@@ -340,10 +347,11 @@ function RecorrenciaRow({ recorrencia }: { recorrencia: RecorrenciaComReservas }
   const [diaSemana, setDiaSemana] = useState(recorrencia.dia_semana)
   const [hora, setHora] = useState(recorrencia.hora.slice(0, 5))
   const [capacidade, setCapacidade] = useState(recorrencia.capacidade)
+  const [meetLink, setMeetLink] = useState(recorrencia.meet_link ?? '')
 
   async function salvar() {
     try {
-      await editar.mutateAsync({ id: recorrencia.id, dia_semana: diaSemana, hora: `${hora}:00`, capacidade })
+      await editar.mutateAsync({ id: recorrencia.id, dia_semana: diaSemana, hora: `${hora}:00`, capacidade, meet_link: meetLink.trim() || null })
       toast.success('Horário atualizado.')
       setEditando(false)
     } catch {
@@ -378,6 +386,13 @@ function RecorrenciaRow({ recorrencia }: { recorrencia: RecorrenciaComReservas }
           type="number" min={1} value={capacidade}
           onChange={e => setCapacidade(Math.max(1, Number(e.target.value) || 1))}
           title="Capacidade" className="h-8 w-16 text-[12px] bg-surface-canvas border-line"
+        />
+        <Input
+          type="url"
+          placeholder="Link da reunião (opcional)"
+          value={meetLink}
+          onChange={e => setMeetLink(e.target.value)}
+          className="h-8 flex-1 min-w-[180px] text-[12px] bg-surface-canvas border-line"
         />
         <Button size="sm" onClick={salvar} disabled={editar.isPending} className="btn-press h-7 text-[11px] bg-brand text-white hover:bg-brand-strong">
           Salvar
@@ -422,6 +437,23 @@ function RecorrenciaRow({ recorrencia }: { recorrencia: RecorrenciaComReservas }
           </Button>
         </div>
       </div>
+
+      {recorrencia.meet_link ? (
+        <a
+          href={recorrencia.meet_link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 w-fit rounded-lg border border-accentBlue/25 bg-accentBlue-soft/30 px-2.5 py-1 text-[11px] text-accentBlue hover:bg-accentBlue-soft/50"
+        >
+          <Video className="h-3 w-3 flex-shrink-0" />
+          <span className="truncate max-w-[260px]">{recorrencia.meet_link}</span>
+        </a>
+      ) : (
+        <p className="flex items-center gap-1.5 text-[11px] text-ink-subtle italic">
+          <Video className="h-3 w-3 flex-shrink-0" />
+          Sem link fixo — gerado automaticamente na 1ª reserva de cada semana
+        </p>
+      )}
 
       {ocorrenciasComSala.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -495,14 +527,14 @@ function NovaAgendaCard() {
   const [aberto, setAberto] = useState(false)
   const [coordId, setCoordId] = useState<string>(profile?.id ?? NONE)
   const [publico, setPublico] = useState<string>(TODOS)
-  const [horarios, setHorarios] = useState<NovaRecorrencia[]>([{ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO }])
+  const [horarios, setHorarios] = useState<NovaRecorrencia[]>([{ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO, meet_link: '' }])
 
   const nomeCoordSelecionado = coordId === NONE
     ? (profile?.nome ?? null)
     : coordenadores.find(c => c.id === coordId)?.nome ?? null
 
   function addHorario() {
-    setHorarios(h => [...h, { dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO }])
+    setHorarios(h => [...h, { dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO, meet_link: '' }])
   }
   function removeHorario(i: number) {
     setHorarios(h => h.filter((_, idx) => idx !== i))
@@ -514,7 +546,7 @@ function NovaAgendaCard() {
   function reset() {
     setCoordId(profile?.id ?? NONE)
     setPublico(TODOS)
-    setHorarios([{ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO }])
+    setHorarios([{ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO, meet_link: '' }])
     setAberto(false)
   }
 
@@ -524,7 +556,7 @@ function NovaAgendaCard() {
         titulo: tituloAgenda(nomeCoordSelecionado),
         coordenador_id: coordId === NONE ? null : coordId,
         grupos_autorizados: publico === TODOS ? null : [publico],
-        recorrencias: horarios,
+        recorrencias: horarios.map(h => ({ ...h, meet_link: h.meet_link?.trim() || null })),
       })
       toast.success('Agenda criada.')
       reset()
@@ -602,6 +634,13 @@ function NovaAgendaCard() {
               title="Capacidade (convidados, sem contar o coordenador)"
               className="h-9 w-20 text-[13px] bg-surface-canvas border-line"
             />
+            <Input
+              type="url"
+              placeholder="Link da reunião (opcional)"
+              value={h.meet_link ?? ''}
+              onChange={e => updateHorario(i, { meet_link: e.target.value })}
+              className="h-9 flex-1 min-w-[180px] text-[13px] bg-surface-canvas border-line"
+            />
             <Button size="icon-sm" variant="ghost" onClick={() => removeHorario(i)} disabled={horarios.length === 1}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -616,7 +655,7 @@ function NovaAgendaCard() {
       <div className="flex items-start gap-2 rounded-lg border border-line-soft bg-surface-subtle/50 px-3 py-2.5">
         <Video className="h-3.5 w-3.5 text-ink-muted mt-0.5 flex-shrink-0" />
         <p className="text-[11.5px] text-ink-muted leading-relaxed">
-          O link do Google Meet de cada semana é gerado automaticamente na primeira reserva — não é preciso criar a sala manualmente.
+          Se você não informar um link, o Google Meet de cada semana é gerado automaticamente na primeira reserva — não é preciso criar a sala manualmente.
         </p>
       </div>
 
