@@ -502,16 +502,23 @@ function VincularBlock({ reuniao, participanteId, dados }: {
       )}
 
       {/* Manual */}
-      <Select onValueChange={v => link(v, 'manual')} disabled={vincular.isPending}>
-        <SelectTrigger className="h-8 text-[12px] bg-surface-canvas border-line text-ink">
-          <SelectValue placeholder="Vincular manualmente…" />
-        </SelectTrigger>
-        <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
-          {(dados?.profs ?? []).map(p => (
-            <SelectItem key={p.id} value={p.id} className="text-[12px]">{p.nome}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {(dados?.profs ?? []).length === 0 ? (
+        <p className="text-[12px] text-ink-muted italic">
+          Nenhum professor cadastrado ainda — cadastre em{' '}
+          <a href="/professores" className="underline underline-offset-2 hover:text-ink">Professores</a>.
+        </p>
+      ) : (
+        <Select onValueChange={v => link(v, 'manual')} disabled={vincular.isPending}>
+          <SelectTrigger className="h-8 text-[12px] bg-surface-canvas border-line text-ink">
+            <SelectValue placeholder="Vincular manualmente…" />
+          </SelectTrigger>
+          <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
+            {dados!.profs.map(p => (
+              <SelectItem key={p.id} value={p.id} className="text-[12px]">{p.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
     </div>
   )
 }
