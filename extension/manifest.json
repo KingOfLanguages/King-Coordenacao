@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "King Nexus — Assistente de Reunião",
+  "version": "0.1.0",
+  "description": "Reconhece o professor automaticamente no Google Meet e mostra perfil, histórico e observações sem precisar trocar de aba.",
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "King Nexus"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["src/content/index.tsx"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage"],
+  "host_permissions": ["https://dajbzpeduxmsxyukmjfm.supabase.co/*"]
+}
