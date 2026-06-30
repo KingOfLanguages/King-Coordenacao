@@ -42,9 +42,17 @@ type ObservacaoRow = {
 const labelTipo: Record<string, string> = {
   reuniao:           'Reunião',
   ocorrencia:        'Ocorrência',
-  feedback_positivo: '🟢 Positivo',
-  feedback_negativo: '🔴 Negativo',
-  feedback_neutro:   '⚪ Neutro',
+  feedback_positivo: 'Positivo',
+  feedback_negativo: 'Negativo',
+  feedback_neutro:   'Neutro',
+}
+
+const dotTipo: Record<string, string> = {
+  reuniao:           'bg-accentBlue',
+  ocorrencia:        'bg-urg-medFg',
+  feedback_positivo: 'bg-urg-lowFg',
+  feedback_negativo: 'bg-urg-highFg',
+  feedback_neutro:   'bg-ink-subtle',
 }
 
 const borderTipo: Record<string, string> = {
@@ -67,9 +75,9 @@ type ObsFiltro = 'todos' | 'feedback_positivo' | 'feedback_negativo' | 'feedback
 
 const FILTROS: { value: ObsFiltro; label: string }[] = [
   { value: 'todos',             label: 'Todos' },
-  { value: 'feedback_positivo', label: '🟢 Positivos' },
-  { value: 'feedback_negativo', label: '🔴 Negativos' },
-  { value: 'feedback_neutro',   label: '⚪ Neutros' },
+  { value: 'feedback_positivo', label: 'Positivos' },
+  { value: 'feedback_negativo', label: 'Negativos' },
+  { value: 'feedback_neutro',   label: 'Neutros' },
   { value: 'reuniao',           label: 'Reuniões' },
   { value: 'ocorrencia',        label: 'Ocorrências' },
 ]
@@ -152,13 +160,15 @@ export function ProfessorDetalhePage() {
               </span>
             )}
             {negativos > 0 && (
-              <span className="text-urg-highFg font-medium">
-                🔴 {negativos} feedback{negativos !== 1 ? 's' : ''} negativo{negativos !== 1 ? 's' : ''}
+              <span className="inline-flex items-center gap-1.5 text-urg-highFg font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-urg-highFg" />
+                {negativos} feedback{negativos !== 1 ? 's' : ''} negativo{negativos !== 1 ? 's' : ''}
               </span>
             )}
             {positivos > 0 && (
-              <span className="text-urg-lowFg font-medium">
-                🟢 {positivos} positivo{positivos !== 1 ? 's' : ''}
+              <span className="inline-flex items-center gap-1.5 text-urg-lowFg font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-urg-lowFg" />
+                {positivos} positivo{positivos !== 1 ? 's' : ''}
               </span>
             )}
           </div>
@@ -274,6 +284,9 @@ export function ProfessorDetalhePage() {
                       : 'bg-surface-subtle text-ink-secondary hover:bg-surface-canvas hover:border-line border border-transparent',
                   )}
                 >
+                  {f.value !== 'todos' && (
+                    <span className={cn('h-1.5 w-1.5 rounded-full', dotTipo[f.value])} />
+                  )}
                   {f.label}
                   <span className={cn(
                     'tabular-nums',

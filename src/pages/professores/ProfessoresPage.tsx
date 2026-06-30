@@ -333,8 +333,9 @@ function CardProfessor({
         {hasAlerts && (
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {professor._negativos > 0 && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-urg-highBg px-2 py-0.5 text-[11px] font-medium text-urg-highFg">
-                🔴 <span className="tabular-nums">{professor._negativos}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-urg-highBg px-2 py-0.5 text-[11px] font-medium text-urg-highFg">
+                <span className="h-1.5 w-1.5 rounded-full bg-urg-highFg" />
+                <span className="tabular-nums">{professor._negativos}</span>
               </span>
             )}
           </div>
