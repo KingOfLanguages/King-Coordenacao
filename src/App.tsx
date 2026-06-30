@@ -14,6 +14,8 @@ import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
+import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
+import { AgendasPage } from '@/pages/admin/AgendasPage'
 
 const queryClient = new QueryClient()
 
@@ -34,6 +36,7 @@ export default function App() {
           <Routes>
             <Route path="/login"    element={<Login />} />
             <Route path="/cadastro" element={<Cadastro />} />
+            <Route path="/agendar"  element={<AgendamentoPage />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<IndexRedirect />} />
@@ -74,6 +77,11 @@ export default function App() {
               <Route path="/admin/configuracoes" element={
                 <ProtectedRoute roles={['admin']}>
                   <ConfiguracoesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/agendas" element={
+                <ProtectedRoute roles={['admin', 'coordenacao']}>
+                  <AgendasPage />
                 </ProtectedRoute>
               } />
             </Route>

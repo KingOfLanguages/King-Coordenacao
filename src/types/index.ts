@@ -84,3 +84,36 @@ export interface ReuniaoProfessor {
   confirmado_por: string | null
   created_at: string
 }
+
+// ─── Agendamento coletivo (auto-agendamento por e-mail) ────────────────────────
+
+export interface AgendaReuniao {
+  id: string
+  titulo: string
+  descricao: string | null
+  coordenador_id: string | null
+  meet_link: string | null
+  grupos_autorizados: string[] | null
+  ativo: boolean
+  created_at: string
+}
+
+export interface AgendaHorario {
+  id: string
+  agenda_id: string
+  data_hora: string
+  capacidade: number
+  ativo: boolean
+  created_at: string
+}
+
+export type StatusAgendaInscricao = 'confirmada' | 'cancelada'
+
+export interface AgendaInscricao {
+  id: string
+  horario_id: string
+  professor_id: string
+  email_usado: string
+  status: StatusAgendaInscricao
+  created_at: string
+}
