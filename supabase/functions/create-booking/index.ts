@@ -5,12 +5,20 @@
 // um professor num horário de agenda coletiva. Toda a validação é refeita
 // aqui no servidor — o client nunca é confiável.
 //
+// horario_id pode ser:
+//   - um UUID real de uma linha já materializada em agenda_horarios, OU
+//   - um id virtual "v|<recorrencia_id>|<data_hora ISO>" (ver teacher-lookup),
+//     representando uma ocorrência futura de uma agenda recorrente que ainda
+//     não tem nenhuma reserva. Nesse caso, a linha em agenda_horarios e o
+//     link do Meet são criados aqui, na primeira reserva daquela semana.
+//
 // Secrets necessários (Supabase Dashboard > Edge Functions > Secrets):
 //   BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME   (mesmos de send-reminders)
+//   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             (já existentes — conta-hub)
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/create-booking
-//   Body: { "email": "professor@exemplo.com", "horario_id": "uuid" }
+//   Body: { "email": "professor@exemplo.com", "horario_id": "uuid | v|<rec>|<iso>" }
 //   Retorna: { reuniao: { titulo, data_hora, coordenador_nome, meet_link } }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -102,6 +110,65 @@ function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome }: 
 </html>`
 }
 
+// Gera o Meet de uma ocorrência via Calendar API, usando o refresh_token da
+// conta-hub (mesmo já usado em daily-import). Lança erro com mensagem amigável
+// em caso de falha — chamado só na 1ª reserva da semana.
+async function gerarMeetLink(
+  admin: ReturnType<typeof createClient>,
+  titulo: string,
+  dataHoraIso: string,
+): Promise<string> {
+  const { data: tokenRow } = await admin
+    .from('google_tokens')
+    .select('refresh_token')
+    .limit(1)
+    .maybeSingle()
+  if (!tokenRow?.refresh_token) {
+    throw new Error('A integração com o Google Calendar não está configurada. Avise a coordenação.')
+  }
+
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     Deno.env.get('GOOGLE_CLIENT_ID')!,
+      client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
+      refresh_token: tokenRow.refresh_token,
+      grant_type:    'refresh_token',
+    }),
+  })
+  const tokenData = await tokenRes.json()
+  if (tokenData.error) {
+    console.error('[create-booking] Erro ao renovar token Google:', tokenData.error)
+    throw new Error('Não foi possível gerar o link da reunião agora. Tente novamente em instantes.')
+  }
+
+  const inicio = new Date(dataHoraIso)
+  const fim    = new Date(inicio.getTime() + 60 * 60 * 1000)
+
+  const eventRes = await fetch(
+    'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokenData.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary: titulo,
+        start: { dateTime: inicio.toISOString(), timeZone: 'America/Sao_Paulo' },
+        end:   { dateTime: fim.toISOString(),    timeZone: 'America/Sao_Paulo' },
+        conferenceData: {
+          createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } },
+        },
+      }),
+    },
+  )
+  const event = await eventRes.json()
+  if (!eventRes.ok || !event.hangoutLink) {
+    console.error('[create-booking] Erro ao criar evento Google:', JSON.stringify(event))
+    throw new Error('Não foi possível gerar o link da reunião agora. Tente novamente em instantes.')
+  }
+  return event.hangoutLink as string
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
@@ -139,38 +206,121 @@ serve(async (req) => {
     return json({ error: 'Professor não encontrado para este e-mail.' }, 404)
   }
 
-  // ── 2. Horário/agenda válidos, ativos, futuros, autorizados ─────────────────
-  const { data: horario } = await admin
-    .from('agenda_horarios')
-    .select(`
-      id, data_hora, capacidade, meet_link, ativo,
-      agenda:agenda_reunioes (
-        id, titulo, meet_link, ativo, grupos_autorizados,
-        coordenador:profiles!coordenador_id (nome)
-      )
-    `)
-    .eq('id', horarioId)
-    .maybeSingle()
-
-  if (!horario || !horario.ativo) return json({ error: 'Horário não encontrado.' }, 404)
-  if (new Date(horario.data_hora) <= new Date()) return json({ error: 'Este horário não está mais disponível.' }, 409)
-
-  const agenda = horario.agenda as unknown as {
+  // ── 2. Resolve o horário: linha real já materializada, ou ocorrência virtual
+  //      de uma recorrência ("v|<recorrencia_id>|<data_hora ISO>") ────────────
+  type AgendaInfo = {
     id: string; titulo: string; meet_link: string | null; ativo: boolean
     grupos_autorizados: string[] | null
     coordenador: { nome: string } | null
   }
-  if (!agenda || !agenda.ativo) return json({ error: 'Esta agenda não está mais disponível.' }, 409)
+  let horario: { id: string; data_hora: string; capacidade: number; meet_link: string | null; ativo: boolean }
+  let agenda: AgendaInfo
 
-  const grupos = agenda.grupos_autorizados
-  const autorizado = !grupos || grupos.length === 0 || (professor.grupo_id != null && grupos.includes(professor.grupo_id))
-  if (!autorizado) return json({ error: 'Você não está autorizado a se inscrever nesta agenda.' }, 403)
+  if (horarioId.startsWith('v|')) {
+    const [, recorrenciaId, dataHoraIso] = horarioId.split('|')
+    if (!recorrenciaId || !dataHoraIso) return json({ error: 'Horário inválido.' }, 400)
+    if (new Date(dataHoraIso) <= new Date()) return json({ error: 'Este horário não está mais disponível.' }, 409)
+
+    const { data: recorrencia } = await admin
+      .from('agenda_recorrencias')
+      .select(`
+        id, capacidade, meet_link, ativo,
+        agenda:agenda_reunioes (
+          id, titulo, meet_link, ativo, grupos_autorizados,
+          coordenador:profiles!coordenador_id (nome)
+        )
+      `)
+      .eq('id', recorrenciaId)
+      .maybeSingle()
+
+    if (!recorrencia || !recorrencia.ativo) return json({ error: 'Horário não encontrado.' }, 404)
+    agenda = recorrencia.agenda as unknown as AgendaInfo
+    if (!agenda || !agenda.ativo) return json({ error: 'Esta agenda não está mais disponível.' }, 409)
+
+    const grupos = agenda.grupos_autorizados
+    const autorizado = !grupos || grupos.length === 0 || (professor.grupo_id != null && grupos.includes(professor.grupo_id))
+    if (!autorizado) return json({ error: 'Você não está autorizado a se inscrever nesta agenda.' }, 403)
+
+    // Tenta achar uma materialização já existente (ex.: outro professor reservou primeiro).
+    const { data: existente } = await admin
+      .from('agenda_horarios')
+      .select('id, data_hora, capacidade, meet_link, ativo')
+      .eq('recorrencia_id', recorrenciaId)
+      .eq('data_hora', dataHoraIso)
+      .maybeSingle()
+
+    if (existente) {
+      horario = existente
+    } else {
+      let meetLink = recorrencia.meet_link
+      if (!meetLink) {
+        try {
+          meetLink = await gerarMeetLink(admin, agenda.titulo, dataHoraIso)
+        } catch (err) {
+          return json({ error: err instanceof Error ? err.message : 'Erro ao gerar link da reunião.' }, 502)
+        }
+      }
+
+      const { data: criado, error: criarErr } = await admin
+        .from('agenda_horarios')
+        .insert({
+          agenda_id: agenda.id,
+          recorrencia_id: recorrenciaId,
+          data_hora: dataHoraIso,
+          capacidade: recorrencia.capacidade,
+          meet_link: meetLink,
+        })
+        .select('id, data_hora, capacidade, meet_link, ativo')
+        .single()
+
+      if (criarErr) {
+        // Corrida: outra reserva materializou no meio tempo — busca de novo.
+        const { data: retry } = await admin
+          .from('agenda_horarios')
+          .select('id, data_hora, capacidade, meet_link, ativo')
+          .eq('recorrencia_id', recorrenciaId)
+          .eq('data_hora', dataHoraIso)
+          .maybeSingle()
+        if (!retry) {
+          console.error('[create-booking] Erro ao materializar horário:', criarErr.message)
+          return json({ error: 'Erro ao confirmar inscrição.' }, 500)
+        }
+        horario = retry
+      } else {
+        horario = criado
+      }
+    }
+  } else {
+    const { data: horarioRow } = await admin
+      .from('agenda_horarios')
+      .select(`
+        id, data_hora, capacidade, meet_link, ativo,
+        agenda:agenda_reunioes (
+          id, titulo, meet_link, ativo, grupos_autorizados,
+          coordenador:profiles!coordenador_id (nome)
+        )
+      `)
+      .eq('id', horarioId)
+      .maybeSingle()
+
+    if (!horarioRow || !horarioRow.ativo) return json({ error: 'Horário não encontrado.' }, 404)
+    if (new Date(horarioRow.data_hora) <= new Date()) return json({ error: 'Este horário não está mais disponível.' }, 409)
+
+    agenda = horarioRow.agenda as unknown as AgendaInfo
+    if (!agenda || !agenda.ativo) return json({ error: 'Esta agenda não está mais disponível.' }, 409)
+
+    const grupos = agenda.grupos_autorizados
+    const autorizado = !grupos || grupos.length === 0 || (professor.grupo_id != null && grupos.includes(professor.grupo_id))
+    if (!autorizado) return json({ error: 'Você não está autorizado a se inscrever nesta agenda.' }, 403)
+
+    horario = horarioRow
+  }
 
   // ── 3. Já inscrito? ───────────────────────────────────────────────────────────
   const { data: jaInscrito } = await admin
     .from('agenda_inscricoes')
     .select('id')
-    .eq('horario_id', horarioId)
+    .eq('horario_id', horario.id)
     .eq('professor_id', professor.id)
     .eq('status', 'confirmada')
     .maybeSingle()
@@ -180,13 +330,13 @@ serve(async (req) => {
   const { count } = await admin
     .from('agenda_inscricoes')
     .select('id', { count: 'exact', head: true })
-    .eq('horario_id', horarioId)
+    .eq('horario_id', horario.id)
     .eq('status', 'confirmada')
   if ((count ?? 0) >= horario.capacidade) return json({ error: 'Não há mais vagas neste horário.' }, 409)
 
   const { error: insertErr } = await admin
     .from('agenda_inscricoes')
-    .insert({ horario_id: horarioId, professor_id: professor.id, email_usado: email, status: 'confirmada' })
+    .insert({ horario_id: horario.id, professor_id: professor.id, email_usado: email, status: 'confirmada' })
 
   if (insertErr) {
     // Índice único pega corrida de duplo-clique/duplicidade.
@@ -201,14 +351,14 @@ serve(async (req) => {
   const { count: countDepois } = await admin
     .from('agenda_inscricoes')
     .select('id', { count: 'exact', head: true })
-    .eq('horario_id', horarioId)
+    .eq('horario_id', horario.id)
     .eq('status', 'confirmada')
 
   if ((countDepois ?? 0) > horario.capacidade) {
     await admin
       .from('agenda_inscricoes')
       .delete()
-      .eq('horario_id', horarioId)
+      .eq('horario_id', horario.id)
       .eq('professor_id', professor.id)
       .eq('status', 'confirmada')
     return json({ error: 'Não há mais vagas neste horário.' }, 409)

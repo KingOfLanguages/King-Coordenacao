@@ -101,10 +101,23 @@ export interface AgendaReuniao {
 export interface AgendaHorario {
   id: string
   agenda_id: string
+  recorrencia_id: string | null
   data_hora: string
   capacidade: number
   meet_link: string | null
   google_event_id: string | null
+  ativo: boolean
+  created_at: string
+}
+
+/** Dia da semana: 0=domingo … 6=sábado (igual ao Date#getDay()). */
+export interface AgendaRecorrencia {
+  id: string
+  agenda_id: string
+  dia_semana: number
+  hora: string
+  capacidade: number
+  meet_link: string | null
   ativo: boolean
   created_at: string
 }

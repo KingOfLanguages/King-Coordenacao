@@ -2,12 +2,21 @@
 // Edge Function: teacher-lookup
 //
 // Usada pela tela pública /agendar (sem login). Recebe o e-mail informado
-// pelo professor, identifica-o via professor_emails e retorna as agendas
-// coletivas disponíveis para ele (público autorizado, com vagas, futuras).
+// pelo professor, identifica-o via professor_emails e retorna as ocorrências
+// futuras (próximas semanas) das agendas recorrentes coletivas disponíveis
+// para ele (público autorizado, com vagas).
+//
+// Cada agenda tem uma ou mais regras de recorrência semanal (agenda_recorrencias:
+// dia da semana + hora). As próximas N semanas de cada regra ativa são
+// calculadas aqui em runtime ("ocorrências virtuais"); só viram uma linha real
+// em agenda_horarios quando alguém reserva (ver create-booking). Por isso,
+// uma ocorrência virtual sempre tem vagas = capacidade da regra; só ocorrências
+// já materializadas (com pelo menos 1 reserva) têm contagem real.
 //
 // Não expõe nenhuma informação sobre professores/agendas que não pertençam
 // ao e-mail informado. Roda com service-role pois anon não tem acesso direto
-// às tabelas de agendamento (ver migration 20260630_agendamentos.sql).
+// às tabelas de agendamento (ver migrations 20260630_agendamentos.sql e
+// 20260702_agenda_recorrencias.sql).
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/teacher-lookup
@@ -23,11 +32,35 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const SEMANAS_FUTURAS = 6
+const BR_OFFSET = '-03:00' // Brasil não observa horário de verão desde 2019.
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   })
+}
+
+/** Próximas N datas (uma por semana) em que `diaSemana` (0=dom…6=sáb) cai, a partir de hoje, no horário `hora` (HH:MM:SS). */
+function proximasOcorrencias(diaSemana: number, hora: string, semanas: number): string[] {
+  const hoje = new Date()
+  const [hh, mm] = hora.split(':')
+  const datas: string[] = []
+
+  // Encontra o primeiro dia (hoje ou futuro) que bate com diaSemana.
+  const base = new Date(hoje)
+  base.setUTCHours(0, 0, 0, 0)
+  let delta = (diaSemana - base.getUTCDay() + 7) % 7
+  base.setUTCDate(base.getUTCDate() + delta)
+
+  for (let i = 0; i < semanas; i++) {
+    const d = new Date(base)
+    d.setUTCDate(d.getUTCDate() + i * 7)
+    const dataStr = d.toISOString().slice(0, 10)
+    datas.push(`${dataStr}T${hh}:${mm}:00${BR_OFFSET}`)
+  }
+  return datas.filter(iso => new Date(iso) > hoje)
 }
 
 serve(async (req) => {
@@ -74,7 +107,8 @@ serve(async (req) => {
     .select(`
       id, titulo, descricao, meet_link, grupos_autorizados,
       coordenador:profiles!coordenador_id (id, nome),
-      horarios:agenda_horarios (id, data_hora, capacidade, meet_link, ativo)
+      recorrencias:agenda_recorrencias (id, dia_semana, hora, capacidade, meet_link, ativo),
+      horarios:agenda_horarios (id, recorrencia_id, data_hora, capacidade, meet_link, ativo)
     `)
     .eq('ativo', true)
 
@@ -92,10 +126,9 @@ serve(async (req) => {
     return json({ professor: { id: professor.id, nome: professor.nome }, agendas: [] })
   }
 
-  // ── 3. Inscrições confirmadas (para calcular vagas e "já inscrito") ──────────
-  const horarioIds = agendasAutorizadas.flatMap(a =>
-    (a.horarios as { id: string }[]).map(h => h.id),
-  )
+  // ── 3. Ocorrências já materializadas (para vagas reais e "já inscrito") ──────
+  type HorarioRow = { id: string; recorrencia_id: string | null; data_hora: string; capacidade: number; meet_link: string | null; ativo: boolean }
+  const horarioIds = agendasAutorizadas.flatMap(a => (a.horarios as HorarioRow[]).map(h => h.id))
 
   const { data: inscricoes } = horarioIds.length
     ? await admin
@@ -112,22 +145,57 @@ serve(async (req) => {
     if (i.professor_id === professor.id) inscritoPorHorario.add(i.horario_id)
   }
 
-  const agora = new Date()
+  // ── 4. Monta a lista de horários (materializados + ocorrências virtuais) ────
+  type HorarioSaida = { id: string; data_hora: string; capacidade: number; meet_link: string | null; vagas: number; ja_inscrito: boolean }
 
   const resultado = agendasAutorizadas
     .map(a => {
-      const horarios = (a.horarios as { id: string; data_hora: string; capacidade: number; meet_link: string | null; ativo: boolean }[])
-        .filter(h => h.ativo && new Date(h.data_hora) > agora)
-        .map(h => ({
-          id:           h.id,
-          data_hora:    h.data_hora,
-          capacidade:   h.capacidade,
-          meet_link:    h.meet_link ?? a.meet_link,
-          vagas:        h.capacidade - (contagemPorHorario.get(h.id) ?? 0),
-          ja_inscrito:  inscritoPorHorario.has(h.id),
-        }))
-        .filter(h => h.vagas > 0 || h.ja_inscrito)
-        .sort((x, y) => x.data_hora.localeCompare(y.data_hora))
+      const horariosExistentes = (a.horarios as HorarioRow[]).filter(h => h.ativo)
+      const materializadosPorRecorrencia = new Map<string, Set<string>>() // recorrencia_id -> set de data_hora já materializadas
+
+      const horarios: HorarioSaida[] = []
+
+      // 4a. Horários já materializados (avulsos antigos OU de uma recorrência, já com ≥1 reserva).
+      for (const h of horariosExistentes) {
+        if (new Date(h.data_hora) <= new Date()) continue
+        const vagas = h.capacidade - (contagemPorHorario.get(h.id) ?? 0)
+        const jaInscrito = inscritoPorHorario.has(h.id)
+        if (vagas <= 0 && !jaInscrito) continue
+        horarios.push({
+          id: h.id,
+          data_hora: h.data_hora,
+          capacidade: h.capacidade,
+          meet_link: h.meet_link ?? a.meet_link,
+          vagas,
+          ja_inscrito: jaInscrito,
+        })
+        if (h.recorrencia_id) {
+          if (!materializadosPorRecorrencia.has(h.recorrencia_id)) materializadosPorRecorrencia.set(h.recorrencia_id, new Set())
+          // Postgres normaliza timestamptz para UTC na resposta — compara pelo instante, não pela string.
+          materializadosPorRecorrencia.get(h.recorrencia_id)!.add(new Date(h.data_hora).getTime())
+        }
+      }
+
+      // 4b. Ocorrências virtuais das recorrências ativas (ainda sem nenhuma reserva nesta data).
+      const recorrencias = (a.recorrencias as { id: string; dia_semana: number; hora: string; capacidade: number; meet_link: string | null; ativo: boolean }[])
+        .filter(r => r.ativo)
+
+      for (const r of recorrencias) {
+        const jaMaterializadas = materializadosPorRecorrencia.get(r.id) ?? new Set()
+        for (const iso of proximasOcorrencias(r.dia_semana, r.hora, SEMANAS_FUTURAS)) {
+          if (jaMaterializadas.has(new Date(iso).getTime())) continue // já coberto pelo passo 4a
+          horarios.push({
+            id: `v|${r.id}|${iso}`,
+            data_hora: iso,
+            capacidade: r.capacidade,
+            meet_link: r.meet_link ?? a.meet_link,
+            vagas: r.capacidade,
+            ja_inscrito: false,
+          })
+        }
+      }
+
+      horarios.sort((x, y) => x.data_hora.localeCompare(y.data_hora))
 
       return {
         id:          a.id,
