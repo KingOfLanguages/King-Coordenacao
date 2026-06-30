@@ -38,10 +38,9 @@ export type CandidatoVinculo = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function todayRange() {
-  const d = new Date()
-  const inicio = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
-  const fim    = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+function dayRange(date: Date) {
+  const inicio = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+  const fim    = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
   return { inicio: inicio.toISOString(), fim: fim.toISOString() }
 }
 
@@ -90,13 +89,14 @@ export function sugerirVinculos(
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-/** Reuniões de hoje do coordenador, com os professores vinculados (participantes). */
-export function useReunioesDoDia(coordId: string | null) {
+/** Reuniões do dia selecionado para o coordenador, com os professores vinculados (participantes). */
+export function useReunioesDoDia(coordId: string | null, dia: Date = new Date()) {
+  const chaveData = dia.toISOString().slice(0, 10)
   return useQuery({
-    queryKey: ['reunioes-dia', coordId],
+    queryKey: ['reunioes-dia', coordId, chaveData],
     enabled: !!coordId,
     queryFn: async (): Promise<ReuniaoCard[]> => {
-      const { inicio, fim } = todayRange()
+      const { inicio, fim } = dayRange(dia)
       const { data, error } = await supabase
         .from('reunioes')
         .select(`

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Video, Check, X, Link2, Mail, Sparkles, Zap, ZapOff,
-  Loader2, Plus,
+  Loader2, Plus, ChevronLeft, ChevronRight, CalendarDays,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -35,22 +35,62 @@ export function ReunioesDiaPage() {
   const { data: coordenadores = [] } = useCoordenadores()
   const [sel, setSel] = useState<string>('')
   const [novaOpen, setNovaOpen] = useState(false)
+  const [diaSelecionado, setDiaSelecionado] = useState(() => new Date())
   const coordId = canSeeAll ? (sel || coordenadores[0]?.id || '') : (profile?.id ?? '')
 
-  const { data: reunioes, isLoading } = useReunioesDoDia(coordId || null)
+  const { data: reunioes, isLoading } = useReunioesDoDia(coordId || null, diaSelecionado)
   const { data: dados } = useDadosVinculo()
 
   const lista = reunioes ?? []
+  const hoje  = isMesmoDia(diaSelecionado, new Date())
+
+  function mudarDia(deltaDias: number) {
+    setDiaSelecionado(d => {
+      const novo = new Date(d)
+      novo.setDate(novo.getDate() + deltaDias)
+      return novo
+    })
+  }
 
   return (
     <div className="px-6 py-6 space-y-6 max-w-[900px] mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-0.5">
+        <div className="space-y-1.5">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Reuniões do Dia</h1>
-          <p className="text-[13px] text-ink-muted">
-            {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-            {' · '}{lista.length} reuniã{lista.length === 1 ? 'o' : 'es'}
-          </p>
+
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => mudarDia(-1)}
+              className="btn-press h-7 w-7 text-ink-secondary hover:text-ink hover:bg-surface-subtle"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => mudarDia(1)}
+              disabled={hoje}
+              className="btn-press h-7 w-7 text-ink-secondary hover:text-ink hover:bg-surface-subtle disabled:opacity-30"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+
+            <p className="text-[13px] text-ink-muted capitalize">
+              {hoje ? 'Hoje · ' : ''}
+              {diaSelecionado.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {' · '}{lista.length} {lista.length === 1 ? 'reunião' : 'reuniões'}
+            </p>
+
+            {!hoje && (
+              <Button
+                variant="ghost" size="sm"
+                onClick={() => setDiaSelecionado(new Date())}
+                className="btn-press h-6 gap-1 px-2 text-[11px] text-accentBlue hover:bg-accentBlue-soft"
+              >
+                <CalendarDays className="h-3 w-3" />Hoje
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -85,7 +125,9 @@ export function ReunioesDiaPage() {
         </div>
       ) : lista.length === 0 ? (
         <div className="card-surface p-10 text-center">
-          <p className="text-[14px] font-medium text-ink">Nenhuma reunião hoje</p>
+          <p className="text-[14px] font-medium text-ink">
+            {hoje ? 'Nenhuma reunião hoje' : 'Nenhuma reunião nesse dia'}
+          </p>
           <p className="text-[13px] text-ink-muted mt-1">A agenda deste coordenador está livre.</p>
         </div>
       ) : (
@@ -503,4 +545,12 @@ function Sugestao({ c, pending, onLink }: { c: CandidatoVinculo; pending: boolea
       </Button>
     </div>
   )
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function isMesmoDia(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate()
 }
