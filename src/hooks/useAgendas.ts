@@ -260,50 +260,63 @@ export type AgendaOcorrenciaCard = {
   participantes: ParticipanteAgendaCard[]
 }
 
+async function fetchAgendaOcorrencias(coordId: string, inicio: string, fim: string): Promise<AgendaOcorrenciaCard[]> {
+  const { data: recorrencias, error: e1 } = await supabase
+    .from('agenda_recorrencias')
+    .select('id, agenda:agenda_reunioes!inner (titulo, coordenador_id)')
+    .eq('agenda.coordenador_id', coordId)
+  if (e1) throw e1
+
+  const recorrenciaIds = (recorrencias ?? []).map(r => r.id)
+  if (!recorrenciaIds.length) return []
+
+  const tituloPorRecorrencia = new Map(
+    (recorrencias ?? []).map(r => [r.id, (r.agenda as unknown as { titulo: string }).titulo]),
+  )
+
+  const { data: horarios, error: e2 } = await supabase
+    .from('agenda_horarios')
+    .select(`
+      id, data_hora, capacidade, meet_link, recorrencia_id,
+      inscricoes:agenda_inscricoes (id, status, email_usado, professor:professores (nome))
+    `)
+    .in('recorrencia_id', recorrenciaIds)
+    .gte('data_hora', inicio)
+    .lte('data_hora', fim)
+    .order('data_hora')
+  if (e2) throw e2
+
+  return (horarios ?? []).map(h => ({
+    id: h.id,
+    data_hora: h.data_hora,
+    capacidade: h.capacidade,
+    meet_link: h.meet_link,
+    titulo: tituloPorRecorrencia.get(h.recorrencia_id as string) ?? 'Reunião de Feedback',
+    participantes: (h.inscricoes as unknown as { id: string; status: string; email_usado: string; professor: { nome: string } | null }[])
+      .filter(i => i.status === 'confirmada')
+      .map(i => ({ id: i.id, nome: i.professor?.nome ?? i.email_usado })),
+  }))
+}
+
 /** Reuniões de feedback (agendamento coletivo) já reservadas, do coordenador, no dia selecionado. */
 export function useAgendaReunioesDoDia(coordId: string | null, dia: Date = new Date()) {
   const chaveData = dia.toISOString().slice(0, 10)
+  const { inicio, fim } = dayRange(dia)
   return useQuery({
     queryKey: ['agenda-reunioes-dia', coordId, chaveData],
     enabled: !!coordId,
-    queryFn: async (): Promise<AgendaOcorrenciaCard[]> => {
-      const { data: recorrencias, error: e1 } = await supabase
-        .from('agenda_recorrencias')
-        .select('id, agenda:agenda_reunioes!inner (titulo, coordenador_id)')
-        .eq('agenda.coordenador_id', coordId)
-      if (e1) throw e1
-
-      const recorrenciaIds = (recorrencias ?? []).map(r => r.id)
-      if (!recorrenciaIds.length) return []
-
-      const tituloPorRecorrencia = new Map(
-        (recorrencias ?? []).map(r => [r.id, (r.agenda as unknown as { titulo: string }).titulo]),
-      )
-
-      const { inicio, fim } = dayRange(dia)
-      const { data: horarios, error: e2 } = await supabase
-        .from('agenda_horarios')
-        .select(`
-          id, data_hora, capacidade, meet_link, recorrencia_id,
-          inscricoes:agenda_inscricoes (id, status, email_usado, professor:professores (nome))
-        `)
-        .in('recorrencia_id', recorrenciaIds)
-        .gte('data_hora', inicio)
-        .lte('data_hora', fim)
-        .order('data_hora')
-      if (e2) throw e2
-
-      return (horarios ?? []).map(h => ({
-        id: h.id,
-        data_hora: h.data_hora,
-        capacidade: h.capacidade,
-        meet_link: h.meet_link,
-        titulo: tituloPorRecorrencia.get(h.recorrencia_id as string) ?? 'Reunião de Feedback',
-        participantes: (h.inscricoes as unknown as { id: string; status: string; email_usado: string; professor: { nome: string } | null }[])
-          .filter(i => i.status === 'confirmada')
-          .map(i => ({ id: i.id, nome: i.professor?.nome ?? i.email_usado })),
-      }))
-    },
+    queryFn: () => fetchAgendaOcorrencias(coordId!, inicio, fim),
     refetchInterval: 2 * 60 * 1000,
+  })
+}
+
+/** Reuniões de feedback num intervalo arbitrário (visões de semana/mês da agenda). */
+export function useAgendaReunioesPeriodo(coordId: string | null, inicio: Date, fim: Date) {
+  const chave = `${inicio.toISOString()}_${fim.toISOString()}`
+  return useQuery({
+    queryKey: ['agenda-reunioes-periodo', coordId, chave],
+    enabled: !!coordId,
+    queryFn: () => fetchAgendaOcorrencias(coordId!, inicio.toISOString(), fim.toISOString()),
+    staleTime: 60 * 1000,
   })
 }

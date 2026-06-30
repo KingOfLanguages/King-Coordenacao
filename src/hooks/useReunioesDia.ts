@@ -89,31 +89,46 @@ export function sugerirVinculos(
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
+const REUNIOES_SELECT = `
+  id, data, titulo, meet_link, professor_email, status,
+  participantes:reuniao_professores (
+    id, status, numero, observacao,
+    professor:professores (id, nome, data_inicio, grupo_id, monitoramento)
+  )
+`
+
+async function fetchReunioes(coordId: string, inicio: string, fim: string): Promise<ReuniaoCard[]> {
+  const { data, error } = await supabase
+    .from('reunioes')
+    .select(REUNIOES_SELECT)
+    .eq('coordenador_id', coordId)
+    .gte('data', inicio)
+    .lte('data', fim)
+    .order('data')
+  if (error) throw error
+  return (data ?? []) as unknown as ReuniaoCard[]
+}
+
 /** Reuniões do dia selecionado para o coordenador, com os professores vinculados (participantes). */
 export function useReunioesDoDia(coordId: string | null, dia: Date = new Date()) {
   const chaveData = dia.toISOString().slice(0, 10)
+  const { inicio, fim } = dayRange(dia)
   return useQuery({
     queryKey: ['reunioes-dia', coordId, chaveData],
     enabled: !!coordId,
-    queryFn: async (): Promise<ReuniaoCard[]> => {
-      const { inicio, fim } = dayRange(dia)
-      const { data, error } = await supabase
-        .from('reunioes')
-        .select(`
-          id, data, titulo, meet_link, professor_email, status,
-          participantes:reuniao_professores (
-            id, status, numero, observacao,
-            professor:professores (id, nome, data_inicio, grupo_id, monitoramento)
-          )
-        `)
-        .eq('coordenador_id', coordId)
-        .gte('data', inicio)
-        .lte('data', fim)
-        .order('data')
-      if (error) throw error
-      return (data ?? []) as unknown as ReuniaoCard[]
-    },
+    queryFn: () => fetchReunioes(coordId!, inicio, fim),
     refetchInterval: 2 * 60 * 1000,
+  })
+}
+
+/** Reuniões num intervalo arbitrário (visões de semana/mês da agenda). */
+export function useReunioesPeriodo(coordId: string | null, inicio: Date, fim: Date) {
+  const chave = `${inicio.toISOString()}_${fim.toISOString()}`
+  return useQuery({
+    queryKey: ['reunioes-periodo', coordId, chave],
+    enabled: !!coordId,
+    queryFn: () => fetchReunioes(coordId!, inicio.toISOString(), fim.toISOString()),
+    staleTime: 60 * 1000,
   })
 }
 
