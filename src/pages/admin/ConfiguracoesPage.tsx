@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
-import { ShieldCheck, Users, Save, Shuffle, AlertTriangle, Info, Check } from 'lucide-react'
+import {
+  ShieldCheck, Users, Save, Shuffle, AlertTriangle, Info, Check,
+  Zap, ZapOff, Loader2, CalendarClock,
+} from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,6 +14,10 @@ import type { ResultadoDistribuicao } from '@/hooks/useGrupos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import type { CoordenadorPerfil } from '@/hooks/useAcompanhamento'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
+import { useGoogleAutomation, useDesativarAutomacao } from '@/hooks/useGoogleAutomation'
+import { solicitarCodigoGoogle } from '@/lib/googleCalendar'
+import { supabase } from '@/lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
 import type { GrupoComCoordenador } from '@/types'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -43,6 +50,9 @@ export function ConfiguracoesPage() {
           Admin
         </span>
       </header>
+
+      {/* ── Importação automática do Google Calendar ──────────────────────── */}
+      <GoogleAutomationCard />
 
       {/* ── Grupos de coordenação ─────────────────────────────────────────── */}
       <section className="space-y-3">
@@ -80,6 +90,104 @@ export function ConfiguracoesPage() {
       {/* ── Distribuição inicial ──────────────────────────────────────────── */}
       <DistribuicaoCard />
     </div>
+  )
+}
+
+// ─── Importação automática do Google Calendar ──────────────────────────────
+
+function GoogleAutomationCard() {
+  const automation  = useGoogleAutomation()
+  const desativar   = useDesativarAutomacao()
+  const queryClient = useQueryClient()
+  const [ativando, setAtivando] = useState(false)
+  const ativa = automation.data?.ativo ?? false
+
+  async function handleAtivar() {
+    try {
+      setAtivando(true)
+      const code = await solicitarCodigoGoogle()
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data, error } = await supabase.functions.invoke('exchange-google-token', {
+        body:    { code },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? 'Erro desconhecido.')
+      toast.success('Importação automática ativada. Reuniões novas aparecem em até 10 minutos.')
+      queryClient.invalidateQueries({ queryKey: ['google', 'automation'] })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (!msg.toLowerCase().includes('popup_closed') && !msg.toLowerCase().includes('access_denied')) {
+        toast.error(`Erro ao ativar: ${msg}`)
+      }
+    } finally {
+      setAtivando(false)
+    }
+  }
+
+  async function handleDesativar() {
+    try {
+      await desativar.mutateAsync()
+      toast.success('Importação automática desativada.')
+    } catch {
+      toast.error('Erro ao desativar.')
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <CalendarClock className="h-4 w-4 text-ink-secondary" />
+        <h2 className="text-[15px] font-semibold text-ink">Importação automática do Google Calendar</h2>
+      </div>
+
+      {automation.isLoading ? (
+        <div className="card-surface p-6 text-center text-[13px] text-ink-muted">Carregando…</div>
+      ) : (
+        <div className={cn(
+          'card-surface flex items-center justify-between gap-4 p-5',
+          ativa && 'border-urg-lowFg/25 bg-urg-lowBg',
+        )}>
+          <div className="flex items-center gap-3 min-w-0">
+            {ativa
+              ? <Zap className="h-4 w-4 text-urg-lowFg flex-shrink-0" />
+              : <ZapOff className="h-4 w-4 text-ink-muted flex-shrink-0" />}
+            <div className="min-w-0">
+              <p className={cn('text-[13px] font-medium', ativa ? 'text-urg-lowFg' : 'text-ink')}>
+                Importação {ativa
+                  ? <span className="font-semibold">ativa</span>
+                  : <span className="text-ink-muted font-normal">inativa</span>}
+              </p>
+              <p className="text-[12px] text-ink-muted mt-0.5">
+                {ativa
+                  ? 'Conta Google conectada — reuniões novas do Calendar aparecem em Reuniões do Dia em até 10 minutos.'
+                  : 'Conecte a conta Google compartilhada da coordenação para importar reuniões automaticamente.'}
+              </p>
+            </div>
+          </div>
+
+          {ativa ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={desativar.isPending}
+              onClick={handleDesativar}
+              className="btn-press h-8 text-[12px] border-urg-highFg/25 text-urg-highFg hover:bg-urg-highBg flex-shrink-0"
+            >
+              {desativar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Desativar'}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={ativando}
+              onClick={handleAtivar}
+              className="btn-press h-8 text-[12px] gap-1.5 bg-accentBlue hover:bg-accentBlue-hov text-white flex-shrink-0"
+            >
+              {ativando ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Aguardando…</> : <><Zap className="h-3.5 w-3.5" />Ativar</>}
+            </Button>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Video, Check, X, Link2, Mail, Sparkles, Zap, ZapOff,
+  Video, Check, X, Link2, Mail, Sparkles,
   Loader2, Plus, ChevronLeft, ChevronRight, CalendarDays,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,18 +11,13 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
-import { canConfig } from '@/lib/permissions'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import {
   useReunioesDoDia, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
   useCriarReuniaoManual, sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesDoDia, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
-import { useGoogleAutomation, useDesativarAutomacao } from '@/hooks/useGoogleAutomation'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
-import { solicitarCodigoGoogle } from '@/lib/googleCalendar'
-import { supabase } from '@/lib/supabase'
-import { useQueryClient } from '@tanstack/react-query'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -164,48 +159,12 @@ export function ReunioesDiaPage() {
   )
 }
 
-// ─── Toolbar — automação + lembretes ──────────────────────────────────────────
+// ─── Toolbar — lembretes ────────────────────────────────────────────────────
+// A gestão da importação automática do Google Calendar mora em Configurações
+// (admin), não aqui — coordenadores não precisam ver/mexer nisso.
 
 function Toolbar() {
-  const { profile }  = useAuth()
-  const podeGerenciar = canConfig(profile?.role)
-  const automation    = useGoogleAutomation()
-  const desativar     = useDesativarAutomacao()
-  const sendGeral     = useSendLembretesGeral()
-  const queryClient   = useQueryClient()
-  const [ativando, setAtivando] = useState(false)
-  const ativa = automation.data?.ativo ?? false
-
-  async function handleAtivar() {
-    try {
-      setAtivando(true)
-      const code = await solicitarCodigoGoogle()
-      const { data: { session } } = await supabase.auth.getSession()
-      const { data, error } = await supabase.functions.invoke('exchange-google-token', {
-        body:    { code },
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      })
-      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? 'Erro desconhecido.')
-      toast.success('Importação automática ativada. Reuniões novas aparecem em até 10 minutos.')
-      queryClient.invalidateQueries({ queryKey: ['google', 'automation'] })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!msg.toLowerCase().includes('popup_closed') && !msg.toLowerCase().includes('access_denied')) {
-        toast.error(`Erro ao ativar: ${msg}`)
-      }
-    } finally {
-      setAtivando(false)
-    }
-  }
-
-  async function handleDesativar() {
-    try {
-      await desativar.mutateAsync()
-      toast.success('Importação automática desativada.')
-    } catch {
-      toast.error('Erro ao desativar.')
-    }
-  }
+  const sendGeral = useSendLembretesGeral()
 
   async function handleLembretes() {
     try {
@@ -220,66 +179,18 @@ function Toolbar() {
     }
   }
 
-  if (automation.isLoading) return null
-
   return (
-    <div className={cn(
-      'flex items-center justify-between gap-4 rounded-xl border px-4 py-3',
-      ativa ? 'border-urg-lowFg/25 bg-urg-lowBg' : 'border-line bg-surface-subtle/60',
-    )}>
-      <div className="flex items-center gap-2.5 min-w-0">
-        {ativa
-          ? <Zap className="h-4 w-4 text-urg-lowFg flex-shrink-0" />
-          : <ZapOff className="h-4 w-4 text-ink-muted flex-shrink-0" />}
-        <div className="min-w-0">
-          <p className={cn('text-[13px] font-medium', ativa ? 'text-urg-lowFg' : 'text-ink')}>
-            Importação automática {ativa
-              ? <span className="font-semibold">ativa</span>
-              : <span className="text-ink-muted font-normal">inativa</span>}
-          </p>
-          <p className="text-[11px] text-ink-muted mt-0.5">
-            {ativa
-              ? 'Reuniões novas do Calendar aparecem aqui em até 10 minutos.'
-              : podeGerenciar
-                ? 'Ative para importar reuniões automaticamente do Google Calendar.'
-                : 'Fale com o admin para ativar a importação automática.'}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={sendGeral.isPending}
-          onClick={handleLembretes}
-          className="btn-press h-7 text-[11px] gap-1.5 border-line text-ink-secondary"
-        >
-          {sendGeral.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-          Lembretes
-        </Button>
-
-        {!podeGerenciar ? null : ativa ? (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={desativar.isPending}
-            onClick={handleDesativar}
-            className="btn-press h-7 text-[11px] border-urg-highFg/25 text-urg-highFg hover:bg-urg-highBg"
-          >
-            {desativar.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Desativar'}
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            disabled={ativando}
-            onClick={handleAtivar}
-            className="btn-press h-7 text-[11px] bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
-          >
-            {ativando ? <><Loader2 className="h-3 w-3 animate-spin" />Aguardando…</> : <><Zap className="h-3 w-3" />Ativar</>}
-          </Button>
-        )}
-      </div>
+    <div className="flex items-center justify-end">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={sendGeral.isPending}
+        onClick={handleLembretes}
+        className="btn-press h-7 text-[11px] gap-1.5 border-line text-ink-secondary"
+      >
+        {sendGeral.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+        Lembretes
+      </Button>
     </div>
   )
 }
