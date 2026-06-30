@@ -1,10 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function: daily-import
 //
-// Roda automaticamente via pg_cron (08:00 BRT).
+// Roda automaticamente via pg_cron (a cada 10 min, dias úteis).
 // Para cada coordenador com refresh_token salvo:
 //   1. Obtém um access_token novo via Google OAuth2
-//   2. Busca eventos do Google Calendar do dia
+//   2. Busca eventos do Google Calendar dos próximos 30 dias
 //   3. Filtra reuniões reais com professores
 //   4. Determina o coordenador_id correto pelo email do organizador/participante
 //   5. Faz match de professores pelo nome
@@ -72,18 +72,13 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
   return data.access_token
 }
 
-async function buscarEventosDia(token: string, data: Date): Promise<CalEvent[]> {
-  const inicio = new Date(data)
-  inicio.setHours(0, 0, 0, 0)
-  const fim = new Date(data)
-  fim.setHours(23, 59, 59, 999)
-
+async function buscarEventosPeriodo(token: string, inicio: Date, fim: Date): Promise<CalEvent[]> {
   const params = new URLSearchParams({
     timeMin:      inicio.toISOString(),
     timeMax:      fim.toISOString(),
     singleEvents: 'true',
     orderBy:      'startTime',
-    maxResults:   '100',
+    maxResults:   '500',
   })
 
   // Lista todos os calendários da conta
@@ -309,8 +304,13 @@ serve(async (req) => {
       // 1 — Refresh access token
       const accessToken = await refreshAccessToken(row.refresh_token)
 
-      // 2 — Busca eventos do dia
-      const events   = await buscarEventosDia(accessToken, today)
+      // 2 — Busca eventos dos próximos 30 dias (deduplicação via google_event_id)
+      const periodoFim = new Date(today)
+      periodoFim.setDate(periodoFim.getDate() + 30)
+      periodoFim.setHours(23, 59, 59, 999)
+      const periodoInicio = new Date(today)
+      periodoInicio.setHours(0, 0, 0, 0)
+      const events   = await buscarEventosPeriodo(accessToken, periodoInicio, periodoFim)
       const meetings = events.filter(isReuniaoComProfessor)
 
       console.log(`[daily-import] ${meetings.length} reunião(ões) encontrada(s) para ${row.google_email ?? row.user_id}`)
