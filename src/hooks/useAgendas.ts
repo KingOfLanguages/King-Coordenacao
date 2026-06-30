@@ -261,10 +261,12 @@ export type AgendaOcorrenciaCard = {
 }
 
 async function fetchAgendaOcorrencias(coordId: string, inicio: string, fim: string): Promise<AgendaOcorrenciaCard[]> {
+  // Inclui agendas do próprio coordenador + agendas gerais (sem coordenador
+  // específico) — antes ficavam de fora do calendário de todo mundo.
   const { data: recorrencias, error: e1 } = await supabase
     .from('agenda_recorrencias')
     .select('id, agenda:agenda_reunioes!inner (titulo, coordenador_id)')
-    .eq('agenda.coordenador_id', coordId)
+    .or(`coordenador_id.eq.${coordId},coordenador_id.is.null`, { foreignTable: 'agenda' })
   if (e1) throw e1
 
   const recorrenciaIds = (recorrencias ?? []).map(r => r.id)

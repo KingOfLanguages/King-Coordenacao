@@ -85,6 +85,7 @@ export function ReunioesDiaPage() {
   const [novaOpen, setNovaOpen] = useState(false)
   const [modo, setModo] = useState<Modo>('dia')
   const [dataRef, setDataRef] = useState(() => new Date())
+  const [eventoAberto, setEventoAberto] = useState<EventoGrade | null>(null)
   const coordId = canSeeAll ? (sel || coordenadores[0]?.id || '') : (profile?.id ?? '')
 
   const intervalo = useMemo(() => computarIntervalo(modo, dataRef), [modo, dataRef])
@@ -209,6 +210,7 @@ export function ReunioesDiaPage() {
           lista={lista}
           listaAgenda={listaAgenda}
           onSelecionarDia={irParaODia}
+          onAbrirEvento={setEventoAberto}
         />
       )}
 
@@ -220,11 +222,20 @@ export function ReunioesDiaPage() {
           lista={lista}
           listaAgenda={listaAgenda}
           onSelecionarDia={irParaODia}
+          onAbrirEvento={setEventoAberto}
         />
       )}
 
       {novaOpen && (
         <NovaReuniaoDialog profs={dados?.profs ?? []} onClose={() => setNovaOpen(false)} />
+      )}
+
+      {eventoAberto && (
+        <EventoPopover
+          evento={eventoAberto}
+          onClose={() => setEventoAberto(null)}
+          onVerDia={() => { irParaODia(eventoAberto.hora); setEventoAberto(null) }}
+        />
       )}
     </div>
   )
@@ -348,13 +359,25 @@ function DiaView({ dia, carregando, lista, listaAgenda, dados }: {
   )
 }
 
-// ─── Visão Semana — grade por hora, estilo Google Calendar ────────────────────
+// ─── Visão Semana/Mês — eventos combinados (reuniões 1:1 + agendamento) ───────
 
 type EventoGrade = {
   id: string
   hora: Date
-  titulo: string
+  rotulo: string
   tipo: 'reuniao' | 'agenda'
+  fonte: ReuniaoCard | AgendaOcorrenciaCard
+}
+
+/** Nome do professor vinculado (se houver) — usado como rótulo do evento e no popup. */
+function professorDoEvento(reuniao: ReuniaoCard): ParticipanteCard['professor'] | null {
+  return reuniao.participantes.find(p => p.professor)?.professor ?? null
+}
+
+function rotuloEvento(tipo: 'reuniao' | 'agenda', fonte: ReuniaoCard | AgendaOcorrenciaCard): string {
+  if (tipo === 'agenda') return (fonte as AgendaOcorrenciaCard).titulo
+  const r = fonte as ReuniaoCard
+  return professorDoEvento(r)?.nome ?? r.professor_email ?? r.titulo ?? '1:1'
 }
 
 function montarEventosPorDia(lista: ReuniaoCard[], listaAgenda: AgendaOcorrenciaCard[]): Map<string, EventoGrade[]> {
@@ -370,28 +393,101 @@ function montarEventosPorDia(lista: ReuniaoCard[], listaAgenda: AgendaOcorrencia
     add(chaveDia(r.data), {
       id: r.id,
       hora: new Date(r.data),
-      titulo: r.professor_email ?? r.titulo ?? '1:1',
+      rotulo: rotuloEvento('reuniao', r),
       tipo: 'reuniao',
+      fonte: r,
     })
   }
   for (const a of listaAgenda) {
     add(chaveDia(a.data_hora), {
       id: a.id,
       hora: new Date(a.data_hora),
-      titulo: a.titulo,
+      rotulo: rotuloEvento('agenda', a),
       tipo: 'agenda',
+      fonte: a,
     })
   }
   for (const arr of mapa.values()) arr.sort((a, b) => a.hora.getTime() - b.hora.getTime())
   return mapa
 }
 
-function SemanaView({ inicioSemana, carregando, lista, listaAgenda, onSelecionarDia }: {
+// ─── Layout da grade de horas — evita blocos sobrepostos ──────────────────────
+// Eventos não têm horário de fim salvo; assume-se uma duração visual fixa e,
+// quando dois ou mais caem na mesma janela, divide a largura entre eles
+// (igual ao Google Calendar) em vez de empilhar tudo por cima.
+
+const DURACAO_VISUAL_MIN = 20
+const ALTURA_PADRAO_PX   = (DURACAO_VISUAL_MIN / 60) * PX_POR_HORA
+const ALTURA_MINIMA_PX   = 14
+
+type EventoPosicionado = EventoGrade & { top: number; left: number; largura: number; altura: number }
+
+function posicionarEventosDoDia(eventos: EventoGrade[]): EventoPosicionado[] {
+  const ordenados = [...eventos].sort((a, b) => a.hora.getTime() - b.hora.getTime())
+  const posicionados: EventoPosicionado[] = []
+
+  // Altura de cada bloco respeita o espaço real até o próximo evento do dia
+  // (independente de coluna) — evita blocos vizinhos se tocando/sobrepondo
+  // quando as reuniões são mais próximas que a duração visual padrão.
+  const alturaPorId = new Map<string, number>()
+  for (let i = 0; i < ordenados.length; i++) {
+    const atual  = ordenados[i]
+    const prox   = ordenados[i + 1]
+    const gapMin = prox ? (prox.hora.getTime() - atual.hora.getTime()) / 60_000 : DURACAO_VISUAL_MIN
+    const gapPx  = (Math.min(gapMin, DURACAO_VISUAL_MIN) / 60) * PX_POR_HORA
+    alturaPorId.set(atual.id, Math.max(ALTURA_MINIMA_PX, gapPx - 2))
+  }
+
+  let cluster: { evento: EventoGrade; fimMs: number; coluna: number }[] = []
+  let maxColunas = 0
+  let clusterFimMaxMs = -Infinity
+
+  function fecharCluster() {
+    if (!cluster.length) return
+    for (const item of cluster) {
+      const horaFracionaria = item.evento.hora.getHours() + item.evento.hora.getMinutes() / 60
+      const top = Math.max(0, (horaFracionaria - HORA_INICIO_GRADE) * PX_POR_HORA)
+      posicionados.push({
+        ...item.evento,
+        top,
+        left:    (item.coluna / maxColunas) * 100,
+        largura: (1 / maxColunas) * 100,
+        altura:  alturaPorId.get(item.evento.id) ?? ALTURA_PADRAO_PX,
+      })
+    }
+    cluster = []
+    maxColunas = 0
+  }
+
+  for (const ev of ordenados) {
+    const inicioMs = ev.hora.getTime()
+    const fimMs    = inicioMs + DURACAO_VISUAL_MIN * 60_000
+
+    if (cluster.length && inicioMs >= clusterFimMaxMs) {
+      fecharCluster()
+      clusterFimMaxMs = -Infinity
+    }
+
+    const colunasOcupadas = new Set(cluster.filter(c => c.fimMs > inicioMs).map(c => c.coluna))
+    let coluna = 0
+    while (colunasOcupadas.has(coluna)) coluna++
+
+    cluster.push({ evento: ev, fimMs, coluna })
+    maxColunas = Math.max(maxColunas, coluna + 1)
+    clusterFimMaxMs = Math.max(clusterFimMaxMs, fimMs)
+  }
+  fecharCluster()
+
+  return posicionados
+}
+
+function SemanaView({ inicioSemana, carregando, lista, listaAgenda, onSelecionarDia, onAbrirEvento }: {
   inicioSemana: Date
   carregando: boolean
   lista: ReuniaoCard[]
   listaAgenda: AgendaOcorrenciaCard[]
   onSelecionarDia: (d: Date) => void
+  onAbrirEvento: (ev: EventoGrade) => void
 }) {
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => somarDias(inicioSemana, i)), [inicioSemana])
   const eventosPorDia = useMemo(() => montarEventosPorDia(lista, listaAgenda), [lista, listaAgenda])
@@ -448,7 +544,7 @@ function SemanaView({ inicioSemana, carregando, lista, listaAgenda, onSelecionar
         </div>
 
         {dias.map(d => {
-          const eventos = eventosPorDia.get(chaveDia(d.toISOString())) ?? []
+          const eventos = posicionarEventosDoDia(eventosPorDia.get(chaveDia(d.toISOString())) ?? [])
           return (
             <div key={d.toISOString()} className="relative border-l border-line-soft">
               {horas.map(h => (
@@ -458,29 +554,29 @@ function SemanaView({ inicioSemana, carregando, lista, listaAgenda, onSelecionar
                   style={{ top: (h - HORA_INICIO_GRADE) * PX_POR_HORA }}
                 />
               ))}
-              {eventos.map(ev => {
-                const horaFracionaria = ev.hora.getHours() + ev.hora.getMinutes() / 60
-                const top = Math.max(0, (horaFracionaria - HORA_INICIO_GRADE) * PX_POR_HORA)
-                return (
-                  <button
-                    key={ev.id}
-                    onClick={() => onSelecionarDia(d)}
-                    title={ev.titulo}
-                    className={cn(
-                      'btn-press absolute left-1 right-1 rounded-md px-1.5 py-1 text-left text-[10.5px] leading-tight overflow-hidden',
-                      ev.tipo === 'agenda'
-                        ? 'bg-accentBlue-soft text-accentBlue hover:bg-accentBlue-soft/80'
-                        : 'bg-surface-subtle text-ink-secondary hover:bg-line-soft',
-                    )}
-                    style={{ top, height: 30 }}
-                  >
-                    <span className="font-semibold tabular-nums">
-                      {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>{' '}
-                    {ev.titulo}
-                  </button>
-                )
-              })}
+              {eventos.map(ev => (
+                <button
+                  key={ev.id}
+                  onClick={() => onAbrirEvento(ev)}
+                  title={ev.rotulo}
+                  className={cn(
+                    'btn-press absolute rounded-md px-1.5 py-0.5 text-left text-[10px] leading-tight overflow-hidden',
+                    ev.tipo === 'agenda'
+                      ? 'bg-accentBlue-soft text-accentBlue hover:bg-accentBlue-soft/80'
+                      : 'bg-surface-subtle text-ink-secondary hover:bg-line-soft',
+                  )}
+                  style={{
+                    top: ev.top, height: ev.altura,
+                    left: `calc(${ev.left}% + 2px)`,
+                    width: `calc(${ev.largura}% - 4px)`,
+                  }}
+                >
+                  <span className="font-semibold tabular-nums">
+                    {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>{' '}
+                  {ev.rotulo}
+                </button>
+              ))}
             </div>
           )
         })}
@@ -491,13 +587,14 @@ function SemanaView({ inicioSemana, carregando, lista, listaAgenda, onSelecionar
 
 // ─── Visão Mês — grade de células, estilo Google Calendar ──────────────────────
 
-function MesView({ mesRef, inicioGrade, carregando, lista, listaAgenda, onSelecionarDia }: {
+function MesView({ mesRef, inicioGrade, carregando, lista, listaAgenda, onSelecionarDia, onAbrirEvento }: {
   mesRef: Date
   inicioGrade: Date
   carregando: boolean
   lista: ReuniaoCard[]
   listaAgenda: AgendaOcorrenciaCard[]
   onSelecionarDia: (d: Date) => void
+  onAbrirEvento: (ev: EventoGrade) => void
 }) {
   const dias = useMemo(() => Array.from({ length: 42 }, (_, i) => somarDias(inicioGrade, i)), [inicioGrade])
   const eventosPorDia = useMemo(() => montarEventosPorDia(lista, listaAgenda), [lista, listaAgenda])
@@ -524,11 +621,13 @@ function MesView({ mesRef, inicioGrade, carregando, lista, listaAgenda, onSeleci
           const restantes  = eventos.length - visiveis.length
 
           return (
-            <button
+            <div
               key={d.toISOString()}
+              role="button" tabIndex={0}
               onClick={() => onSelecionarDia(d)}
+              onKeyDown={e => { if (e.key === 'Enter') onSelecionarDia(d) }}
               className={cn(
-                'btn-press flex flex-col items-stretch gap-1 border-b border-l border-line-soft p-1.5 text-left min-h-[92px] hover:bg-surface-subtle/40',
+                'btn-press flex flex-col items-stretch gap-1 border-b border-l border-line-soft p-1.5 text-left min-h-[92px] cursor-pointer hover:bg-surface-subtle/40',
                 foraDoMes && 'bg-surface-subtle/30',
               )}
             >
@@ -540,25 +639,125 @@ function MesView({ mesRef, inicioGrade, carregando, lista, listaAgenda, onSeleci
               </span>
               <div className="flex flex-col gap-0.5 min-w-0">
                 {visiveis.map(ev => (
-                  <span
+                  <button
                     key={ev.id}
+                    onClick={e => { e.stopPropagation(); onAbrirEvento(ev) }}
+                    title={ev.rotulo}
                     className={cn(
-                      'truncate rounded px-1 py-0.5 text-[10px] leading-tight',
+                      'btn-press truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight',
                       ev.tipo === 'agenda'
-                        ? 'bg-accentBlue-soft text-accentBlue'
-                        : 'bg-surface-subtle text-ink-secondary',
+                        ? 'bg-accentBlue-soft text-accentBlue hover:bg-accentBlue-soft/80'
+                        : 'bg-surface-subtle text-ink-secondary hover:bg-line-soft',
                     )}
                   >
-                    {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} {ev.titulo}
-                  </span>
+                    {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} {ev.rotulo}
+                  </button>
                 ))}
                 {restantes > 0 && (
                   <span className="text-[10px] text-ink-muted px-1">+{restantes} mais</span>
                 )}
               </div>
-            </button>
+            </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Popup de evento (semana/mês) — info do professor + link da reunião ───────
+
+function EventoPopover({ evento, onClose, onVerDia }: {
+  evento: EventoGrade
+  onClose: () => void
+  onVerDia: () => void
+}) {
+  const hora = evento.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const data = evento.hora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  const reuniao = evento.tipo === 'reuniao' ? (evento.fonte as ReuniaoCard) : null
+  const agenda  = evento.tipo === 'agenda'  ? (evento.fonte as AgendaOcorrenciaCard) : null
+  const prof    = reuniao ? professorDoEvento(reuniao) : null
+  const tempo   = prof ? tempoDeCasaLabel(prof.data_inicio) : null
+  const meetLink = reuniao?.meet_link ?? agenda?.meet_link ?? null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface-canvas border border-line rounded-xl shadow-elevated w-full max-w-sm mx-4 p-5 space-y-4 animate-fade-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[12px] text-ink-muted capitalize">{data}</p>
+            <p className="text-[15px] font-semibold text-ink tabular-nums">{hora}</p>
+          </div>
+          <button onClick={onClose} className="btn-press text-ink-subtle hover:text-ink-secondary">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {reuniao && (
+          prof ? (
+            <div className="space-y-1">
+              <p className="text-[14px] font-medium text-ink">{prof.nome}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {tempo && <span className="text-[12px] text-ink-muted">{tempo} de casa</span>}
+                {prof.monitoramento && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-urg-highFg">
+                    <span className="h-1.5 w-1.5 rounded-full bg-urg-highFg" />Monitoramento
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-line bg-surface-subtle/40 p-3 space-y-1">
+              <p className="text-[13px] font-medium text-ink-secondary flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5" />Professor não vinculado
+              </p>
+              {reuniao.professor_email && (
+                <p className="text-[12px] text-ink-muted">{reuniao.professor_email}</p>
+              )}
+              {reuniao.titulo && <p className="text-[12px] text-ink-muted">{reuniao.titulo}</p>}
+            </div>
+          )
+        )}
+
+        {agenda && (
+          <div className="space-y-2">
+            <p className="text-[14px] font-medium text-ink">{agenda.titulo}</p>
+            <p className="text-[12px] text-ink-muted">
+              {agenda.participantes.length}/{agenda.capacidade} confirmado{agenda.participantes.length === 1 ? '' : 's'}
+            </p>
+            {agenda.participantes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {agenda.participantes.map(p => (
+                  <span key={p.id} className="rounded-full bg-surface-subtle px-2.5 py-1 text-[12px] text-ink-secondary">
+                    {p.nome}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <button onClick={onVerDia} className="btn-press text-[12px] text-ink-muted hover:text-ink underline underline-offset-2">
+            Ver dia completo
+          </button>
+          {meetLink ? (
+            <a
+              href={meetLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-press inline-flex items-center gap-1.5 rounded-full bg-accentBlue px-3.5 py-1.5 text-[12px] font-medium text-white hover:bg-accentBlue-hov"
+            >
+              <Video className="h-3.5 w-3.5" />Entrar na reunião
+            </a>
+          ) : (
+            <span className="text-[12px] text-ink-subtle italic">Sem link de reunião</span>
+          )}
+        </div>
       </div>
     </div>
   )
