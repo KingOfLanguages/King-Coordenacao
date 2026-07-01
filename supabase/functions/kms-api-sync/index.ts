@@ -4,9 +4,12 @@
 // Substitui o kms-webhook (nunca implantado). Roda via pg_cron (a cada hora,
 // alinhado ao cache de 1h documentado pela API) e faz PULL em vez de push:
 //   1. POST /api/Login com KMS_API_EMAIL/KMS_API_PASSWORD → accessToken
-//   2. Pagina GET /api/v1/acompanhamento-professores até acabar o cursor
-//   3. Para cada professor: upsert em professores (por kms_id) + em
-//      professor_acompanhamento, professor_score_historico e
+//   2. Pagina GET /api/v1/acompanhamento-professores (~1.800 professores,
+//      ~200/página) até acabar o cursor
+//   3. Por página: upsert em LOTE (não um-a-um — com ~1.800 professores,
+//      fazer 5 chamadas sequenciais ao banco por professor estoura o limite
+//      de recursos da Edge Function) em professores (por kms_id) +
+//      professor_acompanhamento + professor_score_historico +
 //      professor_alunos_kms
 //
 // Importante: a API não retorna e-mail do professor. NÃO seta
@@ -132,112 +135,149 @@ serve(async (req) => {
   let recebidos = 0
   let criados = 0
   let atualizados = 0
-  const erros: { professor_id: number; erro: string }[] = []
+  let paginas = 0
+  const erros: { pagina: number; erro: string }[] = []
 
   try {
     const token = await login(baseUrl, email, password)
     let cursor: string | null = null
 
     do {
-      const pagina: AcompanhamentoResponse = await fetchPagina(baseUrl, token, cursor)
+      paginas++
+      try {
+        const pagina: AcompanhamentoResponse = await fetchPagina(baseUrl, token, cursor)
+        recebidos += pagina.data.length
 
-      for (const p of pagina.data) {
-        recebidos++
-        try {
-          const kmsId = String(p.professor_id)
+        const kmsIds = pagina.data.map(p => String(p.professor_id))
 
-          const { data: existente } = await admin
-            .from('professores')
-            .select('id')
-            .eq('kms_id', kmsId)
-            .maybeSingle()
+        // Quais já existem (pra contabilizar criados vs atualizados).
+        const { data: existentes, error: existErr } = await admin
+          .from('professores')
+          .select('kms_id')
+          .in('kms_id', kmsIds)
+        if (existErr) throw new Error(existErr.message)
+        const jaExistiam = new Set((existentes ?? []).map(e => e.kms_id))
 
-          const payload = {
-            kms_id: kmsId,
-            nome: p.nome,
-            data_inicio: p.data_entrada,
-            status: mapStatus(p.status),
-          }
+        // 1 — Upsert em lote de identidade.
+        const professoresPayload = pagina.data.map(p => ({
+          kms_id: String(p.professor_id),
+          nome: p.nome,
+          data_inicio: p.data_entrada,
+          status: mapStatus(p.status),
+        }))
+        const { data: upserted, error: upsertErr } = await admin
+          .from('professores')
+          .upsert(professoresPayload, { onConflict: 'kms_id' })
+          .select('id, kms_id')
+        if (upsertErr) throw new Error(upsertErr.message)
 
-          let professorId: string
-          if (existente) {
-            const { error } = await admin.from('professores').update(payload).eq('id', existente.id)
-            if (error) throw new Error(error.message)
-            professorId = existente.id
-            atualizados++
-          } else {
-            const { data: novo, error } = await admin
-              .from('professores')
-              .insert(payload)
-              .select('id')
-              .single()
-            if (error || !novo) throw new Error(error?.message ?? 'insert falhou')
-            professorId = novo.id
-            criados++
-          }
+        const idByKmsId = new Map((upserted ?? []).map(r => [r.kms_id as string, r.id as string]))
+        for (const kmsId of kmsIds) {
+          if (jaExistiam.has(kmsId)) atualizados++
+          else criados++
+        }
 
-          const alertas = p.alertas ?? {}
-          const { error: acompErr } = await admin.from('professor_acompanhamento').upsert({
-            professor_id: professorId,
-            score_atual: p.score?.atual ?? null,
-            score_faixa: p.score?.faixa ?? null,
-            elegivel_alocacao: p.score?.elegivel_alocacao ?? null,
-            avaliacao_alunos: p.score?.avaliacao_alunos ?? null,
-            reuniao_status: p.reuniao_monitoramento?.status ?? null,
-            reuniao_ultima: p.reuniao_monitoramento?.ultima ?? null,
-            reuniao_proxima: p.reuniao_monitoramento?.proxima ?? null,
-            aulas_pendentes_qtd: alertas.aulas_pendentes?.quantidade ?? 0,
-            aulas_pendentes_data_mais_antiga: alertas.aulas_pendentes?.data_mais_antiga ?? null,
-            faltas_professor: alertas.faltas_professor ?? null,
-            no_show_primeira_aula: alertas.no_show_primeira_aula ?? null,
-            agendas_bloqueadas: alertas.agendas_bloqueadas ?? null,
-            trocas_professor: alertas.trocas_professor ?? null,
-            turnover_entrou_no_periodo: p.turnover?.entrou_no_periodo ?? null,
-            turnover_saida: p.turnover?.saida ?? null,
-            api_atualizado_em: new Date().toISOString(),
-          }, { onConflict: 'professor_id' })
-          if (acompErr) throw new Error(acompErr.message)
-
-          if (p.score?.historico_mensal?.length) {
-            const rows = p.score.historico_mensal.map(h => ({
+        // 2 — Upsert em lote do snapshot de acompanhamento.
+        const acompanhamentoPayload = pagina.data
+          .map(p => {
+            const professorId = idByKmsId.get(String(p.professor_id))
+            if (!professorId) return null
+            const alertas = p.alertas ?? {}
+            return {
               professor_id: professorId,
-              ano_mes: h.ano_mes,
-              score: h.score,
-            }))
-            const { error: histErr } = await admin
-              .from('professor_score_historico')
-              .upsert(rows, { onConflict: 'professor_id,ano_mes' })
-            if (histErr) throw new Error(histErr.message)
-          }
+              score_atual: p.score?.atual ?? null,
+              score_faixa: p.score?.faixa ?? null,
+              elegivel_alocacao: p.score?.elegivel_alocacao ?? null,
+              avaliacao_alunos: p.score?.avaliacao_alunos ?? null,
+              reuniao_status: p.reuniao_monitoramento?.status ?? null,
+              reuniao_ultima: p.reuniao_monitoramento?.ultima ?? null,
+              reuniao_proxima: p.reuniao_monitoramento?.proxima ?? null,
+              aulas_pendentes_qtd: alertas.aulas_pendentes?.quantidade ?? 0,
+              aulas_pendentes_data_mais_antiga: alertas.aulas_pendentes?.data_mais_antiga ?? null,
+              faltas_professor: alertas.faltas_professor ?? null,
+              no_show_primeira_aula: alertas.no_show_primeira_aula ?? null,
+              agendas_bloqueadas: alertas.agendas_bloqueadas ?? null,
+              trocas_professor: alertas.trocas_professor ?? null,
+              turnover_entrou_no_periodo: p.turnover?.entrou_no_periodo ?? null,
+              turnover_saida: p.turnover?.saida ?? null,
+              api_atualizado_em: new Date().toISOString(),
+            }
+          })
+          .filter((r): r is NonNullable<typeof r> => r !== null)
 
-          await admin.from('professor_alunos_kms').delete().eq('professor_id', professorId)
-          if (p.alunos?.length) {
-            const rows = p.alunos.map(a => ({
+        if (acompanhamentoPayload.length) {
+          const { error } = await admin
+            .from('professor_acompanhamento')
+            .upsert(acompanhamentoPayload, { onConflict: 'professor_id' })
+          if (error) throw new Error(error.message)
+        }
+
+        // 3 — Upsert em lote do histórico mensal de score.
+        const historicoPayload = pagina.data.flatMap(p => {
+          const professorId = idByKmsId.get(String(p.professor_id))
+          if (!professorId || !p.score?.historico_mensal?.length) return []
+          return p.score.historico_mensal.map(h => ({
+            professor_id: professorId,
+            ano_mes: h.ano_mes,
+            score: h.score,
+          }))
+        })
+        if (historicoPayload.length) {
+          const { error } = await admin
+            .from('professor_score_historico')
+            .upsert(historicoPayload, { onConflict: 'professor_id,ano_mes' })
+          if (error) throw new Error(error.message)
+        }
+
+        // 4 — Substitui o roster de alunos da página (delete em lote + insert em lote).
+        const professorIdsDaPagina = [...idByKmsId.values()]
+        if (professorIdsDaPagina.length) {
+          const { error: delErr } = await admin
+            .from('professor_alunos_kms')
+            .delete()
+            .in('professor_id', professorIdsDaPagina)
+          if (delErr) throw new Error(delErr.message)
+        }
+        const alunosPorChave = new Map<string, {
+          professor_id: string; aluno_id: number
+          primeiro_nome: string | null; data_adicao: string | null; status_vinculo: string | null
+        }>()
+        for (const p of pagina.data) {
+          const professorId = idByKmsId.get(String(p.professor_id))
+          if (!professorId) continue
+          for (const a of p.alunos ?? []) {
+            alunosPorChave.set(`${professorId}:${a.aluno_id}`, {
               professor_id: professorId,
               aluno_id: a.aluno_id,
               primeiro_nome: a.primeiro_nome,
               data_adicao: a.data_adicao,
               status_vinculo: a.status_vinculo,
-            }))
-            const { error: alunosErr } = await admin.from('professor_alunos_kms').insert(rows)
-            if (alunosErr) throw new Error(alunosErr.message)
+            })
           }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err)
-          console.error(`[kms-api-sync] Erro no professor ${p.professor_id}:`, msg)
-          erros.push({ professor_id: p.professor_id, erro: msg })
         }
-      }
+        const alunosPayload = [...alunosPorChave.values()]
+        if (alunosPayload.length) {
+          const { error } = await admin
+            .from('professor_alunos_kms')
+            .upsert(alunosPayload, { onConflict: 'professor_id,aluno_id' })
+          if (error) throw new Error(error.message)
+        }
 
-      cursor = pagina.proximo_cursor
+        cursor = pagina.proximo_cursor
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[kms-api-sync] Erro na página ${paginas}:`, msg)
+        erros.push({ pagina: paginas, erro: msg })
+        cursor = null // aborta paginação em caso de erro — evita loop indefinido
+      }
     } while (cursor)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[kms-api-sync] Erro geral:', msg)
-    return new Response(JSON.stringify({ error: msg, recebidos, criados, atualizados, erros }), { status: 500 })
+    return new Response(JSON.stringify({ error: msg, recebidos, criados, atualizados, paginas, erros }), { status: 500 })
   }
 
-  const result = { recebidos, criados, atualizados, erros }
+  const result = { recebidos, criados, atualizados, paginas, erros }
   console.log('[kms-api-sync] Concluído:', JSON.stringify(result))
 
   return new Response(JSON.stringify(result), {
