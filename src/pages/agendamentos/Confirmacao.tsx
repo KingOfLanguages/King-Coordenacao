@@ -54,7 +54,11 @@ export function Confirmacao({ reuniao }: { reuniao: ReuniaoConfirmada }) {
         </Button>
       </div>
 
-      <p className="text-[12px] text-ink-muted">Você também receberá um e-mail com esta confirmação.</p>
+      <p className="text-[12px] text-ink-muted">
+        {reuniao.email_enviado
+          ? 'Você também receberá um e-mail com esta confirmação.'
+          : 'Salve o link acima — não temos um e-mail cadastrado pra te enviar esta confirmação.'}
+      </p>
     </div>
   )
 }

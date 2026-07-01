@@ -14,13 +14,18 @@
 // já materializadas (com pelo menos 1 reserva) têm contagem real.
 //
 // Não expõe nenhuma informação sobre professores/agendas que não pertençam
-// ao e-mail informado. Roda com service-role pois anon não tem acesso direto
-// às tabelas de agendamento (ver migrations 20260630_agendamentos.sql e
-// 20260702_agenda_recorrencias.sql).
+// ao professor informado. Roda com service-role pois anon não tem acesso
+// direto às tabelas de agendamento (ver migrations 20260630_agendamentos.sql
+// e 20260702_agenda_recorrencias.sql).
+//
+// Aceita `email` (fluxo antigo, via professor_emails) OU `professorId`
+// (usado pelo novo Portal de Agendamento, que identifica o professor só
+// pelo nome — a maioria não tem e-mail cadastrado — em
+// portal-agendamento-lookup e repassa o id já resolvido).
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/teacher-lookup
-//   Body: { "email": "professor@exemplo.com" }
+//   Body: { "email": "professor@exemplo.com" } OU { "professorId": "uuid" }
 //   Retorna: { professor: {id, nome} | null, agendas: AgendaComHorarios[] }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -67,7 +72,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { email?: unknown }
+  let body: { email?: unknown; professorId?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -75,26 +80,31 @@ serve(async (req) => {
   }
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-  if (!email) return json({ error: 'E-mail é obrigatório.' }, 400)
+  const professorId = typeof body.professorId === 'string' ? body.professorId : ''
+  if (!email && !professorId) return json({ error: 'E-mail ou professorId é obrigatório.' }, 400)
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // ── 1. Identifica o professor pelo e-mail ────────────────────────────────────
-  const { data: emailRow } = await admin
-    .from('professor_emails')
-    .select('professor_id')
-    .ilike('email', email)
-    .maybeSingle()
+  // ── 1. Identifica o professor pelo e-mail ou pelo id já resolvido ────────────
+  let idProfessor = professorId
+  if (!idProfessor) {
+    const { data: emailRow } = await admin
+      .from('professor_emails')
+      .select('professor_id')
+      .ilike('email', email)
+      .maybeSingle()
 
-  if (!emailRow) return json({ professor: null, agendas: [] })
+    if (!emailRow) return json({ professor: null, agendas: [] })
+    idProfessor = emailRow.professor_id
+  }
 
   const { data: professor } = await admin
     .from('professores')
     .select('id, nome, status, grupo_id')
-    .eq('id', emailRow.professor_id)
+    .eq('id', idProfessor)
     .maybeSingle()
 
   if (!professor || professor.status !== 'ativo') {

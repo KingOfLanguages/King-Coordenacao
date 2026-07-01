@@ -16,9 +16,16 @@
 //   BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME   (mesmos de send-reminders)
 //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             (já existentes — conta-hub)
 //
+// Aceita `email` (fluxo antigo) OU `professor_id` (novo Portal de
+// Agendamento, que identifica o professor só pelo nome — a maioria não tem
+// e-mail cadastrado). Quando não há e-mail real disponível, grava um
+// placeholder sintético em agenda_inscricoes.email_usado (coluna NOT NULL)
+// e pula o envio de e-mail de confirmação.
+//
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/create-booking
-//   Body: { "email": "professor@exemplo.com", "horario_id": "uuid | v|<rec>|<iso>" }
+//   Body: { "email": "professor@exemplo.com", "horario_id": "..." }
+//      OU { "professor_id": "uuid", "horario_id": "..." }
 //   Retorna: { reuniao: { titulo, data_hora, coordenador_nome, meet_link } }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -173,16 +180,19 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { email?: unknown; horario_id?: unknown }
+  let body: { email?: unknown; professor_id?: unknown; horario_id?: unknown }
   try {
     body = await req.json()
   } catch {
     return json({ error: 'JSON inválido.' }, 400)
   }
 
-  const email     = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-  const horarioId = typeof body.horario_id === 'string' ? body.horario_id.trim() : ''
-  if (!email || !horarioId) return json({ error: 'E-mail e horário são obrigatórios.' }, 400)
+  const emailInformado = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  const professorId    = typeof body.professor_id === 'string' ? body.professor_id.trim() : ''
+  const horarioId      = typeof body.horario_id === 'string' ? body.horario_id.trim() : ''
+  if ((!emailInformado && !professorId) || !horarioId) {
+    return json({ error: 'Professor e horário são obrigatórios.' }, 400)
+  }
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -190,21 +200,32 @@ serve(async (req) => {
   )
 
   // ── 1. Professor existe e está ativo? ────────────────────────────────────────
-  const { data: emailRow } = await admin
-    .from('professor_emails')
-    .select('professor_id')
-    .ilike('email', email)
-    .maybeSingle()
-  if (!emailRow) return json({ error: 'Professor não encontrado para este e-mail.' }, 404)
+  let idProfessor = professorId
+  if (!idProfessor) {
+    const { data: emailRow } = await admin
+      .from('professor_emails')
+      .select('professor_id')
+      .ilike('email', emailInformado)
+      .maybeSingle()
+    if (!emailRow) return json({ error: 'Professor não encontrado para este e-mail.' }, 404)
+    idProfessor = emailRow.professor_id
+  }
 
   const { data: professor } = await admin
     .from('professores')
-    .select('id, nome, grupo_id, status')
-    .eq('id', emailRow.professor_id)
+    .select('id, nome, grupo_id, status, email')
+    .eq('id', idProfessor)
     .maybeSingle()
   if (!professor || professor.status !== 'ativo') {
-    return json({ error: 'Professor não encontrado para este e-mail.' }, 404)
+    return json({ error: 'Professor não encontrado.' }, 404)
   }
+
+  // E-mail real pra registrar/enviar confirmação: o informado no request,
+  // senão o cadastrado em professores.email (legado), senão nenhum — nesse
+  // caso usamos um placeholder só pra satisfazer a coluna NOT NULL e pulamos
+  // o envio de confirmação (ver passo 5).
+  const emailReal = emailInformado || (professor.email ? professor.email.trim().toLowerCase() : '')
+  const emailParaRegistro = emailReal || `sem-email-${professor.id}@king.internal`
 
   // ── 2. Resolve o horário: linha real já materializada, ou ocorrência virtual
   //      de uma recorrência ("v|<recorrencia_id>|<data_hora ISO>") ────────────
@@ -336,7 +357,7 @@ serve(async (req) => {
 
   const { error: insertErr } = await admin
     .from('agenda_inscricoes')
-    .insert({ horario_id: horario.id, professor_id: professor.id, email_usado: email, status: 'confirmada' })
+    .insert({ horario_id: horario.id, professor_id: professor.id, email_usado: emailParaRegistro, status: 'confirmada' })
 
   if (insertErr) {
     // Índice único pega corrida de duplo-clique/duplicidade.
@@ -373,7 +394,7 @@ serve(async (req) => {
   const coordNome = agenda.coordenador?.nome ?? 'Coordenação'
   const meetLink  = horario.meet_link ?? agenda.meet_link
 
-  if (brevoKey) {
+  if (brevoKey && emailReal) {
     const fromEmail = Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking.agenda@gmail.com'
     const fromName  = Deno.env.get('BREVO_FROM_NAME')  ?? 'KOL - King Of Languages'
     try {
@@ -382,7 +403,7 @@ serve(async (req) => {
         headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
           sender:      { name: fromName, email: fromEmail },
-          to:          [{ email, name: professor.nome }],
+          to:          [{ email: emailReal, name: professor.nome }],
           subject:     `Inscrição confirmada: ${agenda.titulo}`,
           htmlContent: buildHtml({
             professorNome: professor.nome,
@@ -405,6 +426,7 @@ serve(async (req) => {
       data_hora:         horario.data_hora,
       coordenador_nome: coordNome,
       meet_link:        meetLink,
+      email_enviado:    !!emailReal,
     },
   })
 })

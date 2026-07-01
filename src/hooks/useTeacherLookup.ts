@@ -24,12 +24,12 @@ export type TeacherLookupResult = {
   agendas: AgendaDisponivel[]
 }
 
-/** Identifica o professor pelo e-mail e retorna as agendas coletivas disponíveis para ele. */
+/** Identifica o professor (por e-mail ou por id já resolvido) e retorna as agendas coletivas disponíveis para ele. */
 export function useTeacherLookup() {
   return useMutation({
-    mutationFn: async (email: string) => {
+    mutationFn: async (input: { email: string } | { professorId: string }) => {
       const { data, error } = await supabase.functions.invoke('teacher-lookup', {
-        body: { email },
+        body: input,
       })
       if (error) throw new Error(error.message)
       return data as TeacherLookupResult
