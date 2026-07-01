@@ -24,12 +24,15 @@
 // pelo seu grupo e retorna só as opções de agendamento elegíveis — nunca
 // links de outro coordenador.
 //
-//   Opção 1 — "1ª reunião":     elegível se o professor nunca teve reunião
-//                                 com status='realizada'. Aponta para o
-//                                 koalendar_link do coordenador.
-//   Opção 2 — "Acompanhamento": elegível se já teve ≥1 reunião realizada.
-//                                 Aponta para o google_appointment_link do
-//                                 coordenador.
+//   Opção 1 — "1ª reunião":     elegível só pro professor recém-chegado (até
+//                                 7 dias de casa, por professores.data_inicio)
+//                                 que nunca teve reunião com status='realizada'.
+//                                 Aponta para o koalendar_link do coordenador.
+//   Opção 2 — "Acompanhamento": elegível pra todo o resto — quem já passou
+//                                 da janela de 1ª reunião (>7 dias de casa)
+//                                 OU já teve ≥1 reunião realizada. Nunca deixa
+//                                 o professor sem nenhuma opção. Aponta para
+//                                 o google_appointment_link do coordenador.
 //   Opção 3 — "Reuniões em grupo": elegível se professor_acompanhamento.
 //                                 score_atual >= 1400. Sem link — o front
 //                                 usa o fluxo já existente (teacher-lookup +
@@ -63,6 +66,7 @@ const CORS = {
 }
 
 const SCORE_MINIMO_GRUPO = 1400
+const DIAS_JANELA_PRIMEIRA_REUNIAO = 7
 const NOME_MIN_CHARS = 3
 const STOPWORDS = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
 
@@ -93,6 +97,17 @@ function dataInicioBate(dataInicio: string | null, mes: number, ano: number): bo
   const d = new Date(dataInicio)
   const diffMeses = (d.getUTCFullYear() - ano) * 12 + (d.getUTCMonth() - (mes - 1))
   return Math.abs(diffMeses) <= 1
+}
+
+/** Dias completos desde a data de início, normalizando pra meia-noite UTC (evita erro de fuso/hora do dia). */
+function diasDeCasa(dataInicio: string | null): number | null {
+  if (!dataInicio) return null
+  const inicio = new Date(dataInicio)
+  if (isNaN(inicio.getTime())) return null
+  const agora = new Date()
+  const inicioUTC = Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth(), inicio.getUTCDate())
+  const agoraUTC  = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())
+  return Math.round((agoraUTC - inicioUTC) / 86400000)
 }
 
 const OPCOES_VAZIAS = {
@@ -170,7 +185,15 @@ serve(async (req) => {
 
   const teveReuniaoRealizada = (reunioesRealizadas ?? 0) > 0
 
-  // ── 5. Score de elegibilidade para reunião em grupo ──────────────────────────
+  // ── 5. Recém-chegado? (até 7 dias de casa) ───────────────────────────────────
+  const dias = diasDeCasa(professor.data_inicio)
+  const recemChegado = dias != null && dias >= 0 && dias <= DIAS_JANELA_PRIMEIRA_REUNIAO
+
+  const primeiraReuniaoElegivel = recemChegado && !teveReuniaoRealizada && !!coordenador.koalendar_link
+  // Todo mundo que não se enquadra na 1ª reunião cai aqui — nunca deixa o professor sem nenhuma opção.
+  const acompanhamentoElegivel  = !(recemChegado && !teveReuniaoRealizada) && !!coordenador.google_appointment_link
+
+  // ── 6. Score de elegibilidade para reunião em grupo ──────────────────────────
   const { data: acompanhamento } = await admin
     .from('professor_acompanhamento')
     .select('score_atual')
@@ -186,12 +209,12 @@ serve(async (req) => {
     ambiguo: false,
     opcoes: {
       primeira_reuniao: {
-        elegivel: !teveReuniaoRealizada && !!coordenador.koalendar_link,
-        link: !teveReuniaoRealizada ? coordenador.koalendar_link : null,
+        elegivel: primeiraReuniaoElegivel,
+        link: primeiraReuniaoElegivel ? coordenador.koalendar_link : null,
       },
       acompanhamento: {
-        elegivel: teveReuniaoRealizada && !!coordenador.google_appointment_link,
-        link: teveReuniaoRealizada ? coordenador.google_appointment_link : null,
+        elegivel: acompanhamentoElegivel,
+        link: acompanhamentoElegivel ? coordenador.google_appointment_link : null,
       },
       reuniao_grupo: {
         elegivel: elegivelGrupo,
