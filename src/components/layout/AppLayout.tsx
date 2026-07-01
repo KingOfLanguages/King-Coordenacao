@@ -175,7 +175,7 @@ export function AppLayout() {
           <div className="hidden md:block h-4 w-px bg-line-soft mx-1 flex-shrink-0" />
 
           {/* Desktop nav links */}
-          <div className="hidden md:flex items-center gap-0.5 flex-1 overflow-hidden">
+          <div className="hidden md:flex items-center gap-0.5 flex-1 min-w-0">
             {entries.map(entry => entry.type === 'link' ? (
               <NavLink
                 key={entry.to}
