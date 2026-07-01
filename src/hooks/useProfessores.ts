@@ -82,9 +82,10 @@ export function useProfessor(id: string) {
           *,
           grupo:grupos!grupo_id (id, nome),
           coordenador:profiles!coordenador_id (id, nome),
-          reunioes (
-            id, data, status, notas,
-            profiles (nome)
+          reuniao_professores (
+            id, status, numero, observacao, confirmado_em,
+            confirmado_por:profiles!confirmado_por (nome),
+            reuniao:reunioes!reuniao_id (id, data, titulo)
           ),
           observacoes (
             id, tipo, texto, created_at,

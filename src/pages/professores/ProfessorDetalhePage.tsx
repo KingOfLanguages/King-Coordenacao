@@ -22,12 +22,18 @@ import type { StatusProfessor } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type PerfilRef = { nome: string } | { nome: string }[] | null | undefined
+
 type ReuniaoRow = {
   id: string
-  data: string
-  status: 'pendente' | 'concluida' | 'cancelada'
-  notas?: string | null
-  profiles?: { nome: string } | { nome: string }[] | null
+  status: 'pendente' | 'realizada' | 'cancelada'
+  numero: number | null
+  observacao: string | null
+  confirmado_em: string | null
+  confirmado_por?: PerfilRef
+  reuniao?: ({ id: string; data: string; titulo: string | null }
+    | { id: string; data: string; titulo: string | null }[]
+    | null)
 }
 
 type ObservacaoRow = {
@@ -109,8 +115,19 @@ export function ProfessorDetalhePage() {
     </div>
   )
 
-  const reunioes    = (professor.reunioes    ?? []) as ReuniaoRow[]
   const observacoes = (professor.observacoes ?? []) as ObservacaoRow[]
+
+  const reunioes = ((professor.reuniao_professores ?? []) as ReuniaoRow[])
+    .map(r => {
+      const reuniao = Array.isArray(r.reuniao) ? r.reuniao[0] : r.reuniao
+      return {
+        ...r,
+        data: reuniao?.data ?? r.confirmado_em,
+        confirmadoPorNome: resolverNomePerfil(r.confirmado_por),
+      }
+    })
+    .filter((r): r is typeof r & { data: string } => !!r.data)
+    .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
 
   const grupoNome = resolverNomePerfil(professor.grupo)
   const coordNome = resolverNomePerfil(professor.coordenador)
@@ -123,7 +140,7 @@ export function ProfessorDetalhePage() {
   const negativos  = observacoes.filter(o => o.tipo === 'feedback_negativo').length
   const positivos  = observacoes.filter(o => o.tipo === 'feedback_positivo').length
 
-  function resolverNomePerfil(profiles: { nome: string } | { nome: string }[] | null | undefined): string | null {
+  function resolverNomePerfil(profiles: PerfilRef): string | null {
     if (!profiles) return null
     if (Array.isArray(profiles)) return profiles[0]?.nome ?? null
     return profiles.nome ?? null
@@ -249,23 +266,36 @@ export function ProfessorDetalhePage() {
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
         {/* Reuniões */}
         <section className="card-surface p-5 space-y-3 self-start">
-          <h2 className="label-micro">Reuniões</h2>
+          <h2 className="label-micro">Reuniões ({reunioes.length})</h2>
           {reunioes.length === 0 ? (
             <p className="text-[13px] text-ink-muted">Nenhuma reunião registrada.</p>
           ) : (
-            <ul className="divide-y divide-line-soft">
+            <ul className="space-y-2.5">
               {reunioes.slice(0, 10).map(r => (
-                <li key={r.id} className="flex items-center justify-between py-2 text-[13px] gap-2">
-                  <span className="text-ink tabular-nums">
-                    {new Date(r.data).toLocaleDateString('pt-BR', {
-                      day: '2-digit', month: 'short', year: 'numeric',
-                    })}
-                  </span>
-                  <StatusBadge status={r.status} />
+                <li key={r.id} className="space-y-1 pb-2.5 border-b border-line-soft last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2 text-[13px]">
+                    <span className="text-ink tabular-nums">
+                      {new Date(r.data).toLocaleDateString('pt-BR', {
+                        day: '2-digit', month: 'short', year: 'numeric',
+                      })}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {r.status === 'realizada' && r.numero && (
+                        <span className="text-[11px] text-ink-muted tabular-nums">{r.numero}º</span>
+                      )}
+                      <StatusBadge status={r.status} />
+                    </div>
+                  </div>
+                  {r.observacao && (
+                    <p className="text-[12px] text-ink-secondary leading-relaxed">{r.observacao}</p>
+                  )}
+                  {r.confirmadoPorNome && (
+                    <p className="text-[10.5px] text-ink-subtle">Confirmado por {r.confirmadoPorNome}</p>
+                  )}
                 </li>
               ))}
               {reunioes.length > 10 && (
-                <li className="pt-2 text-[12px] text-ink-muted">
+                <li className="pt-1 text-[12px] text-ink-muted">
                   + {reunioes.length - 10} mais
                 </li>
               )}

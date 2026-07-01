@@ -18,6 +18,7 @@ import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
+import { ExtensaoPage } from '@/pages/extensao/ExtensaoPage'
 
 const queryClient = new QueryClient()
 
@@ -72,6 +73,11 @@ export default function App() {
               <Route path="/acompanhamento" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
                   <AcompanhamentoPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/extensao" element={
+                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                  <ExtensaoPage />
                 </ProtectedRoute>
               } />
 

@@ -12,6 +12,7 @@ const navCoordenacao: NavItem[] = [
   { to: '/professores',  label: 'Professores' },
   { to: '/acompanhamento', label: 'Acompanhamento' },
   { to: '/admin/agendas', label: 'Agendas' },
+  { to: '/extensao', label: 'Extensão' },
 ]
 const navComum: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard' },

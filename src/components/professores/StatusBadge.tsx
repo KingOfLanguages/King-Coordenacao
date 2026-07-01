@@ -1,12 +1,12 @@
 import { cn } from '@/lib/utils'
 
-type Status = 'pendente' | 'concluida' | 'cancelada'
+type Status = 'pendente' | 'realizada' | 'cancelada'
 
 interface Props { status: Status; className?: string }
 
 const config: Record<Status, { label: string; cls: string }> = {
   pendente:  { label: 'Pendente',  cls: 'bg-urg-medBg text-urg-medFg' },
-  concluida: { label: 'Concluída', cls: 'bg-urg-lowBg text-urg-lowFg' },
+  realizada: { label: 'Realizada', cls: 'bg-urg-lowBg text-urg-lowFg' },
   cancelada: { label: 'Cancelada', cls: 'bg-surface-muted text-ink-muted' },
 }
 
