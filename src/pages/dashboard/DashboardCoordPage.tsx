@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import { MessageCircle, Check, Undo2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { MessageCircle, Check, Undo2, User, Copy } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { useDashboardCoord, type DashboardCoordData } from '@/hooks/useDashboardCoord'
-import { useContatosHoje, useMarcarContato, type ContatoDia } from '@/hooks/useContatosDia'
+import { useContatosHoje, useMarcarContato, reuniaoUltimaDe, type ContatoDia } from '@/hooks/useContatosDia'
+import { getDefaultTemplate } from '@/lib/messageTemplates'
 import { mesesDeCasa, cn } from '@/lib/utils'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -52,7 +54,7 @@ export function DashboardCoordPage() {
         )}
       </header>
 
-      {podeVerContatos && <MensagensDoDia coordId={coordId || null} />}
+      {podeVerContatos && <MensagensDoDia coordId={coordId || null} coordNome={coordNome} />}
 
       {/* Reuniões realizadas */}
       <section className="space-y-3">
@@ -201,9 +203,11 @@ function MediaCard({ titulo, valor, meta }: { titulo: string; valor: number; met
 
 // ─── Mensagens do dia (meta: 20 contatos/dia por coordenador) ────────────────
 
-function MensagensDoDia({ coordId }: { coordId: string | null }) {
+function MensagensDoDia({ coordId, coordNome }: { coordId: string | null; coordNome: string }) {
   const { data: contatos = [], isLoading } = useContatosHoje(coordId)
   const marcar = useMarcarContato()
+  const navigate = useNavigate()
+  const [copiadoId, setCopiadoId] = useState<string | null>(null)
 
   const enviados = contatos.filter(c => c.enviado).length
   const total    = contatos.length
@@ -215,6 +219,21 @@ function MensagensDoDia({ coordId }: { coordId: string | null }) {
       { id: c.id, enviado: !c.enviado },
       { onError: () => toast.error('Erro ao atualizar contato.') },
     )
+  }
+
+  async function copiarMensagem(c: ContatoDia) {
+    const ultima = reuniaoUltimaDe(c)
+    const mensagem = getDefaultTemplate().build({
+      professorNome: c.professor?.nome ?? 'professor(a)',
+      coordenadorNome: coordNome,
+      dataUltimaReuniao: ultima
+        ? new Date(ultima).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
+        : null,
+    })
+    await navigator.clipboard.writeText(mensagem)
+    setCopiadoId(c.id)
+    toast.success('Mensagem copiada.')
+    setTimeout(() => setCopiadoId(prev => (prev === c.id ? null : prev)), 1800)
   }
 
   return (
@@ -257,20 +276,40 @@ function MensagensDoDia({ coordId }: { coordId: string | null }) {
                   <p className="text-[11px] text-ink-muted truncate">{c.professor.email}</p>
                 )}
               </div>
-              <Button
-                size="sm"
-                variant={c.enviado ? 'outline' : 'default'}
-                disabled={marcar.isPending}
-                onClick={() => toggle(c)}
-                className={cn(
-                  'btn-press h-7 text-[11px] gap-1.5 flex-shrink-0',
-                  c.enviado
-                    ? 'border-line text-ink-secondary'
-                    : 'bg-urg-lowFg text-white hover:opacity-90',
-                )}
-              >
-                {c.enviado ? <><Undo2 className="h-3 w-3" />Desfazer</> : <><Check className="h-3 w-3" />Marcar enviada</>}
-              </Button>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(`/professores/${c.professor_id}`)}
+                  className="btn-press h-7 w-7 p-0 border-line text-ink-secondary"
+                  title="Ver perfil"
+                >
+                  <User className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copiarMensagem(c)}
+                  className="btn-press h-7 text-[11px] gap-1.5 border-line text-ink-secondary"
+                >
+                  {copiadoId === c.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {copiadoId === c.id ? 'Copiado' : 'Copiar mensagem'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={c.enviado ? 'outline' : 'default'}
+                  disabled={marcar.isPending}
+                  onClick={() => toggle(c)}
+                  className={cn(
+                    'btn-press h-7 text-[11px] gap-1.5',
+                    c.enviado
+                      ? 'border-line text-ink-secondary'
+                      : 'bg-urg-lowFg text-white hover:opacity-90',
+                  )}
+                >
+                  {c.enviado ? <><Undo2 className="h-3 w-3" />Desfazer</> : <><Check className="h-3 w-3" />Marcar enviada</>}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

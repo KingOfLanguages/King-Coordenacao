@@ -6,11 +6,22 @@ export type ContatoDia = {
   professor_id: string
   enviado: boolean
   enviado_em: string | null
-  professor: { id: string; nome: string; email: string | null } | null
+  professor: {
+    id: string
+    nome: string
+    email: string | null
+    professor_acompanhamento: { reuniao_ultima: string | null } | { reuniao_ultima: string | null }[] | null
+  } | null
 }
 
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+export function reuniaoUltimaDe(c: ContatoDia): string | null {
+  const acomp = c.professor?.professor_acompanhamento
+  const row = Array.isArray(acomp) ? acomp[0] : acomp
+  return row?.reuniao_ultima ?? null
 }
 
 /**
@@ -29,7 +40,7 @@ export function useContatosHoje(coordenadorId: string | null) {
 
       const { data, error } = await supabase
         .from('contatos_diarios')
-        .select('id, professor_id, enviado, enviado_em, professor:professores(id, nome, email)')
+        .select('id, professor_id, enviado, enviado_em, professor:professores(id, nome, email, professor_acompanhamento(reuniao_ultima))')
         .eq('coordenador_id', coordenadorId)
         .eq('data', hojeISO())
       if (error) throw error
