@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Puzzle, Download, Copy, Check } from 'lucide-react'
+import { Download, Copy, Check } from 'lucide-react'
 
 const EXTENSAO_ZIP_URL = '/extension/king-nexus-extension.zip'
 
-export function ExtensaoPage() {
+export function ExtensaoConteudo() {
   const [copiado, setCopiado] = useState(false)
 
   async function copiarUrl() {
@@ -17,18 +17,11 @@ export function ExtensaoPage() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-[820px] mx-auto space-y-6">
-      {/* Header */}
-      <header className="space-y-0.5">
-        <div className="flex items-center gap-2">
-          <Puzzle className="h-5 w-5 text-brand" />
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Extensão King Nexus</h1>
-        </div>
-        <p className="text-[13px] text-ink-muted">
-          Reconhece o professor automaticamente numa chamada do Google Meet e mostra perfil, histórico
-          e observações sem precisar trocar de aba.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <p className="text-[13px] text-ink-muted">
+        Reconhece o professor automaticamente numa chamada do Google Meet e mostra perfil, histórico
+        e observações sem precisar trocar de aba.
+      </p>
 
       {/* Download */}
       <section className="card-surface p-5">

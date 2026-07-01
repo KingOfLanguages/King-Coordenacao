@@ -1,22 +1,42 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { LogOut, Puzzle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { cn } from '@/lib/utils'
-import { useState, useRef, useEffect } from 'react'
+import { Fragment, useState, useRef, useEffect } from 'react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { NavDropdown, type NavDropdownItem } from '@/components/layout/NavDropdown'
+import { ExtensaoConteudo } from '@/pages/extensao/ExtensaoConteudo'
 
-type NavItem = { to: string; label: string; exact?: boolean }
+type NavLinkEntry  = { type: 'link';  to: string; label: string; exact?: boolean }
+type NavGroupEntry = { type: 'group'; label: string; items: NavDropdownItem[] }
+type NavEntry = NavLinkEntry | NavGroupEntry
 
-const navCoordenacao: NavItem[] = [
-  { to: '/reunioes-dia', label: 'Reuniões do Dia' },
-  { to: '/professores',  label: 'Professores' },
-  { to: '/acompanhamento', label: 'Acompanhamento' },
-  { to: '/admin/agendas', label: 'Agendas' },
-  { to: '/extensao', label: 'Extensão' },
-]
-const navComum: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard' },
-]
+const groupReunioes: NavGroupEntry = {
+  type: 'group',
+  label: 'Reuniões',
+  items: [
+    { to: '/reunioes-dia', label: 'Reuniões do Dia' },
+    { to: '/admin/agendas', label: 'Agendas' },
+  ],
+}
+const groupProfessores: NavGroupEntry = {
+  type: 'group',
+  label: 'Professores',
+  items: [
+    { to: '/professores', label: 'Professores' },
+    { to: '/acompanhamento', label: 'Acompanhamento' },
+  ],
+}
+const groupAdmin: NavGroupEntry = {
+  type: 'group',
+  label: 'Administração',
+  items: [
+    { to: '/admin/aprovacoes', label: 'Aprovações' },
+    { to: '/admin/usuarios', label: 'Usuários' },
+    { to: '/admin/configuracoes', label: 'Configurações' },
+  ],
+}
 
 function roleLabel(role?: string) {
   switch (role) {
@@ -61,23 +81,33 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 export function AppLayout() {
   const { profile, signOut } = useAuth()
   const navigate   = useNavigate()
-  const [menuOpen,    setMenuOpen]    = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
-  const profileRef = useRef<HTMLDivElement>(null)
+  const location   = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const openRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   const isCoord   = profile?.role === 'coordenacao' || profile?.role === 'admin'
   const isAdmin   = profile?.role === 'admin'
 
-  const links: NavItem[] = [
-    ...(isCoord   ? navCoordenacao : []),
-    ...navComum,
-    ...(isAdmin ? [
-      { to: '/dashboard/geral',     label: 'Dashboard Geral' },
-      { to: '/admin/aprovacoes',    label: 'Aprovações' },
-      { to: '/admin/usuarios',      label: 'Usuários' },
-      { to: '/admin/configuracoes', label: 'Configurações' },
-    ] : []),
+  const dashboardEntry: NavEntry = isAdmin
+    ? { type: 'group', label: 'Dashboard', items: [
+        { to: '/dashboard', label: 'Dashboard', exact: true },
+        { to: '/dashboard/geral', label: 'Dashboard Geral' },
+      ] }
+    : { type: 'link', to: '/dashboard', label: 'Dashboard', exact: true }
+
+  const entries: NavEntry[] = [
+    ...(isCoord ? [groupReunioes, groupProfessores] : []),
+    dashboardEntry,
+    ...(isAdmin ? [groupAdmin] : []),
   ]
+
+  type MobileRow = { sectionLabel?: string; item: NavDropdownItem }
+  const mobileRows: MobileRow[] = entries.flatMap((entry): MobileRow[] =>
+    entry.type === 'link'
+      ? [{ item: entry }]
+      : entry.items.map((item, i) => ({ sectionLabel: i === 0 ? entry.label : undefined, item }))
+  )
 
   const initials = profile?.nome
     ?.split(' ')
@@ -87,16 +117,27 @@ export function AppLayout() {
     .join('')
     .toUpperCase() ?? '—'
 
-  // Close profile dropdown on outside click
+  function registerRef(key: string) {
+    return (el: HTMLDivElement | null) => {
+      if (el) openRefs.current.set(key, el)
+      else openRefs.current.delete(key)
+    }
+  }
+
+  // Close open dropdown/profile menu on outside click (the Extensão dialog manages its own).
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setProfileOpen(false)
-      }
+      if (openMenu === null || openMenu === 'extensao') return
+      const target = e.target as Node
+      const insideAny = Array.from(openRefs.current.values()).some(el => el.contains(target))
+      if (!insideAny) setOpenMenu(null)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [openMenu])
+
+  // Close open dropdown/profile menu on route change.
+  useEffect(() => { setOpenMenu(null) }, [location.pathname])
 
   // Close mobile menu on route change
   useEffect(() => { setMenuOpen(false) }, [navigate])
@@ -135,11 +176,11 @@ export function AppLayout() {
 
           {/* Desktop nav links */}
           <div className="hidden md:flex items-center gap-0.5 flex-1 overflow-hidden">
-            {links.map(item => (
+            {entries.map(entry => entry.type === 'link' ? (
               <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.exact}
+                key={entry.to}
+                to={entry.to}
+                end={entry.exact}
                 className={({ isActive }) => cn(
                   'btn-press flex-shrink-0 px-3 py-1.5 rounded-full text-[12.5px] font-medium whitespace-nowrap',
                   isActive
@@ -147,8 +188,17 @@ export function AppLayout() {
                     : 'text-ink-secondary hover:text-ink hover:bg-surface-subtle/60'
                 )}
               >
-                {item.label}
+                {entry.label}
               </NavLink>
+            ) : (
+              <NavDropdown
+                key={entry.label}
+                label={entry.label}
+                items={entry.items}
+                isOpen={openMenu === entry.label}
+                onToggle={() => setOpenMenu(m => m === entry.label ? null : entry.label)}
+                registerRef={registerRef(entry.label)}
+              />
             ))}
           </div>
 
@@ -159,14 +209,37 @@ export function AppLayout() {
           {/* Theme toggle */}
           <ThemeToggle />
 
+          {/* Extensão popup trigger */}
+          {isCoord && (
+            <Dialog open={openMenu === 'extensao'} onOpenChange={o => setOpenMenu(o ? 'extensao' : null)}>
+              <DialogTrigger asChild>
+                <button
+                  aria-label="Extensão King Nexus"
+                  className="btn-press flex items-center justify-center h-9 w-9 rounded-full hover:bg-surface-subtle/80 flex-shrink-0"
+                >
+                  <Puzzle className="h-4 w-4" />
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-[15px]">
+                    <Puzzle className="h-4 w-4 text-brand" />
+                    Extensão King Nexus
+                  </DialogTitle>
+                </DialogHeader>
+                <ExtensaoConteudo />
+              </DialogContent>
+            </Dialog>
+          )}
+
           {/* Profile button (desktop) */}
-          <div ref={profileRef} className="relative hidden md:block">
+          <div ref={registerRef('profile')} className="relative hidden md:block">
             <button
-              onClick={() => setProfileOpen(o => !o)}
+              onClick={() => setOpenMenu(m => m === 'profile' ? null : 'profile')}
               className={cn(
                 'btn-press flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-full',
                 'hover:bg-surface-subtle/80 transition-all duration-200',
-                profileOpen && 'bg-surface-subtle',
+                openMenu === 'profile' && 'bg-surface-subtle',
               )}
             >
               {/* Avatar: squircle */}
@@ -181,7 +254,7 @@ export function AppLayout() {
             </button>
 
             {/* Profile dropdown */}
-            {profileOpen && (
+            {openMenu === 'profile' && (
               <div className="absolute right-0 top-[calc(100%+10px)] w-60 animate-spring-in overflow-hidden
                               rounded-2xl border border-line-soft bg-surface-canvas
                               shadow-[0_12px_32px_-8px_rgba(0,0,0,0.14),0_4px_12px_-4px_rgba(0,0,0,0.06)]
@@ -249,31 +322,40 @@ export function AppLayout() {
           />
 
           {/* Nav links — staggered reveal */}
-          <div className="relative flex flex-col items-center justify-center flex-1 gap-1 px-6">
-            {links.map((item, i) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.exact}
-                onClick={() => setMenuOpen(false)}
-                style={{ '--i': i } as React.CSSProperties}
-                className={({ isActive }) => cn(
-                  'nav-reveal-item w-full max-w-xs text-center py-3.5 rounded-2xl text-[28px] font-semibold tracking-[-0.02em]',
-                  'transition-colors duration-200',
-                  isActive
-                    ? 'text-ink bg-surface-subtle/60'
-                    : 'text-ink/40 hover:text-ink',
+          <div className="relative flex flex-col items-center justify-center flex-1 gap-1 px-6 overflow-y-auto py-6">
+            {mobileRows.map((row, i) => (
+              <Fragment key={row.item.to}>
+                {row.sectionLabel && (
+                  <p
+                    className="nav-reveal-item w-full max-w-xs text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-ink/30 mt-4 first:mt-0"
+                    style={{ '--i': i } as React.CSSProperties}
+                  >
+                    {row.sectionLabel}
+                  </p>
                 )}
-              >
-                {item.label}
-              </NavLink>
+                <NavLink
+                  to={row.item.to}
+                  end={row.item.exact}
+                  onClick={() => setMenuOpen(false)}
+                  style={{ '--i': i } as React.CSSProperties}
+                  className={({ isActive }) => cn(
+                    'nav-reveal-item w-full max-w-xs text-center py-3.5 rounded-2xl text-[28px] font-semibold tracking-[-0.02em]',
+                    'transition-colors duration-200',
+                    isActive
+                      ? 'text-ink bg-surface-subtle/60'
+                      : 'text-ink/40 hover:text-ink',
+                  )}
+                >
+                  {row.item.label}
+                </NavLink>
+              </Fragment>
             ))}
           </div>
 
           {/* Bottom profile + logout */}
           <div
             className="relative pb-12 px-6 flex items-center justify-between"
-            style={{ '--i': links.length } as React.CSSProperties}
+            style={{ '--i': mobileRows.length } as React.CSSProperties}
           >
             <div className="nav-reveal-item flex items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-[11px]
@@ -290,7 +372,7 @@ export function AppLayout() {
               onClick={handleLogout}
               className="nav-reveal-item btn-press flex items-center gap-2 px-4 py-2 rounded-full
                          bg-brand-soft text-brand text-[13px] font-medium"
-              style={{ '--i': links.length + 1 } as React.CSSProperties}
+              style={{ '--i': mobileRows.length + 1 } as React.CSSProperties}
             >
               <LogOut className="h-3.5 w-3.5" />
               Sair
