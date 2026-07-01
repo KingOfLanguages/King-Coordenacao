@@ -88,6 +88,7 @@ export function AppLayout() {
 
   const isCoord   = profile?.role === 'coordenacao' || profile?.role === 'admin'
   const isAdmin   = profile?.role === 'admin'
+  const isSuporte = profile?.role === 'suporte' || profile?.role === 'suporte_aluno'
 
   const dashboardEntry: NavEntry = isAdmin
     ? { type: 'group', label: 'Dashboard', items: [
@@ -96,9 +97,12 @@ export function AppLayout() {
       ] }
     : { type: 'link', to: '/dashboard', label: 'Dashboard', exact: true }
 
+  const suporteEntry: NavEntry = { type: 'link', to: '/suporte/reunioes', label: 'Buscar Reuniões' }
+
   const entries: NavEntry[] = [
     ...(isCoord ? [groupReunioes, groupProfessores] : []),
     dashboardEntry,
+    ...(isSuporte || isAdmin ? [suporteEntry] : []),
     ...(isAdmin ? [groupAdmin] : []),
   ]
 

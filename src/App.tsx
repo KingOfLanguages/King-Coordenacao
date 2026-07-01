@@ -18,6 +18,7 @@ import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
+import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
 
 const queryClient = new QueryClient()
 
@@ -72,6 +73,11 @@ export default function App() {
               <Route path="/acompanhamento" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
                   <AcompanhamentoPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/suporte/reunioes" element={
+                <ProtectedRoute roles={['suporte', 'suporte_aluno', 'admin']}>
+                  <SuporteReunioesPage />
                 </ProtectedRoute>
               } />
               {/* Admin */}
