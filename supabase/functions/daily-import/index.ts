@@ -1,10 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function: daily-import
 //
-// Roda automaticamente via pg_cron (a cada 10 min, dias úteis).
+// Roda automaticamente via pg_cron (a cada 10 min, todos os dias).
 // Para cada coordenador com refresh_token salvo:
 //   1. Obtém um access_token novo via Google OAuth2
-//   2. Busca eventos do Google Calendar dos próximos 30 dias
+//   2. Busca eventos do Google Calendar de 90 dias atrás até 90 dias à frente,
+//      paginando via nextPageToken (sem isso, calendários com mais de 500
+//      eventos no período perdiam o excedente silenciosamente)
 //   3. Filtra reuniões reais com professores
 //   4. Determina o coordenador_id correto pelo email do organizador/participante
 //   5. Faz match de professores pelo nome
@@ -73,13 +75,13 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
 }
 
 async function buscarEventosPeriodo(token: string, inicio: Date, fim: Date): Promise<CalEvent[]> {
-  const params = new URLSearchParams({
+  const baseParams = {
     timeMin:      inicio.toISOString(),
     timeMax:      fim.toISOString(),
     singleEvents: 'true',
     orderBy:      'startTime',
     maxResults:   '500',
-  })
+  }
 
   // Lista todos os calendários da conta
   const listRes = await fetch(`${CALENDAR_API}/users/me/calendarList`, {
@@ -93,12 +95,22 @@ async function buscarEventosPeriodo(token: string, inicio: Date, fim: Date): Pro
   let all: CalEvent[] = []
   for (const cal of calendars as { id: string }[]) {
     try {
-      const res = await fetch(`${CALENDAR_API}/calendars/${encodeURIComponent(cal.id)}/events?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) continue
-      const json = await res.json()
-      all = all.concat(json.items ?? [])
+      // Pagina até esgotar nextPageToken — sem isso, calendários com mais de
+      // 500 eventos no período perdiam o excedente silenciosamente.
+      let pageToken: string | undefined
+      do {
+        const params = new URLSearchParams({
+          ...baseParams,
+          ...(pageToken ? { pageToken } : {}),
+        })
+        const res = await fetch(`${CALENDAR_API}/calendars/${encodeURIComponent(cal.id)}/events?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) break
+        const json = await res.json()
+        all = all.concat(json.items ?? [])
+        pageToken = json.nextPageToken
+      } while (pageToken)
     } catch { /* ignora calendários sem permissão */ }
   }
   return all
@@ -184,7 +196,30 @@ function extrairNomeDeTitulo(title: string): string[] {
   return candidates
 }
 
-function matchProfessor<T extends { id: string; nome: string }>(ev: CalEvent, professores: T[]): T | null {
+interface ComNomeNormalizado { nomeNorm: string; nameParts: string[] }
+
+/**
+ * Pré-computa nome normalizado + partes de cada professor UMA vez, fora do
+ * loop de eventos. Com ~850 professores reais e centenas de eventos por
+ * coordenador (janela de 180 dias), recalcular norm() — normalize NFD +
+ * regex — a cada combinação evento×professor (centenas de milhares de
+ * chamadas) foi o que estourava o limite de CPU da Edge Function. Antes
+ * disso nunca apareceu porque a tabela `professores` estava vazia.
+ */
+function precomputeProfessores<T extends { id: string; nome: string }>(
+  professores: T[],
+): (T & ComNomeNormalizado)[] {
+  return professores.map(p => {
+    const nomeNorm = norm(p.nome)
+    return {
+      ...p,
+      nomeNorm,
+      nameParts: nomeNorm.split(' ').filter(part => part.length > 1 && !['de', 'da', 'do', 'dos', 'das', 'e'].includes(part)),
+    }
+  })
+}
+
+function matchProfessor<T extends { id: string; nome: string } & ComNomeNormalizado>(ev: CalEvent, professores: T[]): T | null {
   if (!professores.length) return null
   const titleNorm    = norm(ev.summary ?? '')
   const extracted    = extrairNomeDeTitulo(ev.summary ?? '').map(norm)
@@ -192,8 +227,7 @@ function matchProfessor<T extends { id: string; nome: string }>(ev: CalEvent, pr
   const scores: Array<{ prof: T; score: number }> = []
 
   for (const prof of professores) {
-    const nomeNorm  = norm(prof.nome)
-    const nameParts = nomeNorm.split(' ').filter(p => p.length > 1 && !['de','da','do','dos','das','e'].includes(p))
+    const { nomeNorm, nameParts } = prof
 
     if (extracted.some(e => e === nomeNorm))                              return prof
     if (attendeeNorm.some(a => a === nomeNorm))                           return prof
@@ -276,11 +310,12 @@ serve(async (req) => {
   console.log('[daily-import] Mapa de coordenadores:', [...coordEmails])
 
   // Professores ativos (matching por nome) + e-mails conhecidos (matching por e-mail)
-  const { data: professores } = await admin
+  const { data: professoresRaw } = await admin
     .from('professores')
     .select('id, nome')
     .eq('saiu',  false)
     .eq('pausa', false)
+  const professores = precomputeProfessores(professoresRaw ?? [])
 
   const { data: emailRows } = await admin
     .from('professor_emails')
@@ -290,12 +325,24 @@ serve(async (req) => {
   for (const r of emailRows ?? []) {
     if (r.email) emailToProfessorId[r.email.toLowerCase()] = r.professor_id
   }
-  const professorNomeById = new Map((professores ?? []).map(p => [p.id, p.nome]))
+  const professorNomeById = new Map(professores.map(p => [p.id, p.nome]))
 
   const today = new Date()
-  let totalSaved = 0
   let totalErrors = 0
   const errorDetails: { coordenador: string; erro: string }[] = []
+
+  // Candidatos de todos os coordenadores, coletados sem tocar o banco —
+  // a gravação acontece em lote no final (ver comentário abaixo do motivo).
+  type Candidato = {
+    google_event_id: string
+    coordenador_id:  string
+    professor_id:    string | null
+    professor_email: string | null
+    data:            string
+    titulo:          string
+    meet_link:       string | null
+  }
+  const candidatos: Candidato[] = []
 
   for (const row of tokenRows ?? []) {
     try {
@@ -304,83 +351,45 @@ serve(async (req) => {
       // 1 — Refresh access token
       const accessToken = await refreshAccessToken(row.refresh_token)
 
-      // 2 — Busca eventos dos próximos 30 dias (deduplicação via google_event_id)
+      // 2 — Busca eventos de 90 dias atrás até 90 dias à frente (deduplicação
+      //     via google_event_id). Janela bidirecional: cobre reuniões passadas
+      //     que não tinham sido capturadas ainda, e futuras com boa folga.
       const periodoFim = new Date(today)
-      periodoFim.setDate(periodoFim.getDate() + 30)
+      periodoFim.setDate(periodoFim.getDate() + 90)
       periodoFim.setHours(23, 59, 59, 999)
       const periodoInicio = new Date(today)
+      periodoInicio.setDate(periodoInicio.getDate() - 90)
       periodoInicio.setHours(0, 0, 0, 0)
       const events   = await buscarEventosPeriodo(accessToken, periodoInicio, periodoFim)
       const meetings = events.filter(isReuniaoComProfessor)
 
       console.log(`[daily-import] ${meetings.length} reunião(ões) encontrada(s) para ${row.google_email ?? row.user_id}`)
 
-      // 4 — Insere reuniões não duplicadas com coordenador correto
+      // 3 — Resolve coordenador/professor em memória (sem chamadas ao banco
+      //     por evento — com a janela de 180 dias isso pode significar
+      //     centenas de eventos por coordenador; 3 round-trips sequenciais
+      //     por evento já estourou o limite de recursos da Edge Function).
       for (const ev of meetings) {
-        // Resolve qual coordenador é responsável por este evento
         const coordId      = resolveCoordId(ev, row.user_id, emailToUserId)
         const profEmail    = extractProfessorEmail(ev, coordEmails)
 
         // Match por e-mail exato (mais confiável) > match por nome no título (fallback)
         const emailMatchId = profEmail ? emailToProfessorId[profEmail.toLowerCase()] : undefined
-        const profByName   = matchProfessor(ev, professores ?? [])
+        const profByName   = matchProfessor(ev, professores)
         const resolvedProfId = emailMatchId ?? profByName?.id ?? null
-        const resolvedNome   = emailMatchId
-          ? professorNomeById.get(emailMatchId) ?? emailMatchId
-          : profByName?.nome
 
-        const startDt      = new Date(ev.start.dateTime ?? ev.start.date ?? '')
-        const meetHref     = ev.hangoutLink ?? ev.htmlLink ?? null
+        const startDt  = new Date(ev.start.dateTime ?? ev.start.date ?? '')
+        const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
 
-        // Verifica duplicata pelo google_event_id (já importado antes?)
-        const { data: existing } = await admin
-          .from('reunioes')
-          .select('id')
-          .eq('google_event_id', ev.id)
-          .maybeSingle()
-
-        if (existing) {
-          console.log(`[daily-import] Já existe: "${ev.summary}" — pulando`)
-          continue
-        }
-
-        const { data: novaReuniao, error: insertErr } = await admin
-          .from('reunioes')
-          .insert({
-            coordenador_id:  coordId,
-            professor_id:    resolvedProfId,
-            professor_email: profEmail,
-            data:            startDt.toISOString(),
-            titulo:          ev.summary,
-            google_event_id: ev.id,
-            meet_link:       meetHref,
-            status:          'pendente',
-          })
-          .select('id')
-          .single()
-
-        if (insertErr || !novaReuniao) {
-          console.error(`[daily-import] Erro ao inserir "${ev.summary}":`, insertErr?.message)
-          totalErrors++
-          continue
-        }
-
-        // Cria o vínculo na tabela de participação (modelo multi-professor)
-        const { error: linkErr } = await admin.from('reuniao_professores').insert({
-          reuniao_id:   novaReuniao.id,
-          professor_id: resolvedProfId,
-          status:       'pendente',
+        candidatos.push({
+          google_event_id: ev.id,
+          coordenador_id:  coordId,
+          professor_id:    resolvedProfId,
+          professor_email: profEmail,
+          data:            startDt.toISOString(),
+          titulo:          ev.summary,
+          meet_link:       meetHref,
         })
-        if (linkErr) {
-          console.error(`[daily-import] Erro ao vincular professor em "${ev.summary}":`, linkErr.message)
-        }
-
-        // Log detalhado: quem ficou responsável
-        const coordLog = coordId === row.user_id
-          ? (row.google_email ?? row.user_id)
-          : `${coordId} (via ${ev.organizer?.email ?? 'attendee'})`
-        console.log(`[daily-import] ✓ "${ev.summary}" → prof: ${resolvedNome ?? 'sem vínculo'} | coord: ${coordLog}`)
-        totalSaved++
       }
 
     } catch (err) {
@@ -397,7 +406,68 @@ serve(async (req) => {
     }
   }
 
-  const result = { saved: totalSaved, errors: totalErrors, errorDetails, date: today.toISOString() }
+  // 4 — Grava em lote. Dedupe local por google_event_id (o mesmo evento pode
+  //     aparecer em mais de um calendário — ex: dois coordenadores como
+  //     attendees) mantendo a primeira ocorrência, e upsert com
+  //     ignoreDuplicates para não sobrescrever reuniões já importadas
+  //     (mesmo comportamento do "já existe — pulando" de antes).
+  const porEventoId = new Map<string, Candidato>()
+  for (const c of candidatos) {
+    if (!porEventoId.has(c.google_event_id)) porEventoId.set(c.google_event_id, c)
+  }
+  const paraGravar = [...porEventoId.values()]
+
+  let totalSaved = 0
+  const CHUNK = 500
+  for (let i = 0; i < paraGravar.length; i += CHUNK) {
+    const chunk = paraGravar.slice(i, i + CHUNK)
+    const { data: inseridas, error: upsertErr } = await admin
+      .from('reunioes')
+      .upsert(
+        chunk.map(c => ({
+          coordenador_id:  c.coordenador_id,
+          professor_id:    c.professor_id,
+          professor_email: c.professor_email,
+          data:            c.data,
+          titulo:          c.titulo,
+          google_event_id: c.google_event_id,
+          meet_link:       c.meet_link,
+          status:          'pendente',
+        })),
+        { onConflict: 'google_event_id', ignoreDuplicates: true },
+      )
+      .select('id, professor_id')
+
+    if (upsertErr) {
+      console.error('[daily-import] Erro no upsert em lote de reunioes:', upsertErr.message)
+      totalErrors += chunk.length
+      continue
+    }
+
+    totalSaved += inseridas?.length ?? 0
+
+    // Vínculo de participação (modelo multi-professor) — só para as
+    // reuniões efetivamente novas (upsert com ignoreDuplicates não
+    // retorna as que já existiam, então não duplicamos o vínculo).
+    const links = (inseridas ?? []).map(r => ({
+      reuniao_id:   r.id,
+      professor_id: r.professor_id,
+      status:       'pendente' as const,
+    }))
+    if (links.length) {
+      const { error: linkErr } = await admin.from('reuniao_professores').insert(links)
+      if (linkErr) console.error('[daily-import] Erro ao vincular professores em lote:', linkErr.message)
+    }
+  }
+
+  const result = {
+    saved: totalSaved,
+    candidatos: candidatos.length,
+    duplicadosNoLote: candidatos.length - paraGravar.length,
+    errors: totalErrors,
+    errorDetails,
+    date: today.toISOString(),
+  }
   console.log('[daily-import] Concluído:', result)
 
   return new Response(JSON.stringify(result), {

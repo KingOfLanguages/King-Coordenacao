@@ -14,6 +14,7 @@ import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
+import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
@@ -45,6 +46,11 @@ export default function App() {
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <DashboardCoordPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/geral" element={
+                <ProtectedRoute roles={['admin']}>
+                  <DashboardGeralPage />
                 </ProtectedRoute>
               } />
 

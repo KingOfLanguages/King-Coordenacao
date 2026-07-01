@@ -71,6 +71,7 @@ export function AppLayout() {
     ...(isCoord   ? navCoordenacao : []),
     ...navComum,
     ...(isAdmin ? [
+      { to: '/dashboard/geral',     label: 'Dashboard Geral' },
       { to: '/admin/aprovacoes',    label: 'Aprovações' },
       { to: '/admin/usuarios',      label: 'Usuários' },
       { to: '/admin/configuracoes', label: 'Configurações' },
