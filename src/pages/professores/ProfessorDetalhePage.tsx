@@ -10,6 +10,7 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor } from '@/hooks/useProfessores'
+import { useProfessorAcompanhamento, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow } from '@/hooks/useProfessorAcompanhamento'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
@@ -88,6 +89,7 @@ export function ProfessorDetalhePage() {
   const { id }     = useParams<{ id: string }>()
   const navigate   = useNavigate()
   const { data: professor, isLoading } = useProfessor(id!)
+  const { data: acompanhamentoData } = useProfessorAcompanhamento(id)
   const atualizarMonitoramento = useAtualizarMonitoramento()
   const atualizarGrupo = useAtualizarGrupoProfessor()
   const { profile } = useAuth()
@@ -235,6 +237,14 @@ export function ProfessorDetalhePage() {
         </div>
       </div>
 
+      {/* ── Acompanhamento (API KMS) ── */}
+      {acompanhamentoData?.acompanhamento && (
+        <AcompanhamentoSection
+          acompanhamento={acompanhamentoData.acompanhamento}
+          historico={acompanhamentoData.historico}
+        />
+      )}
+
       {/* ── Main grid ── */}
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
         {/* Reuniões */}
@@ -345,6 +355,131 @@ export function ProfessorDetalhePage() {
         onOpenChange={setObsAberta}
         professorId={professor.id}
       />
+    </div>
+  )
+}
+
+// ─── Acompanhamento (score/alertas — API de Acompanhamento de Professores) ────
+
+const faixaCls: Record<string, string> = {
+  Regular:  'bg-urg-lowBg text-urg-lowFg',
+  Atencao:  'bg-urg-medBg text-urg-medFg',
+  Critico:  'bg-urg-highBg text-urg-highFg',
+}
+
+function AcompanhamentoSection({
+  acompanhamento, historico,
+}: {
+  acompanhamento: ProfessorAcompanhamento
+  historico: ProfessorScoreHistoricoRow[]
+}) {
+  const alertasLista = [
+    acompanhamento.aulas_pendentes_qtd > 0 &&
+      { label: `${acompanhamento.aulas_pendentes_qtd} aula(s) pendente(s)`, detalhe: acompanhamento.aulas_pendentes_data_mais_antiga },
+    (acompanhamento.faltas_professor?.quantidade ?? 0) > 0 &&
+      { label: `${acompanhamento.faltas_professor!.quantidade} falta(s) do professor`, detalhe: null },
+    (acompanhamento.no_show_primeira_aula?.quantidade ?? 0) > 0 &&
+      { label: `${acompanhamento.no_show_primeira_aula!.quantidade} no-show de 1ª aula`, detalhe: null },
+    (acompanhamento.agendas_bloqueadas?.quantidade_horarios ?? 0) > 0 &&
+      { label: `${acompanhamento.agendas_bloqueadas!.quantidade_horarios} horário(s) bloqueado(s)`, detalhe: null },
+    (acompanhamento.trocas_professor?.length ?? 0) > 0 &&
+      { label: `${acompanhamento.trocas_professor!.length} troca(s) de professor`, detalhe: null },
+  ].filter(Boolean) as { label: string; detalhe: string | null }[]
+
+  const av = acompanhamento.avaliacao_alunos
+
+  return (
+    <section className="card-surface p-5 space-y-4">
+      <h2 className="label-micro">Acompanhamento</h2>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {/* Score */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-ink-muted">Score</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-semibold text-ink tabular-nums">{acompanhamento.score_atual ?? '—'}</span>
+            {acompanhamento.score_faixa && (
+              <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', faixaCls[acompanhamento.score_faixa] ?? 'bg-surface-subtle text-ink-secondary')}>
+                {acompanhamento.score_faixa}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-ink-muted">
+            {acompanhamento.elegivel_alocacao ? 'Elegível para alocação' : 'Não elegível para alocação'}
+          </p>
+        </div>
+
+        {/* Reunião de monitoramento (KMS) */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-ink-muted">Reunião de monitoramento</p>
+          <p className="text-[13px] text-ink capitalize">{acompanhamento.reuniao_status?.replace(/_/g, ' ') ?? '—'}</p>
+          {acompanhamento.reuniao_proxima && (
+            <p className="text-[11px] text-ink-muted">
+              Próxima: {new Date(acompanhamento.reuniao_proxima).toLocaleDateString('pt-BR')}
+            </p>
+          )}
+        </div>
+
+        {/* Avaliação dos alunos */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-ink-muted">Avaliação dos alunos</p>
+          {av?.total_avaliacoes ? (
+            <>
+              <p className="text-[13px] text-ink tabular-nums">
+                {av.media_estrelas?.toFixed(2) ?? '—'} ★ ({av.total_avaliacoes})
+              </p>
+              <p className="text-[11px] text-ink-muted">
+                {av.comentarios_positivos ?? 0} coment. positivos · {av.comentarios_negativos ?? 0} negativos
+              </p>
+            </>
+          ) : (
+            <p className="text-[13px] text-ink-muted">Sem avaliações no período.</p>
+          )}
+        </div>
+      </div>
+
+      {historico.length > 1 && <ScoreHistoricoChart historico={historico} />}
+
+      {alertasLista.length > 0 && (
+        <div className="space-y-1.5 pt-1">
+          <p className="text-[11px] text-ink-muted">Alertas ativos</p>
+          <div className="flex flex-wrap gap-2">
+            {alertasLista.map((a, i) => (
+              <span key={i} className="inline-flex items-center rounded-full bg-urg-medBg text-urg-medFg px-2.5 py-1 text-[11px] font-medium">
+                {a.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ScoreHistoricoChart({ historico }: { historico: ProfessorScoreHistoricoRow[] }) {
+  const W = 560, H = 100, padL = 24, padB = 16, padT = 8, padR = 8
+  const maxY = Math.max(...historico.map(h => h.score), 1)
+  const minY = Math.min(...historico.map(h => h.score), 0)
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+  const x = (i: number) => padL + (historico.length === 1 ? innerW / 2 : (i / (historico.length - 1)) * innerW)
+  const y = (v: number) => padT + innerH - ((v - minY) / Math.max(maxY - minY, 1)) * innerH
+  const points = historico.map((h, i) => `${x(i)},${y(h.score)}`).join(' ')
+
+  return (
+    <div className="pt-1">
+      <p className="text-[11px] text-ink-muted mb-1">Evolução do score</p>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full text-ink-muted" role="img" aria-label="Evolução do score">
+        <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="currentColor" strokeWidth="1" opacity="0.2" />
+        <polyline points={points} fill="none" stroke="var(--accent-blue)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {historico.map((h, i) => (
+          <g key={h.ano_mes}>
+            <circle cx={x(i)} cy={y(h.score)} r="2.5" fill="var(--accent-blue)" />
+            <text x={x(i)} y={H - 4} textAnchor="middle" fontSize="8" fill="currentColor">
+              {String(h.ano_mes).slice(4)}/{String(h.ano_mes).slice(2, 4)}
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   )
 }

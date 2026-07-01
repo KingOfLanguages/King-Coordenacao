@@ -10,6 +10,7 @@ type NavItem = { to: string; label: string; exact?: boolean }
 const navCoordenacao: NavItem[] = [
   { to: '/reunioes-dia', label: 'Reuniões do Dia' },
   { to: '/professores',  label: 'Professores' },
+  { to: '/acompanhamento', label: 'Acompanhamento' },
   { to: '/admin/agendas', label: 'Agendas' },
 ]
 const navComum: NavItem[] = [

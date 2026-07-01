@@ -9,6 +9,7 @@ import { Login } from '@/pages/Login'
 import { Cadastro } from '@/pages/Cadastro'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
+import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
@@ -60,6 +61,11 @@ export default function App() {
               <Route path="/reunioes-dia" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
                   <ReunioesDiaPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/acompanhamento" element={
+                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                  <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
 
