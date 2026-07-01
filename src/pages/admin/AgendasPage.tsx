@@ -20,6 +20,7 @@ import {
 import { useGrupos } from '@/hooks/useGrupos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { useAuth } from '@/contexts/AuthContext'
+import { MeusLinksAgendamentoCard } from '@/pages/admin/MeusLinksAgendamentoCard'
 import { cn } from '@/lib/utils'
 
 const NONE = 'none'
@@ -52,6 +53,8 @@ export function AgendasPage() {
       </header>
 
       <LinkPublicoCard />
+
+      <MeusLinksAgendamentoCard />
 
       <NovaAgendaCard />
 

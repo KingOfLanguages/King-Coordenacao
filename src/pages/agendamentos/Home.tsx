@@ -3,41 +3,65 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { useTeacherLookup, type TeacherLookupResult } from '@/hooks/useTeacherLookup'
+import { usePortalLookup, type PortalLookupResult } from '@/hooks/usePortalAgendamento'
+import { useTeacherLookup, type AgendaDisponivel as AgendaDisponivelType } from '@/hooks/useTeacherLookup'
 import { useBookMeeting, type ReuniaoConfirmada } from '@/hooks/useBookMeeting'
+import { OpcoesPortal } from '@/pages/agendamentos/OpcoesPortal'
 import { AgendaDisponivel } from '@/pages/agendamentos/AgendaDisponivel'
 import { Confirmacao } from '@/pages/agendamentos/Confirmacao'
 
 type Step =
-  | { tipo: 'email' }
-  | { tipo: 'agendas'; email: string; resultado: TeacherLookupResult }
+  | { tipo: 'identificacao' }
+  | { tipo: 'opcoes'; email: string; resultado: PortalLookupResult }
+  | { tipo: 'grupo-agendas'; email: string; professorNome: string; agendas: AgendaDisponivelType[] }
   | { tipo: 'confirmacao'; reuniao: ReuniaoConfirmada }
 
 export function Home() {
-  const [step, setStep] = useState<Step>({ tipo: 'email' })
+  const [step, setStep] = useState<Step>({ tipo: 'identificacao' })
+  const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [erro, setErro] = useState('')
 
-  const lookup = useTeacherLookup()
-  const book = useBookMeeting()
+  const lookup       = usePortalLookup()
+  const teacherLookup = useTeacherLookup()
+  const book          = useBookMeeting()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setErro('')
     try {
-      const resultado = await lookup.mutateAsync(email.trim())
+      const resultado = await lookup.mutateAsync({ nome: nome.trim(), email: email.trim() })
       if (!resultado.professor) {
-        setErro('Não encontramos um cadastro ativo com este e-mail. Confira se digitou corretamente ou fale com sua coordenação.')
+        setErro('Não encontramos um cadastro ativo com esse nome e e-mail. Confira se digitou corretamente ou fale com sua coordenação.')
         return
       }
-      setStep({ tipo: 'agendas', email: email.trim(), resultado })
+      setStep({ tipo: 'opcoes', email: email.trim(), resultado })
     } catch {
-      setErro('Não foi possível buscar suas reuniões agora. Tente novamente em instantes.')
+      setErro('Não foi possível buscar suas opções de agendamento agora. Tente novamente em instantes.')
+    }
+  }
+
+  async function handleEscolherGrupo() {
+    if (step.tipo !== 'opcoes') return
+    try {
+      const resultado = await teacherLookup.mutateAsync(step.email)
+      if (!resultado.professor) {
+        toast.error('Não foi possível carregar as reuniões em grupo agora.')
+        return
+      }
+      setStep({
+        tipo: 'grupo-agendas',
+        email: step.email,
+        professorNome: resultado.professor.nome,
+        agendas: resultado.agendas,
+      })
+    } catch {
+      toast.error('Não foi possível carregar as reuniões em grupo agora.')
     }
   }
 
   async function handleConfirmar(horarioId: string) {
-    if (step.tipo !== 'agendas') return
+    if (step.tipo !== 'grupo-agendas') return
     try {
       const { reuniao } = await book.mutateAsync({ email: step.email, horarioId })
       setStep({ tipo: 'confirmacao', reuniao })
@@ -61,15 +85,15 @@ export function Home() {
       />
 
       <div className="relative z-10 flex items-center justify-center w-full">
-        {step.tipo === 'email' && (
+        {step.tipo === 'identificacao' && (
           <div className="w-full max-w-sm space-y-7">
             <div className="space-y-1.5">
               <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
                 Agendamento de Reuniões
               </h1>
               <p className="text-[14px] text-ink-muted leading-relaxed">
-                Informe abaixo o e-mail utilizado no seu cadastro como professor da King of
-                Languages para visualizar as reuniões disponíveis.
+                Informe seu nome completo e o e-mail utilizado no seu cadastro como professor da King of
+                Languages para ver as opções de agendamento disponíveis para você.
               </p>
             </div>
 
@@ -77,6 +101,22 @@ export function Home() {
                             shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
               <div className="rounded-[1.5rem] bg-surface-canvas px-6 py-7 space-y-5">
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="nome" className="text-[12px] text-ink-secondary font-medium">
+                      Nome completo
+                    </Label>
+                    <Input
+                      id="nome"
+                      type="text"
+                      value={nome}
+                      onChange={ev => setNome(ev.target.value)}
+                      required
+                      autoComplete="name"
+                      placeholder="Seu nome completo"
+                      className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
+                    />
+                  </div>
+
                   <div className="space-y-1.5">
                     <Label htmlFor="email" className="text-[12px] text-ink-secondary font-medium">
                       E-mail cadastrado
@@ -118,10 +158,19 @@ export function Home() {
           </div>
         )}
 
-        {step.tipo === 'agendas' && (
-          <AgendaDisponivel
+        {step.tipo === 'opcoes' && (
+          <OpcoesPortal
             professorNome={step.resultado.professor!.nome}
-            agendas={step.resultado.agendas}
+            resultado={step.resultado}
+            onEscolherGrupo={handleEscolherGrupo}
+            carregandoGrupo={teacherLookup.isPending}
+          />
+        )}
+
+        {step.tipo === 'grupo-agendas' && (
+          <AgendaDisponivel
+            professorNome={step.professorNome}
+            agendas={step.agendas}
             onConfirmar={handleConfirmar}
             pending={book.isPending}
           />

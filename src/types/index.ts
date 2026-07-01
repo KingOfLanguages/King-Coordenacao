@@ -9,6 +9,8 @@ export interface Profile {
   role: RoleUsuario
   ativo: boolean
   created_at: string
+  koalendar_link: string | null
+  google_appointment_link: string | null
 }
 
 export interface Grupo {
