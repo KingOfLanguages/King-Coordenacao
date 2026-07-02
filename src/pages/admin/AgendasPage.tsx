@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  CalendarPlus, Users, Plus, Trash2, Power, Pencil, Link2, Copy, Check, ExternalLink, X, Video,
+  CalendarPlus, Users, Plus, Trash2, Power, Pencil, Link2, Copy, Check, ExternalLink, X, Video, UserCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
@@ -217,8 +217,9 @@ function AgendaCard({ agenda, indice }: { agenda: AgendaComRecorrencias; indice:
 
   async function salvarNovoHorario() {
     try {
-      await adicionarRecorrencia.mutateAsync({ agendaId: agenda.id, recorrencia: novoHorario })
+      const res = await adicionarRecorrencia.mutateAsync({ agendaId: agenda.id, recorrencia: novoHorario })
       toast.success('Horário adicionado.')
+      if (res && !res.materializou && res.aviso) toast.warning(res.aviso)
       setNovoHorario({ dia_semana: 1, hora: '09:00', capacidade: CAPACIDADE_PADRAO, meet_link: '' })
       setAdicionandoHorario(false)
     } catch {
@@ -453,6 +454,14 @@ function RecorrenciaRow({ recorrencia }: { recorrencia: RecorrenciaComReservas }
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[15px] font-semibold tabular-nums text-ink">{recorrencia.hora.slice(0, 5)}</span>
               <span className="text-[12px] text-ink-muted capitalize">toda {DIAS_PLENO[recorrencia.dia_semana]}</span>
+              {recorrencia.coordenador_confirmado && (
+                <span
+                  title="As próximas ocorrências já têm link gerado e o coordenador confirmado."
+                  className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg px-2 py-0.5 text-[10px] font-medium text-urg-lowFg"
+                >
+                  <UserCheck className="h-3 w-3" />Coord. confirmado
+                </span>
+              )}
               {!recorrencia.ativo && (
                 <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] font-medium text-ink-muted">Pausado</span>
               )}
@@ -590,13 +599,14 @@ function NovaAgendaCard() {
 
   async function salvar() {
     try {
-      await criar.mutateAsync({
+      const res = await criar.mutateAsync({
         titulo: tituloAgenda(nomeCoordSelecionado),
         coordenador_id: coordId === NONE ? null : coordId,
         grupos_autorizados: publico === TODOS ? null : [publico],
         recorrencias: horarios.map(h => ({ ...h, meet_link: h.meet_link?.trim() || null })),
       })
       toast.success('Agenda criada.')
+      if (res && !res.materializou && res.aviso) toast.warning(res.aviso)
       reset()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao criar agenda.')

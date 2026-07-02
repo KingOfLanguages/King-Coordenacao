@@ -7,6 +7,7 @@ export type OcorrenciaComLink = {
   data_hora: string
   meet_link: string | null
   inscritos: number
+  coordenador_confirmado: boolean
 }
 
 export type RecorrenciaComReservas = {
@@ -18,6 +19,8 @@ export type RecorrenciaComReservas = {
   ativo: boolean
   proximas_reservas: number
   proximas_ocorrencias: OcorrenciaComLink[]
+  /** True quando as próximas ocorrências foram pré-criadas com o coordenador confirmado. */
+  coordenador_confirmado: boolean
 }
 
 export type AgendaComRecorrencias = {
@@ -45,7 +48,7 @@ export function useAgendas() {
           recorrencias:agenda_recorrencias (
             id, dia_semana, hora, capacidade, meet_link, ativo,
             horarios:agenda_horarios (
-              id, data_hora, meet_link,
+              id, data_hora, meet_link, coordenador_confirmado,
               inscricoes:agenda_inscricoes (status)
             )
           )
@@ -57,7 +60,7 @@ export function useAgendas() {
       return (data ?? []).map((a: Record<string, unknown>) => ({
         ...a,
         recorrencias: (a.recorrencias as Record<string, unknown>[]).map(r => {
-          const horarios = r.horarios as { id: string; data_hora: string; meet_link: string | null; inscricoes: { status: string }[] }[]
+          const horarios = r.horarios as { id: string; data_hora: string; meet_link: string | null; coordenador_confirmado: boolean; inscricoes: { status: string }[] }[]
           const futuros = horarios
             .filter(h => new Date(h.data_hora).getTime() > agora)
             .sort((x, y) => x.data_hora.localeCompare(y.data_hora))
@@ -76,7 +79,9 @@ export function useAgendas() {
               data_hora: h.data_hora,
               meet_link: h.meet_link,
               inscritos: h.inscricoes.filter(i => i.status === 'confirmada').length,
+              coordenador_confirmado: !!h.coordenador_confirmado,
             })),
+            coordenador_confirmado: futuros.length > 0 && futuros.every(h => !!h.coordenador_confirmado),
           }
         }),
       })) as AgendaComRecorrencias[]
@@ -85,6 +90,28 @@ export function useAgendas() {
 }
 
 export type NovaRecorrencia = { dia_semana: number; hora: string; capacidade: number; meet_link?: string | null }
+
+/** Pré-gera as ocorrências (Meet próprio por ocorrência + coordenador confirmado)
+ *  de uma agenda logo após criá-la ou adicionar um horário. Best-effort: se o
+ *  Google falhar, a agenda segue criada e o create-booking gera o link na 1ª
+ *  reserva (fallback). */
+export type MaterializacaoResultado = { materializou: boolean; aviso?: string }
+
+async function materializarAgenda(agendaId: string): Promise<MaterializacaoResultado> {
+  try {
+    const { data, error } = await supabase.functions.invoke('materializar-ocorrencias', {
+      body: { agenda_id: agendaId },
+    })
+    if (error) return { materializou: false, aviso: 'Não deu pra pré-gerar os links agora — eles serão criados na primeira reserva.' }
+    const d = data as { criadas?: number; erros?: number } | null
+    if (d && (d.erros ?? 0) > 0 && (d.criadas ?? 0) === 0) {
+      return { materializou: false, aviso: 'Não foi possível gerar os links no Google agora. Verifique a integração.' }
+    }
+    return { materializou: true }
+  } catch {
+    return { materializou: false, aviso: 'Não deu pra pré-gerar os links agora — eles serão criados na primeira reserva.' }
+  }
+}
 
 /** Cria uma agenda recorrente com suas regras de horário semanal. */
 export function useCriarAgenda() {
@@ -121,6 +148,8 @@ export function useCriarAgenda() {
         )
         if (e2) throw e2
       }
+
+      return { agendaId: agenda.id, ...(await materializarAgenda(agenda.id)) }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agendas'] })
@@ -141,6 +170,8 @@ export function useAdicionarRecorrencia() {
         meet_link: recorrencia.meet_link?.trim() || null,
       })
       if (error) throw error
+
+      return materializarAgenda(agendaId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agendas'] })
