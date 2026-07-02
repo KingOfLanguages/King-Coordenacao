@@ -34,8 +34,15 @@ function tituloAgenda(nomeCoordenador: string | null | undefined): string {
   return `Reunião de Feedback — Coord. ${nomeCoordenador?.trim() || '—'}`
 }
 
+/** Base pública do portal de agendamento.
+ *  Fixada no domínio de produção (sobrescritível por VITE_PUBLIC_BASE_URL) pra que
+ *  o link copiado nunca herde a URL onde o admin está navegando — evita compartilhar
+ *  com os professores uma URL de preview da Vercel (protegida por login e congelada
+ *  num build antigo). */
+const PORTAL_BASE_URL = import.meta.env.VITE_PUBLIC_BASE_URL || 'https://projeto-king-coord.vercel.app'
+
 function linkPublico(): string {
-  return `${window.location.origin}/agendar`
+  return `${PORTAL_BASE_URL}/agendar`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,7 +129,7 @@ function LinkPublicoCard() {
             {copiado ? 'Copiado' : 'Copiar link'}
           </Button>
           <Button asChild variant="outline" className="btn-press h-9 text-[13px] gap-2 border-line">
-            <a href="/agendar" target="_blank" rel="noopener noreferrer">
+            <a href={link} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-3.5 w-3.5" />
               Abrir
             </a>
