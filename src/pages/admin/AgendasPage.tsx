@@ -44,8 +44,12 @@ export function AgendasPage() {
   const { data: agendas, isLoading } = useAgendas()
 
   return (
-    <div className="px-6 py-6 max-w-[1100px] mx-auto space-y-6">
-      <header className="space-y-0.5">
+    <div className="px-6 py-6 max-w-[1100px] mx-auto space-y-6 animate-fade-up">
+      <header className="space-y-1">
+        <span className="label-micro flex items-center gap-1.5 text-accentBlue">
+          <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
+          Portal de agendamento
+        </span>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Agendas</h1>
         <p className="text-[13px] text-ink-muted">
           Reuniões de feedback recorrentes que professores reservam sozinhos, sem login.
@@ -59,18 +63,25 @@ export function AgendasPage() {
       <NovaAgendaCard />
 
       <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <CalendarPlus className="h-4 w-4 text-ink-secondary" />
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accentBlue-soft text-accentBlue">
+            <CalendarPlus className="h-3.5 w-3.5" />
+          </span>
           <h2 className="text-[15px] font-semibold text-ink">Agendas criadas</h2>
         </div>
 
         {isLoading ? (
           <div className="card-surface p-10 text-center text-[13px] text-ink-muted">Carregando…</div>
         ) : !agendas?.length ? (
-          <div className="card-surface p-10 text-center text-[13px] text-ink-muted">Nenhuma agenda criada ainda.</div>
+          <div className="card-surface p-10 text-center space-y-2">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-surface-subtle text-ink-muted">
+              <CalendarPlus className="h-5 w-5" />
+            </span>
+            <p className="text-[13px] text-ink-muted">Nenhuma agenda criada ainda.</p>
+          </div>
         ) : (
           <ul className="space-y-3">
-            {agendas.map(a => <AgendaCard key={a.id} agenda={a} />)}
+            {agendas.map((a, i) => <AgendaCard key={a.id} agenda={a} indice={i} />)}
           </ul>
         )}
       </section>
@@ -148,7 +159,7 @@ function DiaSemanaPicker({ value, onChange }: { value: number; onChange: (dia: n
 
 // ─── Card de agenda ──────────────────────────────────────────────────────────
 
-function AgendaCard({ agenda }: { agenda: AgendaComRecorrencias }) {
+function AgendaCard({ agenda, indice }: { agenda: AgendaComRecorrencias; indice: number }) {
   const alternar = useAlternarAgenda()
   const editar = useEditarAgenda()
   const excluir = useExcluirAgenda()
@@ -209,21 +220,30 @@ function AgendaCard({ agenda }: { agenda: AgendaComRecorrencias }) {
   }
 
   return (
-    <li className="card-surface p-4 space-y-3.5">
+    <li
+      className="card-surface p-4 space-y-3.5 animate-fade-up"
+      style={{ animationDelay: `${indice * 60}ms`, animationFillMode: 'both' }}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-0.5 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[14px] font-semibold text-ink">{agenda.titulo}</p>
-            <span className={cn(
-              'rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0',
-              agenda.ativo ? 'bg-urg-lowBg text-urg-lowFg' : 'bg-surface-subtle text-ink-muted',
-            )}>
-              {agenda.ativo ? 'Ativa' : 'Pausada'}
-            </span>
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+            <Users className="h-4 w-4" />
+          </span>
+          <div className="space-y-0.5 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-[14px] font-semibold text-ink">{agenda.titulo}</p>
+              <span className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0',
+                agenda.ativo ? 'bg-urg-lowBg text-urg-lowFg' : 'bg-surface-subtle text-ink-muted',
+              )}>
+                {agenda.ativo && <span className="h-1.5 w-1.5 rounded-full bg-urg-lowFg" />}
+                {agenda.ativo ? 'Ativa' : 'Pausada'}
+              </span>
+            </div>
+            <p className="text-[12px] text-ink-muted">
+              {agenda.grupos_autorizados?.length ? `${agenda.grupos_autorizados.length} grupo(s) autorizado(s)` : 'Todos os grupos'}
+            </p>
           </div>
-          <p className="text-[12px] text-ink-muted">
-            {agenda.grupos_autorizados?.length ? `${agenda.grupos_autorizados.length} grupo(s) autorizado(s)` : 'Todos os grupos'}
-          </p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <Button size="icon-sm" variant="ghost" onClick={() => setEditando(v => !v)} title="Editar">
@@ -414,19 +434,27 @@ function RecorrenciaRow({ recorrencia }: { recorrencia: RecorrenciaComReservas }
       'rounded-xl border px-3.5 py-2.5 space-y-2',
       recorrencia.ativo ? 'border-line-soft bg-surface-subtle/60' : 'border-line-soft bg-surface-subtle/20 opacity-60',
     )}>
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[13px] font-medium text-ink capitalize">
-            Toda {DIAS_PLENO[recorrencia.dia_semana]}
+      <div className="flex items-center justify-between gap-2.5">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className={cn(
+            'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-[12px] font-bold uppercase tracking-wide',
+            recorrencia.ativo ? 'bg-accentBlue-soft text-accentBlue' : 'bg-surface-subtle text-ink-muted',
+          )}>
+            {DIAS[recorrencia.dia_semana]}
           </span>
-          <span className="text-[13px] text-ink-secondary tabular-nums">{recorrencia.hora.slice(0, 5)}</span>
-          <span className="flex items-center gap-1 text-[11.5px] text-ink-muted">
-            <Users className="h-3 w-3" />
-            até {recorrencia.capacidade} vaga{recorrencia.capacidade === 1 ? '' : 's'} · {recorrencia.proximas_reservas} reservada{recorrencia.proximas_reservas === 1 ? '' : 's'}
-          </span>
-          {!recorrencia.ativo && (
-            <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] font-medium text-ink-muted">Pausado</span>
-          )}
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[15px] font-semibold tabular-nums text-ink">{recorrencia.hora.slice(0, 5)}</span>
+              <span className="text-[12px] text-ink-muted capitalize">toda {DIAS_PLENO[recorrencia.dia_semana]}</span>
+              {!recorrencia.ativo && (
+                <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] font-medium text-ink-muted">Pausado</span>
+              )}
+            </div>
+            <span className="flex items-center gap-1 text-[11.5px] text-ink-muted">
+              <Users className="h-3 w-3" />
+              até {recorrencia.capacidade} vaga{recorrencia.capacidade === 1 ? '' : 's'} · {recorrencia.proximas_reservas} reservada{recorrencia.proximas_reservas === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <Button size="icon-sm" variant="ghost" onClick={() => setEditando(true)} title="Editar">

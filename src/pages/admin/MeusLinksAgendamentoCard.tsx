@@ -35,8 +35,10 @@ export function MeusLinksAgendamentoCard() {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center gap-2">
-        <CalendarClock className="h-4 w-4 text-ink-secondary" />
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accentBlue-soft text-accentBlue">
+          <CalendarClock className="h-3.5 w-3.5" />
+        </span>
         <h2 className="text-[15px] font-semibold text-ink">
           {coordenadores.length > 1 ? 'Links de agendamento individual' : 'Meus links de agendamento individual'}
         </h2>
