@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,15 @@ const ANOS = Array.from({ length: 9 }, (_, i) => ANO_ATUAL - i)
 
 const MENSAGEM_GENERICA = 'Não conseguimos confirmar seu cadastro. Confira o nome digitado ou fale com sua coordenação.'
 const MENSAGEM_FINAL = 'Não conseguimos confirmar automaticamente quem você é. Fale com sua coordenação pra agendar.'
+
+/** Iniciais do professor (primeiro + último nome) pro avatar da confirmação. */
+function iniciais(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean)
+  if (partes.length === 0) return '?'
+  const primeira = partes[0][0]
+  const ultima = partes.length > 1 ? partes[partes.length - 1][0] : ''
+  return (primeira + ultima).toUpperCase()
+}
 
 type Tentativa = 1 | 2 | 3
 
@@ -128,16 +138,25 @@ export function Home() {
 
       <div className="relative z-10 flex items-center justify-center w-full">
         {step.tipo === 'identificacao' && (
-          <div className="w-full max-w-sm space-y-7">
-            <div className="space-y-1.5">
-              <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-                Agendamento de Reuniões
-              </h1>
-              <p className="text-[14px] text-ink-muted leading-relaxed">
-                {step.tentativa === 1 && 'Informe seu nome para ver as opções de agendamento disponíveis para você.'}
-                {step.tentativa === 2 && 'Encontramos mais de uma pessoa com esse nome. Digite seu nome completo, como está no seu cadastro.'}
-                {step.tentativa === 3 && 'Ainda encontramos mais de uma pessoa. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'}
-              </p>
+          <div className="w-full max-w-sm space-y-6 animate-fade-up">
+            <div className="space-y-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accentBlue-soft text-accentBlue shadow-inner-top">
+                <CalendarClock className="h-6 w-6" />
+              </div>
+              <div className="space-y-1.5">
+                <span className="label-micro flex items-center gap-1.5 text-accentBlue">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
+                  Portal do professor
+                </span>
+                <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
+                  Agendamento de Reuniões
+                </h1>
+                <p className="text-[14px] text-ink-muted leading-relaxed">
+                  {step.tentativa === 1 && 'Informe seu nome para ver as opções de agendamento disponíveis para você.'}
+                  {step.tentativa === 2 && 'Encontramos mais de uma pessoa com esse nome. Digite seu nome completo, como está no seu cadastro.'}
+                  {step.tentativa === 3 && 'Ainda encontramos mais de uma pessoa. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'}
+                </p>
+              </div>
             </div>
 
             <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
@@ -222,11 +241,18 @@ export function Home() {
         )}
 
         {step.tipo === 'confirmar-identidade' && step.resultado.professor && (
-          <div className="w-full max-w-sm space-y-6 text-center">
-            <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-              Você é {step.resultado.professor.nome}?
-            </h1>
-            <p className="text-[13px] text-ink-muted">Confirme pra ver suas opções de agendamento.</p>
+          <div className="w-full max-w-sm space-y-6 text-center animate-fade-up">
+            <div className="flex flex-col items-center gap-3.5">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accentBlue-soft text-[19px] font-semibold text-accentBlue shadow-inner-top">
+                {iniciais(step.resultado.professor.nome)}
+              </span>
+              <div className="space-y-1.5">
+                <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
+                  Você é {step.resultado.professor.nome}?
+                </h1>
+                <p className="text-[13px] text-ink-muted">Confirme pra ver suas opções de agendamento.</p>
+              </div>
+            </div>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={recomecar}
