@@ -249,7 +249,7 @@ export function useExcluirAgenda() {
 
 // ─── Reuniões de feedback (agendamento) do dia, para um coordenador ─────────
 
-export type ParticipanteAgendaCard = { id: string; nome: string }
+export type ParticipanteAgendaCard = { id: string; nome: string; score_atual: number | null }
 
 export type AgendaOcorrenciaCard = {
   id: string
@@ -280,7 +280,10 @@ async function fetchAgendaOcorrencias(coordId: string, inicio: string, fim: stri
     .from('agenda_horarios')
     .select(`
       id, data_hora, capacidade, meet_link, recorrencia_id,
-      inscricoes:agenda_inscricoes (id, status, email_usado, professor:professores (nome))
+      inscricoes:agenda_inscricoes (
+        id, status, email_usado,
+        professor:professores (nome, professor_acompanhamento (score_atual))
+      )
     `)
     .in('recorrencia_id', recorrenciaIds)
     .gte('data_hora', inicio)
@@ -288,15 +291,26 @@ async function fetchAgendaOcorrencias(coordId: string, inicio: string, fim: stri
     .order('data_hora')
   if (e2) throw e2
 
+  type AcompRaw = { score_atual: number | null }
+  type InscricaoRaw = {
+    id: string; status: string; email_usado: string
+    professor: { nome: string; professor_acompanhamento: AcompRaw | AcompRaw[] | null } | null
+  }
+
   return (horarios ?? []).map(h => ({
     id: h.id,
     data_hora: h.data_hora,
     capacidade: h.capacidade,
     meet_link: h.meet_link,
     titulo: tituloPorRecorrencia.get(h.recorrencia_id as string) ?? 'Reunião de Feedback',
-    participantes: (h.inscricoes as unknown as { id: string; status: string; email_usado: string; professor: { nome: string } | null }[])
+    participantes: (h.inscricoes as unknown as InscricaoRaw[])
       .filter(i => i.status === 'confirmada')
-      .map(i => ({ id: i.id, nome: i.professor?.nome ?? i.email_usado })),
+      .map(i => {
+        const acomp = Array.isArray(i.professor?.professor_acompanhamento)
+          ? i.professor?.professor_acompanhamento[0]
+          : i.professor?.professor_acompanhamento
+        return { id: i.id, nome: i.professor?.nome ?? i.email_usado, score_atual: acomp?.score_atual ?? null }
+      }),
   }))
 }
 

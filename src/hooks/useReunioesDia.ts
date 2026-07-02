@@ -15,6 +15,8 @@ export type ParticipanteCard = {
     data_inicio: string | null
     grupo_id: string | null
     monitoramento: boolean
+    score_atual: number | null
+    score_faixa: string | null
   } | null
 }
 
@@ -93,9 +95,57 @@ const REUNIOES_SELECT = `
   id, data, titulo, meet_link, professor_email, status,
   participantes:reuniao_professores (
     id, status, numero, observacao,
-    professor:professores (id, nome, data_inicio, grupo_id, monitoramento)
+    professor:professores (
+      id, nome, data_inicio, grupo_id, monitoramento,
+      professor_acompanhamento (score_atual, score_faixa)
+    )
   )
 `
+
+// Formato cru vindo do PostgREST (professor_acompanhamento vem aninhado e pode
+// ser objeto ou array de um item, dependendo da inferência da relação).
+type AcompRaw = { score_atual: number | null; score_faixa: string | null }
+type ProfRaw = {
+  id: string; nome: string; data_inicio: string | null; grupo_id: string | null
+  monitoramento: boolean
+  professor_acompanhamento: AcompRaw | AcompRaw[] | null
+}
+type ParticipanteRaw = {
+  id: string
+  status: ParticipanteCard['status']
+  numero: number | null
+  observacao: string | null
+  professor: ProfRaw | null
+}
+type ReuniaoRaw = {
+  id: string; data: string; titulo: string | null; meet_link: string | null
+  professor_email: string | null; status: string
+  participantes: ParticipanteRaw[] | null
+}
+
+function mapParticipante(p: ParticipanteRaw): ParticipanteCard {
+  const prof = p.professor
+  const acomp = Array.isArray(prof?.professor_acompanhamento)
+    ? prof?.professor_acompanhamento[0]
+    : prof?.professor_acompanhamento
+  return {
+    id: p.id,
+    status: p.status,
+    numero: p.numero,
+    observacao: p.observacao,
+    professor: prof
+      ? {
+          id: prof.id,
+          nome: prof.nome,
+          data_inicio: prof.data_inicio,
+          grupo_id: prof.grupo_id,
+          monitoramento: prof.monitoramento,
+          score_atual: acomp?.score_atual ?? null,
+          score_faixa: acomp?.score_faixa ?? null,
+        }
+      : null,
+  }
+}
 
 async function fetchReunioes(coordId: string, inicio: string, fim: string): Promise<ReuniaoCard[]> {
   const { data, error } = await supabase
@@ -106,7 +156,15 @@ async function fetchReunioes(coordId: string, inicio: string, fim: string): Prom
     .lte('data', fim)
     .order('data')
   if (error) throw error
-  return (data ?? []) as unknown as ReuniaoCard[]
+  return ((data ?? []) as unknown as ReuniaoRaw[]).map(r => ({
+    id: r.id,
+    data: r.data,
+    titulo: r.titulo,
+    meet_link: r.meet_link,
+    professor_email: r.professor_email,
+    status: r.status,
+    participantes: (r.participantes ?? []).map(mapParticipante),
+  }))
 }
 
 /** Reuniões do dia selecionado para o coordenador, com os professores vinculados (participantes). */

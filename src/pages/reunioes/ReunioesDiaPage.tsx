@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   Video, Check, X, Link2, Mail, Sparkles,
-  Loader2, Plus, ChevronLeft, ChevronRight, CalendarDays,
+  Loader2, Plus, ChevronLeft, ChevronRight, CalendarDays, User, Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,7 @@ import {
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
+import { scoreVisual } from '@/lib/score'
 import { toast } from 'sonner'
 
 type DadosVinculo = ReturnType<typeof useDadosVinculo>['data']
@@ -71,6 +72,67 @@ function chaveDia(iso: string): string {
 const HORA_INICIO_GRADE = 7
 const HORA_FIM_GRADE    = 22
 const PX_POR_HORA       = 52
+
+// ─── Status visual das reuniões (feito / a fazer / atrasada) ──────────────────
+
+type EventoStatus = 'realizada' | 'a_fazer' | 'atrasada' | 'cancelada'
+
+const STATUS_VISUAL: Record<EventoStatus, {
+  label: string; dot: string; bar: string; blocoBg: string; blocoText: string; chip: string
+}> = {
+  realizada: { label: 'Realizada',     dot: 'bg-urg-lowFg',  bar: 'bg-urg-lowFg',  blocoBg: 'bg-urg-lowBg',       blocoText: 'text-urg-lowFg',  chip: 'bg-urg-lowBg text-urg-lowFg' },
+  a_fazer:   { label: 'A fazer',       dot: 'bg-accentBlue', bar: 'bg-accentBlue', blocoBg: 'bg-accentBlue-soft', blocoText: 'text-accentBlue', chip: 'bg-accentBlue-soft text-accentBlue' },
+  atrasada:  { label: 'Atrasada',      dot: 'bg-urg-medFg',  bar: 'bg-urg-medFg',  blocoBg: 'bg-urg-medBg',       blocoText: 'text-urg-medFg',  chip: 'bg-urg-medBg text-urg-medFg' },
+  cancelada: { label: 'Não realizada', dot: 'bg-ink-subtle', bar: 'bg-ink-subtle', blocoBg: 'bg-surface-subtle',  blocoText: 'text-ink-muted',  chip: 'bg-surface-subtle text-ink-muted' },
+}
+
+/** Status de uma reunião 1:1 a partir dos participantes + data. */
+function statusReuniao(r: ReuniaoCard): EventoStatus {
+  const passou = new Date(r.data) < new Date()
+  const parts = r.participantes
+  if (parts.length > 0) {
+    if (parts.some(p => p.status === 'pendente'))  return passou ? 'atrasada' : 'a_fazer'
+    if (parts.some(p => p.status === 'realizada')) return 'realizada'
+    return 'cancelada' // todos cancelados
+  }
+  if (r.status === 'realizada') return 'realizada'
+  return passou ? 'atrasada' : 'a_fazer'
+}
+
+/** Status de uma ocorrência de agenda (feedback coletivo): baseada só na data —
+ *  ocorrências passadas contam como realizadas, futuras como a fazer. */
+function statusOcorrencia(o: AgendaOcorrenciaCard): EventoStatus {
+  return new Date(o.data_hora) < new Date() ? 'realizada' : 'a_fazer'
+}
+
+/** Tag compacta com o score do professor, colorido pela escala. */
+function ScoreTag({ score }: { score: number | null }) {
+  const v = scoreVisual(score)
+  if (score == null) return null
+  return (
+    <span
+      title={`Score ${v.label} · faixa ${v.faixaLabel}`}
+      className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums', v.tagClass)}
+    >
+      {v.label}
+    </span>
+  )
+}
+
+/** Legenda compacta do sistema de cores por status. */
+function LegendaStatus() {
+  const itens: EventoStatus[] = ['a_fazer', 'realizada', 'atrasada']
+  return (
+    <div className="flex items-center gap-3">
+      {itens.map(s => (
+        <span key={s} className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted">
+          <span className={cn('h-2 w-2 rounded-full', STATUS_VISUAL[s].dot)} />
+          {STATUS_VISUAL[s].label}
+        </span>
+      ))}
+    </div>
+  )
+}
 
 // ─── Página ─────────────────────────────────────────────────────────────────
 
@@ -191,7 +253,10 @@ export function ReunioesDiaPage() {
         </div>
       </header>
 
-      <Toolbar />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <LegendaStatus />
+        <Toolbar />
+      </div>
 
       {modo === 'dia' && (
         <DiaView
@@ -366,6 +431,7 @@ type EventoGrade = {
   hora: Date
   rotulo: string
   tipo: 'reuniao' | 'agenda'
+  status: EventoStatus
   fonte: ReuniaoCard | AgendaOcorrenciaCard
 }
 
@@ -395,6 +461,7 @@ function montarEventosPorDia(lista: ReuniaoCard[], listaAgenda: AgendaOcorrencia
       hora: new Date(r.data),
       rotulo: rotuloEvento('reuniao', r),
       tipo: 'reuniao',
+      status: statusReuniao(r),
       fonte: r,
     })
   }
@@ -404,6 +471,7 @@ function montarEventosPorDia(lista: ReuniaoCard[], listaAgenda: AgendaOcorrencia
       hora: new Date(a.data_hora),
       rotulo: rotuloEvento('agenda', a),
       tipo: 'agenda',
+      status: statusOcorrencia(a),
       fonte: a,
     })
   }
@@ -558,12 +626,10 @@ function SemanaView({ inicioSemana, carregando, lista, listaAgenda, onSelecionar
                 <button
                   key={ev.id}
                   onClick={() => onAbrirEvento(ev)}
-                  title={ev.rotulo}
+                  title={`${STATUS_VISUAL[ev.status].label} · ${ev.rotulo}`}
                   className={cn(
-                    'btn-press absolute rounded-md px-1.5 py-0.5 text-left text-[10px] leading-tight overflow-hidden',
-                    ev.tipo === 'agenda'
-                      ? 'bg-accentBlue-soft text-accentBlue hover:bg-accentBlue-soft/80'
-                      : 'bg-surface-subtle text-ink-secondary hover:bg-line-soft',
+                    'btn-press absolute flex items-start gap-1 rounded-md px-1.5 py-0.5 text-left text-[10px] leading-tight overflow-hidden hover:opacity-90',
+                    STATUS_VISUAL[ev.status].blocoBg, STATUS_VISUAL[ev.status].blocoText,
                   )}
                   style={{
                     top: ev.top, height: ev.altura,
@@ -571,10 +637,15 @@ function SemanaView({ inicioSemana, carregando, lista, listaAgenda, onSelecionar
                     width: `calc(${ev.largura}% - 4px)`,
                   }}
                 >
-                  <span className="font-semibold tabular-nums">
-                    {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </span>{' '}
-                  {ev.rotulo}
+                  {ev.tipo === 'agenda'
+                    ? <Users className="mt-[1px] h-2.5 w-2.5 shrink-0 opacity-70" />
+                    : <User className="mt-[1px] h-2.5 w-2.5 shrink-0 opacity-70" />}
+                  <span className="min-w-0 truncate">
+                    <span className="font-semibold tabular-nums">
+                      {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>{' '}
+                    {ev.rotulo}
+                  </span>
                 </button>
               ))}
             </div>
@@ -642,15 +713,16 @@ function MesView({ mesRef, inicioGrade, carregando, lista, listaAgenda, onSeleci
                   <button
                     key={ev.id}
                     onClick={e => { e.stopPropagation(); onAbrirEvento(ev) }}
-                    title={ev.rotulo}
+                    title={`${STATUS_VISUAL[ev.status].label} · ${ev.rotulo}`}
                     className={cn(
-                      'btn-press truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight',
-                      ev.tipo === 'agenda'
-                        ? 'bg-accentBlue-soft text-accentBlue hover:bg-accentBlue-soft/80'
-                        : 'bg-surface-subtle text-ink-secondary hover:bg-line-soft',
+                      'btn-press flex items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight hover:opacity-90',
+                      STATUS_VISUAL[ev.status].blocoBg, STATUS_VISUAL[ev.status].blocoText,
                     )}
                   >
-                    {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} {ev.rotulo}
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_VISUAL[ev.status].dot)} />
+                    <span className="truncate">
+                      {ev.hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} {ev.rotulo}
+                    </span>
                   </button>
                 ))}
                 {restantes > 0 && (
@@ -690,7 +762,12 @@ function EventoPopover({ evento, onClose, onVerDia }: {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[12px] text-ink-muted capitalize">{data}</p>
-            <p className="text-[15px] font-semibold text-ink tabular-nums">{hora}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[15px] font-semibold text-ink tabular-nums">{hora}</p>
+              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', STATUS_VISUAL[evento.status].chip)}>
+                {STATUS_VISUAL[evento.status].label}
+              </span>
+            </div>
           </div>
           <button onClick={onClose} className="btn-press text-ink-subtle hover:text-ink-secondary">
             <X className="h-4 w-4" />
@@ -700,7 +777,10 @@ function EventoPopover({ evento, onClose, onVerDia }: {
         {reuniao && (
           prof ? (
             <div className="space-y-1">
-              <p className="text-[14px] font-medium text-ink">{prof.nome}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[14px] font-medium text-ink">{prof.nome}</p>
+                <ScoreTag score={prof.score_atual} />
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {tempo && <span className="text-[12px] text-ink-muted">{tempo} de casa</span>}
                 {prof.monitoramento && (
@@ -732,7 +812,8 @@ function EventoPopover({ evento, onClose, onVerDia }: {
             {agenda.participantes.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {agenda.participantes.map(p => (
-                  <span key={p.id} className="rounded-full bg-surface-subtle px-2.5 py-1 text-[12px] text-ink-secondary">
+                  <span key={p.id} className="inline-flex items-center gap-1.5 rounded-full bg-surface-subtle px-2.5 py-1 text-[12px] text-ink-secondary">
+                    <span className={cn('h-1.5 w-1.5 rounded-full', scoreVisual(p.score_atual).dotClass)} />
                     {p.nome}
                   </span>
                 ))}
@@ -849,14 +930,17 @@ function NovaReuniaoDialog({ profs, onClose }: { profs: { id: string; nome: stri
 
 function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrenciaCard }) {
   const hora = new Date(ocorrencia.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const sv = STATUS_VISUAL[statusOcorrencia(ocorrencia)]
 
   return (
-    <div className="card-surface p-4 space-y-3">
+    <div className="card-surface relative overflow-hidden p-4 pl-5 space-y-3">
+      <span className={cn('absolute inset-y-0 left-0 w-1', sv.bar)} />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[13px] font-semibold text-ink tabular-nums">{hora}</span>
             <span className="text-[12px] text-ink-muted truncate">{ocorrencia.titulo}</span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', sv.chip)}>{sv.label}</span>
           </div>
           <span className="flex items-center gap-1 text-[11px] text-ink-muted mt-0.5">
             <Mail className="h-3 w-3" />
@@ -878,7 +962,8 @@ function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrencia
 
       <div className="border-t border-line-soft pt-3 flex flex-wrap gap-1.5">
         {ocorrencia.participantes.map(p => (
-          <span key={p.id} className="rounded-full bg-surface-subtle px-2.5 py-1 text-[12px] text-ink-secondary">
+          <span key={p.id} className="inline-flex items-center gap-1.5 rounded-full bg-surface-subtle px-2.5 py-1 text-[12px] text-ink-secondary">
+            <span className={cn('h-1.5 w-1.5 rounded-full', scoreVisual(p.score_atual).dotClass)} />
             {p.nome}
           </span>
         ))}
@@ -891,13 +976,16 @@ function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrencia
 
 function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: DadosVinculo }) {
   const hora = new Date(reuniao.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const sv = STATUS_VISUAL[statusReuniao(reuniao)]
 
   return (
-    <div className="card-surface p-4 space-y-3">
+    <div className="card-surface relative overflow-hidden p-4 pl-5 space-y-3">
+      <span className={cn('absolute inset-y-0 left-0 w-1', sv.bar)} />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[13px] font-semibold text-ink tabular-nums">{hora}</span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', sv.chip)}>{sv.label}</span>
             {reuniao.professor_email && (
               <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
                 <Mail className="h-3 w-3" />{reuniao.professor_email}
@@ -957,6 +1045,7 @@ function ParticipanteRow({ part }: { part: ParticipanteCard }) {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[13px] font-medium text-ink truncate">{prof.nome}</span>
+          <ScoreTag score={prof.score_atual} />
           {prof.monitoramento && (
             <span className="h-1.5 w-1.5 rounded-full bg-urg-highFg flex-shrink-0" title="Monitoramento ativo" />
           )}
