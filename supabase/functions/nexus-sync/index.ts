@@ -232,8 +232,13 @@ serve(async (req) => {
         incident_mode: i.incident_mode ?? 'professor',
         image_urls: i.image_urls ?? [],
         created_at: i.created_at,
-        // Ocorrências internas não apontam pra professor — não força match.
-        professor_id: i.incident_mode === 'interno' ? null : matcher.match(i.teacher_name),
+        // incident_mode 'interno' é sobre COMO a ocorrência foi registrada
+        // (tipos internos como No-Show, Erros de lançamento, Mês de análise —
+        // ver INTERNAL_PROBLEM_TYPES no Nexus), não sobre ausência de professor.
+        // teacher_name segue sendo o nome real do professor nesses casos, então
+        // o match por nome vale igual — só falha (null) pra placeholders
+        // genuínos como "Geral"/"Suporte"/"SEM PROFESSOR".
+        professor_id: matcher.match(i.teacher_name),
         synced_at: runStart,
       }))
       await upsertChunks(admin, 'nexus_incidents', rows)
