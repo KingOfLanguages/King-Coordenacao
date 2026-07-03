@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, Eye, EyeOff,
+  ArrowLeft, Plus, Eye, EyeOff, AlertTriangle,
   CalendarDays, Clock, DollarSign, Users, User,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor } from '@/hooks/useProfessores'
-import { useProfessorAcompanhamento, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow } from '@/hooks/useProfessorAcompanhamento'
+import { useProfessorAcompanhamento, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
@@ -18,7 +18,10 @@ import { canEdit } from '@/lib/permissions'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
+import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
+import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
+import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import type { StatusProfessor } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -105,6 +108,11 @@ export function ProfessorDetalhePage() {
   const podeEditar = canEdit(profile?.role)
   const [obsAberta, setObsAberta] = useState(false)
   const [obsFiltro, setObsFiltro] = useState<ObsFiltro>('todos')
+  const [colocarMesAnaliseAberto, setColocarMesAnaliseAberto] = useState(false)
+  const [resolverMesAnaliseAberto, setResolverMesAnaliseAberto] = useState(false)
+
+  // Deriva do que useNexusDados já busca — sem query extra.
+  const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === 'Mês de análise' && !i.resolved) ?? null
 
   if (isLoading) return (
     <div className="flex h-64 items-center justify-center text-ink-muted text-[13px]">
@@ -164,6 +172,15 @@ export function ProfessorDetalhePage() {
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-semibold tracking-tight text-ink">{professor.nome}</h1>
             <PrioridadeBadge professor={professor} />
+            {emMesAnalise && (
+              <button
+                onClick={() => podeEditar && setResolverMesAnaliseAberto(true)}
+                disabled={!podeEditar}
+                className="btn-press inline-flex items-center gap-1 rounded-full bg-urg-highBg text-urg-highFg px-2.5 py-1 text-[11px] font-medium disabled:cursor-default"
+              >
+                <AlertTriangle className="h-3 w-3" />Em Mês de Análise
+              </button>
+            )}
           </div>
 
           {/* Contadores rápidos */}
@@ -233,6 +250,15 @@ export function ProfessorDetalhePage() {
         </div>
 
         <div className="flex gap-2 flex-shrink-0">
+          {podeEditar && !emMesAnalise && (
+            <Button
+              variant="outline" size="sm"
+              className="btn-press border-urg-highFg/30 text-urg-highFg hover:bg-urg-highBg gap-1.5"
+              onClick={() => setColocarMesAnaliseAberto(true)}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />Mês de Análise
+            </Button>
+          )}
           <Button
             variant="outline" size="sm"
             className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
@@ -261,7 +287,13 @@ export function ProfessorDetalhePage() {
         <AcompanhamentoSection
           acompanhamento={acompanhamentoData.acompanhamento}
           historico={acompanhamentoData.historico}
+          alunos={acompanhamentoData.alunos}
         />
+      )}
+
+      {/* ── Alunos vinculados (KMS) ── */}
+      {acompanhamentoData?.alunos && acompanhamentoData.alunos.length > 0 && (
+        <AlunosKmsSection alunos={acompanhamentoData.alunos} />
       )}
 
       {/* ── Ocorrências (King Nexus) ── */}
@@ -396,6 +428,21 @@ export function ProfessorDetalhePage() {
         onOpenChange={setObsAberta}
         professorId={professor.id}
       />
+      <ColocarEmMesAnaliseDialog
+        open={colocarMesAnaliseAberto}
+        onOpenChange={setColocarMesAnaliseAberto}
+        professorFixo={{ id: professor.id, nome: professor.nome }}
+      />
+      <ResolverMesAnaliseDialog
+        open={resolverMesAnaliseAberto}
+        onOpenChange={setResolverMesAnaliseAberto}
+        incidente={emMesAnalise ? {
+          id: emMesAnalise.id,
+          teacher_name: professor.nome,
+          solution: emMesAnalise.solution,
+          professor_id: professor.id,
+        } : null}
+      />
     </div>
   )
 }
@@ -409,11 +456,15 @@ const faixaCls: Record<string, string> = {
 }
 
 function AcompanhamentoSection({
-  acompanhamento, historico,
+  acompanhamento, historico, alunos,
 }: {
   acompanhamento: ProfessorAcompanhamento
   historico: ProfessorScoreHistoricoRow[]
+  alunos: ProfessorAlunoKms[]
 }) {
+  const temFaltasOuNoShow = (acompanhamento.faltas_professor?.quantidade ?? 0) > 0
+    || (acompanhamento.no_show_primeira_aula?.quantidade ?? 0) > 0
+
   const alertasLista = [
     acompanhamento.aulas_pendentes_qtd > 0 &&
       { label: `${acompanhamento.aulas_pendentes_qtd} aula(s) pendente(s)`, detalhe: acompanhamento.aulas_pendentes_data_mais_antiga },
@@ -423,10 +474,9 @@ function AcompanhamentoSection({
       { label: `${acompanhamento.no_show_primeira_aula!.quantidade} no-show de 1ª aula`, detalhe: null },
     (acompanhamento.agendas_bloqueadas?.quantidade_horarios ?? 0) > 0 &&
       { label: `${acompanhamento.agendas_bloqueadas!.quantidade_horarios} horário(s) bloqueado(s)`, detalhe: null },
-    (acompanhamento.trocas_professor?.length ?? 0) > 0 &&
-      { label: `${acompanhamento.trocas_professor!.length} troca(s) de professor`, detalhe: null },
   ].filter(Boolean) as { label: string; detalhe: string | null }[]
 
+  const alunosMap = new Map(alunos.map(a => [a.aluno_id, a]))
   const av = acompanhamento.avaliacao_alunos
 
   return (
@@ -490,7 +540,107 @@ function AcompanhamentoSection({
               </span>
             ))}
           </div>
+          {temFaltasOuNoShow && (
+            <p className="text-[10.5px] text-ink-subtle italic">
+              Faltas e no-show trazem só contagem e datas — a origem dos dados não vincula a um aluno específico.
+            </p>
+          )}
         </div>
+      )}
+
+      {(acompanhamento.trocas_professor?.length ?? 0) > 0 && (
+        <TrocasProfessorList trocas={acompanhamento.trocas_professor!} alunosMap={alunosMap} />
+      )}
+    </section>
+  )
+}
+
+// ─── Trocas de professor — cruzadas com nomes de alunos (KMS) ─────────────────
+
+type TrocaProfessor = NonNullable<ProfessorAcompanhamento['trocas_professor']>[number]
+
+function TrocasProfessorList({
+  trocas, alunosMap,
+}: {
+  trocas: TrocaProfessor[]
+  alunosMap: Map<number, ProfessorAlunoKms>
+}) {
+  const [expandido, setExpandido] = useState(false)
+  const visiveis = expandido ? trocas : trocas.slice(0, 5)
+
+  return (
+    <div className="space-y-1.5 pt-1">
+      <p className="text-[11px] text-ink-muted">Trocas de professor ({trocas.length})</p>
+      <ul className="space-y-1.5">
+        {visiveis.map((t, i) => {
+          const aluno = alunosMap.get(t.aluno_id)
+          return (
+            <li key={i} className="flex items-center justify-between gap-2 text-[12px]">
+              <span className="text-ink-secondary">
+                {aluno?.primeiro_nome ?? `Aluno #${t.aluno_id}`}
+                {t.motivo && <span className="text-ink-muted"> · {t.motivo}</span>}
+              </span>
+              <span className="text-ink-subtle tabular-nums flex-shrink-0">
+                {new Date(t.data).toLocaleDateString('pt-BR')}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      {trocas.length > 5 && (
+        <button
+          onClick={() => setExpandido(v => !v)}
+          className="btn-press text-[11px] text-accentBlue font-medium"
+        >
+          {expandido ? 'Ver menos' : `+ ${trocas.length - 5} mais`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Alunos vinculados (KMS) ───────────────────────────────────────────────────
+
+function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
+  const [expandido, setExpandido] = useState(false)
+
+  const porStatus = new Map<string, number>()
+  for (const a of alunos) {
+    const chave = a.status_vinculo ?? 'Outro'
+    porStatus.set(chave, (porStatus.get(chave) ?? 0) + 1)
+  }
+  const ordenados = [...alunos].sort((a, b) => (a.primeiro_nome ?? '').localeCompare(b.primeiro_nome ?? ''))
+  const visiveis = expandido ? ordenados : ordenados.slice(0, 16)
+
+  return (
+    <section className="card-surface p-5 space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-1">
+        <h2 className="label-micro">Alunos (KMS)</h2>
+        <p className="text-[11px] text-ink-muted">
+          {[...porStatus.entries()].map(([status, qtd]) => `${qtd} ${status}`).join(' · ')}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {visiveis.map(a => (
+          <span
+            key={a.aluno_id}
+            title={[
+              a.status_vinculo,
+              a.data_adicao ? `adicionado em ${new Date(a.data_adicao).toLocaleDateString('pt-BR')}` : null,
+            ].filter(Boolean).join(' · ') || undefined}
+            className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-2 py-0.5 text-[11px] cursor-help"
+          >
+            {a.primeiro_nome ?? `Aluno #${a.aluno_id}`}
+          </span>
+        ))}
+      </div>
+      {ordenados.length > 16 && (
+        <button
+          onClick={() => setExpandido(v => !v)}
+          className="btn-press text-[12px] text-accentBlue font-medium"
+        >
+          {expandido ? 'Ver menos' : `+ ${ordenados.length - 16} mais`}
+        </button>
       )}
     </section>
   )
@@ -526,36 +676,6 @@ function ScoreHistoricoChart({ historico }: { historico: ProfessorScoreHistorico
 }
 
 // ─── Ocorrências (King Nexus) ──────────────────────────────────────────────────
-
-const urgenciaChip: Record<string, string> = {
-  Baixa: 'bg-urg-lowBg text-urg-lowFg',
-  Média: 'bg-urg-medBg text-urg-medFg',
-  Alta:  'bg-urg-highBg text-urg-highFg',
-}
-
-const urgenciaBorda: Record<string, string> = {
-  Baixa: 'border-urg-lowFg/40',
-  Média: 'border-urg-medFg/40',
-  Alta:  'border-urg-highFg/40',
-}
-
-const nivelLabel: Record<string, string> = {
-  observacao: 'Observação',
-  alerta:     'Alerta',
-  critico:    'Crítico',
-}
-
-const nivelChip: Record<string, string> = {
-  observacao: 'bg-surface-subtle text-ink-secondary',
-  alerta:     'bg-urg-medBg text-urg-medFg',
-  critico:    'bg-urg-highBg text-urg-highFg',
-}
-
-function statusEscalonamento(t: NexusTracking): { label: string; cls: string } {
-  if (t.problem_resolved) return { label: 'Resolvido', cls: 'bg-urg-lowBg text-urg-lowFg' }
-  if (t.forwarded_to_coordination) return { label: 'Encaminhado à coordenação', cls: 'bg-urg-highBg text-urg-highFg' }
-  return { label: 'Em acompanhamento', cls: 'bg-urg-medBg text-urg-medFg' }
-}
 
 function NexusSection({
   incidentes, tracking, alertas,

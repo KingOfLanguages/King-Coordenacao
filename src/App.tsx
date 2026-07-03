@@ -10,6 +10,7 @@ import { Cadastro } from '@/pages/Cadastro'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
+import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
@@ -73,6 +74,11 @@ export default function App() {
               <Route path="/acompanhamento" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
                   <AcompanhamentoPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/mes-analise" element={
+                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                  <MesAnalisePage />
                 </ProtectedRoute>
               } />
               <Route path="/suporte/reunioes" element={

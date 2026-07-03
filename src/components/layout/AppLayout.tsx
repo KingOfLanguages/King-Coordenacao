@@ -26,6 +26,7 @@ const groupProfessores: NavGroupEntry = {
   items: [
     { to: '/professores', label: 'Professores' },
     { to: '/acompanhamento', label: 'Acompanhamento' },
+    { to: '/mes-analise', label: 'Mês de Análise' },
   ],
 }
 const groupAdmin: NavGroupEntry = {
