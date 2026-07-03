@@ -48,6 +48,30 @@ const FAIXA_TOM: Record<string, 'verde' | 'neutro' | 'amarelo' | 'vermelho'> = {
   Bloqueado: 'vermelho',
 }
 
+const NIVEL_LABEL: Record<string, string> = {
+  observacao: 'Observação',
+  alerta:     'Alerta',
+  critico:    'Crítico',
+}
+
+const NIVEL_TOM: Record<string, 'neutro' | 'amarelo' | 'vermelho'> = {
+  observacao: 'neutro',
+  alerta:     'amarelo',
+  critico:    'vermelho',
+}
+
+const URGENCIA_COR: Record<string, string> = {
+  Baixa: '#1A9C5F',
+  Média: '#B4690E',
+  Alta:  '#C0272D',
+}
+
+function statusEscalonamento(t: { problem_resolved: boolean; forwarded_to_coordination: boolean }): { label: string; tom: 'verde' | 'amarelo' | 'vermelho' } {
+  if (t.problem_resolved) return { label: 'Resolvido', tom: 'verde' }
+  if (t.forwarded_to_coordination) return { label: 'Encaminhado à coordenação', tom: 'vermelho' }
+  return { label: 'Em acompanhamento', tom: 'amarelo' }
+}
+
 function formatarData(data: string | null): string | null {
   if (!data) return null
   const d = new Date(data)
@@ -175,7 +199,7 @@ export function Panel() {
       <div style={cabecalho}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <LogoK />
-          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: C.ink }}>KING NEXUS</span>
+          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: C.ink }}>KING TEACHERTRACK</span>
         </div>
         <button onClick={() => setColapsado(true)} style={botaoFechar} aria-label="Minimizar">—</button>
       </div>
@@ -300,6 +324,50 @@ export function Panel() {
                       <Chip key={i} tom="amarelo">{a.label}</Chip>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+
+            {!!(resultado.nexus.ocorrencias.length || resultado.nexus.tracking || resultado.nexus.alertas.length) && (
+              <div style={secaoBox}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ ...rotulo, margin: 0 }}>Ocorrências (Nexus)</span>
+                  {resultado.nexus.ocorrenciasAbertasTotal > 0 && (
+                    <Chip tom="vermelho">{resultado.nexus.ocorrenciasAbertasTotal} em aberto</Chip>
+                  )}
+                </div>
+
+                {resultado.nexus.tracking && (
+                  <p style={{ fontSize: 11.5, color: C.ink, margin: '0 0 8px' }}>
+                    Escalonamento: <strong>{statusEscalonamento(resultado.nexus.tracking).label}</strong>
+                    {resultado.nexus.tracking.recurrence_count > 0 && (
+                      <span style={{ color: C.inkMuted }}> · {resultado.nexus.tracking.recurrence_count} reincidência(s)</span>
+                    )}
+                  </p>
+                )}
+
+                {resultado.nexus.alertas.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                    {resultado.nexus.alertas.map((a, i) => (
+                      <Chip key={i} tom={NIVEL_TOM[a.level] ?? 'neutro'}>
+                        {NIVEL_LABEL[a.level] ?? a.level} · {a.total_count}
+                      </Chip>
+                    ))}
+                  </div>
+                )}
+
+                {resultado.nexus.ocorrencias.length > 0 && (
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    {resultado.nexus.ocorrencias.slice(0, 3).map(o => (
+                      <li key={o.id} style={{ borderLeft: `2px solid ${URGENCIA_COR[o.urgency] ?? C.border}`, paddingLeft: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                          <span style={{ fontSize: 10.5, fontWeight: 600, color: C.inkMuted }}>{o.problem_type}</span>
+                          <span style={{ fontSize: 10.5, color: C.inkMuted }}>{formatarData(o.created_at)}</span>
+                        </div>
+                        <p style={{ fontSize: 12, color: C.ink, margin: '2px 0 0', lineHeight: 1.4 }}>{o.description}</p>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )}

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select'
 import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor } from '@/hooks/useProfessores'
 import { useProfessorAcompanhamento, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow } from '@/hooks/useProfessorAcompanhamento'
+import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
@@ -96,6 +97,7 @@ export function ProfessorDetalhePage() {
   const navigate   = useNavigate()
   const { data: professor, isLoading } = useProfessor(id!)
   const { data: acompanhamentoData } = useProfessorAcompanhamento(id)
+  const { data: nexusData } = useNexusDados(id)
   const atualizarMonitoramento = useAtualizarMonitoramento()
   const atualizarGrupo = useAtualizarGrupoProfessor()
   const { profile } = useAuth()
@@ -259,6 +261,15 @@ export function ProfessorDetalhePage() {
         <AcompanhamentoSection
           acompanhamento={acompanhamentoData.acompanhamento}
           historico={acompanhamentoData.historico}
+        />
+      )}
+
+      {/* ── Ocorrências (King Nexus) ── */}
+      {nexusData && (nexusData.incidentes.length > 0 || nexusData.tracking || nexusData.alertas.length > 0) && (
+        <NexusSection
+          incidentes={nexusData.incidentes}
+          tracking={nexusData.tracking}
+          alertas={nexusData.alertas}
         />
       )}
 
@@ -511,6 +522,155 @@ function ScoreHistoricoChart({ historico }: { historico: ProfessorScoreHistorico
         ))}
       </svg>
     </div>
+  )
+}
+
+// ─── Ocorrências (King Nexus) ──────────────────────────────────────────────────
+
+const urgenciaChip: Record<string, string> = {
+  Baixa: 'bg-urg-lowBg text-urg-lowFg',
+  Média: 'bg-urg-medBg text-urg-medFg',
+  Alta:  'bg-urg-highBg text-urg-highFg',
+}
+
+const urgenciaBorda: Record<string, string> = {
+  Baixa: 'border-urg-lowFg/40',
+  Média: 'border-urg-medFg/40',
+  Alta:  'border-urg-highFg/40',
+}
+
+const nivelLabel: Record<string, string> = {
+  observacao: 'Observação',
+  alerta:     'Alerta',
+  critico:    'Crítico',
+}
+
+const nivelChip: Record<string, string> = {
+  observacao: 'bg-surface-subtle text-ink-secondary',
+  alerta:     'bg-urg-medBg text-urg-medFg',
+  critico:    'bg-urg-highBg text-urg-highFg',
+}
+
+function statusEscalonamento(t: NexusTracking): { label: string; cls: string } {
+  if (t.problem_resolved) return { label: 'Resolvido', cls: 'bg-urg-lowBg text-urg-lowFg' }
+  if (t.forwarded_to_coordination) return { label: 'Encaminhado à coordenação', cls: 'bg-urg-highBg text-urg-highFg' }
+  return { label: 'Em acompanhamento', cls: 'bg-urg-medBg text-urg-medFg' }
+}
+
+function NexusSection({
+  incidentes, tracking, alertas,
+}: {
+  incidentes: NexusIncidente[]
+  tracking: NexusTracking | null
+  alertas: NexusAlerta[]
+}) {
+  const [expandido, setExpandido] = useState(false)
+  const abertas = incidentes.filter(i => !i.resolved).length
+  const visiveis = expandido ? incidentes : incidentes.slice(0, 5)
+
+  return (
+    <section className="card-surface p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="label-micro">Ocorrências (King Nexus)</h2>
+        {abertas > 0 && (
+          <span className="text-[11px] text-urg-highFg font-medium">{abertas} em aberto</span>
+        )}
+      </div>
+
+      {(tracking || alertas.length > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {tracking && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-ink-muted">Escalonamento</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', statusEscalonamento(tracking).cls)}>
+                  {statusEscalonamento(tracking).label}
+                </span>
+                {tracking.recurrence_count > 0 && (
+                  <span className="text-[11px] text-ink-muted">{tracking.recurrence_count} reincidência(s)</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-[11px] pt-0.5">
+                {[
+                  { sent: tracking.first_message_sent, label: '1ª mensagem' },
+                  { sent: tracking.second_message_sent, label: '2ª mensagem' },
+                  { sent: tracking.third_message_sent, label: '3ª mensagem' },
+                ].map(e => (
+                  <span key={e.label} className={cn('inline-flex items-center gap-1', e.sent ? 'text-ink' : 'text-ink-subtle')}>
+                    <span className={cn('h-1.5 w-1.5 rounded-full', e.sent ? 'bg-accentBlue' : 'bg-line')} />
+                    {e.label}
+                  </span>
+                ))}
+              </div>
+              {tracking.next_message_due && !tracking.problem_resolved && (
+                <p className="text-[11px] text-ink-muted">
+                  Próxima mensagem: {new Date(tracking.next_message_due).toLocaleDateString('pt-BR')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {alertas.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-ink-muted">Alertas de mês de análise</p>
+              <div className="flex flex-wrap gap-1.5">
+                {alertas.map(a => (
+                  <span key={a.id} className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', nivelChip[a.level] ?? 'bg-surface-subtle text-ink-secondary')}>
+                    {nivelLabel[a.level] ?? a.level} · {a.total_count}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {incidentes.length === 0 ? (
+        <p className="text-[13px] text-ink-muted">Nenhuma ocorrência registrada no Nexus.</p>
+      ) : (
+        <>
+          <ul className="space-y-2.5">
+            {visiveis.map(i => (
+              <li
+                key={i.id}
+                className={cn('card-surface p-3.5 space-y-1.5 border-l-2', urgenciaBorda[i.urgency] ?? 'border-line')}
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className={cn('inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium', urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
+                      {i.urgency}
+                    </span>
+                    <span className="text-[12px] text-ink font-medium">{i.problem_type}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    {i.resolved
+                      ? <span className="text-urg-lowFg font-medium">Resolvida</span>
+                      : <span className="text-urg-highFg font-medium">Em aberto</span>}
+                    <span className="text-ink-subtle tabular-nums">
+                      {new Date(i.created_at).toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[13px] text-ink-secondary leading-relaxed">{i.description}</p>
+                {i.solution && (
+                  <p className="text-[12px] text-ink-muted leading-relaxed">
+                    <span className="text-ink-subtle">Solução: </span>{i.solution}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+          {incidentes.length > 5 && (
+            <button
+              onClick={() => setExpandido(v => !v)}
+              className="btn-press text-[12px] text-accentBlue font-medium"
+            >
+              {expandido ? 'Ver menos' : `+ ${incidentes.length - 5} mais`}
+            </button>
+          )}
+        </>
+      )}
+    </section>
   )
 }
 

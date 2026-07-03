@@ -81,7 +81,10 @@ async function montarResultado(
   professorId: string,
   motivo: 'email' | 'nome',
 ): Promise<ProfessorEncontrado | null> {
-  const [profRes, acompRes, historicoRes, totalRes, obsRes, reuniaoHoje] = await Promise.all([
+  const [
+    profRes, acompRes, historicoRes, totalRes, obsRes, reuniaoHoje,
+    nexusIncidentesRes, nexusAbertasRes, nexusTrackingRes, nexusAlertasRes,
+  ] = await Promise.all([
     supabase
       .from('professores')
       .select('id, nome, email, status, data_inicio, data_ultima_reuniao, monitoramento, grupo:grupos!grupo_id (id, nome), coordenador:profiles!coordenador_id (nome)')
@@ -110,6 +113,28 @@ async function montarResultado(
       .order('created_at', { ascending: false })
       .limit(5),
     buscarReuniaoHoje(professorId),
+    supabase
+      .from('nexus_incidents')
+      .select('id, problem_type, urgency, description, resolved, created_at')
+      .eq('professor_id', professorId)
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase
+      .from('nexus_incidents')
+      .select('id', { count: 'exact', head: true })
+      .eq('professor_id', professorId)
+      .eq('resolved', false),
+    supabase
+      .from('nexus_teacher_tracking')
+      .select('first_message_sent, second_message_sent, third_message_sent, next_message_due, forwarded_to_coordination, problem_resolved, recurrence_count')
+      .eq('professor_id', professorId)
+      .order('updated_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('nexus_mes_analise_alerts')
+      .select('level, total_count')
+      .eq('professor_id', professorId)
+      .order('created_at', { ascending: false }),
   ])
   if (profRes.error || !profRes.data) return null
   const prof = profRes.data
@@ -149,6 +174,12 @@ async function montarResultado(
     totalReunioesRealizadas: totalRes.count ?? 0,
     reuniaoHoje,
     observacoes: obsRes.data ?? [],
+    nexus: {
+      ocorrencias: nexusIncidentesRes.data ?? [],
+      ocorrenciasAbertasTotal: nexusAbertasRes.count ?? 0,
+      tracking: nexusTrackingRes.data?.[0] ?? null,
+      alertas: nexusAlertasRes.data ?? [],
+    },
     motivo,
   }
 }
@@ -212,7 +243,7 @@ async function handleCriarReuniaoAgora(professorId: string): Promise<RespostaDoB
 
   const { data: reuniao, error: e1 } = await supabase
     .from('reunioes')
-    .insert({ coordenador_id: session.user.id, data: new Date().toISOString(), titulo: 'Reunião via King Nexus', status: 'pendente' })
+    .insert({ coordenador_id: session.user.id, data: new Date().toISOString(), titulo: 'Reunião via King TeacherTrack', status: 'pendente' })
     .select('id')
     .single()
   if (e1 || !reuniao) return { ok: false, erro: e1?.message ?? 'Erro ao criar reunião.' }

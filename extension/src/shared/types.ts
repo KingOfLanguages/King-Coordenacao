@@ -50,6 +50,38 @@ export interface ObservacaoResumo {
   created_at: string
 }
 
+/** Ocorrências do King Nexus vinculadas ao professor — ver [[ktm-nexus-sync]]. */
+export interface NexusOcorrencia {
+  id: string
+  problem_type: string
+  urgency: string
+  description: string
+  resolved: boolean
+  created_at: string
+}
+
+export interface NexusTrackingResumo {
+  first_message_sent: boolean
+  second_message_sent: boolean
+  third_message_sent: boolean
+  next_message_due: string | null
+  forwarded_to_coordination: boolean
+  problem_resolved: boolean
+  recurrence_count: number
+}
+
+export interface NexusAlertaResumo {
+  level: string
+  total_count: number
+}
+
+export interface NexusResumo {
+  ocorrencias: NexusOcorrencia[]
+  ocorrenciasAbertasTotal: number
+  tracking: NexusTrackingResumo | null
+  alertas: NexusAlertaResumo[]
+}
+
 export interface ProfessorEncontrado {
   professor: ProfessorPerfil
   acompanhamento: AcompanhamentoResumo | null
@@ -57,6 +89,7 @@ export interface ProfessorEncontrado {
   totalReunioesRealizadas: number
   reuniaoHoje: ReuniaoHojeInfo | null
   observacoes: ObservacaoResumo[]
+  nexus: NexusResumo
   motivo: 'email' | 'nome'
 }
 
