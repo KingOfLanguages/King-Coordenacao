@@ -41,6 +41,14 @@ export function Cadastro() {
       return
     }
 
+    // Supabase não retorna erro para e-mail já cadastrado (evita enumeração):
+    // devolve um usuário "fake" com identities vazio e sem sessão.
+    if (data.user.identities && data.user.identities.length === 0) {
+      setErro('Este e-mail já possui uma conta cadastrada.')
+      setLoading(false)
+      return
+    }
+
     const { error: insertError } = await supabase.from('pending_approvals').insert({
       user_id: data.user.id,
       email,
@@ -90,7 +98,7 @@ export function Cadastro() {
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-white">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M4 19l2-9 4 5 4-8 4 8 4-5 2 9z" /></svg>
             </span>
-            <span className="text-[13px] font-semibold tracking-[0.24em] text-ink">KING <span className="text-brand">NEXUS</span></span>
+            <span className="text-[13px] font-semibold tracking-[0.24em] text-ink">KING <span className="text-brand">TEACHERTRACK</span></span>
           </div>
 
           <div className="space-y-1.5">
