@@ -49,23 +49,9 @@ export function Cadastro() {
       return
     }
 
-    const { error: insertError } = await supabase.from('pending_approvals').insert({
-      user_id: data.user.id,
-      email,
-      nome,
-      role_solicitada: 'suporte',
-    })
-
-    if (insertError) {
-      // Conta foi criada no Auth mas a solicitação não foi registrada
-      setErro(
-        `Conta criada, mas houve um erro ao registrar a solicitação: ${insertError.message}. ` +
-        `Entre em contato com o administrador informando seu e-mail.`
-      )
-      setLoading(false)
-      return
-    }
-
+    // A solicitação em pending_approvals é criada automaticamente por um
+    // trigger no banco (não depende de sessão, que só existe após o usuário
+    // confirmar o e-mail).
     setEnviado(true)
     setLoading(false)
   }
@@ -76,9 +62,11 @@ export function Cadastro() {
         <div className="mx-auto h-11 w-11 rounded-full bg-urg-lowBg text-urg-lowFg flex items-center justify-center">
           <CheckCircle2 className="h-6 w-6" />
         </div>
-        <h2 className="text-xl font-semibold tracking-tight text-ink">Solicitação enviada</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-ink">Confirme seu e-mail</h2>
         <p className="text-sm text-ink-secondary leading-relaxed">
-          Sua conta foi criada e está aguardando aprovação do administrador. Você receberá acesso em breve.
+          Enviamos um link de confirmação para <strong className="text-ink">{email}</strong>.
+          Abra o e-mail e clique no link para ativar sua conta — depois disso, ela fica
+          aguardando aprovação do administrador. Você receberá acesso em breve.
         </p>
         <Link to="/login" className="inline-flex text-[13px] font-medium text-ink hover:text-brand underline-offset-4 hover:underline">
           Voltar ao login

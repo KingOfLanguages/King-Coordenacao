@@ -19,20 +19,36 @@ export function Login() {
   const [email,   setEmail]   = useState('')
   const [senha,   setSenha]   = useState('')
   const [erro,    setErro]    = useState('')
+  const [reenviado, setReenviado] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [emailNaoConfirmado, setEmailNaoConfirmado] = useState(false)
   const navigate = useNavigate()
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setErro('')
+    setReenviado(false)
+    setEmailNaoConfirmado(false)
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha })
     if (error) {
-      setErro('E-mail ou senha inválidos.')
+      if (error.message.includes('Email not confirmed')) {
+        setErro('Você ainda não confirmou seu e-mail. Verifique sua caixa de entrada.')
+        setEmailNaoConfirmado(true)
+      } else {
+        setErro('E-mail ou senha inválidos.')
+      }
       setLoading(false)
       return
     }
     navigate('/')
+  }
+
+  async function handleReenviar() {
+    setLoading(true)
+    await supabase.auth.resend({ type: 'signup', email })
+    setReenviado(true)
+    setLoading(false)
   }
 
   return (
@@ -68,7 +84,7 @@ export function Login() {
               </span>
             </span>
             <span className="text-[13px] font-semibold tracking-[0.22em] text-ink">
-              KING <span className="text-brand">NEXUS</span>
+              KING <span className="text-brand">TEACHERTRACK</span>
             </span>
           </div>
 
@@ -139,7 +155,7 @@ export function Login() {
                 </span>
               </span>
               <span className="text-[13px] font-semibold tracking-[0.22em] text-ink">
-                KING <span className="text-brand">NEXUS</span>
+                KING <span className="text-brand">TEACHERTRACK</span>
               </span>
             </div>
 
@@ -209,8 +225,22 @@ export function Login() {
                     {/* Error */}
                     {erro && (
                       <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
-                                      text-[12.5px] text-brand-strong font-medium animate-fade-up">
-                        {erro}
+                                      text-[12.5px] text-brand-strong font-medium animate-fade-up space-y-1.5">
+                        <p>{erro}</p>
+                        {emailNaoConfirmado && (
+                          reenviado ? (
+                            <p className="text-ink-secondary font-normal">E-mail de confirmação reenviado.</p>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleReenviar}
+                              disabled={loading}
+                              className="underline underline-offset-2 hover:no-underline disabled:opacity-60"
+                            >
+                              Reenviar e-mail de confirmação
+                            </button>
+                          )
+                        )}
                       </div>
                     )}
 
