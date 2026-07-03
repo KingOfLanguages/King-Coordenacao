@@ -246,6 +246,7 @@ export function useVincularProfessor() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
       queryClient.invalidateQueries({ queryKey: ['dados-vinculo'] })
     },
   })
@@ -282,6 +283,40 @@ export function useCriarReuniaoManual() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
+    },
+  })
+}
+
+/** Edita data/hora e título da reunião (nível card, não a participação de um professor específico). */
+export function useEditarReuniao() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, data, titulo }: { id: string; data: string; titulo?: string | null }) => {
+      const { error } = await supabase
+        .from('reunioes')
+        .update({ data, titulo: titulo?.trim() || null })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
+    },
+  })
+}
+
+/** Exclui a reunião inteira (cascata apaga os vínculos em reuniao_professores). */
+export function useExcluirReuniao() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('reunioes').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
     },
   })
 }
@@ -329,6 +364,7 @@ export function useConfirmarParticipacao() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
       queryClient.invalidateQueries({ queryKey: ['professores'] })
     },
   })

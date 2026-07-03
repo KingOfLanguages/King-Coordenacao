@@ -27,7 +27,12 @@ export interface ProfessorAcompanhamento {
   agendas_bloqueadas: { quantidade_horarios: number; motivos: { motivo: string; quantidade: number }[] } | null
   trocas_professor: { aluno_id: number; tipo: string; data: string; motivo: string; status: string }[] | null
   turnover_entrou_no_periodo: boolean | null
-  turnover_saida: unknown
+  turnover_saida: {
+    data: string | null
+    motivo: string | null
+    quantidade_alunos_realocados: number | null
+    saiu_no_periodo: boolean | null
+  } | null
   api_atualizado_em: string | null
 }
 

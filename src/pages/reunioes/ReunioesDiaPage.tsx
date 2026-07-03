@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  Video, Check, X, Link2, Mail, Sparkles,
+  Video, Check, X, Link2, Mail, Sparkles, Pencil, Trash2,
   Loader2, Plus, ChevronLeft, ChevronRight, CalendarDays, User, Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,10 +11,12 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
+import { canEdit } from '@/lib/permissions'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import {
   useReunioesPeriodo, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
-  useCriarReuniaoManual, sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
+  useCriarReuniaoManual, useEditarReuniao, useExcluirReuniao,
+  sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
@@ -975,8 +977,12 @@ function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrencia
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: DadosVinculo }) {
+  const { profile } = useAuth()
+  const podeEditar = canEdit(profile?.role)
   const hora = new Date(reuniao.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   const sv = STATUS_VISUAL[statusReuniao(reuniao)]
+  const [editarAberto, setEditarAberto] = useState(false)
+  const [excluirAberto, setExcluirAberto] = useState(false)
 
   return (
     <div className="card-surface relative overflow-hidden p-4 pl-5 space-y-3">
@@ -995,16 +1001,36 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
           {reuniao.titulo && <p className="text-[12px] text-ink-muted truncate mt-0.5">{reuniao.titulo}</p>}
         </div>
 
-        {reuniao.meet_link && (
-          <a
-            href={reuniao.meet_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-press inline-flex items-center gap-1.5 rounded-full bg-accentBlue px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accentBlue-hov flex-shrink-0"
-          >
-            <Video className="h-3.5 w-3.5" />Entrar
-          </a>
-        )}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {podeEditar && (
+            <>
+              <button
+                onClick={() => setEditarAberto(true)}
+                title="Editar reunião"
+                className="btn-press flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-surface-subtle hover:text-ink"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setExcluirAberto(true)}
+                title="Excluir reunião"
+                className="btn-press flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-urg-highBg hover:text-urg-highFg"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+          {reuniao.meet_link && (
+            <a
+              href={reuniao.meet_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-press inline-flex items-center gap-1.5 rounded-full bg-accentBlue px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accentBlue-hov"
+            >
+              <Video className="h-3.5 w-3.5" />Entrar
+            </a>
+          )}
+        </div>
       </div>
 
       <div className="border-t border-line-soft pt-3 space-y-3">
@@ -1017,6 +1043,125 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
               : <VincularBlock key={part.id} reuniao={reuniao} participanteId={part.id} dados={dados} />
           )
         )}
+      </div>
+
+      {editarAberto && <EditarReuniaoDialog reuniao={reuniao} onClose={() => setEditarAberto(false)} />}
+      {excluirAberto && <ExcluirReuniaoDialog reuniao={reuniao} onClose={() => setExcluirAberto(false)} />}
+    </div>
+  )
+}
+
+// ─── Editar reunião (data/hora/título) ─────────────────────────────────────────
+
+function EditarReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onClose: () => void }) {
+  const editar = useEditarReuniao()
+  const dataOriginal = new Date(reuniao.data)
+  const [data, setData] = useState(() => dataOriginal.toISOString().slice(0, 10))
+  const [hora, setHora] = useState(() => dataOriginal.toTimeString().slice(0, 5))
+  const [titulo, setTitulo] = useState(reuniao.titulo ?? '')
+
+  async function handleSalvar() {
+    if (!data) { toast.error('Selecione uma data.'); return }
+    try {
+      await editar.mutateAsync({
+        id: reuniao.id,
+        data: new Date(`${data}T${hora}:00`).toISOString(),
+        titulo,
+      })
+      toast.success('Reunião atualizada.')
+      onClose()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao editar reunião.')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface-canvas border border-line rounded-xl shadow-elevated w-full max-w-md mx-4 p-6 space-y-5 animate-fade-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold text-ink">Editar reunião</h2>
+          <button onClick={onClose} className="btn-press text-ink-subtle hover:text-ink-secondary">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="label-micro">Data <span className="text-brand">*</span></Label>
+              <Input type="date" value={data} onChange={e => setData(e.target.value)} className="h-9 bg-surface-canvas border-line" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="label-micro">Horário</Label>
+              <Input type="time" value={hora} onChange={e => setHora(e.target.value)} className="h-9 bg-surface-canvas border-line" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="label-micro">Título (opcional)</Label>
+            <Input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: 1:1 com teacher" className="h-9 bg-surface-canvas border-line" />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-ink-secondary">Cancelar</Button>
+          <Button
+            size="sm"
+            onClick={handleSalvar}
+            disabled={editar.isPending}
+            className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
+          >
+            {editar.isPending ? 'Salvando…' : 'Salvar'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Excluir reunião (com confirmação) ─────────────────────────────────────────
+
+function ExcluirReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onClose: () => void }) {
+  const excluir = useExcluirReuniao()
+  const nomesVinculados = reuniao.participantes.filter(p => p.professor).map(p => p.professor!.nome)
+
+  async function handleConfirmar() {
+    try {
+      await excluir.mutateAsync(reuniao.id)
+      toast.success('Reunião excluída.')
+      onClose()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao excluir reunião.')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface-canvas border border-line rounded-xl shadow-elevated w-full max-w-sm mx-4 p-6 space-y-4 animate-fade-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 className="text-[16px] font-semibold text-ink">Excluir reunião?</h2>
+        <p className="text-[13px] text-ink-secondary leading-relaxed">
+          Isso remove a reunião permanentemente do KTM
+          {nomesVinculados.length > 0 && (
+            <> e o vínculo com {nomesVinculados.length === 1 ? nomesVinculados[0] : `${nomesVinculados.length} professores`}</>
+          )}. O evento no Google Calendar (se houver) não é cancelado — só o registro no KTM é apagado.
+        </p>
+        <div className="flex gap-2 justify-end pt-1">
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-ink-secondary">Cancelar</Button>
+          <Button
+            size="sm"
+            onClick={handleConfirmar}
+            disabled={excluir.isPending}
+            className="btn-press bg-urg-highFg hover:opacity-90 text-white"
+          >
+            {excluir.isPending ? 'Excluindo…' : 'Excluir'}
+          </Button>
+        </div>
       </div>
     </div>
   )

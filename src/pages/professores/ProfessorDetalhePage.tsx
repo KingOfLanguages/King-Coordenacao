@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, Eye, EyeOff, AlertTriangle,
+  ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2,
   CalendarDays, Clock, DollarSign, Users, User,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,8 @@ import { canEdit } from '@/lib/permissions'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
+import { EditarReuniaoProfessorDialog } from '@/components/professores/EditarReuniaoProfessorDialog'
+import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirReuniaoProfessorDialog'
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
 import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
@@ -38,6 +40,15 @@ type ReuniaoRow = {
   reuniao?: ({ id: string; data: string; titulo: string | null }
     | { id: string; data: string; titulo: string | null }[]
     | null)
+}
+
+type ReuniaoHistorico = {
+  id: string
+  status: 'pendente' | 'realizada' | 'cancelada'
+  numero: number | null
+  observacao: string | null
+  data: string
+  reuniaoId: string | null
 }
 
 type ObservacaoRow = {
@@ -110,6 +121,8 @@ export function ProfessorDetalhePage() {
   const [obsFiltro, setObsFiltro] = useState<ObsFiltro>('todos')
   const [colocarMesAnaliseAberto, setColocarMesAnaliseAberto] = useState(false)
   const [resolverMesAnaliseAberto, setResolverMesAnaliseAberto] = useState(false)
+  const [editarReuniaoAlvo, setEditarReuniaoAlvo] = useState<ReuniaoHistorico | null>(null)
+  const [excluirReuniaoAlvo, setExcluirReuniaoAlvo] = useState<string | null>(null)
 
   // Deriva do que useNexusDados já busca — sem query extra.
   const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === 'Mês de análise' && !i.resolved) ?? null
@@ -133,6 +146,7 @@ export function ProfessorDetalhePage() {
       return {
         ...r,
         data: reuniao?.data ?? r.confirmado_em,
+        reuniaoId: reuniao?.id ?? null,
         confirmadoPorNome: resolverNomePerfil(r.confirmado_por),
       }
     })
@@ -322,11 +336,29 @@ export function ProfessorDetalhePage() {
                         day: '2-digit', month: 'short', year: 'numeric',
                       })}
                     </span>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       {r.status === 'realizada' && r.numero && (
                         <span className="text-[11px] text-ink-muted tabular-nums">{r.numero}º</span>
                       )}
                       <StatusBadge status={r.status} />
+                      {podeEditar && (
+                        <>
+                          <button
+                            onClick={() => setEditarReuniaoAlvo(r)}
+                            title="Editar reunião"
+                            className="btn-press flex h-5 w-5 items-center justify-center rounded-full text-ink-subtle hover:bg-surface-subtle hover:text-ink"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => setExcluirReuniaoAlvo(r.id)}
+                            title="Excluir reunião"
+                            className="btn-press flex h-5 w-5 items-center justify-center rounded-full text-ink-subtle hover:bg-urg-highBg hover:text-urg-highFg"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   {r.observacao && (
@@ -443,6 +475,16 @@ export function ProfessorDetalhePage() {
           professor_id: professor.id,
         } : null}
       />
+      <EditarReuniaoProfessorDialog
+        open={!!editarReuniaoAlvo}
+        onOpenChange={o => !o && setEditarReuniaoAlvo(null)}
+        participacao={editarReuniaoAlvo}
+      />
+      <ExcluirReuniaoProfessorDialog
+        open={!!excluirReuniaoAlvo}
+        onOpenChange={o => !o && setExcluirReuniaoAlvo(null)}
+        participanteId={excluirReuniaoAlvo}
+      />
     </div>
   )
 }
@@ -478,6 +520,13 @@ function AcompanhamentoSection({
 
   const alunosMap = new Map(alunos.map(a => [a.aluno_id, a]))
   const av = acompanhamento.avaliacao_alunos
+  const estrelasBreakdown = [
+    { n: 5, qtd: av?.estrelas_5 ?? 0 },
+    { n: 4, qtd: av?.estrelas_4 ?? 0 },
+    { n: 3, qtd: av?.estrelas_3 ?? 0 },
+    { n: 2, qtd: av?.estrelas_2 ?? 0 },
+    { n: 1, qtd: av?.estrelas_1 ?? 0 },
+  ]
 
   return (
     <section className="card-surface p-5 space-y-4">
@@ -518,6 +567,11 @@ function AcompanhamentoSection({
               <p className="text-[13px] text-ink tabular-nums">
                 {av.media_estrelas?.toFixed(2) ?? '—'} ★ ({av.total_avaliacoes})
               </p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-ink-muted tabular-nums">
+                {estrelasBreakdown.map(e => (
+                  <span key={e.n}>{e.n}★ {e.qtd}</span>
+                ))}
+              </div>
               <p className="text-[11px] text-ink-muted">
                 {av.comentarios_positivos ?? 0} coment. positivos · {av.comentarios_negativos ?? 0} negativos
               </p>
@@ -527,6 +581,23 @@ function AcompanhamentoSection({
           )}
         </div>
       </div>
+
+      {acompanhamento.turnover_saida && (
+        <div className="rounded-lg bg-surface-subtle p-3 space-y-1">
+          <p className="text-[11px] text-ink-muted">Saída do professor</p>
+          <p className="text-[13px] text-ink">
+            {acompanhamento.turnover_saida.motivo ?? 'Motivo não informado'}
+            {acompanhamento.turnover_saida.data && (
+              <span className="text-ink-muted"> · {new Date(acompanhamento.turnover_saida.data).toLocaleDateString('pt-BR')}</span>
+            )}
+          </p>
+          {(acompanhamento.turnover_saida.quantidade_alunos_realocados ?? 0) > 0 && (
+            <p className="text-[11px] text-urg-medFg font-medium">
+              {acompanhamento.turnover_saida.quantidade_alunos_realocados} aluno(s) precisaram ser realocados
+            </p>
+          )}
+        </div>
+      )}
 
       {historico.length > 1 && <ScoreHistoricoChart historico={historico} />}
 
@@ -559,6 +630,12 @@ function AcompanhamentoSection({
 
 type TrocaProfessor = NonNullable<ProfessorAcompanhamento['trocas_professor']>[number]
 
+const statusTrocaCls: Record<string, string> = {
+  Concluido: 'bg-urg-lowBg text-urg-lowFg',
+  Erro: 'bg-urg-highBg text-urg-highFg',
+  SemProfessorDisponivel: 'bg-urg-medBg text-urg-medFg',
+}
+
 function TrocasProfessorList({
   trocas, alunosMap,
 }: {
@@ -575,10 +652,15 @@ function TrocasProfessorList({
         {visiveis.map((t, i) => {
           const aluno = alunosMap.get(t.aluno_id)
           return (
-            <li key={i} className="flex items-center justify-between gap-2 text-[12px]">
-              <span className="text-ink-secondary">
+            <li key={i} className="flex items-center justify-between gap-2 text-[12px] flex-wrap">
+              <span className="text-ink-secondary inline-flex items-center gap-1.5 flex-wrap">
                 {aluno?.primeiro_nome ?? `Aluno #${t.aluno_id}`}
-                {t.motivo && <span className="text-ink-muted"> · {t.motivo}</span>}
+                {t.motivo && <span className="text-ink-muted">· {t.motivo}</span>}
+                {t.status && (
+                  <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium', statusTrocaCls[t.status] ?? 'bg-surface-subtle text-ink-muted')}>
+                    {t.status}
+                  </span>
+                )}
               </span>
               <span className="text-ink-subtle tabular-nums flex-shrink-0">
                 {new Date(t.data).toLocaleDateString('pt-BR')}
