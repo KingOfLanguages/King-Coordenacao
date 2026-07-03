@@ -54,7 +54,7 @@ export function Popup() {
           width: 22, height: 22, borderRadius: '50%', background: COLORS.brand,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700,
         }}>K</span>
-        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', color: COLORS.ink }}>KING NEXUS</span>
+        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', color: COLORS.ink }}>KING TEACHERTRACK</span>
       </div>
 
       {sessao ? (
@@ -69,7 +69,7 @@ export function Popup() {
       ) : (
         <form onSubmit={handleLogin}>
           <p style={{ fontSize: 12, color: COLORS.inkMuted, margin: '0 0 12px' }}>
-            Use as mesmas credenciais do King Nexus.
+            Use as mesmas credenciais do King TeacherTrack.
           </p>
           <input
             type="email" placeholder="E-mail" value={email} required

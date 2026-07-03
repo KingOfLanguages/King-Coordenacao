@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "extensao:zip": "powershell -NoProfile -Command \"Compress-Archive -Path extension/dist/* -DestinationPath public/extension/king-nexus-extension.zip -Force\""
+    "extensao:zip": "powershell -NoProfile -Command \"Compress-Archive -Path extension/dist/* -DestinationPath public/extension/king-teachertrack-extension.zip -Force\""
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

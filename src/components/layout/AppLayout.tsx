@@ -69,7 +69,7 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
       </span>
       {!compact && (
         <span className="text-[12.5px] font-semibold tracking-[0.22em] text-ink transition-opacity duration-200">
-          KING <span className="text-brand">NEXUS</span>
+          KING <span className="text-brand">TEACHERTRACK</span>
         </span>
       )}
     </NavLink>
@@ -218,7 +218,7 @@ export function AppLayout() {
             <Dialog open={openMenu === 'extensao'} onOpenChange={o => setOpenMenu(o ? 'extensao' : null)}>
               <DialogTrigger asChild>
                 <button
-                  aria-label="Extensão King Nexus"
+                  aria-label="Extensão King TeacherTrack"
                   className="btn-press flex items-center justify-center h-9 w-9 rounded-full hover:bg-surface-subtle/80 flex-shrink-0"
                 >
                   <Puzzle className="h-4 w-4" />
@@ -228,7 +228,7 @@ export function AppLayout() {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-[15px]">
                     <Puzzle className="h-4 w-4 text-brand" />
-                    Extensão King Nexus
+                    Extensão King TeacherTrack
                   </DialogTitle>
                 </DialogHeader>
                 <ExtensaoConteudo />
