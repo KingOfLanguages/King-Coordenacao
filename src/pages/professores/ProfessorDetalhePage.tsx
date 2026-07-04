@@ -151,11 +151,12 @@ export function ProfessorDetalhePage() {
   return (
     <div className="px-6 py-6 space-y-6 max-w-[1200px] mx-auto">
       {/* ── Header ── */}
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+       <div className="flex items-start gap-4 flex-1 min-w-0">
         <Button
           variant="ghost" size="icon"
           onClick={() => navigate('/professores')}
-          className="btn-press text-ink-secondary hover:text-ink hover:bg-surface-subtle mt-0.5"
+          className="btn-press text-ink-secondary hover:text-ink hover:bg-surface-subtle mt-0.5 flex-shrink-0"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -240,8 +241,9 @@ export function ProfessorDetalhePage() {
             )}
           </div>
         </div>
+       </div>
 
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
           {podeEditar && (
             <Button
               variant="outline" size="sm"
