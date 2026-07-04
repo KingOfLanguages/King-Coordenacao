@@ -213,7 +213,7 @@ export function ProfessorDetalhePage() {
                 onValueChange={v => atualizarGrupo.mutate({ id: professor.id, grupo_id: v })}
                 disabled={atualizarGrupo.isPending}
               >
-                <SelectTrigger className="h-7 w-[150px] text-[12px] bg-surface-canvas border-line text-ink">
+                <SelectTrigger size="sm" className="w-[150px] bg-surface-canvas border-line text-ink">
                   <SelectValue placeholder="Sem grupo" />
                 </SelectTrigger>
                 <SelectContent className="bg-surface-canvas border-line text-ink">

@@ -1319,7 +1319,7 @@ function VincularBlock({ reuniao, participanteId, dados }: {
         </p>
       ) : (
         <Select onValueChange={v => link(v, 'manual')} disabled={vincular.isPending}>
-          <SelectTrigger className="h-8 text-[12px] bg-surface-canvas border-line text-ink">
+          <SelectTrigger size="sm" className="bg-surface-canvas border-line text-ink">
             <SelectValue placeholder="Vincular manualmente…" />
           </SelectTrigger>
           <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">

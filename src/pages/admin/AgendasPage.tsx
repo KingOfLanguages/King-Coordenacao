@@ -271,7 +271,7 @@ function AgendaCard({ agenda, indice }: { agenda: AgendaComRecorrencias; indice:
           <div className="space-y-1.5">
             <Label className="text-[11.5px] text-ink-secondary font-medium">Coordenador responsável</Label>
             <Select value={coordId} onValueChange={setCoordId}>
-              <SelectTrigger className="h-8 text-[12px] bg-surface-canvas border-line text-ink w-full">
+              <SelectTrigger size="sm" className="bg-surface-canvas border-line text-ink w-full">
                 <SelectValue placeholder="Sem coordenador" />
               </SelectTrigger>
               <SelectContent className="bg-surface-canvas border-line text-ink">
@@ -285,7 +285,7 @@ function AgendaCard({ agenda, indice }: { agenda: AgendaComRecorrencias; indice:
           <div className="space-y-1.5">
             <Label className="text-[11.5px] text-ink-secondary font-medium">Público autorizado</Label>
             <Select value={publico} onValueChange={setPublico}>
-              <SelectTrigger className="h-8 text-[12px] bg-surface-canvas border-line text-ink w-full">
+              <SelectTrigger size="sm" className="bg-surface-canvas border-line text-ink w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-surface-canvas border-line text-ink">

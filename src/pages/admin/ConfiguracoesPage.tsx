@@ -234,7 +234,7 @@ function GrupoRow({ grupo, coordenadores, total }: {
 
       {/* Coordenador */}
       <Select value={coordId} onValueChange={setCoordId} disabled={atualizar.isPending}>
-        <SelectTrigger className="h-8 text-[12px] bg-surface-canvas border-line text-ink w-full">
+        <SelectTrigger size="sm" className="bg-surface-canvas border-line text-ink w-full">
           <SelectValue placeholder="Sem coordenador" />
         </SelectTrigger>
         <SelectContent className="bg-surface-canvas border-line text-ink">
