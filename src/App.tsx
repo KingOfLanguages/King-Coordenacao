@@ -53,69 +53,69 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/dashboard/geral" element={
-                <ProtectedRoute roles={['admin']}>
+                <ProtectedRoute admin lider>
                   <DashboardGeralPage />
                 </ProtectedRoute>
               } />
 
               <Route path="/professores" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <ProfessoresPage />
                 </ProtectedRoute>
               } />
               <Route path="/professores/:id" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <ProfessorDetalhePage />
                 </ProtectedRoute>
               } />
               <Route path="/observacoes/:id" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <ObservacaoDetalhePage />
                 </ProtectedRoute>
               } />
               <Route path="/reunioes-dia" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <ReunioesDiaPage />
                 </ProtectedRoute>
               } />
               <Route path="/acompanhamento" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
               <Route path="/mes-analise" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <MesAnalisePage />
                 </ProtectedRoute>
               } />
               <Route path="/incidentes" element={
-                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <IncidentesPage />
                 </ProtectedRoute>
               } />
               <Route path="/suporte/reunioes" element={
-                <ProtectedRoute roles={['suporte', 'suporte_aluno', 'admin']}>
+                <ProtectedRoute roles={['suporte', 'suporte_aluno']} admin>
                   <SuporteReunioesPage />
                 </ProtectedRoute>
               } />
               {/* Admin */}
               <Route path="/admin/aprovacoes" element={
-                <ProtectedRoute roles={['admin']}>
+                <ProtectedRoute admin>
                   <AprovacoesPage />
                 </ProtectedRoute>
               } />
               <Route path="/admin/usuarios" element={
-                <ProtectedRoute roles={['admin']}>
+                <ProtectedRoute admin>
                   <UsuariosPage />
                 </ProtectedRoute>
               } />
               <Route path="/admin/configuracoes" element={
-                <ProtectedRoute roles={['admin']}>
+                <ProtectedRoute admin>
                   <ConfiguracoesPage />
                 </ProtectedRoute>
               } />
               <Route path="/admin/agendas" element={
-                <ProtectedRoute roles={['admin', 'coordenacao']}>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <AgendasPage />
                 </ProtectedRoute>
               } />

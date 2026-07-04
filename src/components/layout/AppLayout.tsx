@@ -40,10 +40,10 @@ const groupAdmin: NavGroupEntry = {
   ],
 }
 
-function roleLabel(role?: string) {
+function roleLabel(role?: string, isLider?: boolean) {
   switch (role) {
     case 'admin':         return 'Admin'
-    case 'coordenacao':   return 'Coordenação'
+    case 'coordenacao':   return isLider ? 'Coordenação · Líder' : 'Coordenação'
     case 'suporte':       return 'Suporte'
     case 'suporte_aluno': return 'Suporte · Aluno'
     default:              return '—'
@@ -88,11 +88,12 @@ export function AppLayout() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const openRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
-  const isCoord   = profile?.role === 'coordenacao' || profile?.role === 'admin'
-  const isAdmin   = profile?.role === 'admin'
+  const isAdmin   = profile?.is_admin === true || profile?.role === 'admin'
+  const isLider   = profile?.is_lider === true
+  const isCoord   = profile?.role === 'coordenacao' || isAdmin
   const isSuporte = profile?.role === 'suporte' || profile?.role === 'suporte_aluno'
 
-  const dashboardEntry: NavEntry = isAdmin
+  const dashboardEntry: NavEntry = (isAdmin || isLider)
     ? { type: 'group', label: 'Dashboard', items: [
         { to: '/dashboard', label: 'Dashboard', exact: true },
         { to: '/dashboard/geral', label: 'Dashboard Geral' },
@@ -255,7 +256,7 @@ export function AppLayout() {
                 {initials}
               </span>
               <span className="text-[12.5px] font-medium text-ink-secondary">
-                {roleLabel(profile?.role)}
+                {roleLabel(profile?.role, profile?.is_lider)}
               </span>
             </button>
 
@@ -274,7 +275,7 @@ export function AppLayout() {
                   </span>
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-ink truncate">{profile?.nome ?? '—'}</p>
-                    <p className="text-[11px] text-ink-muted">{roleLabel(profile?.role)}</p>
+                    <p className="text-[11px] text-ink-muted">{roleLabel(profile?.role, profile?.is_lider)}</p>
                   </div>
                 </div>
                 {/* Actions */}
@@ -370,7 +371,7 @@ export function AppLayout() {
               </span>
               <div>
                 <p className="text-[13px] font-semibold text-ink">{profile?.nome}</p>
-                <p className="text-[11px] text-ink-muted">{roleLabel(profile?.role)}</p>
+                <p className="text-[11px] text-ink-muted">{roleLabel(profile?.role, profile?.is_lider)}</p>
               </div>
             </div>
 

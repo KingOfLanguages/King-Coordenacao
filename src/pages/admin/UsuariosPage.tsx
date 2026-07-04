@@ -49,6 +49,16 @@ export function UsuariosPage() {
     }
   }
 
+  async function handleFlag(usuario: UsuarioAdmin, flag: 'is_lider' | 'is_admin', valor: boolean) {
+    try {
+      await atualizar.mutateAsync({ id: usuario.id, [flag]: valor })
+      const label = flag === 'is_lider' ? 'Líder de coordenação' : 'Acesso admin'
+      toast.success(`${label} ${valor ? 'ativado' : 'desativado'} para ${usuario.nome}.`)
+    } catch {
+      toast.error('Erro ao atualizar permissão.')
+    }
+  }
+
   async function handleGoogleEmail(usuario: UsuarioAdmin, google_email: string) {
     try {
       await atualizar.mutateAsync({ id: usuario.id, google_email })
@@ -166,6 +176,7 @@ export function UsuariosPage() {
                 usuario={u}
                 isSelf={u.id === profile?.id}
                 onRole={role => handleRole(u, role)}
+                onFlag={(flag, valor) => handleFlag(u, flag, valor)}
                 onGoogleEmail={email => handleGoogleEmail(u, email)}
                 onToggleAtivo={() => handleToggleAtivo(u)}
                 onExcluir={() => handleExcluir(u)}
@@ -185,12 +196,13 @@ export function UsuariosPage() {
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
 function UsuarioRow({
-  usuario, isSelf, onRole, onGoogleEmail, onToggleAtivo, onExcluir,
+  usuario, isSelf, onRole, onFlag, onGoogleEmail, onToggleAtivo, onExcluir,
   confirmingDelete, onRequestDelete, onCancelDelete, isPending,
 }: {
   usuario: UsuarioAdmin
   isSelf: boolean
   onRole: (role: RoleUsuario) => void
+  onFlag: (flag: 'is_lider' | 'is_admin', valor: boolean) => void
   onGoogleEmail: (email: string) => void
   onToggleAtivo: () => void
   onExcluir: () => void
@@ -228,7 +240,7 @@ function UsuarioRow({
       </div>
 
       {/* Perfil */}
-      <div>
+      <div className="space-y-1.5">
         <Select
           value={usuario.role}
           onValueChange={v => onRole(v as RoleUsuario)}
@@ -245,6 +257,36 @@ function UsuarioRow({
             ))}
           </SelectContent>
         </Select>
+        <div className="flex gap-1">
+          {usuario.role === 'coordenacao' && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => onFlag('is_lider', !usuario.is_lider)}
+              className={cn(
+                'btn-press rounded-full px-2 py-0.5 text-[10.5px] font-medium border',
+                usuario.is_lider
+                  ? 'border-accentBlue/30 bg-accentBlue-soft text-accentBlue'
+                  : 'border-line text-ink-muted hover:text-ink',
+              )}
+            >
+              Líder
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => onFlag('is_admin', !usuario.is_admin)}
+            className={cn(
+              'btn-press rounded-full px-2 py-0.5 text-[10.5px] font-medium border',
+              usuario.is_admin
+                ? 'border-urg-medFg/30 bg-urg-medBg text-urg-medFg'
+                : 'border-line text-ink-muted hover:text-ink',
+            )}
+          >
+            Admin
+          </button>
+        </div>
       </div>
 
       {/* Status */}

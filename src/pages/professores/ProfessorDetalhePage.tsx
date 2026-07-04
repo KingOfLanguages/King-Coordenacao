@@ -92,7 +92,7 @@ export function ProfessorDetalhePage() {
   const resolverObservacao = useResolverObservacao()
   const { profile } = useAuth()
   const { data: grupos = [] } = useGrupos()
-  const podeEditar = canEdit(profile?.role)
+  const podeEditar = canEdit(profile)
   const [obsAberta, setObsAberta] = useState(false)
   const [obsFiltro, setObsFiltro] = useState<ObsFiltro>('todos')
   const [colocarMesAnaliseAberto, setColocarMesAnaliseAberto] = useState(false)

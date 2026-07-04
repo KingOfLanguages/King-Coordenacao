@@ -22,9 +22,11 @@ export function useCoordenadores() {
   const canSeeAll = profile?.role === 'admin'
     || profile?.role === 'suporte'
     || profile?.role === 'suporte_aluno'
+    || profile?.is_admin === true
+    || profile?.is_lider === true
 
   return useQuery({
-    queryKey: ['coordenadores-acompanhamento', profile?.role],
+    queryKey: ['coordenadores-acompanhamento', profile?.role, profile?.is_lider, profile?.is_admin],
     queryFn: async (): Promise<CoordenadorPerfil[]> => {
       if (canSeeAll) {
         const { data, error } = await supabase

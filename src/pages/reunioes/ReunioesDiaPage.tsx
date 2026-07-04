@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
-  Video, Check, X, Link2, Mail, Sparkles, Pencil, Trash2,
-  Loader2, Plus, ChevronLeft, ChevronRight, CalendarDays, User, Users,
+  Video, Check, X, Link2, Mail, Sparkles, Pencil, Trash2, Users2,
+  Loader2, ChevronLeft, ChevronRight, CalendarDays, User, Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -15,7 +15,7 @@ import { canEdit } from '@/lib/permissions'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import {
   useReunioesPeriodo, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
-  useCriarReuniaoManual, useEditarReuniao, useExcluirReuniao,
+  useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna, usePerfisPorEmail,
   sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
@@ -88,16 +88,23 @@ const STATUS_VISUAL: Record<EventoStatus, {
   cancelada: { label: 'Não realizada', dot: 'bg-ink-subtle', bar: 'bg-ink-subtle', blocoBg: 'bg-surface-subtle',  blocoText: 'text-ink-muted',  chip: 'bg-surface-subtle text-ink-muted' },
 }
 
-/** Status de uma reunião 1:1 a partir dos participantes + data. */
+/** Status de uma reunião a partir dos participantes (professor) ou de reunioes.status (interna) + data. */
 function statusReuniao(r: ReuniaoCard): EventoStatus {
   const passou = new Date(r.data) < new Date()
+
+  if (r.tipo_reuniao === 'interna') {
+    if (r.status === 'concluida') return 'realizada'
+    if (r.status === 'cancelada') return 'cancelada'
+    return passou ? 'atrasada' : 'a_fazer'
+  }
+
   const parts = r.participantes
   if (parts.length > 0) {
     if (parts.some(p => p.status === 'pendente'))  return passou ? 'atrasada' : 'a_fazer'
     if (parts.some(p => p.status === 'realizada')) return 'realizada'
     return 'cancelada' // todos cancelados
   }
-  if (r.status === 'realizada') return 'realizada'
+  if (r.status === 'concluida') return 'realizada'
   return passou ? 'atrasada' : 'a_fazer'
 }
 
@@ -143,10 +150,11 @@ export function ReunioesDiaPage() {
   const canSeeAll = profile?.role === 'admin'
     || profile?.role === 'suporte'
     || profile?.role === 'suporte_aluno'
+    || profile?.is_admin === true
+    || profile?.is_lider === true
 
   const { data: coordenadores = [] } = useCoordenadores()
   const [sel, setSel] = useState<string>('')
-  const [novaOpen, setNovaOpen] = useState(false)
   const [modo, setModo] = useState<Modo>('dia')
   const [dataRef, setDataRef] = useState(() => new Date())
   const [eventoAberto, setEventoAberto] = useState<EventoGrade | null>(null)
@@ -244,14 +252,6 @@ export function ReunioesDiaPage() {
               </SelectContent>
             </Select>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setNovaOpen(true)}
-            className="btn-press h-9 gap-1.5 border-line text-ink-secondary text-[12px]"
-          >
-            <Plus className="h-3.5 w-3.5" />Nova reunião
-          </Button>
         </div>
       </header>
 
@@ -291,10 +291,6 @@ export function ReunioesDiaPage() {
           onSelecionarDia={irParaODia}
           onAbrirEvento={setEventoAberto}
         />
-      )}
-
-      {novaOpen && (
-        <NovaReuniaoDialog profs={dados?.profs ?? []} onClose={() => setNovaOpen(false)} />
       )}
 
       {eventoAberto && (
@@ -445,6 +441,7 @@ function professorDoEvento(reuniao: ReuniaoCard): ParticipanteCard['professor'] 
 function rotuloEvento(tipo: 'reuniao' | 'agenda', fonte: ReuniaoCard | AgendaOcorrenciaCard): string {
   if (tipo === 'agenda') return (fonte as AgendaOcorrenciaCard).titulo
   const r = fonte as ReuniaoCard
+  if (r.tipo_reuniao === 'interna') return r.titulo ?? 'Reunião interna'
   return professorDoEvento(r)?.nome ?? r.professor_email ?? r.titulo ?? '1:1'
 }
 
@@ -776,7 +773,19 @@ function EventoPopover({ evento, onClose, onVerDia }: {
           </button>
         </div>
 
-        {reuniao && (
+        {reuniao && reuniao.tipo_reuniao === 'interna' && (
+          <div className="rounded-lg border border-dashed border-line bg-surface-subtle/40 p-3 space-y-1">
+            <p className="text-[13px] font-medium text-ink-secondary flex items-center gap-1.5">
+              <Users2 className="h-3.5 w-3.5" />Reunião interna
+            </p>
+            {reuniao.titulo && <p className="text-[12px] text-ink-muted">{reuniao.titulo}</p>}
+            {reuniao.participantes_emails.length > 0 && (
+              <p className="text-[12px] text-ink-muted">{reuniao.participantes_emails.length} participante(s)</p>
+            )}
+          </div>
+        )}
+
+        {reuniao && reuniao.tipo_reuniao === 'professor' && (
           prof ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -846,88 +855,6 @@ function EventoPopover({ evento, onClose, onVerDia }: {
   )
 }
 
-// ─── Nova reunião (manual) ─────────────────────────────────────────────────────
-
-function NovaReuniaoDialog({ profs, onClose }: { profs: { id: string; nome: string }[]; onClose: () => void }) {
-  const criar = useCriarReuniaoManual()
-  const [professorId, setProfessorId] = useState('')
-  const [data, setData]               = useState('')
-  const [hora, setHora]               = useState('08:00')
-  const [titulo, setTitulo]           = useState('')
-
-  async function handleSalvar() {
-    if (!data) { toast.error('Selecione uma data.'); return }
-    try {
-      await criar.mutateAsync({
-        professorId: professorId || null,
-        data:        new Date(`${data}T${hora}:00`).toISOString(),
-        titulo:      titulo || undefined,
-      })
-      toast.success('Reunião criada.')
-      onClose()
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao criar reunião.')
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-surface-canvas border border-line rounded-xl shadow-elevated w-full max-w-md mx-4 p-6 space-y-5 animate-fade-up">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-ink">Nova reunião</h2>
-          <button onClick={onClose} className="btn-press text-ink-subtle hover:text-ink-secondary">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="label-micro">Professor</Label>
-            <Select value={professorId} onValueChange={setProfessorId}>
-              <SelectTrigger className="h-9 bg-surface-canvas border-line text-ink text-[13px]">
-                <SelectValue placeholder="— Sem vínculo —" />
-              </SelectTrigger>
-              <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
-                {profs.map(p => (
-                  <SelectItem key={p.id} value={p.id} className="text-[13px]">{p.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label className="label-micro">Data <span className="text-brand">*</span></Label>
-              <Input type="date" value={data} onChange={e => setData(e.target.value)} className="h-9 bg-surface-canvas border-line" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="label-micro">Horário</Label>
-              <Input type="time" value={hora} onChange={e => setHora(e.target.value)} className="h-9 bg-surface-canvas border-line" />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="label-micro">Título (opcional)</Label>
-            <Input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: 1:1 com teacher" className="h-9 bg-surface-canvas border-line" />
-          </div>
-        </div>
-
-        <div className="flex gap-2 justify-end pt-1">
-          <Button variant="ghost" size="sm" onClick={onClose} className="text-ink-secondary">Cancelar</Button>
-          <Button
-            size="sm"
-            onClick={handleSalvar}
-            disabled={criar.isPending}
-            className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
-          >
-            {criar.isPending ? 'Salvando…' : 'Criar reunião'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Card — reunião de feedback (agendamento coletivo) ─────────────────────────
 
 function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrenciaCard }) {
@@ -978,7 +905,7 @@ function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrencia
 
 function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: DadosVinculo }) {
   const { profile } = useAuth()
-  const podeEditar = canEdit(profile?.role)
+  const podeEditar = canEdit(profile)
   const hora = new Date(reuniao.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   const sv = STATUS_VISUAL[statusReuniao(reuniao)]
   const [editarAberto, setEditarAberto] = useState(false)
@@ -992,6 +919,11 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[13px] font-semibold text-ink tabular-nums">{hora}</span>
             <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', sv.chip)}>{sv.label}</span>
+            {reuniao.tipo_reuniao === 'interna' && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] font-medium text-ink-secondary">
+                <Users2 className="h-3 w-3" />Interna
+              </span>
+            )}
             {reuniao.professor_email && (
               <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
                 <Mail className="h-3 w-3" />{reuniao.professor_email}
@@ -1034,7 +966,9 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
       </div>
 
       <div className="border-t border-line-soft pt-3 space-y-3">
-        {reuniao.participantes.length === 0 ? (
+        {reuniao.tipo_reuniao === 'interna' ? (
+          <ReuniaoInternaBody reuniao={reuniao} />
+        ) : reuniao.participantes.length === 0 ? (
           <VincularBlock reuniao={reuniao} participanteId={null} dados={dados} />
         ) : (
           reuniao.participantes.map(part =>
@@ -1059,6 +993,8 @@ function EditarReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onClo
   const [data, setData] = useState(() => dataOriginal.toISOString().slice(0, 10))
   const [hora, setHora] = useState(() => dataOriginal.toTimeString().slice(0, 5))
   const [titulo, setTitulo] = useState(reuniao.titulo ?? '')
+  const [pauta, setPauta] = useState(reuniao.pauta ?? '')
+  const ehInterna = reuniao.tipo_reuniao === 'interna'
 
   async function handleSalvar() {
     if (!data) { toast.error('Selecione uma data.'); return }
@@ -1067,6 +1003,7 @@ function EditarReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onClo
         id: reuniao.id,
         data: new Date(`${data}T${hora}:00`).toISOString(),
         titulo,
+        ...(ehInterna ? { pauta } : {}),
       })
       toast.success('Reunião atualizada.')
       onClose()
@@ -1104,6 +1041,19 @@ function EditarReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onClo
             <Label className="label-micro">Título (opcional)</Label>
             <Input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: 1:1 com teacher" className="h-9 bg-surface-canvas border-line" />
           </div>
+
+          {ehInterna && (
+            <div className="space-y-1.5">
+              <Label className="label-micro">Pauta (opcional)</Label>
+              <textarea
+                value={pauta}
+                onChange={e => setPauta(e.target.value)}
+                rows={3}
+                placeholder="Assunto da reunião…"
+                className="w-full resize-none rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-accentBlue"
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 justify-end pt-1">
@@ -1239,6 +1189,85 @@ function ParticipanteRow({ part }: { part: ParticipanteCard }) {
         </div>
       ) : (
         part.observacao && <p className="text-[12px] text-ink-secondary leading-relaxed">{part.observacao}</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Reunião interna (equipe/liderança, sem professor) ─────────────────────────
+
+function ReuniaoInternaBody({ reuniao }: { reuniao: ReuniaoCard }) {
+  const { data: perfisPorEmail } = usePerfisPorEmail()
+  const confirmar = useConfirmarReuniaoInterna()
+  const [obs, setObs] = useState(reuniao.notas ?? '')
+  const pendente = reuniao.status === 'pendente'
+
+  function nomeParticipante(email: string): string {
+    return perfisPorEmail?.get(email.toLowerCase()) ?? email.split('@')[0]
+  }
+
+  function confirmarReuniaoInterna(aconteceu: boolean) {
+    confirmar.mutate(
+      { id: reuniao.id, aconteceu, observacao: obs },
+      {
+        onSuccess: () => toast.success(aconteceu ? 'Reunião confirmada.' : 'Marcada como não realizada.'),
+        onError:   () => toast.error('Erro ao confirmar.'),
+      },
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {reuniao.participantes_emails.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {reuniao.participantes_emails.map(email => (
+            <span
+              key={email}
+              title={email}
+              className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-ink-secondary"
+            >
+              <Users2 className="h-3 w-3" />{nomeParticipante(email)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {reuniao.pauta && (
+        <p className="text-[12px] text-ink-secondary leading-relaxed">
+          <span className="text-ink-subtle">Pauta: </span>{reuniao.pauta}
+        </p>
+      )}
+
+      {pendente ? (
+        <div className="space-y-2">
+          <textarea
+            value={obs}
+            onChange={e => setObs(e.target.value)}
+            placeholder="Observações da reunião…"
+            className="w-full min-h-[64px] resize-y rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accentBlue"
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={confirmar.isPending}
+              onClick={() => confirmarReuniaoInterna(true)}
+              className="btn-press h-8 text-[12px] gap-1.5 bg-urg-lowFg text-white hover:opacity-90"
+            >
+              <Check className="h-3.5 w-3.5" />Realizada
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={confirmar.isPending}
+              onClick={() => confirmarReuniaoInterna(false)}
+              className="btn-press h-8 text-[12px] gap-1.5 border-line text-ink-secondary"
+            >
+              <X className="h-3.5 w-3.5" />Não aconteceu
+            </Button>
+          </div>
+        </div>
+      ) : (
+        reuniao.notas && <p className="text-[12px] text-ink-secondary leading-relaxed">{reuniao.notas}</p>
       )}
     </div>
   )

@@ -14,7 +14,7 @@ export function ObservacaoDetalhePage() {
   const { data: observacao, isLoading } = useObservacao(id)
   const resolverObservacao = useResolverObservacao()
   const { profile } = useAuth()
-  const podeEditar = canEdit(profile?.role)
+  const podeEditar = canEdit(profile)
 
   if (isLoading) return (
     <div className="flex h-64 items-center justify-center text-ink-muted text-[13px]">

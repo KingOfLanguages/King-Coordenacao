@@ -7,9 +7,12 @@
 //   2. Busca eventos do Google Calendar de 90 dias atrás até 90 dias à frente,
 //      paginando via nextPageToken (sem isso, calendários com mais de 500
 //      eventos no período perdiam o excedente silenciosamente)
-//   3. Filtra reuniões reais com professores
+//   3. Classifica cada evento em 'professor' (reunião 1:1 com professor) ou
+//      'interna' (reunião só entre gente conhecida da King — equipe de
+//      coordenação, liderança — sem nenhum participante externo). Eventos
+//      sem nenhum participante relevante são ignorados.
 //   4. Determina o coordenador_id correto pelo email do organizador/participante
-//   5. Faz match de professores pelo nome
+//   5. Faz match de professores pelo nome (só pra tipo 'professor')
 //   6. Insere na tabela reunioes (ignora duplicatas pelo google_event_id)
 //
 // Atribuição de coordenador:
@@ -132,13 +135,33 @@ const MEETING_PATTERNS: RegExp[] = [
   /\([\p{L}\s]{3,}\)/u, /[\p{L}\s]{4,}&[\p{L}\s]{4,}/u,
 ]
 
-function isReuniaoComProfessor(ev: CalEvent): boolean {
-  if (!ev.start.dateTime) return false
+type TipoReuniao = 'professor' | 'interna'
+
+/**
+ * Classifica o evento. 'professor' tem prioridade quando há sinal de reunião
+ * 1:1 (padrão de título ou participante externo) — mesma heurística de
+ * antes. 'interna' cobre reunião de equipe/liderança: sem participante
+ * externo, mas com pelo menos uma pessoa conhecida da King (coordEmails)
+ * além do dono do calendário — isso pega daily/standup/sync/treinamento que
+ * o BLOCKLIST descartaria, desde que seja reunião de verdade (com convite).
+ * Sem nenhum participante relevante (compromisso pessoal, bloqueio de
+ * agenda) retorna null e o evento é ignorado.
+ */
+function classificarEvento(ev: CalEvent, coordEmails: Set<string>): TipoReuniao | null {
+  if (!ev.start.dateTime) return null
   const title = ev.summary ?? ''
-  if (BLOCKLIST.some(rx => rx.test(title))) return false
-  if (MEETING_PATTERNS.some(rx => rx.test(title))) return true
-  const ext = (ev.attendees ?? []).filter(a => !a.self)
-  return ext.length >= 1
+  const attendees = (ev.attendees ?? []).filter(a => !a.self && a.email)
+  const conhecidos = attendees.filter(a => coordEmails.has(a.email.toLowerCase()))
+  const externos   = attendees.filter(a => !coordEmails.has(a.email.toLowerCase()))
+
+  if (!BLOCKLIST.some(rx => rx.test(title))) {
+    if (MEETING_PATTERNS.some(rx => rx.test(title))) return 'professor'
+    if (externos.length >= 1) return 'professor'
+  }
+
+  if (conhecidos.length >= 1) return 'interna'
+
+  return null
 }
 
 // ─── Atribuição de coordenador ────────────────────────────────────────────────
@@ -325,7 +348,6 @@ serve(async (req) => {
   for (const r of emailRows ?? []) {
     if (r.email) emailToProfessorId[r.email.toLowerCase()] = r.professor_id
   }
-  const professorNomeById = new Map(professores.map(p => [p.id, p.nome]))
 
   const today = new Date()
   let totalErrors = 0
@@ -338,6 +360,9 @@ serve(async (req) => {
     coordenador_id:  string
     professor_id:    string | null
     professor_email: string | null
+    tipo_reuniao:    TipoReuniao
+    pauta:           string | null
+    participantes_emails: string[]
     data:            string
     titulo:          string
     meet_link:       string | null
@@ -361,31 +386,55 @@ serve(async (req) => {
       periodoInicio.setDate(periodoInicio.getDate() - 90)
       periodoInicio.setHours(0, 0, 0, 0)
       const events   = await buscarEventosPeriodo(accessToken, periodoInicio, periodoFim)
-      const meetings = events.filter(isReuniaoComProfessor)
+      const classificados = events
+        .map(ev => ({ ev, tipo: classificarEvento(ev, coordEmails) }))
+        .filter((c): c is { ev: CalEvent; tipo: TipoReuniao } => c.tipo !== null)
 
-      console.log(`[daily-import] ${meetings.length} reunião(ões) encontrada(s) para ${row.google_email ?? row.user_id}`)
+      console.log(`[daily-import] ${classificados.length} reunião(ões) encontrada(s) para ${row.google_email ?? row.user_id}`)
 
       // 3 — Resolve coordenador/professor em memória (sem chamadas ao banco
       //     por evento — com a janela de 180 dias isso pode significar
       //     centenas de eventos por coordenador; 3 round-trips sequenciais
       //     por evento já estourou o limite de recursos da Edge Function).
-      for (const ev of meetings) {
-        const coordId      = resolveCoordId(ev, row.user_id, emailToUserId)
-        const profEmail    = extractProfessorEmail(ev, coordEmails)
+      for (const { ev, tipo } of classificados) {
+        const coordId  = resolveCoordId(ev, row.user_id, emailToUserId)
+        const startDt  = new Date(ev.start.dateTime ?? ev.start.date ?? '')
+        const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
+
+        if (tipo === 'interna') {
+          const participantes = [...new Set(
+            (ev.attendees ?? []).map(a => a.email?.toLowerCase()).filter((e): e is string => !!e),
+          )]
+          candidatos.push({
+            google_event_id: ev.id,
+            coordenador_id:  coordId,
+            professor_id:    null,
+            professor_email: null,
+            tipo_reuniao:    'interna',
+            pauta:           ev.description?.trim().slice(0, 2000) || null,
+            participantes_emails: participantes,
+            data:            startDt.toISOString(),
+            titulo:          ev.summary,
+            meet_link:       meetHref,
+          })
+          continue
+        }
+
+        const profEmail = extractProfessorEmail(ev, coordEmails)
 
         // Match por e-mail exato (mais confiável) > match por nome no título (fallback)
         const emailMatchId = profEmail ? emailToProfessorId[profEmail.toLowerCase()] : undefined
         const profByName   = matchProfessor(ev, professores)
         const resolvedProfId = emailMatchId ?? profByName?.id ?? null
 
-        const startDt  = new Date(ev.start.dateTime ?? ev.start.date ?? '')
-        const meetHref = ev.hangoutLink ?? ev.htmlLink ?? null
-
         candidatos.push({
           google_event_id: ev.id,
           coordenador_id:  coordId,
           professor_id:    resolvedProfId,
           professor_email: profEmail,
+          tipo_reuniao:    'professor',
+          pauta:           null,
+          participantes_emails: [],
           data:            startDt.toISOString(),
           titulo:          ev.summary,
           meet_link:       meetHref,
@@ -428,6 +477,9 @@ serve(async (req) => {
           coordenador_id:  c.coordenador_id,
           professor_id:    c.professor_id,
           professor_email: c.professor_email,
+          tipo_reuniao:    c.tipo_reuniao,
+          pauta:           c.pauta,
+          participantes_emails: c.participantes_emails,
           data:            c.data,
           titulo:          c.titulo,
           google_event_id: c.google_event_id,
@@ -436,7 +488,7 @@ serve(async (req) => {
         })),
         { onConflict: 'google_event_id', ignoreDuplicates: true },
       )
-      .select('id, professor_id')
+      .select('id, professor_id, tipo_reuniao')
 
     if (upsertErr) {
       console.error('[daily-import] Erro no upsert em lote de reunioes:', upsertErr.message)
@@ -446,14 +498,17 @@ serve(async (req) => {
 
     totalSaved += inseridas?.length ?? 0
 
-    // Vínculo de participação (modelo multi-professor) — só para as
-    // reuniões efetivamente novas (upsert com ignoreDuplicates não
-    // retorna as que já existiam, então não duplicamos o vínculo).
-    const links = (inseridas ?? []).map(r => ({
-      reuniao_id:   r.id,
-      professor_id: r.professor_id,
-      status:       'pendente' as const,
-    }))
+    // Vínculo de participação (modelo multi-professor) — só para reuniões
+    // tipo 'professor' (interna não tem professor pra vincular) e efetivamente
+    // novas (upsert com ignoreDuplicates não retorna as que já existiam, então
+    // não duplicamos o vínculo).
+    const links = (inseridas ?? [])
+      .filter(r => r.tipo_reuniao === 'professor')
+      .map(r => ({
+        reuniao_id:   r.id,
+        professor_id: r.professor_id,
+        status:       'pendente' as const,
+      }))
     if (links.length) {
       const { error: linkErr } = await admin.from('reuniao_professores').insert(links)
       if (linkErr) console.error('[daily-import] Erro ao vincular professores em lote:', linkErr.message)

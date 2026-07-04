@@ -27,6 +27,10 @@ export type ReuniaoCard = {
   meet_link: string | null
   professor_email: string | null
   status: string
+  notas: string | null
+  tipo_reuniao: 'professor' | 'interna'
+  pauta: string | null
+  participantes_emails: string[]
   participantes: ParticipanteCard[]
 }
 
@@ -92,7 +96,7 @@ export function sugerirVinculos(
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 const REUNIOES_SELECT = `
-  id, data, titulo, meet_link, professor_email, status,
+  id, data, titulo, meet_link, professor_email, status, notas, tipo_reuniao, pauta, participantes_emails,
   participantes:reuniao_professores (
     id, status, numero, observacao,
     professor:professores (
@@ -119,7 +123,8 @@ type ParticipanteRaw = {
 }
 type ReuniaoRaw = {
   id: string; data: string; titulo: string | null; meet_link: string | null
-  professor_email: string | null; status: string
+  professor_email: string | null; status: string; notas: string | null
+  tipo_reuniao: 'professor' | 'interna'; pauta: string | null; participantes_emails: string[] | null
   participantes: ParticipanteRaw[] | null
 }
 
@@ -163,6 +168,10 @@ async function fetchReunioes(coordId: string, inicio: string, fim: string): Prom
     meet_link: r.meet_link,
     professor_email: r.professor_email,
     status: r.status,
+    notas: r.notas,
+    tipo_reuniao: r.tipo_reuniao,
+    pauta: r.pauta,
+    participantes_emails: r.participantes_emails ?? [],
     participantes: (r.participantes ?? []).map(mapParticipante),
   }))
 }
@@ -252,34 +261,19 @@ export function useVincularProfessor() {
   })
 }
 
-/** Cria uma reunião manualmente, já com o professor como participante (modelo novo). */
-export function useCriarReuniaoManual() {
+/** Edita data/hora, título e/ou pauta da reunião (nível card, não a participação de um professor específico). */
+export function useEditarReuniao() {
   const queryClient = useQueryClient()
-  const { profile } = useAuth()
   return useMutation({
-    mutationFn: async ({ professorId, data, titulo }: {
-      professorId?: string | null
-      data: string
-      titulo?: string
+    mutationFn: async ({ id, data, titulo, pauta }: {
+      id: string; data?: string; titulo?: string | null; pauta?: string | null
     }) => {
-      const { data: reuniao, error: e1 } = await supabase
-        .from('reunioes')
-        .insert({
-          coordenador_id: profile!.id,
-          data,
-          titulo: titulo?.trim() || null,
-          status: 'pendente',
-        })
-        .select('id')
-        .single()
-      if (e1) throw e1
-
-      if (professorId) {
-        const { error: e2 } = await supabase
-          .from('reuniao_professores')
-          .insert({ reuniao_id: reuniao.id, professor_id: professorId, status: 'pendente' })
-        if (e2) throw e2
-      }
+      const patch: Record<string, unknown> = {}
+      if (data !== undefined)   patch.data = data
+      if (titulo !== undefined) patch.titulo = titulo?.trim() || null
+      if (pauta !== undefined)  patch.pauta = pauta?.trim() || null
+      const { error } = await supabase.from('reunioes').update(patch).eq('id', id)
+      if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
@@ -288,14 +282,19 @@ export function useCriarReuniaoManual() {
   })
 }
 
-/** Edita data/hora e título da reunião (nível card, não a participação de um professor específico). */
-export function useEditarReuniao() {
+/** Confirma uma reunião interna (equipe/liderança, sem professor) como concluída ou cancelada + observação. */
+export function useConfirmarReuniaoInterna() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, data, titulo }: { id: string; data: string; titulo?: string | null }) => {
+    mutationFn: async ({ id, aconteceu, observacao }: {
+      id: string; aconteceu: boolean; observacao?: string
+    }) => {
       const { error } = await supabase
         .from('reunioes')
-        .update({ data, titulo: titulo?.trim() || null })
+        .update({
+          status: aconteceu ? 'concluida' : 'cancelada',
+          notas:  observacao?.trim() || null,
+        })
         .eq('id', id)
       if (error) throw error
     },
@@ -303,6 +302,24 @@ export function useEditarReuniao() {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
       queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
     },
+  })
+}
+
+/** Perfis (coordenação/liderança) com e-mail Google conhecido — usado pra resolver nome a
+ *  partir do e-mail dos participantes de uma reunião interna (participantes_emails). */
+export function usePerfisPorEmail() {
+  return useQuery({
+    queryKey: ['perfis-por-email'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, nome, google_email').not('google_email', 'is', null)
+      if (error) throw error
+      const mapa = new Map<string, string>()
+      for (const p of data ?? []) {
+        if (p.google_email) mapa.set(p.google_email.toLowerCase(), p.nome)
+      }
+      return mapa
+    },
+    staleTime: 10 * 60 * 1000,
   })
 }
 

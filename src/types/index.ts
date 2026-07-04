@@ -7,6 +7,8 @@ export interface Profile {
   id: string
   nome: string
   role: RoleUsuario
+  is_lider: boolean
+  is_admin: boolean
   ativo: boolean
   created_at: string
   koalendar_link: string | null

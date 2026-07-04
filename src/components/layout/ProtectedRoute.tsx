@@ -5,9 +5,13 @@ import type { RoleUsuario } from '@/types'
 interface Props {
   children: React.ReactNode
   roles?: RoleUsuario[]
+  /** Também libera se profile.is_admin (ou o legado role === 'admin'). */
+  admin?: boolean
+  /** Também libera se profile.is_lider. */
+  lider?: boolean
 }
 
-export function ProtectedRoute({ children, roles }: Props) {
+export function ProtectedRoute({ children, roles, admin, lider }: Props) {
   const { session, profile, loading } = useAuth()
 
   if (loading) {
@@ -23,10 +27,15 @@ export function ProtectedRoute({ children, roles }: Props) {
 
   if (!session) return <Navigate to="/login" replace />
 
-  // If role-restricted, require a loaded profile with matching role.
-  if (roles) {
-    if (!profile)                       return <Navigate to="/login" replace />
-    if (!roles.includes(profile.role))  return <Navigate to="/" replace />
+  // If restricted, require a loaded profile matching role and/or flags.
+  if (roles || admin || lider) {
+    if (!profile) return <Navigate to="/login" replace />
+    const ehAdmin  = profile.is_admin || profile.role === 'admin'
+    const liberado =
+      (roles?.includes(profile.role) ?? false) ||
+      (admin === true && ehAdmin) ||
+      (lider === true && profile.is_lider)
+    if (!liberado) return <Navigate to="/" replace />
   }
 
   return <>{children}</>

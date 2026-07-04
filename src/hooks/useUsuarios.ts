@@ -6,6 +6,8 @@ export type UsuarioAdmin = {
   id:           string
   nome:         string
   role:         RoleUsuario
+  is_lider:     boolean
+  is_admin:     boolean
   ativo:        boolean
   created_at:   string
   google_email: string | null
@@ -18,7 +20,7 @@ export function useUsuarios() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, nome, role, ativo, created_at, google_email')
+        .select('id, nome, role, is_lider, is_admin, ativo, created_at, google_email')
         .order('nome')
       if (error) throw error
       return data as UsuarioAdmin[]
@@ -43,10 +45,12 @@ export function useAtualizarUsuario() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({
-      id, role, ativo, google_email,
-    }: { id: string; role?: RoleUsuario; ativo?: boolean; google_email?: string | null }) => {
+      id, role, is_lider, is_admin, ativo, google_email,
+    }: { id: string; role?: RoleUsuario; is_lider?: boolean; is_admin?: boolean; ativo?: boolean; google_email?: string | null }) => {
       const updates: Record<string, unknown> = {}
       if (role         !== undefined) updates.role         = role
+      if (is_lider     !== undefined) updates.is_lider     = is_lider
+      if (is_admin     !== undefined) updates.is_admin     = is_admin
       if (ativo        !== undefined) updates.ativo        = ativo
       if (google_email !== undefined) updates.google_email = google_email || null
 

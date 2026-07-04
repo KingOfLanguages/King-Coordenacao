@@ -20,6 +20,8 @@ export function DashboardCoordPage() {
   const canSeeAll = profile?.role === 'admin'
     || profile?.role === 'suporte'
     || profile?.role === 'suporte_aluno'
+    || profile?.is_admin === true
+    || profile?.is_lider === true
 
   const { data: coordenadores = [] } = useCoordenadores()
   const [sel, setSel] = useState<string>('')
