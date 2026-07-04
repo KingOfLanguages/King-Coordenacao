@@ -36,6 +36,12 @@ export interface ProfessorAcompanhamento {
   api_atualizado_em: string | null
 }
 
+export const faixaCls: Record<string, string> = {
+  Regular:  'bg-urg-lowBg text-urg-lowFg',
+  Atencao:  'bg-urg-medBg text-urg-medFg',
+  Critico:  'bg-urg-highBg text-urg-highFg',
+}
+
 export interface ProfessorScoreHistoricoRow {
   ano_mes: number
   score: number
@@ -82,7 +88,9 @@ export interface ProfessorRisco {
   coordenador_nome: string | null
   score_atual: number | null
   score_faixa: string | null
+  elegivel_alocacao: boolean | null
   reuniao_status: string | null
+  aulas_pendentes_qtd: number
   alertas_total: number
 }
 
@@ -97,7 +105,7 @@ export function useProfessoresAcompanhamento() {
           grupo:grupos!grupo_id (nome),
           coordenador:profiles!coordenador_id (nome),
           professor_acompanhamento (
-            score_atual, score_faixa, reuniao_status,
+            score_atual, score_faixa, elegivel_alocacao, reuniao_status,
             aulas_pendentes_qtd, faltas_professor, no_show_primeira_aula, agendas_bloqueadas, trocas_professor
           )
         `)
@@ -128,7 +136,9 @@ export function useProfessoresAcompanhamento() {
           coordenador_nome: coordenador?.nome ?? null,
           score_atual: acomp?.score_atual ?? null,
           score_faixa: acomp?.score_faixa ?? null,
+          elegivel_alocacao: acomp?.elegivel_alocacao ?? null,
           reuniao_status: acomp?.reuniao_status ?? null,
+          aulas_pendentes_qtd: acomp?.aulas_pendentes_qtd ?? 0,
           alertas_total: alertas,
         }
       })

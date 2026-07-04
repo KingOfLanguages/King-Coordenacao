@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2,
   CalendarDays, Clock, DollarSign, Users, User,
@@ -10,20 +10,23 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor } from '@/hooks/useProfessores'
-import { useProfessorAcompanhamento, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
+import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
+import { useResolverObservacao, type ObservacaoSnapshot } from '@/hooks/useObservacoes'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
+import { ObservacaoSnapshotDetalhe } from '@/components/professores/ObservacaoSnapshotDetalhe'
 import { EditarReuniaoProfessorDialog } from '@/components/professores/EditarReuniaoProfessorDialog'
 import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirReuniaoProfessorDialog'
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
 import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
+import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
 import type { StatusProfessor } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,42 +59,13 @@ type ObservacaoRow = {
   tipo: string
   texto: string
   created_at: string
+  snapshot?: ObservacaoSnapshot | null
+  resolvido?: boolean
+  resolvido_em?: string | null
   profiles?: { nome: string } | { nome: string }[] | null
 }
 
-// ─── Observation labels/tones ─────────────────────────────────────────────────
-
-const labelTipo: Record<string, string> = {
-  reuniao:           'Reunião',
-  ocorrencia:        'Ocorrência',
-  feedback_positivo: 'Positivo',
-  feedback_negativo: 'Negativo',
-  feedback_neutro:   'Neutro',
-}
-
-const dotTipo: Record<string, string> = {
-  reuniao:           'bg-accentBlue',
-  ocorrencia:        'bg-urg-medFg',
-  feedback_positivo: 'bg-urg-lowFg',
-  feedback_negativo: 'bg-urg-highFg',
-  feedback_neutro:   'bg-ink-subtle',
-}
-
-const borderTipo: Record<string, string> = {
-  reuniao:           'border-accentBlue/40',
-  ocorrencia:        'border-urg-medFg/40',
-  feedback_positivo: 'border-urg-lowFg/40',
-  feedback_negativo: 'border-urg-highFg/40',
-  feedback_neutro:   'border-line',
-}
-
-const chipTipo: Record<string, string> = {
-  reuniao:           'bg-accentBlue-soft text-accentBlue',
-  ocorrencia:        'bg-urg-medBg text-urg-medFg',
-  feedback_positivo: 'bg-urg-lowBg text-urg-lowFg',
-  feedback_negativo: 'bg-urg-highBg text-urg-highFg',
-  feedback_neutro:   'bg-surface-subtle text-ink-secondary',
-}
+// ─── Observation filters ──────────────────────────────────────────────────────
 
 type ObsFiltro = 'todos' | 'feedback_positivo' | 'feedback_negativo' | 'feedback_neutro' | 'reuniao' | 'ocorrencia'
 
@@ -114,6 +88,7 @@ export function ProfessorDetalhePage() {
   const { data: nexusData } = useNexusDados(id)
   const atualizarMonitoramento = useAtualizarMonitoramento()
   const atualizarGrupo = useAtualizarGrupoProfessor()
+  const resolverObservacao = useResolverObservacao()
   const { profile } = useAuth()
   const { data: grupos = [] } = useGrupos()
   const podeEditar = canEdit(profile?.role)
@@ -123,6 +98,7 @@ export function ProfessorDetalhePage() {
   const [resolverMesAnaliseAberto, setResolverMesAnaliseAberto] = useState(false)
   const [editarReuniaoAlvo, setEditarReuniaoAlvo] = useState<ReuniaoHistorico | null>(null)
   const [excluirReuniaoAlvo, setExcluirReuniaoAlvo] = useState<string | null>(null)
+  const [obsExpandidas, setObsExpandidas] = useState<Set<string>>(new Set())
 
   // Deriva do que useNexusDados já busca — sem query extra.
   const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === 'Mês de análise' && !i.resolved) ?? null
@@ -426,6 +402,8 @@ export function ProfessorDetalhePage() {
             <ul className="space-y-3">
               {obsFiltered.map(o => {
                 const autor = resolverNomePerfil(o.profiles)
+                const temSnapshot = !!o.snapshot
+                const expandida = obsExpandidas.has(o.id)
                 return (
                   <li
                     key={o.id}
@@ -435,18 +413,68 @@ export function ProfessorDetalhePage() {
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className={cn(
-                        'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium',
-                        chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
-                      )}>
-                        {labelTipo[o.tipo] ?? o.tipo}
-                      </span>
+                      {temSnapshot ? (
+                        <Link
+                          to={`/observacoes/${o.id}`}
+                          className={cn(
+                            'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium hover:opacity-80 transition-opacity',
+                            chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
+                          )}
+                        >
+                          {labelTipo[o.tipo] ?? o.tipo}
+                        </Link>
+                      ) : (
+                        <span className={cn(
+                          'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium',
+                          chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
+                        )}>
+                          {labelTipo[o.tipo] ?? o.tipo}
+                        </span>
+                      )}
                       <div className="flex items-center gap-2 text-[11px] text-ink-subtle tabular-nums">
                         {autor && <span className="text-ink-muted">{autor}</span>}
                         <span>{new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
                       </div>
                     </div>
                     <p className="text-[13px] text-ink-secondary leading-relaxed">{o.texto}</p>
+                    {o.tipo === 'ocorrencia' && (
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+                          o.resolvido ? 'bg-urg-lowBg text-urg-lowFg' : 'bg-urg-highBg text-urg-highFg',
+                        )}>
+                          {o.resolvido ? 'Resolvida' : 'Em aberto'}
+                        </span>
+                        {podeEditar && (
+                          <button
+                            onClick={() => resolverObservacao.mutate({ id: o.id, resolvido: !o.resolvido })}
+                            disabled={resolverObservacao.isPending}
+                            className="btn-press text-[11px] text-accentBlue font-medium"
+                          >
+                            {o.resolvido ? 'Reabrir' : 'Marcar como resolvida'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {temSnapshot && (
+                      <div className="pt-1 border-t border-line-soft">
+                        <button
+                          onClick={() => setObsExpandidas(prev => {
+                            const next = new Set(prev)
+                            if (next.has(o.id)) next.delete(o.id); else next.add(o.id)
+                            return next
+                          })}
+                          className="btn-press text-[11px] text-accentBlue font-medium pt-1.5"
+                        >
+                          {expandida ? 'Ocultar contexto no momento' : 'Ver contexto no momento'}
+                        </button>
+                        {expandida && (
+                          <div className="pt-2">
+                            <ObservacaoSnapshotDetalhe snapshot={o.snapshot!} compact />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </li>
                 )
               })}
@@ -490,12 +518,6 @@ export function ProfessorDetalhePage() {
 }
 
 // ─── Acompanhamento (score/alertas — API de Acompanhamento de Professores) ────
-
-const faixaCls: Record<string, string> = {
-  Regular:  'bg-urg-lowBg text-urg-lowFg',
-  Atencao:  'bg-urg-medBg text-urg-medFg',
-  Critico:  'bg-urg-highBg text-urg-highFg',
-}
 
 function AcompanhamentoSection({
   acompanhamento, historico, alunos,
