@@ -329,12 +329,12 @@ export function AppLayout() {
           />
 
           {/* Nav links — staggered reveal */}
-          <div className="relative flex flex-col items-center justify-center flex-1 gap-1 px-6 overflow-y-auto py-6">
+          <div className="relative flex flex-col items-center flex-1 gap-0.5 px-6 overflow-y-auto pt-[4.5rem] pb-6">
             {mobileRows.map((row, i) => (
               <Fragment key={row.item.to}>
                 {row.sectionLabel && (
                   <p
-                    className="nav-reveal-item w-full max-w-xs text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-ink/30 mt-4 first:mt-0"
+                    className="nav-reveal-item w-full max-w-xs text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-ink/30 mt-5 first:mt-0"
                     style={{ '--i': i } as React.CSSProperties}
                   >
                     {row.sectionLabel}
@@ -346,7 +346,7 @@ export function AppLayout() {
                   onClick={() => setMenuOpen(false)}
                   style={{ '--i': i } as React.CSSProperties}
                   className={({ isActive }) => cn(
-                    'nav-reveal-item w-full max-w-xs text-center py-3.5 rounded-2xl text-[28px] font-semibold tracking-[-0.02em]',
+                    'nav-reveal-item w-full max-w-xs text-center py-2.5 rounded-xl text-[21px] font-semibold tracking-[-0.01em]',
                     'transition-colors duration-200',
                     isActive
                       ? 'text-ink bg-surface-subtle/60'
@@ -361,7 +361,7 @@ export function AppLayout() {
 
           {/* Bottom profile + logout */}
           <div
-            className="relative pb-12 px-6 flex items-center justify-between"
+            className="relative pb-8 px-6 flex items-center justify-between flex-shrink-0 border-t border-line-soft/50 pt-4 bg-surface-app/80"
             style={{ '--i': mobileRows.length } as React.CSSProperties}
           >
             <div className="nav-reveal-item flex items-center gap-3">

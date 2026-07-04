@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Search, X } from 'lucide-react'
+import { Search, X, GraduationCap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -7,13 +7,15 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
-import { useCriarIncidente, CATEGORIAS_INCIDENTE } from '@/hooks/useIncidentes'
+import { useCriarIncidente, useAlunosDoProfessor, CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL } from '@/hooks/useIncidentes'
 import { cn } from '@/lib/utils'
+
+type Aba = 'professor' | 'geral'
 
 interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
-  /** Pré-preenchido quando a ação parte da tela do próprio professor — esconde o toggle "sem professor". */
+  /** Pré-preenchido quando a ação parte da tela do próprio professor — esconde a aba "geral". */
   professorFixo?: { id: string; nome: string }
 }
 
@@ -21,26 +23,38 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const { data: professores = [] } = useProfessoresAtivos()
   const criar = useCriarIncidente()
 
-  const [comProfessor, setComProfessor] = useState(true)
+  const [aba, setAba] = useState<Aba>('professor')
   const [busca, setBusca] = useState('')
   const [selecionado, setSelecionado] = useState<{ id: string; nome: string } | null>(professorFixo ?? null)
   const [tituloLivre, setTituloLivre] = useState('')
-  const [categoria, setCategoria] = useState<string>(CATEGORIAS_INCIDENTE[0])
+  const [alunoNome, setAlunoNome] = useState('')
+  const [alunoBusca, setAlunoBusca] = useState(false)
+  const [categoria, setCategoria] = useState<string>(CATEGORIAS_PROFESSOR[0])
   const [urgencia, setUrgencia] = useState('Média')
   const [descricao, setDescricao] = useState('')
   const [precisaAcompanhamento, setPrecisaAcompanhamento] = useState(false)
 
+  const { data: roster = [] } = useAlunosDoProfessor(selecionado?.id ?? null)
+
   useEffect(() => {
     if (!open) return
-    setComProfessor(true)
+    setAba('professor')
     setSelecionado(professorFixo ?? null)
     setBusca('')
     setTituloLivre('')
-    setCategoria(CATEGORIAS_INCIDENTE[0])
+    setAlunoNome('')
+    setCategoria(CATEGORIAS_PROFESSOR[0])
     setUrgencia('Média')
     setDescricao('')
     setPrecisaAcompanhamento(false)
   }, [open, professorFixo])
+
+  const categorias = aba === 'professor' ? CATEGORIAS_PROFESSOR : CATEGORIAS_GERAL
+
+  function trocarAba(novaAba: Aba) {
+    setAba(novaAba)
+    setCategoria(novaAba === 'professor' ? CATEGORIAS_PROFESSOR[0] : CATEGORIAS_GERAL[0])
+  }
 
   const resultados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -48,7 +62,13 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     return professores.filter(p => p.nome.toLowerCase().includes(termo)).slice(0, 8)
   }, [busca, professores])
 
-  const podeConfirmar = !!descricao.trim() && (!comProfessor || !!selecionado)
+  const sugestoesAluno = useMemo(() => {
+    const termo = alunoNome.trim().toLowerCase()
+    if (!termo) return roster.slice(0, 6)
+    return roster.filter(a => a.primeiro_nome.toLowerCase().includes(termo)).slice(0, 6)
+  }, [alunoNome, roster])
+
+  const podeConfirmar = !!descricao.trim() && (aba === 'geral' || !!selecionado)
 
   async function handleConfirmar() {
     if (!podeConfirmar) return
@@ -58,8 +78,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         urgency: urgencia,
         description: descricao.trim(),
         needs_follow_up: precisaAcompanhamento,
-        professor_id: comProfessor ? selecionado?.id : null,
-        titulo_livre: comProfessor ? undefined : tituloLivre,
+        professor_id: aba === 'professor' ? selecionado?.id : null,
+        titulo_livre: aba === 'geral' ? tituloLivre : undefined,
+        aluno_nome: alunoNome,
       })
       toast.success('Incidente registrado.')
       onOpenChange(false)
@@ -78,37 +99,37 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
           {!professorFixo && (
             <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
               <button
-                onClick={() => setComProfessor(true)}
+                onClick={() => trocarAba('professor')}
                 className={cn(
-                  'btn-press px-3 py-1 rounded-full text-[12px] font-medium transition-colors',
-                  comProfessor ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+                  'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+                  aba === 'professor' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
                 )}
               >
-                Com professor
+                Professor
               </button>
               <button
-                onClick={() => setComProfessor(false)}
+                onClick={() => trocarAba('geral')}
                 className={cn(
-                  'btn-press px-3 py-1 rounded-full text-[12px] font-medium transition-colors',
-                  !comProfessor ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+                  'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+                  aba === 'geral' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
                 )}
               >
-                Sem professor (desafio)
+                Geral / plataforma
               </button>
             </div>
           )}
 
-          {comProfessor ? (
+          {aba === 'professor' ? (
             <div className="space-y-1.5">
               <Label className="label-micro">Professor</Label>
               {professorFixo ? (
-                <div className="flex items-center gap-2 rounded-md border border-line bg-surface-subtle px-3 py-2 text-[13px] text-ink">
+                <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-subtle px-3 py-2 text-[13px] text-ink">
                   {professorFixo.nome}
                 </div>
               ) : selecionado ? (
-                <div className="flex items-center justify-between gap-2 rounded-md border border-line bg-surface-subtle px-3 py-2 text-[13px] text-ink">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-surface-subtle px-3 py-2 text-[13px] text-ink">
                   {selecionado.nome}
-                  <button onClick={() => setSelecionado(null)} className="text-ink-muted hover:text-ink">
+                  <button onClick={() => setSelecionado(null)} className="text-ink-muted hover:text-ink transition-colors">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -122,7 +143,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                     className="pl-9 h-9 bg-surface-canvas border-line"
                   />
                   {resultados.length > 0 && (
-                    <ul className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-line bg-surface-canvas shadow-lg">
+                    <ul className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-line bg-surface-canvas shadow-lg">
                       {resultados.map(p => (
                         <li key={p.id}>
                           <button
@@ -147,9 +168,38 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                 placeholder={`Ex: ${categoria}`}
                 className="h-9 bg-surface-canvas border-line"
               />
-              <p className="text-[11px] text-ink-subtle">Sem professor vinculado — aparece só na tela geral de incidentes.</p>
+              <p className="text-[11px] text-ink-subtle">Sem professor vinculado — aparece na aba geral/plataforma.</p>
             </div>
           )}
+
+          <div className="space-y-1.5 relative">
+            <Label className="label-micro flex items-center gap-1.5">
+              <GraduationCap className="h-3.5 w-3.5 text-ink-muted" />
+              Aluno (opcional)
+            </Label>
+            <Input
+              value={alunoNome}
+              onChange={e => setAlunoNome(e.target.value)}
+              onFocus={() => setAlunoBusca(true)}
+              onBlur={() => setTimeout(() => setAlunoBusca(false), 150)}
+              placeholder="Nome do aluno relacionado ao incidente…"
+              className="h-9 bg-surface-canvas border-line"
+            />
+            {alunoBusca && selecionado && sugestoesAluno.length > 0 && (
+              <ul className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-line bg-surface-canvas shadow-lg">
+                {sugestoesAluno.map(a => (
+                  <li key={a.aluno_id}>
+                    <button
+                      onMouseDown={() => setAlunoNome(a.primeiro_nome)}
+                      className="w-full text-left px-3 py-2 text-[13px] text-ink hover:bg-surface-subtle transition-colors"
+                    >
+                      {a.primeiro_nome}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
@@ -159,7 +209,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
-                  {CATEGORIAS_INCIDENTE.map(c => (
+                  {categorias.map(c => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
@@ -187,7 +237,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
               onChange={e => setDescricao(e.target.value)}
               rows={4}
               className={cn(
-                'w-full resize-none rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink',
+                'w-full resize-none rounded-lg border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink',
                 'placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue transition-colors',
               )}
               placeholder="O que aconteceu…"
