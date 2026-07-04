@@ -7,6 +7,14 @@
 // tem updated_at em incidents, então sincronização incremental não é
 // confiável; os volumes (milhares de linhas) permitem upsert completo.
 //
+// STATUS (2026-07-03): King Nexus está sendo descontinuado. Este sync foi
+// religado só como REDE DE SEGURANÇA temporária — enquanto alguém ainda
+// possa estar lançando dado direto no Nexus, isso garante que nada se perde
+// até a descontinuação de fato. Pode ser desligado a qualquer momento
+// (cron.unschedule('king-nexus-sync')) sem quebrar nada: nexus_incidents/
+// nexus_teacher_tracking/nexus_teacher_recurrences/nexus_mes_analise_alerts
+// simplesmente ficam congeladas no último estado. Ver [[ktm-nexus-sync]].
+//
 // Fluxo:
 //   1. Lê professores (id, nome) daqui e monta o índice de name-match
 //      (mesma normalização do daily-import: NFD sem acentos + caixa baixa)
@@ -18,7 +26,10 @@
 //   3. Upsert em lote nos espelhos (PK = id original do Nexus), preenchendo
 //      professor_id quando o match por nome é inequívoco
 //   4. Se não houve erro, remove linhas que sumiram da origem
-//      (synced_at < início da execução)
+//      (synced_at < início da execução) — EXCETO nexus_incidents com
+//      problem_type = 'Mês de análise', que desde 2026-07-03 são gravadas
+//      só localmente por nexus-mes-analise (não vêm mais do Nexus) e por
+//      isso nunca devem ser tratadas como "sumiram da origem"
 //
 // Secrets necessários:
 //   NEXUS_SUPABASE_URL, NEXUS_ANON_KEY           (projeto do Nexus)
@@ -125,11 +136,12 @@ async function upsertChunks(
   }
 }
 
-async function deleteStale(client: SupabaseClient, table: string, runStart: string): Promise<number> {
-  const { count, error } = await client
-    .from(table)
-    .delete({ count: 'exact' })
-    .lt('synced_at', runStart)
+async function deleteStale(
+  client: SupabaseClient, table: string, runStart: string, excludeProblemType?: string,
+): Promise<number> {
+  let query = client.from(table).delete({ count: 'exact' }).lt('synced_at', runStart)
+  if (excludeProblemType) query = query.neq('problem_type', excludeProblemType)
+  const { count, error } = await query
   if (error) throw new Error(`cleanup ${table}: ${error.message}`)
   return count ?? 0
 }
@@ -322,9 +334,12 @@ serve(async (req) => {
     }
 
     // ── 5. Remove o que sumiu da origem (só com o sync 100% ok) ─────────────
+    // nexus_incidents com problem_type 'Mês de análise' são canônicos do KTM
+    // desde 2026-07-03 (nexus-mes-analise não escreve mais no Nexus) — nunca
+    // aparecem nesta leitura, então ficam de fora da limpeza por staleness.
     stats.removidos = {
       teacher_recurrences: await deleteStale(admin, 'nexus_teacher_recurrences', runStart),
-      incidents:           await deleteStale(admin, 'nexus_incidents', runStart),
+      incidents:           await deleteStale(admin, 'nexus_incidents', runStart, 'Mês de análise'),
       teacher_tracking:    await deleteStale(admin, 'nexus_teacher_tracking', runStart),
       mes_analise_alerts:  await deleteStale(admin, 'nexus_mes_analise_alerts', runStart),
     }

@@ -1,21 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function: nexus-mes-analise
 //
-// Primeira escrita do KTM no banco do King Nexus (até aqui só líamos, via
-// nexus-sync). Permite colocar/resolver/reabrir um professor em "Mês de
-// Análise" — no Nexus isso não é um status separado, é só um incident com
-// problem_type = 'Mês de análise'. A escrita acontece SEMPRE no Nexus
-// primeiro (com a mesma conta coordenacao usada pelo sync); só depois de
-// confirmada é que o mirror local (nexus_incidents) é atualizado — o mirror
-// nunca pode mostrar um estado que o Nexus não tem.
+// Permite colocar/resolver/reabrir um professor em "Mês de Análise" — modelado
+// como uma linha de problem_type = 'Mês de análise' em nexus_incidents, mesmo
+// formato herdado do King Nexus. Desde 2026-07-03, nexus_incidents é a fonte
+// canônica desse fluxo — a função não escreve mais no banco do Nexus (o
+// King Nexus está sendo descontinuado; ver [[ktm-nexus-sync]] / memória do
+// projeto). O nexus-sync que alimentava nexus_incidents por leitura também
+// foi desativado no mesmo momento, então não há mais risco de um sync
+// apagar registros criados aqui por não existirem na origem.
 //
 // Invocada por usuários logados do KTM (supabase.functions.invoke, JWT do
 // usuário) — não é chamada por cron. Exige role admin ou coordenacao (mesma
 // régua de canEdit em src/lib/permissions.ts, replicada aqui no servidor).
 //
-// Secrets: NEXUS_SUPABASE_URL, NEXUS_ANON_KEY, NEXUS_SYNC_EMAIL,
-// NEXUS_SYNC_PASSWORD (mesmos do nexus-sync), SUPABASE_URL,
-// SUPABASE_SERVICE_ROLE_KEY (já existentes).
+// Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (já existentes).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -40,22 +39,6 @@ type Body =
   | { action: 'colocar';  professor_id: string; descricao: string; urgencia?: string }
   | { action: 'resolver'; incident_id: string; resultado: string }
   | { action: 'reabrir';  incident_id: string }
-
-async function loginNexus() {
-  const nexusUrl      = Deno.env.get('NEXUS_SUPABASE_URL')
-  const nexusAnonKey  = Deno.env.get('NEXUS_ANON_KEY')
-  const nexusEmail    = Deno.env.get('NEXUS_SYNC_EMAIL')
-  const nexusPassword = Deno.env.get('NEXUS_SYNC_PASSWORD')
-  if (!nexusUrl || !nexusAnonKey || !nexusEmail || !nexusPassword) {
-    throw new Error('NEXUS_SUPABASE_URL / NEXUS_ANON_KEY / NEXUS_SYNC_EMAIL / NEXUS_SYNC_PASSWORD não configurados.')
-  }
-  const nexus = createClient(nexusUrl, nexusAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-  const { error } = await nexus.auth.signInWithPassword({ email: nexusEmail, password: nexusPassword })
-  if (error) throw new Error(`Login no Nexus falhou: ${error.message}`)
-  return nexus
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -123,14 +106,10 @@ serve(async (req) => {
         created_at: nowIso,
       }
 
-      const nexus = await loginNexus()
-      const { error: insertErr } = await nexus.from('incidents').insert(row)
-      if (insertErr) return json({ error: `Falha ao gravar no Nexus: ${insertErr.message}` }, 502)
-
-      await admin.from('nexus_incidents').upsert(
-        { ...row, professor_id: professorId, synced_at: nowIso },
-        { onConflict: 'id' },
-      )
+      const { error: insertErr } = await admin
+        .from('nexus_incidents')
+        .insert({ ...row, professor_id: professorId, synced_at: nowIso })
+      if (insertErr) return json({ error: `Falha ao gravar: ${insertErr.message}` }, 502)
 
       return json({ ok: true, incident: { ...row, professor_id: professorId } })
     }
@@ -150,17 +129,11 @@ serve(async (req) => {
       if (incidente.problem_type !== PROBLEM_TYPE) return json({ error: 'Este incidente não é de Mês de Análise.' }, 400)
 
       const nowIso = new Date().toISOString()
-      const nexus = await loginNexus()
-      const { error: updateErr } = await nexus
-        .from('incidents')
-        .update({ resolved: true, resolved_at: nowIso, solution: resultado })
-        .eq('id', incidentId)
-      if (updateErr) return json({ error: `Falha ao gravar no Nexus: ${updateErr.message}` }, 502)
-
-      await admin
+      const { error: updateErr } = await admin
         .from('nexus_incidents')
         .update({ resolved: true, resolved_at: nowIso, solution: resultado, synced_at: nowIso })
         .eq('id', incidentId)
+      if (updateErr) return json({ error: `Falha ao gravar: ${updateErr.message}` }, 502)
 
       return json({ ok: true, incident: { id: incidentId, resolved: true, resolved_at: nowIso, solution: resultado } })
     }
@@ -177,17 +150,11 @@ serve(async (req) => {
       if (!incidente) return json({ error: 'Incidente não encontrado.' }, 404)
       if (incidente.problem_type !== PROBLEM_TYPE) return json({ error: 'Este incidente não é de Mês de Análise.' }, 400)
 
-      const nexus = await loginNexus()
-      const { error: updateErr } = await nexus
-        .from('incidents')
-        .update({ resolved: false, resolved_at: null })
-        .eq('id', incidentId)
-      if (updateErr) return json({ error: `Falha ao gravar no Nexus: ${updateErr.message}` }, 502)
-
-      await admin
+      const { error: updateErr } = await admin
         .from('nexus_incidents')
         .update({ resolved: false, resolved_at: null, synced_at: new Date().toISOString() })
         .eq('id', incidentId)
+      if (updateErr) return json({ error: `Falha ao gravar: ${updateErr.message}` }, 502)
 
       return json({ ok: true, incident: { id: incidentId, resolved: false, resolved_at: null } })
     }
