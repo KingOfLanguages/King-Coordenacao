@@ -15,6 +15,11 @@ export interface AvaliacaoAlunos {
   total_avaliacoes?: number
   comentarios_positivos?: number
   comentarios_negativos?: number
+  estrelas_5?: number
+  estrelas_4?: number
+  estrelas_3?: number
+  estrelas_2?: number
+  estrelas_1?: number
 }
 
 export interface AcompanhamentoResumo {
@@ -47,6 +52,15 @@ export interface ObservacaoResumo {
   id: string
   tipo: string
   texto: string
+  created_at: string
+  resolvido: boolean
+}
+
+/** Incidente aberto de Mês de Análise (nexus_incidents, problem_type = 'Mês de análise'). */
+export interface MesAnaliseResumo {
+  id: string
+  description: string
+  urgency: string
   created_at: string
 }
 
@@ -89,7 +103,9 @@ export interface ProfessorEncontrado {
   totalReunioesRealizadas: number
   reuniaoHoje: ReuniaoHojeInfo | null
   observacoes: ObservacaoResumo[]
+  observacoesAbertasTotal: number
   nexus: NexusResumo
+  mesAnalise: MesAnaliseResumo | null
   motivo: 'email' | 'nome'
 }
 
@@ -109,6 +125,9 @@ export type MensagemParaBackground =
   | { tipo: 'CRIAR_REUNIAO_AGORA'; professorId: string }
   | { tipo: 'CONFIRMAR_REUNIAO'; participanteId: string; professorId: string; aconteceu: boolean; observacao: string }
   | { tipo: 'SALVAR_OBSERVACAO_REUNIAO'; participanteId: string; observacao: string }
+  | { tipo: 'COLOCAR_MES_ANALISE'; professorId: string; descricao: string; urgencia?: string }
+  | { tipo: 'RESOLVER_MES_ANALISE'; professorId: string; incidentId: string; resultado: string }
+  | { tipo: 'RESOLVER_OBSERVACAO'; professorId: string; id: string; resolvido: boolean }
 
 export type RespostaBuscarProfessor   = { ok: true; resultado: ProfessorEncontrado | null }
 export type RespostaSessao            = { ok: true; sessao: SessaoArmazenada | null }

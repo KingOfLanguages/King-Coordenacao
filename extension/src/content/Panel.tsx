@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { extrairCandidatos } from './scrape'
-import type { MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada } from '../shared/types'
+import type { MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada, AvaliacaoAlunos } from '../shared/types'
 
 const C = {
   brand:     '#D1333A',
@@ -101,6 +101,11 @@ export function Panel() {
   const [buscaManual, setBuscaManual] = useState('')
   const [obsReuniao, setObsReuniao]   = useState('')
   const [salvandoReuniao, setSalvandoReuniao] = useState(false)
+  const [mesAnaliseAberto, setMesAnaliseAberto] = useState(false)
+  const [mesAnaliseTexto, setMesAnaliseTexto]   = useState('')
+  const [salvandoMesAnalise, setSalvandoMesAnalise] = useState(false)
+  const [resolvendoObsId, setResolvendoObsId] = useState<string | null>(null)
+  const [erroAcao, setErroAcao] = useState<string | null>(null)
   const ultimosCandidatos = useRef<string>('')
 
   useEffect(() => {
@@ -132,6 +137,9 @@ export function Panel() {
   // evita apagar texto em digitação a cada refresh automático (a cada 4s).
   useEffect(() => {
     setObsReuniao(resultado?.reuniaoHoje?.observacao ?? '')
+    setMesAnaliseAberto(false)
+    setMesAnaliseTexto('')
+    setErroAcao(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultado?.professor.id])
 
@@ -184,6 +192,54 @@ export function Panel() {
     atualizarReuniaoHoje(r)
   }
 
+  async function confirmarColocarMesAnalise() {
+    if (!resultado || !mesAnaliseTexto.trim()) return
+    setSalvandoMesAnalise(true)
+    setErroAcao(null)
+    const r = await enviar({ tipo: 'COLOCAR_MES_ANALISE', professorId: resultado.professor.id, descricao: mesAnaliseTexto })
+    setSalvandoMesAnalise(false)
+    if (r.ok && 'resultado' in r && r.resultado) {
+      setResultado(r.resultado)
+      setMesAnaliseAberto(false)
+      setMesAnaliseTexto('')
+    } else if (!r.ok) {
+      setErroAcao(r.erro)
+    }
+  }
+
+  async function confirmarResolverMesAnalise() {
+    if (!resultado?.mesAnalise || !mesAnaliseTexto.trim()) return
+    setSalvandoMesAnalise(true)
+    setErroAcao(null)
+    const r = await enviar({
+      tipo: 'RESOLVER_MES_ANALISE',
+      professorId: resultado.professor.id,
+      incidentId: resultado.mesAnalise.id,
+      resultado: mesAnaliseTexto,
+    })
+    setSalvandoMesAnalise(false)
+    if (r.ok && 'resultado' in r && r.resultado) {
+      setResultado(r.resultado)
+      setMesAnaliseAberto(false)
+      setMesAnaliseTexto('')
+    } else if (!r.ok) {
+      setErroAcao(r.erro)
+    }
+  }
+
+  async function alternarResolvidoObservacao(id: string, resolvidoAtual: boolean) {
+    if (!resultado) return
+    setResolvendoObsId(id)
+    setErroAcao(null)
+    const r = await enviar({ tipo: 'RESOLVER_OBSERVACAO', professorId: resultado.professor.id, id, resolvido: !resolvidoAtual })
+    setResolvendoObsId(null)
+    if (r.ok && 'resultado' in r && r.resultado) {
+      setResultado(r.resultado)
+    } else if (!r.ok) {
+      setErroAcao(r.erro)
+    }
+  }
+
   if (sessao === undefined) return null // ainda carregando, evita flash
 
   if (colapsado) {
@@ -207,7 +263,7 @@ export function Panel() {
       <div style={corpoRolavel}>
         {!sessao ? (
           <p style={{ fontSize: 12, color: C.inkMuted, margin: 0, lineHeight: 1.5 }}>
-            Faça login no ícone da extensão (barra do Chrome) para ver o perfil do professor aqui.
+            Faça login no ícone da extensão (barra do navegador) para ver o perfil do professor aqui.
           </p>
         ) : resultado ? (
           <div>
@@ -217,11 +273,15 @@ export function Panel() {
             )}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+              {resultado.mesAnalise && <Chip tom="vermelho">Em Mês de Análise</Chip>}
               {resultado.professor.grupo && <Chip>{resultado.professor.grupo.nome}</Chip>}
               {resultado.professor.coordenador_nome && <Chip>Coord. {resultado.professor.coordenador_nome}</Chip>}
               <Chip tom={resultado.professor.status === 'ativo' ? 'verde' : 'neutro'}>
                 {resultado.professor.status === 'ativo' ? 'Ativo' : resultado.professor.status}
               </Chip>
+              {formatarData(resultado.professor.data_inicio) && (
+                <Chip>Desde {formatarData(resultado.professor.data_inicio)}</Chip>
+              )}
               {tempoDeCasaLabel(resultado.professor.data_inicio) && (
                 <Chip>{tempoDeCasaLabel(resultado.professor.data_inicio)} de casa</Chip>
               )}
@@ -310,12 +370,19 @@ export function Panel() {
                 )}
 
                 {!!resultado.acompanhamento.avaliacao_alunos?.total_avaliacoes && (
-                  <p style={{ fontSize: 11.5, color: C.ink, margin: '6px 0 0' }}>
-                    ★ {resultado.acompanhamento.avaliacao_alunos.media_estrelas?.toFixed(1) ?? '—'}
-                    <span style={{ color: C.inkMuted }}> ({resultado.acompanhamento.avaliacao_alunos.total_avaliacoes} avaliações,{' '}
-                      {resultado.acompanhamento.avaliacao_alunos.comentarios_positivos ?? 0} pos. / {resultado.acompanhamento.avaliacao_alunos.comentarios_negativos ?? 0} neg.)
-                    </span>
-                  </p>
+                  <>
+                    <p style={{ fontSize: 11.5, color: C.ink, margin: '6px 0 0' }}>
+                      ★ {resultado.acompanhamento.avaliacao_alunos.media_estrelas?.toFixed(1) ?? '—'}
+                      <span style={{ color: C.inkMuted }}> ({resultado.acompanhamento.avaliacao_alunos.total_avaliacoes} avaliações,{' '}
+                        {resultado.acompanhamento.avaliacao_alunos.comentarios_positivos ?? 0} pos. / {resultado.acompanhamento.avaliacao_alunos.comentarios_negativos ?? 0} neg.)
+                      </span>
+                    </p>
+                    <p style={{ fontSize: 10.5, color: C.inkMuted, margin: '3px 0 0' }}>
+                      {[5, 4, 3, 2, 1].map(n => (
+                        `${n}★ ${resultado.acompanhamento?.avaliacao_alunos?.[`estrelas_${n}` as keyof AvaliacaoAlunos] ?? 0}`
+                      )).join(' · ')}
+                    </p>
+                  </>
                 )}
 
                 {resultado.acompanhamento.alertas.length > 0 && (
@@ -327,6 +394,56 @@ export function Panel() {
                 )}
               </div>
             )}
+
+            <div style={secaoBox}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: resultado.mesAnalise || mesAnaliseAberto ? 8 : 0 }}>
+                <span style={{ ...rotulo, margin: 0 }}>Mês de Análise</span>
+                {resultado.mesAnalise && <Chip tom="vermelho">Em análise</Chip>}
+              </div>
+
+              {resultado.mesAnalise ? (
+                <div>
+                  <p style={{ fontSize: 12, color: C.ink, margin: '0 0 8px', lineHeight: 1.4 }}>{resultado.mesAnalise.description}</p>
+                  {!mesAnaliseAberto ? (
+                    <button onClick={() => setMesAnaliseAberto(true)} style={botaoSecundario}>Resolver</button>
+                  ) : (
+                    <div>
+                      <textarea
+                        value={mesAnaliseTexto}
+                        onChange={e => setMesAnaliseTexto(e.target.value)}
+                        placeholder="Resultado do Mês de Análise…"
+                        style={textarea}
+                      />
+                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                        <button onClick={confirmarResolverMesAnalise} disabled={salvandoMesAnalise || !mesAnaliseTexto.trim()} style={botaoSucesso}>
+                          {salvandoMesAnalise ? 'Salvando…' : 'Confirmar'}
+                        </button>
+                        <button onClick={() => { setMesAnaliseAberto(false); setMesAnaliseTexto('') }} style={botaoSecundario}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : !mesAnaliseAberto ? (
+                <button onClick={() => setMesAnaliseAberto(true)} style={botaoTexto}>Colocar em Mês de Análise</button>
+              ) : (
+                <div>
+                  <textarea
+                    value={mesAnaliseTexto}
+                    onChange={e => setMesAnaliseTexto(e.target.value)}
+                    placeholder="Descreva o motivo…"
+                    style={textarea}
+                  />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    <button onClick={confirmarColocarMesAnalise} disabled={salvandoMesAnalise || !mesAnaliseTexto.trim()} style={botaoSucesso}>
+                      {salvandoMesAnalise ? 'Salvando…' : 'Confirmar'}
+                    </button>
+                    <button onClick={() => { setMesAnaliseAberto(false); setMesAnaliseTexto('') }} style={botaoSecundario}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+
+              {erroAcao && <p style={{ fontSize: 11, color: C.red, margin: '8px 0 0' }}>{erroAcao}</p>}
+            </div>
 
             {!!(resultado.nexus.ocorrencias.length || resultado.nexus.tracking || resultado.nexus.alertas.length) && (
               <div style={secaoBox}>
@@ -393,7 +510,12 @@ export function Panel() {
               )}
             </div>
 
-            <p style={rotulo}>Últimas observações</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+              <span style={{ ...rotulo, margin: 0 }}>Últimas observações</span>
+              {resultado.observacoesAbertasTotal > 0 && (
+                <Chip tom="vermelho">{resultado.observacoesAbertasTotal} ocorrência(s) em aberto</Chip>
+              )}
+            </div>
             {resultado.observacoes.length === 0 ? (
               <p style={{ fontSize: 12, color: C.inkMuted, margin: 0 }}>Nenhuma observação registrada.</p>
             ) : (
@@ -409,6 +531,18 @@ export function Panel() {
                       </span>
                     </div>
                     <p style={{ fontSize: 12, color: C.ink, margin: '2px 0 0', lineHeight: 1.4 }}>{o.texto}</p>
+                    {o.tipo === 'ocorrencia' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <Chip tom={o.resolvido ? 'verde' : 'vermelho'}>{o.resolvido ? 'Resolvida' : 'Em aberto'}</Chip>
+                        <button
+                          onClick={() => alternarResolvidoObservacao(o.id, o.resolvido)}
+                          disabled={resolvendoObsId === o.id}
+                          style={botaoTexto}
+                        >
+                          {resolvendoObsId === o.id ? 'Salvando…' : o.resolvido ? 'Reabrir' : 'Marcar como resolvida'}
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -467,8 +601,9 @@ function LogoK() {
   )
 }
 
+// Canto superior esquerdo, logo abaixo da barra do Meet com hora e nome da reunião.
 const painel: React.CSSProperties = {
-  position: 'fixed', bottom: 20, right: 20, width: 320, maxHeight: '82vh', zIndex: 2147483647,
+  position: 'fixed', top: 72, left: 16, width: 320, maxHeight: 'calc(100vh - 92px)', zIndex: 2147483647,
   background: C.bg, borderRadius: 14, border: `1px solid ${C.border}`,
   boxShadow: '0 12px 32px -8px rgba(0,0,0,0.25)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -499,7 +634,7 @@ const botaoFechar: React.CSSProperties = {
 }
 
 const botaoFlutuante: React.CSSProperties = {
-  position: 'fixed', bottom: 20, right: 20, zIndex: 2147483647,
+  position: 'fixed', top: 72, left: 16, zIndex: 2147483647,
   width: 36, height: 36, borderRadius: '50%', border: `1px solid ${C.border}`,
   background: C.bg, boxShadow: '0 6px 16px -4px rgba(0,0,0,0.25)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',

@@ -4,6 +4,27 @@ import type {
   MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, ReuniaoHistoricoItem, ReuniaoHojeInfo,
 } from '../shared/types'
 
+const PROBLEM_TYPE_MES_ANALISE = 'Mês de análise'
+
+/** supabase-js só expõe error.message genérico em erros HTTP da function — o corpo
+ *  JSON real ({error: "..."}) vem em error.context (a Response). Mesmo parser usado
+ *  em src/hooks/useMesAnalise.ts na plataforma web (não compartilha módulo com a extensão). */
+async function invocarMesAnalise(body: Record<string, unknown>): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const { data, error } = await supabase.functions.invoke('nexus-mes-analise', { body })
+  if (error) {
+    const ctx = (error as { context?: Response }).context
+    if (ctx) {
+      try {
+        const parsed = await ctx.clone().json()
+        if (parsed?.error) return { ok: false, erro: parsed.error }
+      } catch { /* corpo não era JSON — usa error.message abaixo */ }
+    }
+    return { ok: false, erro: error.message }
+  }
+  if (data?.error) return { ok: false, erro: data.error }
+  return { ok: true }
+}
+
 function limitesDeHoje(): { inicio: string; fim: string } {
   const inicio = new Date(); inicio.setHours(0, 0, 0, 0)
   const fim    = new Date(); fim.setHours(23, 59, 59, 999)
@@ -82,8 +103,8 @@ async function montarResultado(
   motivo: 'email' | 'nome',
 ): Promise<ProfessorEncontrado | null> {
   const [
-    profRes, acompRes, historicoRes, totalRes, obsRes, reuniaoHoje,
-    nexusIncidentesRes, nexusAbertasRes, nexusTrackingRes, nexusAlertasRes,
+    profRes, acompRes, historicoRes, totalRes, obsRes, obsAbertasRes, reuniaoHoje,
+    nexusIncidentesRes, nexusAbertasRes, nexusTrackingRes, nexusAlertasRes, mesAnaliseRes,
   ] = await Promise.all([
     supabase
       .from('professores')
@@ -108,10 +129,16 @@ async function montarResultado(
       .eq('status', 'realizada'),
     supabase
       .from('observacoes')
-      .select('id, tipo, texto, created_at')
+      .select('id, tipo, texto, created_at, resolvido')
       .eq('professor_id', professorId)
       .order('created_at', { ascending: false })
       .limit(5),
+    supabase
+      .from('observacoes')
+      .select('id', { count: 'exact', head: true })
+      .eq('professor_id', professorId)
+      .eq('tipo', 'ocorrencia')
+      .eq('resolvido', false),
     buscarReuniaoHoje(professorId),
     supabase
       .from('nexus_incidents')
@@ -135,6 +162,14 @@ async function montarResultado(
       .select('level, total_count')
       .eq('professor_id', professorId)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('nexus_incidents')
+      .select('id, description, urgency, created_at')
+      .eq('professor_id', professorId)
+      .eq('problem_type', PROBLEM_TYPE_MES_ANALISE)
+      .eq('resolved', false)
+      .order('created_at', { ascending: false })
+      .limit(1),
   ])
   if (profRes.error || !profRes.data) return null
   const prof = profRes.data
@@ -174,12 +209,14 @@ async function montarResultado(
     totalReunioesRealizadas: totalRes.count ?? 0,
     reuniaoHoje,
     observacoes: obsRes.data ?? [],
+    observacoesAbertasTotal: obsAbertasRes.count ?? 0,
     nexus: {
       ocorrencias: nexusIncidentesRes.data ?? [],
       ocorrenciasAbertasTotal: nexusAbertasRes.count ?? 0,
       tracking: nexusTrackingRes.data?.[0] ?? null,
       alertas: nexusAlertasRes.data ?? [],
     },
+    mesAnalise: mesAnaliseRes.data?.[0] ?? null,
     motivo,
   }
 }
@@ -328,6 +365,54 @@ async function handleSalvarObservacaoReuniao(participanteId: string, observacao:
   }
 }
 
+/** Coloca o professor em Mês de Análise via a Edge Function nexus-mes-analise
+ *  (mesma usada pela plataforma web) — já valida role admin/coordenacao no servidor. */
+async function handleColocarMesAnalise(
+  professorId: string, descricao: string, urgencia?: string,
+): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+  if (!descricao.trim()) return { ok: false, erro: 'Descreva o motivo do Mês de Análise.' }
+
+  const r = await invocarMesAnalise({ action: 'colocar', professor_id: professorId, descricao: descricao.trim(), urgencia })
+  if (!r.ok) return { ok: false, erro: r.erro }
+
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Professor não encontrado após atualizar.' }
+}
+
+/** Resolve o Mês de Análise em aberto. */
+async function handleResolverMesAnalise(
+  professorId: string, incidentId: string, resultadoTexto: string,
+): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+  if (!resultadoTexto.trim()) return { ok: false, erro: 'Escreva o resultado do Mês de Análise.' }
+
+  const r = await invocarMesAnalise({ action: 'resolver', incident_id: incidentId, resultado: resultadoTexto.trim() })
+  if (!r.ok) return { ok: false, erro: r.erro }
+
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Professor não encontrado após atualizar.' }
+}
+
+/** Marca/reabre uma ocorrência do KTM — mesma lógica de useResolverObservacao na web. */
+async function handleResolverObservacao(
+  professorId: string, id: string, resolvido: boolean,
+): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+
+  const { error } = await supabase
+    .from('observacoes')
+    .update({ resolvido, resolvido_em: resolvido ? new Date().toISOString() : null })
+    .eq('id', id)
+  if (error) return { ok: false, erro: error.message }
+
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Professor não encontrado após atualizar.' }
+}
+
 chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, sendResponse) => {
   (async () => {
     try {
@@ -348,6 +433,12 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
           sendResponse(await handleConfirmarReuniao(msg.participanteId, msg.professorId, msg.aconteceu, msg.observacao)); break
         case 'SALVAR_OBSERVACAO_REUNIAO':
           sendResponse(await handleSalvarObservacaoReuniao(msg.participanteId, msg.observacao)); break
+        case 'COLOCAR_MES_ANALISE':
+          sendResponse(await handleColocarMesAnalise(msg.professorId, msg.descricao, msg.urgencia)); break
+        case 'RESOLVER_MES_ANALISE':
+          sendResponse(await handleResolverMesAnalise(msg.professorId, msg.incidentId, msg.resultado)); break
+        case 'RESOLVER_OBSERVACAO':
+          sendResponse(await handleResolverObservacao(msg.professorId, msg.id, msg.resolvido)); break
       }
     } catch (err) {
       sendResponse({ ok: false, erro: err instanceof Error ? err.message : String(err) })
