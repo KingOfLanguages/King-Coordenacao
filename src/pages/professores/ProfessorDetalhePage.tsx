@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2,
+  ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
   CalendarDays, Clock, DollarSign, Users, User,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ import { EditarReuniaoProfessorDialog } from '@/components/professores/EditarReu
 import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirReuniaoProfessorDialog'
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
 import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
+import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
@@ -96,6 +97,7 @@ export function ProfessorDetalhePage() {
   const [obsFiltro, setObsFiltro] = useState<ObsFiltro>('todos')
   const [colocarMesAnaliseAberto, setColocarMesAnaliseAberto] = useState(false)
   const [resolverMesAnaliseAberto, setResolverMesAnaliseAberto] = useState(false)
+  const [novoIncidenteAberto, setNovoIncidenteAberto] = useState(false)
   const [editarReuniaoAlvo, setEditarReuniaoAlvo] = useState<ReuniaoHistorico | null>(null)
   const [excluirReuniaoAlvo, setExcluirReuniaoAlvo] = useState<string | null>(null)
   const [obsExpandidas, setObsExpandidas] = useState<Set<string>>(new Set())
@@ -240,6 +242,15 @@ export function ProfessorDetalhePage() {
         </div>
 
         <div className="flex gap-2 flex-shrink-0">
+          {podeEditar && (
+            <Button
+              variant="outline" size="sm"
+              className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
+              onClick={() => setNovoIncidenteAberto(true)}
+            >
+              <FileWarning className="h-3.5 w-3.5" />Incidente
+            </Button>
+          )}
           {podeEditar && !emMesAnalise && (
             <Button
               variant="outline" size="sm"
@@ -512,6 +523,11 @@ export function ProfessorDetalhePage() {
         open={!!excluirReuniaoAlvo}
         onOpenChange={o => !o && setExcluirReuniaoAlvo(null)}
         participanteId={excluirReuniaoAlvo}
+      />
+      <NovoIncidenteDialog
+        open={novoIncidenteAberto}
+        onOpenChange={setNovoIncidenteAberto}
+        professorFixo={{ id: professor.id, nome: professor.nome }}
       />
     </div>
   )

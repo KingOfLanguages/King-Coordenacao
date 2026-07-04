@@ -12,6 +12,7 @@ import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
+import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
@@ -85,6 +86,11 @@ export default function App() {
               <Route path="/mes-analise" element={
                 <ProtectedRoute roles={['coordenacao', 'admin']}>
                   <MesAnalisePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/incidentes" element={
+                <ProtectedRoute roles={['coordenacao', 'admin']}>
+                  <IncidentesPage />
                 </ProtectedRoute>
               } />
               <Route path="/suporte/reunioes" element={
