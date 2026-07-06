@@ -176,18 +176,6 @@ async function fetchReunioes(coordId: string, inicio: string, fim: string): Prom
   }))
 }
 
-/** Reuniões do dia selecionado para o coordenador, com os professores vinculados (participantes). */
-export function useReunioesDoDia(coordId: string | null, dia: Date = new Date()) {
-  const chaveData = dia.toISOString().slice(0, 10)
-  const { inicio, fim } = dayRange(dia)
-  return useQuery({
-    queryKey: ['reunioes-dia', coordId, chaveData],
-    enabled: !!coordId,
-    queryFn: () => fetchReunioes(coordId!, inicio, fim),
-    refetchInterval: 2 * 60 * 1000,
-  })
-}
-
 /** Reuniões num intervalo arbitrário (visões de semana/mês da agenda). */
 export function useReunioesPeriodo(coordId: string | null, inicio: Date, fim: Date) {
   const chave = `${inicio.toISOString()}_${fim.toISOString()}`

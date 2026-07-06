@@ -59,17 +59,17 @@ export default function App() {
               } />
 
               <Route path="/professores" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <ProfessoresPage />
                 </ProtectedRoute>
               } />
               <Route path="/professores/:id" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <ProfessorDetalhePage />
                 </ProtectedRoute>
               } />
               <Route path="/observacoes/:id" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <ObservacaoDetalhePage />
                 </ProtectedRoute>
               } />
@@ -79,17 +79,17 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/acompanhamento" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
               <Route path="/mes-analise" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <MesAnalisePage />
                 </ProtectedRoute>
               } />
               <Route path="/incidentes" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <IncidentesPage />
                 </ProtectedRoute>
               } />

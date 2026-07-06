@@ -60,6 +60,13 @@ function computarIntervalo(modo: Modo, ref: Date): { inicio: Date; fim: Date } {
   return { inicio, fim: fimDoDia(somarDias(inicio, 41)) } // grade de 6 semanas
 }
 
+/** Data no formato do <input type="date"> em horário LOCAL (evita o shift de dia que
+ *  toISOString causa em reuniões à noite no fuso do Brasil). */
+function paraInputDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 function isMesmoDia(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear()
     && a.getMonth() === b.getMonth()
@@ -990,7 +997,7 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
 function EditarReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onClose: () => void }) {
   const editar = useEditarReuniao()
   const dataOriginal = new Date(reuniao.data)
-  const [data, setData] = useState(() => dataOriginal.toISOString().slice(0, 10))
+  const [data, setData] = useState(() => paraInputDate(dataOriginal))
   const [hora, setHora] = useState(() => dataOriginal.toTimeString().slice(0, 5))
   const [titulo, setTitulo] = useState(reuniao.titulo ?? '')
   const [pauta, setPauta] = useState(reuniao.pauta ?? '')
@@ -1281,7 +1288,10 @@ function VincularBlock({ reuniao, participanteId, dados }: {
   dados: DadosVinculo
 }) {
   const vincular = useVincularProfessor()
-  const sugestoes = dados ? sugerirVinculos(reuniao, dados.profs, dados.emails) : []
+  const sugestoes = useMemo(
+    () => (dados ? sugerirVinculos(reuniao, dados.profs, dados.emails) : []),
+    [reuniao, dados],
+  )
 
   function link(professorId: string, motivo: 'email' | 'nome' | 'manual') {
     vincular.mutate(

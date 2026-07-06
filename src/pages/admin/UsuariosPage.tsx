@@ -275,10 +275,11 @@ function UsuarioRow({
           )}
           <button
             type="button"
-            disabled={isPending}
+            disabled={isPending || isSelf}
             onClick={() => onFlag('is_admin', !usuario.is_admin)}
+            title={isSelf ? 'Você não pode alterar o próprio acesso admin' : undefined}
             className={cn(
-              'btn-press rounded-full px-2 py-0.5 text-[10.5px] font-medium border',
+              'btn-press rounded-full px-2 py-0.5 text-[10.5px] font-medium border disabled:opacity-60 disabled:cursor-default',
               usuario.is_admin
                 ? 'border-urg-medFg/30 bg-urg-medBg text-urg-medFg'
                 : 'border-line text-ink-muted hover:text-ink',
@@ -339,10 +340,11 @@ function UsuarioRow({
             <Button
               size="sm"
               variant="outline"
-              disabled={isPending}
+              disabled={isPending || isSelf}
               onClick={onToggleAtivo}
+              title={isSelf ? 'Você não pode bloquear a própria conta' : undefined}
               className={cn(
-                'btn-press h-7 text-[11px] gap-1.5',
+                'btn-press h-7 text-[11px] gap-1.5 disabled:opacity-60',
                 usuario.ativo
                   ? 'border-urg-highFg/25 text-urg-highFg hover:bg-urg-highBg'
                   : 'border-urg-lowFg/25 text-urg-lowFg hover:bg-urg-lowBg',

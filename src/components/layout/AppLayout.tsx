@@ -103,7 +103,8 @@ export function AppLayout() {
   const suporteEntry: NavEntry = { type: 'link', to: '/suporte/reunioes', label: 'Buscar Reuniões' }
 
   const entries: NavEntry[] = [
-    ...(isCoord ? [groupReunioes, groupProfessores] : []),
+    ...(isCoord ? [groupReunioes] : []),
+    ...(isCoord || isSuporte ? [groupProfessores] : []),
     dashboardEntry,
     ...(isSuporte || isAdmin ? [suporteEntry] : []),
     ...(isAdmin ? [groupAdmin] : []),

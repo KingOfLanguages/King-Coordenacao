@@ -1,7 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR" translate="no">
   <head>
     <meta charset="UTF-8" />
+    <!-- App 100% em português. Barrar a auto-tradução do navegador evita o crash
+         de removeChild: o Google Translate troca nós de texto do DOM e, ao
+         desmontar telas (ex.: lista de Incidentes) na navegação, o React tenta
+         remover um nó que já não existe → tela branca / "Recarregar página". -->
+    <meta name="google" content="notranslate" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>King TeacherTrack</title>

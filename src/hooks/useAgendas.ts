@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { dayRange } from '@/hooks/useReunioesDia'
 
 export type OcorrenciaComLink = {
   id: string
@@ -343,18 +342,6 @@ async function fetchAgendaOcorrencias(coordId: string, inicio: string, fim: stri
         return { id: i.id, nome: i.professor?.nome ?? i.email_usado, score_atual: acomp?.score_atual ?? null }
       }),
   }))
-}
-
-/** Reuniões de feedback (agendamento coletivo) já reservadas, do coordenador, no dia selecionado. */
-export function useAgendaReunioesDoDia(coordId: string | null, dia: Date = new Date()) {
-  const chaveData = dia.toISOString().slice(0, 10)
-  const { inicio, fim } = dayRange(dia)
-  return useQuery({
-    queryKey: ['agenda-reunioes-dia', coordId, chaveData],
-    enabled: !!coordId,
-    queryFn: () => fetchAgendaOcorrencias(coordId!, inicio, fim),
-    refetchInterval: 2 * 60 * 1000,
-  })
 }
 
 /** Reuniões de feedback num intervalo arbitrário (visões de semana/mês da agenda). */

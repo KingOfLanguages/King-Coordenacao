@@ -15,7 +15,7 @@ import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlert
 import { useResolverObservacao, type ObservacaoSnapshot } from '@/hooks/useObservacoes'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
-import { canEdit } from '@/lib/permissions'
+import { canEdit, canAddInfo } from '@/lib/permissions'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
@@ -94,6 +94,7 @@ export function ProfessorDetalhePage() {
   const { profile } = useAuth()
   const { data: grupos = [] } = useGrupos()
   const podeEditar = canEdit(profile)
+  const podeRegistrar = canAddInfo(profile)
   const [obsAberta, setObsAberta] = useState(false)
   const [obsFiltro, setObsFiltro] = useState<ObsFiltro>('todos')
   const [colocarMesAnaliseAberto, setColocarMesAnaliseAberto] = useState(false)
@@ -102,6 +103,7 @@ export function ProfessorDetalhePage() {
   const [editarReuniaoAlvo, setEditarReuniaoAlvo] = useState<ReuniaoHistorico | null>(null)
   const [excluirReuniaoAlvo, setExcluirReuniaoAlvo] = useState<string | null>(null)
   const [obsExpandidas, setObsExpandidas] = useState<Set<string>>(new Set())
+  const [reunioesExpandidas, setReunioesExpandidas] = useState(false)
 
   // Deriva do que useNexusDados já busca — sem query extra.
   const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === 'Mês de análise' && !i.resolved) ?? null
@@ -140,8 +142,11 @@ export function ProfessorDetalhePage() {
     ? observacoes
     : observacoes.filter(o => o.tipo === obsFiltro)
 
-  const negativos  = observacoes.filter(o => o.tipo === 'feedback_negativo').length
-  const positivos  = observacoes.filter(o => o.tipo === 'feedback_positivo').length
+  // Uma passada só monta a contagem por tipo (em vez de 8 filtros por render).
+  const obsCounts = new Map<string, number>()
+  for (const o of observacoes) obsCounts.set(o.tipo, (obsCounts.get(o.tipo) ?? 0) + 1)
+  const negativos = obsCounts.get('feedback_negativo') ?? 0
+  const positivos = obsCounts.get('feedback_positivo') ?? 0
 
   function resolverNomePerfil(profiles: PerfilRef): string | null {
     if (!profiles) return null
@@ -245,7 +250,7 @@ export function ProfessorDetalhePage() {
        </div>
 
         <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
-          {podeEditar && (
+          {podeRegistrar && (
             <Button
               variant="outline" size="sm"
               className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
@@ -320,7 +325,7 @@ export function ProfessorDetalhePage() {
             <p className="text-[13px] text-ink-muted">Nenhuma reunião registrada.</p>
           ) : (
             <ul className="space-y-2.5">
-              {reunioes.slice(0, 10).map(r => (
+              {(reunioesExpandidas ? reunioes : reunioes.slice(0, 10)).map(r => (
                 <li key={r.id} className="space-y-1 pb-2.5 border-b border-line-soft last:border-0 last:pb-0">
                   <div className="flex items-center justify-between gap-2 text-[13px]">
                     <span className="text-ink tabular-nums">
@@ -362,8 +367,13 @@ export function ProfessorDetalhePage() {
                 </li>
               ))}
               {reunioes.length > 10 && (
-                <li className="pt-1 text-[12px] text-ink-muted">
-                  + {reunioes.length - 10} mais
+                <li className="pt-1">
+                  <button
+                    onClick={() => setReunioesExpandidas(v => !v)}
+                    className="btn-press text-[12px] text-accentBlue font-medium"
+                  >
+                    {reunioesExpandidas ? 'Ver menos' : `+ ${reunioes.length - 10} mais`}
+                  </button>
                 </li>
               )}
             </ul>
@@ -379,7 +389,7 @@ export function ProfessorDetalhePage() {
             {FILTROS.map(f => {
               const count = f.value === 'todos'
                 ? observacoes.length
-                : observacoes.filter(o => o.tipo === f.value).length
+                : obsCounts.get(f.value) ?? 0
               return (
                 <button
                   key={f.value}

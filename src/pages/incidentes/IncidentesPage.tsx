@@ -14,6 +14,8 @@ import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidente
 import { urgenciaChip } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useAuth } from '@/contexts/AuthContext'
+import { canEdit } from '@/lib/permissions'
 
 type Aba = 'professor' | 'geral'
 type FiltroStatus = 'todos' | 'abertos' | 'resolvidos'
@@ -35,6 +37,8 @@ function tempoRelativo(iso: string): string {
 
 export function IncidentesPage() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
+  const podeEditar = canEdit(profile)
   const { data: incidentes = [], isLoading } = useIncidentes()
   const reabrir = useReabrirIncidente()
 
@@ -264,39 +268,56 @@ export function IncidentesPage() {
                 </div>
                 <p className="text-[13px] text-ink-secondary mt-1.5 truncate" title={i.description}>{i.description}</p>
                 <p className="text-[11px] text-ink-muted mt-1.5">{i.coordinator} · {tempoRelativo(i.created_at)}</p>
+                {i.image_urls.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {i.image_urls.map((url, idx) => (
+                      <a
+                        key={idx}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block h-12 w-12 overflow-hidden rounded-md border border-line hover:opacity-90"
+                      >
+                        <img src={url} alt={`Anexo ${idx + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
                 <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium', urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
                   {i.urgency}
                 </span>
-                <div className="flex items-center gap-1.5">
-                  {i.resolved ? (
+                {podeEditar && (
+                  <div className="flex items-center gap-1.5">
+                    {i.resolved ? (
+                      <button
+                        onClick={() => reabrir.mutate(
+                          { id: i.id, professor_id: i.professor_id },
+                          { onSuccess: () => toast.success('Incidente reaberto.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao reabrir.') },
+                        )}
+                        className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-medBg text-urg-medFg hover:opacity-80 transition-opacity"
+                      >
+                        Reabrir
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setResolverAlvo(i)}
+                        className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity"
+                      >
+                        Resolver
+                      </button>
+                    )}
                     <button
-                      onClick={() => reabrir.mutate(
-                        { id: i.id, professor_id: i.professor_id },
-                        { onSuccess: () => toast.success('Incidente reaberto.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao reabrir.') },
-                      )}
-                      className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-medBg text-urg-medFg hover:opacity-80 transition-opacity"
+                      onClick={() => setExcluirAlvo(i)}
+                      aria-label="Excluir incidente"
+                      className="btn-press p-1.5 rounded-lg text-ink-subtle hover:text-urg-highFg hover:bg-urg-highBg transition-colors"
                     >
-                      Reabrir
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => setResolverAlvo(i)}
-                      className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity"
-                    >
-                      Resolver
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setExcluirAlvo(i)}
-                    aria-label="Excluir incidente"
-                    className="btn-press p-1.5 rounded-lg text-ink-subtle hover:text-urg-highFg hover:bg-urg-highBg transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           ))}

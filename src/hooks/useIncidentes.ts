@@ -3,6 +3,19 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 
 const PROBLEM_TYPE_MES_ANALISE = 'Mês de análise'
+const BUCKET_INCIDENTES = 'incidentes'
+
+/** Envia uma imagem pro bucket de incidentes e devolve a URL pública.
+ *  Nome aleatório (uuid) evita colisão; o bucket é público pra renderização direta. */
+export async function uploadImagemIncidente(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'
+  const caminho = `${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage
+    .from(BUCKET_INCIDENTES)
+    .upload(caminho, file, { cacheControl: '3600', contentType: file.type || undefined, upsert: false })
+  if (error) throw error
+  return supabase.storage.from(BUCKET_INCIDENTES).getPublicUrl(caminho).data.publicUrl
+}
 
 /** Roster de alunos ativos do professor (via KMS) — usado como sugestão de
  *  autocomplete no campo de aluno do incidente. Só primeiro nome (LGPD). */
@@ -64,9 +77,10 @@ export interface Incidente {
   resolved: boolean
   resolved_at: string | null
   created_at: string
+  image_urls: string[]
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, created_at'
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, created_at, image_urls'
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
@@ -80,7 +94,7 @@ export function useIncidentes() {
         .neq('problem_type', PROBLEM_TYPE_MES_ANALISE)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return (data ?? []) as Incidente[]
+      return (data ?? []).map(i => ({ ...i, image_urls: i.image_urls ?? [] })) as Incidente[]
     },
   })
 }
@@ -99,6 +113,8 @@ export function useCriarIncidente() {
       titulo_livre?: string
       /** Nome do aluno referido no incidente — sempre opcional, com ou sem professor vinculado. */
       aluno_nome?: string
+      /** URLs de imagens já enviadas ao Storage (bucket "incidentes"). */
+      image_urls?: string[]
     }) => {
       let teacherName: string
       if (input.professor_id) {
@@ -126,7 +142,7 @@ export function useCriarIncidente() {
         resolved_at: null,
         under_analysis: false,
         incident_mode: input.professor_id ? 'professor' : 'interno',
-        image_urls: [],
+        image_urls: input.image_urls ?? [],
         created_at: nowIso,
         professor_id: input.professor_id ?? null,
         synced_at: nowIso,

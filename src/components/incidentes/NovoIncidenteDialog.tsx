@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Search, X, GraduationCap } from 'lucide-react'
+import { Search, X, GraduationCap, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -7,8 +7,10 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
-import { useCriarIncidente, useAlunosDoProfessor, CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL } from '@/hooks/useIncidentes'
+import { useCriarIncidente, useAlunosDoProfessor, uploadImagemIncidente, CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL } from '@/hooks/useIncidentes'
 import { cn } from '@/lib/utils'
+
+const MAX_IMAGENS = 3
 
 type Aba = 'professor' | 'geral'
 
@@ -33,10 +35,31 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [urgencia, setUrgencia] = useState('Média')
   const [descricao, setDescricao] = useState('')
   const [precisaAcompanhamento, setPrecisaAcompanhamento] = useState(false)
+  const [imagens, setImagens] = useState<File[]>([])
+  const [enviandoImagens, setEnviandoImagens] = useState(false)
 
   const { data: roster = [], isLoading: carregandoRoster } = useAlunosDoProfessor(selecionado?.id ?? null)
 
   const alunoBlurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // URLs de preview locais — revogadas quando a lista muda ou o diálogo desmonta.
+  const previews = useMemo(() => imagens.map(f => URL.createObjectURL(f)), [imagens])
+  useEffect(() => () => { previews.forEach(URL.revokeObjectURL) }, [previews])
+
+  function addImagens(files: FileList | null) {
+    if (!files) return
+    const novas = Array.from(files).filter(f => f.type.startsWith('image/'))
+    if (!novas.length) return
+    setImagens(prev => {
+      const combinado = [...prev, ...novas].slice(0, MAX_IMAGENS)
+      if (prev.length + novas.length > MAX_IMAGENS) toast.warning(`Máximo de ${MAX_IMAGENS} imagens.`)
+      return combinado
+    })
+  }
+  function removeImagem(idx: number) {
+    setImagens(prev => prev.filter((_, i) => i !== idx))
+  }
 
   useEffect(() => {
     // Limpa o timeout pendente do onBlur do campo "Aluno" — sem isso, o
@@ -62,6 +85,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setUrgencia('Média')
     setDescricao('')
     setPrecisaAcompanhamento(false)
+    setImagens([])
   }, [open, professorFixo])
 
   const categorias = aba === 'professor' ? CATEGORIAS_PROFESSOR : CATEGORIAS_GERAL
@@ -86,10 +110,15 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const podeConfirmar = !!descricao.trim() && (aba === 'geral' || !!selecionado)
 
   async function handleConfirmar() {
-    if (!podeConfirmar) return
+    if (!podeConfirmar || criar.isPending || enviandoImagens) return
     if (alunoBlurTimeout.current) clearTimeout(alunoBlurTimeout.current)
     setAlunoBusca(false)
     try {
+      let imageUrls: string[] = []
+      if (imagens.length) {
+        setEnviandoImagens(true)
+        imageUrls = await Promise.all(imagens.map(uploadImagemIncidente))
+      }
       await criar.mutateAsync({
         problem_type: categoria,
         urgency: urgencia,
@@ -98,11 +127,14 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         professor_id: aba === 'professor' ? selecionado?.id : null,
         titulo_livre: aba === 'geral' ? tituloLivre : undefined,
         aluno_nome: alunoNome,
+        image_urls: imageUrls,
       })
       toast.success('Incidente registrado.')
       onOpenChange(false)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao registrar incidente.')
+    } finally {
+      setEnviandoImagens(false)
     }
   }
 
@@ -268,6 +300,43 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label className="label-micro">Imagens (opcional · até {MAX_IMAGENS})</Label>
+            <div className="flex flex-wrap gap-2">
+              {imagens.map((f, i) => (
+                <div key={i} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-line">
+                  <img src={previews[i]} alt={f.name} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeImagem(i)}
+                    className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    aria-label="Remover imagem"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {imagens.length < MAX_IMAGENS && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-press flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-line text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+                >
+                  <ImagePlus className="h-4 w-4" />
+                  <span className="text-[10px]">Adicionar</span>
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              hidden
+              onChange={e => { addImagens(e.target.files); e.target.value = '' }}
+            />
+          </div>
+
           <label className="flex items-center gap-2 text-[12.5px] text-ink-secondary cursor-pointer">
             <input
               type="checkbox"
@@ -284,10 +353,10 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             </Button>
             <Button
               onClick={handleConfirmar}
-              disabled={!podeConfirmar || criar.isPending}
+              disabled={!podeConfirmar || criar.isPending || enviandoImagens}
               className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
             >
-              {criar.isPending ? 'Salvando…' : 'Registrar incidente'}
+              {enviandoImagens ? 'Enviando imagens…' : criar.isPending ? 'Salvando…' : 'Registrar incidente'}
             </Button>
           </div>
         </div>
