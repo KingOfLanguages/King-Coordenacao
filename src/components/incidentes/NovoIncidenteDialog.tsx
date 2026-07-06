@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { Search, X, GraduationCap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -34,10 +34,25 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [descricao, setDescricao] = useState('')
   const [precisaAcompanhamento, setPrecisaAcompanhamento] = useState(false)
 
-  const { data: roster = [] } = useAlunosDoProfessor(selecionado?.id ?? null)
+  const { data: roster = [], isLoading: carregandoRoster } = useAlunosDoProfessor(selecionado?.id ?? null)
+
+  const alunoBlurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!open) return
+    // Limpa o timeout pendente do onBlur do campo "Aluno" — sem isso, o
+    // setState agendado pode disparar depois que o Dialog já começou a
+    // fechar/desmontar (Radix ainda está com a animação de saída), o que
+    // já causou um crash de removeChild ao registrar incidente.
+    return () => {
+      if (alunoBlurTimeout.current) clearTimeout(alunoBlurTimeout.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) {
+      if (alunoBlurTimeout.current) clearTimeout(alunoBlurTimeout.current)
+      return
+    }
     setAba('professor')
     setSelecionado(professorFixo ?? null)
     setBusca('')
@@ -72,6 +87,8 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
 
   async function handleConfirmar() {
     if (!podeConfirmar) return
+    if (alunoBlurTimeout.current) clearTimeout(alunoBlurTimeout.current)
+    setAlunoBusca(false)
     try {
       await criar.mutateAsync({
         problem_type: categoria,
@@ -181,7 +198,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
               value={alunoNome}
               onChange={e => setAlunoNome(e.target.value)}
               onFocus={() => setAlunoBusca(true)}
-              onBlur={() => setTimeout(() => setAlunoBusca(false), 150)}
+              onBlur={() => {
+                alunoBlurTimeout.current = setTimeout(() => setAlunoBusca(false), 150)
+              }}
               placeholder="Nome do aluno relacionado ao incidente…"
               className="h-9 bg-surface-canvas border-line"
             />
@@ -198,6 +217,11 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                   </li>
                 ))}
               </ul>
+            )}
+            {alunoBusca && selecionado && !carregandoRoster && roster.length === 0 && (
+              <div className="absolute z-10 mt-1 w-full rounded-lg border border-line bg-surface-canvas px-3 py-2 text-[12px] text-ink-muted shadow-lg">
+                Nenhum aluno sincronizado pra esse professor ainda — pode digitar o nome manualmente.
+              </div>
             )}
           </div>
 
