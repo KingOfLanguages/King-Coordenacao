@@ -25,6 +25,7 @@ import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirR
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
 import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
+import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
@@ -305,6 +306,8 @@ export function ProfessorDetalhePage() {
           incidentes={nexusData.incidentes}
           tracking={nexusData.tracking}
           alertas={nexusData.alertas}
+          professorId={id!}
+          professorNome={professor?.nome ?? ''}
         />
       )}
 
@@ -800,13 +803,16 @@ function ScoreHistoricoChart({ historico }: { historico: ProfessorScoreHistorico
 // ─── Ocorrências (King Nexus) ──────────────────────────────────────────────────
 
 function NexusSection({
-  incidentes, tracking, alertas,
+  incidentes, tracking, alertas, professorId, professorNome,
 }: {
   incidentes: NexusIncidente[]
   tracking: NexusTracking | null
   alertas: NexusAlerta[]
+  professorId: string
+  professorNome: string
 }) {
   const [expandido, setExpandido] = useState(false)
+  const [excluirAlvo, setExcluirAlvo] = useState<NexusIncidente | null>(null)
   const abertas = incidentes.filter(i => !i.resolved).length
   const visiveis = expandido ? incidentes : incidentes.slice(0, 5)
 
@@ -891,6 +897,15 @@ function NexusSection({
                     <span className="text-ink-subtle tabular-nums">
                       {new Date(i.created_at).toLocaleDateString('pt-BR')}
                     </span>
+                    {i.problem_type !== 'Mês de análise' && (
+                      <button
+                        onClick={() => setExcluirAlvo(i)}
+                        aria-label="Excluir incidente"
+                        className="btn-press p-1 rounded-md text-ink-subtle hover:text-urg-highFg hover:bg-urg-highBg transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <p className="text-[13px] text-ink-secondary leading-relaxed">{i.description}</p>
@@ -912,6 +927,12 @@ function NexusSection({
           )}
         </>
       )}
+
+      <ExcluirIncidenteDialog
+        open={!!excluirAlvo}
+        onOpenChange={o => !o && setExcluirAlvo(null)}
+        incidente={excluirAlvo && { id: excluirAlvo.id, teacher_name: professorNome, professor_id: professorId }}
+      />
     </section>
   )
 }

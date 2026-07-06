@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -10,12 +10,15 @@ import {
 } from '@/hooks/useIncidentes'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { ResolverIncidenteDialog } from '@/components/incidentes/ResolverIncidenteDialog'
+import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { urgenciaChip } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 type Aba = 'professor' | 'geral'
 type FiltroStatus = 'todos' | 'abertos' | 'resolvidos'
+type FiltroUrgencia = 'todas' | 'Baixa' | 'Média' | 'Alta'
+type Ordem = 'novo' | 'antigo'
 
 const URG_BAR: Record<string, string> = {
   Baixa: 'bg-urg-lowFg',
@@ -37,10 +40,14 @@ export function IncidentesPage() {
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [resolverAlvo, setResolverAlvo] = useState<Incidente | null>(null)
+  const [excluirAlvo, setExcluirAlvo] = useState<Incidente | null>(null)
   const [aba, setAba] = useState<Aba>('professor')
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<string>('todas')
   const [status, setStatus] = useState<FiltroStatus>('abertos')
+  const [urgenciaFiltro, setUrgenciaFiltro] = useState<FiltroUrgencia>('todas')
+  const [professorFiltro, setProfessorFiltro] = useState<string>('todos')
+  const [ordem, setOrdem] = useState<Ordem>('novo')
 
   const porAba = useMemo(
     () => incidentes.filter(i => (aba === 'professor' ? !!i.professor_id : !i.professor_id)),
@@ -48,6 +55,14 @@ export function IncidentesPage() {
   )
 
   const categoriasAba = aba === 'professor' ? CATEGORIAS_PROFESSOR : CATEGORIAS_GERAL
+
+  const professoresComIncidente = useMemo(() => {
+    const mapa = new Map<string, string>()
+    for (const i of porAba) {
+      if (i.professor_id) mapa.set(i.professor_id, i.teacher_name)
+    }
+    return [...mapa.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [porAba])
 
   const stats = {
     abertos: porAba.filter(i => !i.resolved).length,
@@ -60,10 +75,12 @@ export function IncidentesPage() {
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
-    return porAba.filter(i => {
+    const lista = porAba.filter(i => {
       if (status === 'abertos' && i.resolved) return false
       if (status === 'resolvidos' && !i.resolved) return false
       if (categoria !== 'todas' && i.problem_type !== categoria) return false
+      if (urgenciaFiltro !== 'todas' && i.urgency !== urgenciaFiltro) return false
+      if (professorFiltro !== 'todos' && i.professor_id !== professorFiltro) return false
       if (termo && !(
         i.teacher_name.toLowerCase().includes(termo) ||
         (i.aluno_nome ?? '').toLowerCase().includes(termo) ||
@@ -72,11 +89,14 @@ export function IncidentesPage() {
       )) return false
       return true
     })
-  }, [porAba, busca, categoria, status])
+    const sinal = ordem === 'novo' ? -1 : 1
+    return [...lista].sort((a, b) => sinal * a.created_at.localeCompare(b.created_at))
+  }, [porAba, busca, categoria, status, urgenciaFiltro, professorFiltro, ordem])
 
   function trocarAba(novaAba: Aba) {
     setAba(novaAba)
     setCategoria('todas')
+    setProfessorFiltro('todos')
   }
 
   return (
@@ -158,6 +178,30 @@ export function IncidentesPage() {
             ))}
           </SelectContent>
         </Select>
+        {aba === 'professor' && (
+          <Select value={professorFiltro} onValueChange={setProfessorFiltro}>
+            <SelectTrigger className="h-9 w-[180px] text-[12px] bg-surface-canvas border-line text-ink">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
+              <SelectItem value="todos">Todos os professores</SelectItem>
+              {professoresComIncidente.map(([id, nome]) => (
+                <SelectItem key={id} value={id}>{nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={urgenciaFiltro} onValueChange={v => setUrgenciaFiltro(v as FiltroUrgencia)}>
+          <SelectTrigger className="h-9 w-[150px] text-[12px] bg-surface-canvas border-line text-ink">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-surface-canvas border-line text-ink">
+            <SelectItem value="todas">Todas as urgências</SelectItem>
+            <SelectItem value="Baixa">Baixa</SelectItem>
+            <SelectItem value="Média">Média</SelectItem>
+            <SelectItem value="Alta">Alta</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1">
           {([['abertos', 'Abertos'], ['resolvidos', 'Resolvidos'], ['todos', 'Todos']] as [FiltroStatus, string][]).map(([value, label]) => (
             <button
@@ -172,6 +216,14 @@ export function IncidentesPage() {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setOrdem(o => (o === 'novo' ? 'antigo' : 'novo'))}
+          className="btn-press flex items-center gap-1.5 h-9 px-3 rounded-full text-[12px] font-medium text-ink-secondary bg-surface-subtle hover:text-ink transition-colors"
+          title="Alternar ordenação"
+        >
+          {ordem === 'novo' ? <ArrowDownNarrowWide className="h-3.5 w-3.5" /> : <ArrowUpNarrowWide className="h-3.5 w-3.5" />}
+          {ordem === 'novo' ? 'Mais recentes' : 'Mais antigos'}
+        </button>
       </div>
 
       {isLoading ? (
@@ -218,24 +270,33 @@ export function IncidentesPage() {
                 <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium', urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
                   {i.urgency}
                 </span>
-                {i.resolved ? (
+                <div className="flex items-center gap-1.5">
+                  {i.resolved ? (
+                    <button
+                      onClick={() => reabrir.mutate(
+                        { id: i.id, professor_id: i.professor_id },
+                        { onSuccess: () => toast.success('Incidente reaberto.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao reabrir.') },
+                      )}
+                      className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-medBg text-urg-medFg hover:opacity-80 transition-opacity"
+                    >
+                      Reabrir
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setResolverAlvo(i)}
+                      className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity"
+                    >
+                      Resolver
+                    </button>
+                  )}
                   <button
-                    onClick={() => reabrir.mutate(
-                      { id: i.id, professor_id: i.professor_id },
-                      { onSuccess: () => toast.success('Incidente reaberto.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao reabrir.') },
-                    )}
-                    className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-medBg text-urg-medFg hover:opacity-80 transition-opacity"
+                    onClick={() => setExcluirAlvo(i)}
+                    aria-label="Excluir incidente"
+                    className="btn-press p-1.5 rounded-lg text-ink-subtle hover:text-urg-highFg hover:bg-urg-highBg transition-colors"
                   >
-                    Reabrir
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                ) : (
-                  <button
-                    onClick={() => setResolverAlvo(i)}
-                    className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity"
-                  >
-                    Resolver
-                  </button>
-                )}
+                </div>
               </div>
             </div>
           ))}
@@ -247,6 +308,11 @@ export function IncidentesPage() {
         open={!!resolverAlvo}
         onOpenChange={o => !o && setResolverAlvo(null)}
         incidente={resolverAlvo}
+      />
+      <ExcluirIncidenteDialog
+        open={!!excluirAlvo}
+        onOpenChange={o => !o && setExcluirAlvo(null)}
+        incidente={excluirAlvo}
       />
     </div>
   )

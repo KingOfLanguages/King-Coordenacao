@@ -157,6 +157,21 @@ export function useResolverIncidente() {
   })
 }
 
+export function useExcluirIncidente() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; professor_id?: string | null }) => {
+      const { error } = await supabase.from('nexus_incidents').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['incidentes'] })
+      qc.invalidateQueries({ queryKey: ['problemas-abertos'] })
+      if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
+    },
+  })
+}
+
 export function useReabrirIncidente() {
   const qc = useQueryClient()
   return useMutation({
