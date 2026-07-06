@@ -103,7 +103,7 @@ serve(async (req) => {
 
   const { data: professor } = await admin
     .from('professores')
-    .select('id, nome, status, grupo_id')
+    .select('id, nome, status')
     .eq('id', idProfessor)
     .maybeSingle()
 
@@ -111,11 +111,14 @@ serve(async (req) => {
     return json({ professor: null, agendas: [] })
   }
 
-  // ── 2. Agendas ativas autorizadas para o grupo do professor ──────────────────
+  // ── 2. Agendas ativas de todos os coordenadores ──────────────────────────────
+  // Reunião em grupo é sempre apresentada com as agendas de todos os
+  // coordenadores juntas — `grupos_autorizados` não filtra mais a visibilidade
+  // pro professor (o campo continua existindo no admin, mas sem efeito aqui).
   const { data: agendas, error: agendasErr } = await admin
     .from('agenda_reunioes')
     .select(`
-      id, titulo, descricao, meet_link, grupos_autorizados,
+      id, titulo, descricao, meet_link,
       coordenador:profiles!coordenador_id (id, nome),
       recorrencias:agenda_recorrencias (id, dia_semana, hora, capacidade, meet_link, ativo),
       horarios:agenda_horarios (id, recorrencia_id, data_hora, capacidade, meet_link, ativo)
@@ -127,10 +130,7 @@ serve(async (req) => {
     return json({ error: 'Erro ao buscar agendas.' }, 500)
   }
 
-  const agendasAutorizadas = (agendas ?? []).filter(a => {
-    const grupos = a.grupos_autorizados as string[] | null
-    return !grupos || grupos.length === 0 || (professor.grupo_id != null && grupos.includes(professor.grupo_id))
-  })
+  const agendasAutorizadas = agendas ?? []
 
   if (agendasAutorizadas.length === 0) {
     return json({ professor: { id: professor.id, nome: professor.nome }, agendas: [] })
