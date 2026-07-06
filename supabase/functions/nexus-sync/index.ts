@@ -186,6 +186,17 @@ serve(async (req) => {
     return new Response('Não autorizado.', { status: 401 })
   }
 
+  // `skipCleanup: true` faz um sync SÓ ADITIVO — puxa/atualiza tudo do Nexus
+  // (upsert por id) mas NÃO roda o deleteStale final. Serve pra puxar dado novo
+  // sem apagar incidentes criados direto no KTM (que não existem na origem e
+  // seriam removidos pela limpeza por staleness). O cron manda body '{}', então
+  // o comportamento padrão (com limpeza) fica inalterado.
+  let skipCleanup = false
+  try {
+    const body = await req.json()
+    skipCleanup = body?.skipCleanup === true
+  } catch { /* sem body / body inválido → sync completo normal */ }
+
   const nexusUrl      = Deno.env.get('NEXUS_SUPABASE_URL')
   const nexusAnonKey  = Deno.env.get('NEXUS_ANON_KEY')
   const nexusEmail    = Deno.env.get('NEXUS_SYNC_EMAIL')
@@ -337,11 +348,16 @@ serve(async (req) => {
     // nexus_incidents com problem_type 'Mês de análise' são canônicos do KTM
     // desde 2026-07-03 (nexus-mes-analise não escreve mais no Nexus) — nunca
     // aparecem nesta leitura, então ficam de fora da limpeza por staleness.
-    stats.removidos = {
-      teacher_recurrences: await deleteStale(admin, 'nexus_teacher_recurrences', runStart),
-      incidents:           await deleteStale(admin, 'nexus_incidents', runStart, 'Mês de análise'),
-      teacher_tracking:    await deleteStale(admin, 'nexus_teacher_tracking', runStart),
-      mes_analise_alerts:  await deleteStale(admin, 'nexus_mes_analise_alerts', runStart),
+    // Com skipCleanup, pula a limpeza inteira (sync aditivo — ver topo).
+    if (skipCleanup) {
+      stats.removidos = { pulado: 1 }
+    } else {
+      stats.removidos = {
+        teacher_recurrences: await deleteStale(admin, 'nexus_teacher_recurrences', runStart),
+        incidents:           await deleteStale(admin, 'nexus_incidents', runStart, 'Mês de análise'),
+        teacher_tracking:    await deleteStale(admin, 'nexus_teacher_tracking', runStart),
+        mes_analise_alerts:  await deleteStale(admin, 'nexus_mes_analise_alerts', runStart),
+      }
     }
 
     const nomesSemMatch = [...matcher.semMatch].sort()
