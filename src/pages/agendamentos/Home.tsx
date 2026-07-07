@@ -226,7 +226,7 @@ export function Home() {
                     type="submit"
                     disabled={lookup.isPending}
                     className={cn(
-                      'btn-press w-full h-11 rounded-full bg-ink text-white',
+                      'btn-press w-full h-11 rounded-full bg-ink text-ink-inverse',
                       'flex items-center justify-center',
                       'hover:bg-ink/90 disabled:opacity-60 disabled:cursor-not-allowed',
                       'font-medium text-[13.5px]',
@@ -262,7 +262,7 @@ export function Home() {
               </button>
               <button
                 onClick={() => setStep({ tipo: 'opcoes', resultado: step.resultado })}
-                className="btn-press h-10 px-5 rounded-full bg-ink text-white text-[13px] font-medium hover:bg-ink/90"
+                className="btn-press h-10 px-5 rounded-full bg-ink text-ink-inverse text-[13px] font-medium hover:bg-ink/90"
               >
                 Sim, sou eu
               </button>

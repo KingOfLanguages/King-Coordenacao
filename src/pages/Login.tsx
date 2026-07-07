@@ -280,9 +280,9 @@ export function Login() {
                       disabled={loading}
                       className={cn(
                         'btn-press group relative w-full h-11 rounded-full',
-                        'bg-ink text-white',
+                        'bg-ink text-ink-inverse',
                         'flex items-center justify-between pl-5 pr-1.5',
-                        'shadow-[0_1px_2px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.12)]',
+                        'shadow-[0_1px_2px_rgba(0,0,0,0.3)]',
                         'hover:bg-ink/90 disabled:opacity-60 disabled:cursor-not-allowed',
                         'font-medium text-[13.5px]',
                       )}
@@ -293,17 +293,17 @@ export function Login() {
 
                       {/* Trailing icon "button-in-button" */}
                       <span className="flex h-8 w-8 items-center justify-center rounded-full
-                                       bg-white/10 flex-shrink-0
-                                       group-hover:bg-white/16 group-hover:translate-x-0.5
+                                       bg-ink-inverse/10 flex-shrink-0
+                                       group-hover:bg-ink-inverse/20 group-hover:translate-x-0.5
                                        group-hover:-translate-y-[1px] group-hover:scale-105
                                        transition-all duration-300 ease-spring">
                         {loading ? (
-                          <svg className="h-3.5 w-3.5 animate-spin text-white" viewBox="0 0 24 24" fill="none" aria-hidden>
+                          <svg className="h-3.5 w-3.5 animate-spin text-ink-inverse" viewBox="0 0 24 24" fill="none" aria-hidden>
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                           </svg>
                         ) : (
-                          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-ink-inverse" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                             <path d="M3 8h10M9 4l4 4-4 4" />
                           </svg>
                         )}

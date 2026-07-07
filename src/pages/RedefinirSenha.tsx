@@ -70,7 +70,7 @@ export function RedefinirSenha() {
         <p className="text-sm text-ink-secondary leading-relaxed">
           Sua senha foi atualizada. Você já pode continuar usando a plataforma.
         </p>
-        <Button onClick={() => navigate('/')} className="btn-press w-full h-10 bg-ink text-white hover:bg-ink/90 font-medium">
+        <Button onClick={() => navigate('/')} className="btn-press w-full h-10 bg-ink text-ink-inverse hover:bg-ink/90 font-medium">
           Continuar
         </Button>
       </div>
@@ -135,7 +135,7 @@ export function RedefinirSenha() {
               )}
 
               <Button type="submit" disabled={loading}
-                className="btn-press w-full h-10 bg-ink text-white hover:bg-ink/90 font-medium">
+                className="btn-press w-full h-10 bg-ink text-ink-inverse hover:bg-ink/90 font-medium">
                 {loading ? 'Salvando…' : 'Redefinir senha'}
               </Button>
             </form>

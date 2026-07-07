@@ -153,7 +153,7 @@ export function Cadastro() {
             )}
 
             <Button type="submit" disabled={loading}
-              className="btn-press w-full h-10 bg-ink text-white hover:bg-ink/90 font-medium">
+              className="btn-press w-full h-10 bg-ink text-ink-inverse hover:bg-ink/90 font-medium">
               {loading ? 'Enviando…' : 'Solicitar acesso'}
             </Button>
           </form>
