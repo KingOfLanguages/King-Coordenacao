@@ -54,3 +54,27 @@ export function useBuscarReunioesPorProfessor(termo: string) {
     },
   })
 }
+
+/** Todas as reuniões de um dia específico (data no formato YYYY-MM-DD, horário local) —
+ *  visão padrão da tela de Suporte antes de qualquer busca por nome. */
+export function useReunioesDoDia(diaISO: string) {
+  return useQuery({
+    queryKey: ['suporte-reunioes-do-dia', diaISO],
+    queryFn: async (): Promise<ReuniaoBusca[]> => {
+      const inicio = `${diaISO}T00:00:00`
+      const fim = `${diaISO}T23:59:59.999`
+      const { data, error } = await supabase
+        .from('reuniao_professores')
+        .select(`
+          id, status, numero, observacao, confirmado_em,
+          professor:professores!inner(id, nome, coordenador:profiles!coordenador_id(nome)),
+          reuniao:reunioes!inner(id, data, titulo, meet_link, status)
+        `)
+        .gte('reuniao.data', inicio)
+        .lte('reuniao.data', fim)
+        .order('data', { referencedTable: 'reuniao', ascending: true })
+      if (error) throw error
+      return (data ?? []) as unknown as ReuniaoBusca[]
+    },
+  })
+}

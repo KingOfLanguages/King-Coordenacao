@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -11,11 +10,12 @@ import {
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { ResolverIncidenteDialog } from '@/components/incidentes/ResolverIncidenteDialog'
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
+import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
 import { urgenciaChip } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
-import { canEdit } from '@/lib/permissions'
+import { canEditIncidente } from '@/lib/permissions'
 
 type Aba = 'professor' | 'geral'
 type FiltroStatus = 'todos' | 'abertos' | 'resolvidos'
@@ -36,15 +36,15 @@ function tempoRelativo(iso: string): string {
 }
 
 export function IncidentesPage() {
-  const navigate = useNavigate()
   const { profile } = useAuth()
-  const podeEditar = canEdit(profile)
+  const podeEditar = canEditIncidente(profile)
   const { data: incidentes = [], isLoading } = useIncidentes()
   const reabrir = useReabrirIncidente()
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [resolverAlvo, setResolverAlvo] = useState<Incidente | null>(null)
   const [excluirAlvo, setExcluirAlvo] = useState<Incidente | null>(null)
+  const [detalheAlvo, setDetalheAlvo] = useState<Incidente | null>(null)
   const [aba, setAba] = useState<Aba>('professor')
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<string>('todas')
@@ -241,19 +241,18 @@ export function IncidentesPage() {
           {filtrados.map(i => (
             <div
               key={i.id}
-              className="flex gap-3 rounded-xl border border-line bg-surface-canvas px-4 py-3.5 items-start transition-colors hover:bg-surface-subtle/40"
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetalheAlvo(i)}
+              onKeyDown={e => { if (e.key === 'Enter') setDetalheAlvo(i) }}
+              className="flex gap-3 rounded-xl border border-line bg-surface-canvas px-4 py-3.5 items-start transition-colors hover:bg-surface-subtle/40 cursor-pointer"
             >
               <div className={cn('w-[3px] self-stretch rounded-full flex-shrink-0', URG_BAR[i.urgency] ?? 'bg-ink-subtle')} />
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   {i.professor_id ? (
-                    <button
-                      onClick={() => navigate(`/professores/${i.professor_id}`)}
-                      className="text-[14px] font-medium text-ink hover:text-accentBlue hover:underline transition-colors"
-                    >
-                      {i.teacher_name}
-                    </button>
+                    <span className="text-[14px] font-medium text-ink">{i.teacher_name}</span>
                   ) : (
                     <span className="text-[14px] font-medium text-ink-secondary italic">{i.teacher_name}</span>
                   )}
@@ -276,6 +275,7 @@ export function IncidentesPage() {
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
                         className="block h-12 w-12 overflow-hidden rounded-md border border-line hover:opacity-90"
                       >
                         <img src={url} alt={`Anexo ${idx + 1}`} loading="lazy" className="h-full w-full object-cover" />
@@ -290,7 +290,7 @@ export function IncidentesPage() {
                   {i.urgency}
                 </span>
                 {podeEditar && (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                     {i.resolved ? (
                       <button
                         onClick={() => reabrir.mutate(
@@ -334,6 +334,11 @@ export function IncidentesPage() {
         open={!!excluirAlvo}
         onOpenChange={o => !o && setExcluirAlvo(null)}
         incidente={excluirAlvo}
+      />
+      <IncidenteDetalheDialog
+        open={!!detalheAlvo}
+        onOpenChange={o => !o && setDetalheAlvo(null)}
+        incidente={detalheAlvo}
       />
     </div>
   )

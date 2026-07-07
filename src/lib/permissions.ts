@@ -40,3 +40,12 @@ export function canAddInfo(perfil?: PerfilComoAdmin): boolean {
       || perfil?.role === 'suporte_aluno'
       || ehAdmin(perfil)
 }
+
+/** Editar/resolver/excluir incidentes. Liberado pra todos os cargos com acesso
+ *  à tela de Incidentes (coordenação, suporte, suporte_aluno, admin). */
+export function canEditIncidente(perfil?: PerfilComoAdmin): boolean {
+  return perfil?.role === 'coordenacao'
+      || perfil?.role === 'suporte'
+      || perfil?.role === 'suporte_aluno'
+      || ehAdmin(perfil)
+}
