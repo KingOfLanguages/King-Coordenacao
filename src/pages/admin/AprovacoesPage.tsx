@@ -39,21 +39,26 @@ export function AprovacoesPage() {
       acao: 'aprovado' | 'rejeitado'
       role?: string
     }) => {
-      await supabase
+      const { error: e1 } = await supabase
         .from('pending_approvals')
         .update({ status: acao })
         .eq('id', aprovacao.id)
+      if (e1) throw e1
 
       if (acao === 'aprovado') {
-        await supabase
+        const { error: e2 } = await supabase
           .from('profiles')
           .update({ role: role ?? aprovacao.role_solicitada, ativo: true })
           .eq('id', aprovacao.user_id)
+        if (e2) throw e2
       }
     },
     onSuccess: (_data, vars) => {
       toast.success(`Acesso ${vars.acao} para ${vars.aprovacao.nome}.`)
       queryClient.invalidateQueries({ queryKey: ['aprovacoes'] })
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? `Erro ao processar: ${e.message}` : 'Erro ao processar a solicitação.')
     },
   })
 

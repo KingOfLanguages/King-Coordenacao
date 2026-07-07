@@ -30,7 +30,10 @@ export function Login() {
     setErro('')
     setReenviado(false)
     setEmailNaoConfirmado(false)
-    const { error } = await supabase.auth.signInWithPassword({ email, password: senha })
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: senha,
+    })
     if (error) {
       if (error.message.includes('Email not confirmed')) {
         setErro('Você ainda não confirmou seu e-mail. Verifique sua caixa de entrada.')
@@ -41,13 +44,35 @@ export function Login() {
       setLoading(false)
       return
     }
+
+    // Login no Supabase Auth não sabe nada sobre aprovação interna — precisa
+    // conferir o profile antes de navegar, senão um usuário pendente/rejeitado
+    // chega a piscar no dashboard e volta pro login sem nenhuma explicação
+    // (o AuthContext derruba a sessão em segundo plano ao ver ativo=false).
+    const { data: perfil } = await supabase
+      .from('profiles')
+      .select('ativo')
+      .eq('id', data.user.id)
+      .single()
+
+    if (perfil && perfil.ativo === false) {
+      await supabase.auth.signOut()
+      setErro('Sua conta ainda está aguardando aprovação de um administrador.')
+      setLoading(false)
+      return
+    }
+
     navigate('/')
   }
 
   async function handleReenviar() {
     setLoading(true)
-    await supabase.auth.resend({ type: 'signup', email })
-    setReenviado(true)
+    const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim() })
+    if (error) {
+      setErro('Não foi possível reenviar o e-mail agora. Tente novamente em instantes.')
+    } else {
+      setReenviado(true)
+    }
     setLoading(false)
   }
 
@@ -205,9 +230,14 @@ export function Login() {
 
                     {/* Password */}
                     <div className="space-y-1.5">
-                      <Label htmlFor="senha" className="text-[12px] text-ink-secondary font-medium">
-                        Senha
-                      </Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="senha" className="text-[12px] text-ink-secondary font-medium">
+                          Senha
+                        </Label>
+                        <Link to="/esqueci-senha" className="text-[11.5px] text-ink-muted hover:text-ink underline-offset-2 hover:underline">
+                          Esqueci minha senha
+                        </Link>
+                      </div>
                       <Input
                         id="senha"
                         type="password"

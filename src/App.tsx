@@ -7,6 +7,8 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Login } from '@/pages/Login'
 import { Cadastro } from '@/pages/Cadastro'
+import { EsqueciSenha } from '@/pages/EsqueciSenha'
+import { RedefinirSenha } from '@/pages/RedefinirSenha'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
@@ -23,7 +25,17 @@ import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
 import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Dados frescos por 30s evitam refetch (e flashes de "Carregando…") a cada
+      // navegação; e não recarregar tudo ao refocar a aba deixa a navegação fluida.
+      // Mutations continuam invalidando as queries relevantes na hora.
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 // Home: todos vão para o Dashboard da Coordenação.
 function IndexRedirect() {
@@ -33,6 +45,14 @@ function IndexRedirect() {
   return <Navigate to="/dashboard" replace />
 }
 
+// Quem já tem sessão não deveria ver o formulário de login/cadastro de novo.
+function SoDeslogado({ children }: { children: React.ReactNode }) {
+  const { session, loading } = useAuth()
+  if (loading) return null
+  if (session) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
@@ -40,9 +60,13 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/login"    element={<Login />} />
-            <Route path="/cadastro" element={<Cadastro />} />
-            <Route path="/agendar"  element={<AgendamentoPage />} />
+            <Route path="/login"          element={<SoDeslogado><Login /></SoDeslogado>} />
+            <Route path="/cadastro"       element={<SoDeslogado><Cadastro /></SoDeslogado>} />
+            <Route path="/esqueci-senha"  element={<SoDeslogado><EsqueciSenha /></SoDeslogado>} />
+            {/* Sem SoDeslogado: o link do e-mail já cria uma sessão de recovery — redirecionar
+                pra "/" aqui derrubaria o usuário antes de conseguir trocar a senha. */}
+            <Route path="/redefinir-senha" element={<RedefinirSenha />} />
+            <Route path="/agendar"        element={<AgendamentoPage />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<IndexRedirect />} />

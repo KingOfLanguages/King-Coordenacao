@@ -6,30 +6,57 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2 } from 'lucide-react'
 
+const SENHA_MIN = 6
+
+/** Traduz as mensagens mais comuns do Supabase Auth — o resto cai num fallback genérico em vez de vazar inglês cru. */
+function traduzirErroCadastro(mensagem: string): string {
+  if (/password/i.test(mensagem) && /(least|short|characters)/i.test(mensagem)) {
+    return `A senha precisa ter pelo menos ${SENHA_MIN} caracteres.`
+  }
+  if (/invalid/i.test(mensagem) && /email/i.test(mensagem)) {
+    return 'E-mail inválido. Confira e tente novamente.'
+  }
+  return 'Não foi possível criar a conta. Tente novamente em instantes.'
+}
+
 export function Cadastro() {
   const [nome, setNome]       = useState('')
   const [email, setEmail]     = useState('')
   const [senha, setSenha]     = useState('')
+  const [confirmarSenha, setConfirmarSenha] = useState('')
   const [loading, setLoading] = useState(false)
   const [enviado, setEnviado] = useState(false)
   const [erro, setErro]       = useState('')
 
   async function handleCadastro(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setErro('')
 
+    const nomeAparado  = nome.trim()
+    const emailAparado = email.trim()
+
+    if (senha.length < SENHA_MIN) {
+      setErro(`A senha precisa ter pelo menos ${SENHA_MIN} caracteres.`)
+      return
+    }
+    if (senha !== confirmarSenha) {
+      setErro('As senhas não coincidem.')
+      return
+    }
+
+    setLoading(true)
+
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: emailAparado,
       password: senha,
-      options: { data: { nome } },
+      options: { data: { nome: nomeAparado } },
     })
 
     if (error) {
       if (error.message.includes('already registered') || error.message.includes('already been registered')) {
         setErro('Este e-mail já possui uma conta cadastrada.')
       } else {
-        setErro(`Erro ao criar conta: ${error.message}`)
+        setErro(traduzirErroCadastro(error.message))
       }
       setLoading(false)
       return
@@ -108,6 +135,14 @@ export function Cadastro() {
             <div className="space-y-1.5">
               <Label htmlFor="senha" className="text-[13px] text-ink-secondary">Senha</Label>
               <Input id="senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} required
+                minLength={SENHA_MIN} autoComplete="new-password"
+                className="h-10 bg-surface-canvas border-line" />
+              <p className="text-[11px] text-ink-muted">Pelo menos {SENHA_MIN} caracteres.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirmar-senha" className="text-[13px] text-ink-secondary">Confirmar senha</Label>
+              <Input id="confirmar-senha" type="password" value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} required
+                autoComplete="new-password"
                 className="h-10 bg-surface-canvas border-line" />
             </div>
 
