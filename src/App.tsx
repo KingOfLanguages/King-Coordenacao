@@ -9,6 +9,7 @@ import { Login } from '@/pages/Login'
 import { Cadastro } from '@/pages/Cadastro'
 import { EsqueciSenha } from '@/pages/EsqueciSenha'
 import { RedefinirSenha } from '@/pages/RedefinirSenha'
+import { AuthCallback } from '@/pages/AuthCallback'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
@@ -66,6 +67,8 @@ export default function App() {
             {/* Sem SoDeslogado: o link do e-mail já cria uma sessão de recovery — redirecionar
                 pra "/" aqui derrubaria o usuário antes de conseguir trocar a senha. */}
             <Route path="/redefinir-senha" element={<RedefinirSenha />} />
+            {/* Retorno do OAuth (Google) — precisa da sessão viva pra decidir o destino. */}
+            <Route path="/auth/callback"  element={<AuthCallback />} />
             <Route path="/agendar"        element={<AgendamentoPage />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

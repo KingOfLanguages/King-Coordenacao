@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2 } from 'lucide-react'
+import { GoogleIcon } from '@/pages/Login'
 
 const SENHA_MIN = 6
 
@@ -83,6 +84,15 @@ export function Cadastro() {
     setLoading(false)
   }
 
+  async function handleGoogle() {
+    setErro('')
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    })
+    if (error) setErro('Não foi possível iniciar o cadastro com Google. Tente novamente.')
+  }
+
   if (enviado) return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-surface-app p-6">
       <div className="max-w-sm w-full card-surface p-8 text-center space-y-4 animate-fade-up">
@@ -156,6 +166,24 @@ export function Cadastro() {
               className="btn-press w-full h-10 bg-ink text-ink-inverse hover:bg-ink/90 font-medium">
               {loading ? 'Enviando…' : 'Solicitar acesso'}
             </Button>
+
+            <div className="flex items-center gap-3 py-0.5">
+              <span className="h-px flex-1 bg-line-soft" />
+              <span className="text-[11px] text-ink-muted">ou</span>
+              <span className="h-px flex-1 bg-line-soft" />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGoogle}
+              disabled={loading}
+              className="btn-press w-full h-10 rounded-lg flex items-center justify-center gap-2.5
+                         border border-line bg-surface-canvas text-ink text-[13px] font-medium
+                         hover:bg-surface-subtle disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <GoogleIcon />
+              Continuar com Google
+            </button>
           </form>
 
           <p className="text-center text-[13px] text-ink-secondary">
