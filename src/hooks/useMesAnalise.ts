@@ -1,7 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
-const PROBLEM_TYPE = 'Mês de análise'
+/** problem_type que marca um incidente do Nexus como "Mês de Análise".
+ *  Fonte única — reusada por useIncidentes e pela tela de Detalhe do Professor. */
+export const MES_ANALISE_PROBLEM_TYPE = 'Mês de análise'
+const PROBLEM_TYPE = MES_ANALISE_PROBLEM_TYPE
 
 // ─── Mês de Análise — lista (Pendentes / Concluídos) ──────────────────────────
 

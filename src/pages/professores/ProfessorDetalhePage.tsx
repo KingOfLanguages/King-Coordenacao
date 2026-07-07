@@ -12,6 +12,7 @@ import {
 import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor } from '@/hooks/useProfessores'
 import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
+import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
 import { useResolverObservacao, type ObservacaoSnapshot } from '@/hooks/useObservacoes'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
@@ -106,7 +107,7 @@ export function ProfessorDetalhePage() {
   const [reunioesExpandidas, setReunioesExpandidas] = useState(false)
 
   // Deriva do que useNexusDados já busca — sem query extra.
-  const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === 'Mês de análise' && !i.resolved) ?? null
+  const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === MES_ANALISE_PROBLEM_TYPE && !i.resolved) ?? null
 
   if (isLoading) return (
     <div className="flex h-64 items-center justify-center text-ink-muted text-[13px]">
@@ -907,7 +908,7 @@ function NexusSection({
                     <span className="text-ink-subtle tabular-nums">
                       {new Date(i.created_at).toLocaleDateString('pt-BR')}
                     </span>
-                    {i.problem_type !== 'Mês de análise' && (
+                    {i.problem_type !== MES_ANALISE_PROBLEM_TYPE && (
                       <button
                         onClick={() => setExcluirAlvo(i)}
                         aria-label="Excluir incidente"

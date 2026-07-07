@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
 
-const PROBLEM_TYPE_MES_ANALISE = 'Mês de análise'
+const PROBLEM_TYPE_MES_ANALISE = MES_ANALISE_PROBLEM_TYPE
 const BUCKET_INCIDENTES = 'incidentes'
 
 /** Envia uma imagem pro bucket de incidentes e devolve a URL pública.

@@ -96,7 +96,7 @@ export function DashboardGeralPage() {
   const coordenacoes = useMemo(() => agregarPorCoordenacao(filteredRows), [filteredRows])
 
   const resumo = useMemo(() => ({
-    coordenadoresAtivos: new Set(filteredRows.map(r => r.grupo_id).filter(Boolean)).size,
+    coordenadoresAtivos: new Set(filteredRows.map(r => r.coordenador_nome).filter(Boolean)).size,
     professoresAtivos: filteredRows.length,
     scoreMedio: media(scores),
     totalGrupos: new Set(filteredRows.map(r => r.grupo_id).filter(Boolean)).size,
@@ -248,7 +248,8 @@ export function DashboardGeralPage() {
                   <tr
                     onClick={() => setExpandido(prev => {
                       const next = new Set(prev)
-                      next.has(chave) ? next.delete(chave) : next.add(chave)
+                      if (next.has(chave)) next.delete(chave)
+                      else next.add(chave)
                       return next
                     })}
                     className="border-b border-line-soft cursor-pointer hover:bg-surface-subtle"

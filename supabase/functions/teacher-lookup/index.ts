@@ -56,7 +56,7 @@ function proximasOcorrencias(diaSemana: number, hora: string, semanas: number): 
   // Encontra o primeiro dia (hoje ou futuro) que bate com diaSemana.
   const base = new Date(hoje)
   base.setUTCHours(0, 0, 0, 0)
-  let delta = (diaSemana - base.getUTCDay() + 7) % 7
+  const delta = (diaSemana - base.getUTCDay() + 7) % 7
   base.setUTCDate(base.getUTCDate() + delta)
 
   for (let i = 0; i < semanas; i++) {
