@@ -4,6 +4,14 @@ import { supabase } from '@/lib/supabase'
 export type OpcaoLink = { elegivel: boolean; link: string | null }
 export type OpcaoGrupo = { elegivel: boolean; recomendada: boolean }
 
+export type AvisoAgendamentoRecente = {
+  reuniaoProfessorId: string
+  data: string
+  diasDesdeUltima: number
+  diasParaProxima: number
+  proximaDataSugerida: string
+}
+
 export type PortalLookupResult = {
   professor: { id: string; nome: string } | null
   coordenador: { id: string; nome: string } | null
@@ -13,6 +21,7 @@ export type PortalLookupResult = {
     acompanhamento: OpcaoLink
     reuniao_grupo: OpcaoGrupo
   }
+  avisoAgendamentoRecente: AvisoAgendamentoRecente | null
 }
 
 export type PortalLookupInput = {
@@ -34,6 +43,20 @@ export function usePortalLookup() {
       })
       if (error) throw new Error(error.message)
       return data as PortalLookupResult
+    },
+  })
+}
+
+/** Professor declara que a última reunião vinculada (aviso de agendamento
+ *  recente) não aconteceu de fato — libera um novo agendamento imediato. */
+export function useDeclararNaoFezReuniao() {
+  return useMutation({
+    mutationFn: async (input: { professorId: string; reuniaoProfessorId: string }) => {
+      const { data, error } = await supabase.functions.invoke('portal-agendamento-declarar-nao-fez', {
+        body: input,
+      })
+      if (error) throw new Error(error.message)
+      return data as { ok: true }
     },
   })
 }

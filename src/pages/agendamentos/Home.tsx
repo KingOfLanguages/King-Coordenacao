@@ -7,10 +7,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { usePortalLookup, type PortalLookupResult } from '@/hooks/usePortalAgendamento'
+import { usePortalLookup, useDeclararNaoFezReuniao, type PortalLookupResult } from '@/hooks/usePortalAgendamento'
 import { useTeacherLookup, type AgendaDisponivel as AgendaDisponivelType } from '@/hooks/useTeacherLookup'
 import { useBookMeeting, type ReuniaoConfirmada } from '@/hooks/useBookMeeting'
 import { OpcoesPortal } from '@/pages/agendamentos/OpcoesPortal'
+import { AvisoAgendamentoRecente } from '@/pages/agendamentos/AvisoAgendamentoRecente'
 import { AgendaDisponivel } from '@/pages/agendamentos/AgendaDisponivel'
 import { Confirmacao } from '@/pages/agendamentos/Confirmacao'
 
@@ -38,6 +39,7 @@ type Tentativa = 1 | 2 | 3
 type Step =
   | { tipo: 'identificacao'; tentativa: Tentativa; nome: string; erro: string }
   | { tipo: 'confirmar-identidade'; resultado: PortalLookupResult }
+  | { tipo: 'aviso-agendamento-recente'; resultado: PortalLookupResult }
   | { tipo: 'opcoes'; resultado: PortalLookupResult }
   | { tipo: 'grupo-agendas'; professorId: string; professorNome: string; agendas: AgendaDisponivelType[] }
   | { tipo: 'confirmacao'; reuniao: ReuniaoConfirmada }
@@ -47,9 +49,10 @@ export function Home() {
   const [mes, setMes] = useState<number | null>(null)
   const [ano, setAno] = useState<number | null>(null)
 
-  const lookup        = usePortalLookup()
-  const teacherLookup = useTeacherLookup()
-  const book          = useBookMeeting()
+  const lookup           = usePortalLookup()
+  const teacherLookup    = useTeacherLookup()
+  const book             = useBookMeeting()
+  const declararNaoFez   = useDeclararNaoFezReuniao()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -110,6 +113,32 @@ export function Home() {
     } catch {
       toast.error('Não foi possível carregar as reuniões em grupo agora.')
     }
+  }
+
+  function handleConfirmarIdentidade(resultado: PortalLookupResult) {
+    if (resultado.avisoAgendamentoRecente) {
+      setStep({ tipo: 'aviso-agendamento-recente', resultado })
+    } else {
+      setStep({ tipo: 'opcoes', resultado })
+    }
+  }
+
+  async function handleDeclararNaoFez() {
+    if (step.tipo !== 'aviso-agendamento-recente' || !step.resultado.professor || !step.resultado.avisoAgendamentoRecente) return
+    try {
+      await declararNaoFez.mutateAsync({
+        professorId: step.resultado.professor.id,
+        reuniaoProfessorId: step.resultado.avisoAgendamentoRecente.reuniaoProfessorId,
+      })
+      setStep({ tipo: 'opcoes', resultado: { ...step.resultado, avisoAgendamentoRecente: null } })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível registrar agora. Tente novamente.')
+    }
+  }
+
+  function handleSoTirarDuvida() {
+    if (step.tipo !== 'aviso-agendamento-recente') return
+    setStep({ tipo: 'opcoes', resultado: step.resultado })
   }
 
   async function handleConfirmar(horarioId: string) {
@@ -261,13 +290,23 @@ export function Home() {
                 Não sou eu
               </button>
               <button
-                onClick={() => setStep({ tipo: 'opcoes', resultado: step.resultado })}
+                onClick={() => handleConfirmarIdentidade(step.resultado)}
                 className="btn-press h-10 px-5 rounded-full bg-ink text-ink-inverse text-[13px] font-medium hover:bg-ink/90"
               >
                 Sim, sou eu
               </button>
             </div>
           </div>
+        )}
+
+        {step.tipo === 'aviso-agendamento-recente' && step.resultado.professor && step.resultado.avisoAgendamentoRecente && (
+          <AvisoAgendamentoRecente
+            professorNome={step.resultado.professor.nome}
+            aviso={step.resultado.avisoAgendamentoRecente}
+            pendingDeclarar={declararNaoFez.isPending}
+            onDeclararNaoFez={handleDeclararNaoFez}
+            onSoTirarDuvida={handleSoTirarDuvida}
+          />
         )}
 
         {step.tipo === 'opcoes' && step.resultado.professor && (

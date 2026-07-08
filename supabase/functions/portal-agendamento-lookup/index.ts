@@ -42,6 +42,15 @@
 // continua usando o fluxo público já existente, só passa a ficar atrás
 // deste gate de score.
 //
+// ── Aviso de agendamento recente ────────────────────────────────────────────
+// Professores entre 8 e 90 dias de casa (passaram da janela de "1ª reunião",
+// ainda no 1º-3º mês) fazem acompanhamento mensal. Se a última reunião
+// vinculada (status realizada/pendente) tiver acontecido há menos de 30 dias,
+// a resposta inclui `avisoAgendamentoRecente` — o front mostra um aviso antes
+// das opções normais de agendamento, com duas saídas: declarar que a reunião
+// não aconteceu (via portal-agendamento-declarar-nao-fez, libera o reagendamento)
+// ou seguir direto pras opções (p.ex. só tirar uma dúvida).
+//
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
 //   Body: { "nome": "Fulano de Tal", "mesInicio"?: 3, "anoInicio"?: 2026 }
@@ -53,7 +62,14 @@
 //       primeira_reuniao: { elegivel: boolean, link: string | null },
 //       acompanhamento:   { elegivel: boolean, link: string | null },
 //       reuniao_grupo:    { elegivel: boolean, recomendada: boolean },
-//     }
+//     },
+//     avisoAgendamentoRecente: {
+//       reuniaoProfessorId: string,
+//       data: string,             // data da última reunião vinculada (ISO)
+//       diasDesdeUltima: number,
+//       diasParaProxima: number,  // dias que faltam pra completar os 30 dias de cadência
+//       proximaDataSugerida: string, // ISO
+//     } | null,
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -67,6 +83,8 @@ const CORS = {
 
 const SCORE_MINIMO_GRUPO = 1400
 const DIAS_JANELA_PRIMEIRA_REUNIAO = 7
+const DIAS_JANELA_ACOMPANHAMENTO_MENSAL = 90 // ~3 meses de casa
+const CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS = 30
 const NOME_MIN_CHARS = 3
 const STOPWORDS = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
 
@@ -99,16 +117,19 @@ function dataInicioBate(dataInicio: string | null, mes: number, ano: number): bo
   return Math.abs(diffMeses) <= 1
 }
 
-/** Dias completos desde a data de início, normalizando pra meia-noite UTC (evita erro de fuso/hora do dia). */
-function diasDeCasa(dataInicio: string | null): number | null {
-  if (!dataInicio) return null
-  const inicio = new Date(dataInicio)
-  if (isNaN(inicio.getTime())) return null
+/** Dias completos desde uma data ISO, normalizando pra meia-noite UTC (evita erro de fuso/hora do dia).
+ *  Negativo quando a data é no futuro. */
+function diasDesde(dataIso: string | null): number | null {
+  if (!dataIso) return null
+  const d = new Date(dataIso)
+  if (isNaN(d.getTime())) return null
   const agora = new Date()
-  const inicioUTC = Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth(), inicio.getUTCDate())
-  const agoraUTC  = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())
-  return Math.round((agoraUTC - inicioUTC) / 86400000)
+  const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  const agoraUTC = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())
+  return Math.round((agoraUTC - dUTC) / 86400000)
 }
+
+const diasDeCasa = diasDesde
 
 const OPCOES_VAZIAS = {
   primeira_reuniao: { elegivel: false, link: null },
@@ -117,7 +138,7 @@ const OPCOES_VAZIAS = {
 }
 
 function respostaVazia(ambiguo: boolean) {
-  return { professor: null, coordenador: null, ambiguo, opcoes: OPCOES_VAZIAS }
+  return { professor: null, coordenador: null, ambiguo, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null }
 }
 
 serve(async (req) => {
@@ -162,7 +183,7 @@ serve(async (req) => {
   const professor = candidatos[0]
 
   if (!professor.coordenador_id) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, opcoes: OPCOES_VAZIAS })
+    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 3. Coordenador responsável e seus links ──────────────────────────────────
@@ -173,7 +194,7 @@ serve(async (req) => {
     .maybeSingle()
 
   if (!coordenador) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, opcoes: OPCOES_VAZIAS })
+    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 4. Já teve reunião realizada? ────────────────────────────────────────────
@@ -203,6 +224,46 @@ serve(async (req) => {
   const scoreAtual = acompanhamento?.score_atual ?? null
   const elegivelGrupo = scoreAtual != null && scoreAtual >= SCORE_MINIMO_GRUPO
 
+  // ── 7. Aviso de agendamento recente (acompanhamento mensal, 8-90 dias de casa) ─
+  let avisoAgendamentoRecente: {
+    reuniaoProfessorId: string
+    data: string
+    diasDesdeUltima: number
+    diasParaProxima: number
+    proximaDataSugerida: string
+  } | null = null
+
+  const dentroDoAcompanhamentoMensal =
+    dias != null && dias > DIAS_JANELA_PRIMEIRA_REUNIAO && dias <= DIAS_JANELA_ACOMPANHAMENTO_MENSAL
+
+  if (dentroDoAcompanhamentoMensal) {
+    const { data: ultimasReunioes } = await admin
+      .from('reuniao_professores')
+      .select('id, reuniao:reunioes!inner(data)')
+      .eq('professor_id', professor.id)
+      .in('status', ['realizada', 'pendente'])
+      .order('data', { referencedTable: 'reuniao', ascending: false })
+      .limit(1)
+
+    const ultima = ultimasReunioes?.[0] as { id: string; reuniao: { data: string } | { data: string }[] } | undefined
+    const reuniaoUltima = ultima ? (Array.isArray(ultima.reuniao) ? ultima.reuniao[0] : ultima.reuniao) : null
+
+    if (ultima && reuniaoUltima) {
+      const diasDesdeUltima = diasDesde(reuniaoUltima.data)
+      if (diasDesdeUltima != null && diasDesdeUltima < CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS) {
+        const dataUltima = new Date(reuniaoUltima.data)
+        const proximaData = new Date(dataUltima.getTime() + CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS * 86400000)
+        avisoAgendamentoRecente = {
+          reuniaoProfessorId: ultima.id,
+          data: reuniaoUltima.data,
+          diasDesdeUltima,
+          diasParaProxima: Math.max(CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS - diasDesdeUltima, 0),
+          proximaDataSugerida: proximaData.toISOString(),
+        }
+      }
+    }
+  }
+
   return json({
     professor: { id: professor.id, nome: professor.nome },
     coordenador: { id: coordenador.id, nome: coordenador.nome },
@@ -221,5 +282,6 @@ serve(async (req) => {
         recomendada: elegivelGrupo,
       },
     },
+    avisoAgendamentoRecente,
   })
 })
