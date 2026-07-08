@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  Video, Check, X, Link2, Mail, Sparkles, Pencil, Trash2, Users2,
+  Video, Check, X, Link2, Unlink2, Mail, Sparkles, Pencil, Trash2, Users2,
   Loader2, ChevronLeft, ChevronRight, CalendarDays, User, Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import {
   useReunioesPeriodo, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
   useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna, usePerfisPorEmail,
-  sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
+  useDesvincularProfessor, sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
@@ -1128,7 +1128,9 @@ function ExcluirReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onCl
 
 function ParticipanteRow({ part }: { part: ParticipanteCard }) {
   const confirmar = useConfirmarParticipacao()
+  const desvincular = useDesvincularProfessor()
   const [obs, setObs] = useState(part.observacao ?? '')
+  const [confirmandoTroca, setConfirmandoTroca] = useState(false)
   const prof = part.professor!
   const tempo = tempoDeCasaLabel(prof.data_inicio)
 
@@ -1142,6 +1144,13 @@ function ParticipanteRow({ part }: { part: ParticipanteCard }) {
     )
   }
 
+  function handleDesvincular() {
+    desvincular.mutate(part.id, {
+      onSuccess: () => toast.success('Professor desvinculado — selecione o correto abaixo.'),
+      onError:   () => toast.error('Erro ao desvincular.'),
+    })
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -1152,6 +1161,33 @@ function ParticipanteRow({ part }: { part: ParticipanteCard }) {
             <span className="h-1.5 w-1.5 rounded-full bg-urg-highFg flex-shrink-0" title="Monitoramento ativo" />
           )}
           {tempo && <span className="text-[11px] text-ink-muted">· {tempo}</span>}
+
+          {confirmandoTroca ? (
+            <span className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-[11px] text-ink-muted">Desvincular?</span>
+              <button
+                onClick={handleDesvincular}
+                disabled={desvincular.isPending}
+                className="btn-press text-[11px] font-medium text-urg-highFg hover:underline"
+              >
+                Sim
+              </button>
+              <button
+                onClick={() => setConfirmandoTroca(false)}
+                className="btn-press text-[11px] text-ink-muted hover:underline"
+              >
+                Não
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmandoTroca(true)}
+              title="Desvincular e selecionar outro professor"
+              className="btn-press flex h-5 w-5 items-center justify-center rounded-full text-ink-subtle hover:bg-surface-subtle hover:text-ink flex-shrink-0"
+            >
+              <Unlink2 className="h-3 w-3" />
+            </button>
+          )}
         </div>
 
         {part.status === 'realizada' && (

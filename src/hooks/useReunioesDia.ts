@@ -249,6 +249,31 @@ export function useVincularProfessor() {
   })
 }
 
+/** Desvincula o professor de uma participação — reseta status/numero/confirmação (pertenciam ao
+ *  professor errado) e a linha volta a aparecer como "não vinculado", reabrindo sugestões + seleção manual. */
+export function useDesvincularProfessor() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (participanteId: string) => {
+      const { error } = await supabase
+        .from('reuniao_professores')
+        .update({
+          professor_id:   null,
+          status:         'pendente',
+          numero:         null,
+          confirmado_em:  null,
+          confirmado_por: null,
+        })
+        .eq('id', participanteId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
+    },
+  })
+}
+
 /** Edita data/hora, título e/ou pauta da reunião (nível card, não a participação de um professor específico). */
 export function useEditarReuniao() {
   const queryClient = useQueryClient()
