@@ -80,6 +80,15 @@ export function MesAnalisePage() {
     return m
   }, [alunosKms])
 
+  // Quantas vezes cada professor já passou por Mês de Análise (todos os registros, pendentes + concluídos).
+  const recorrenciaPorProfessor = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of incidentes) {
+      if (i.professor_id) m.set(i.professor_id, (m.get(i.professor_id) ?? 0) + 1)
+    }
+    return m
+  }, [incidentes])
+
   function abrirColocarManual() {
     setColocarPreset({})
     setColocarAberto(true)
@@ -236,6 +245,14 @@ export function MesAnalisePage() {
                           className="ml-2 inline-flex items-center rounded-full bg-surface-subtle text-ink-muted px-1.5 py-0.5 text-[10.5px] tabular-nums cursor-help"
                         >
                           {alunos.total} aluno{alunos.total !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {i.professor_id && (recorrenciaPorProfessor.get(i.professor_id) ?? 0) > 1 && (
+                        <span
+                          title={`Passou ${recorrenciaPorProfessor.get(i.professor_id)}x por Mês de Análise`}
+                          className="ml-2 inline-flex items-center rounded-full bg-urg-highBg text-urg-highFg px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums cursor-help"
+                        >
+                          {recorrenciaPorProfessor.get(i.professor_id)}x
                         </span>
                       )}
                     </td>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2 } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -35,6 +35,22 @@ function tempoRelativo(iso: string): string {
   return `há ${dias} dias`
 }
 
+/** Duração em dias (número) → rótulo legível. Menos de 1 dia vira horas. */
+function fmtDuracao(dias: number): string {
+  if (dias < 1) {
+    const horas = Math.max(1, Math.round(dias * 24))
+    return `${horas}h`
+  }
+  const arred = dias < 10 ? dias.toFixed(1).replace('.', ',') : String(Math.round(dias))
+  return `${arred} ${dias < 2 ? 'dia' : 'dias'}`
+}
+
+/** Tempo entre criação e resolução, em dias (fracionários). null se não resolvido. */
+function diasResolucao(i: { created_at: string; resolved: boolean; resolved_at: string | null }): number | null {
+  if (!i.resolved || !i.resolved_at) return null
+  return (new Date(i.resolved_at).getTime() - new Date(i.created_at).getTime()) / 86_400_000
+}
+
 export function IncidentesPage() {
   const { profile } = useAuth()
   const podeEditar = canEditIncidente(profile)
@@ -68,13 +84,18 @@ export function IncidentesPage() {
     return [...mapa.entries()].sort((a, b) => a[1].localeCompare(b[1]))
   }, [porAba])
 
+  const temposResolucao = porAba
+    .map(diasResolucao)
+    .filter((d): d is number => d !== null)
+  const tempoMedioResolucao = temposResolucao.length
+    ? temposResolucao.reduce((a, b) => a + b, 0) / temposResolucao.length
+    : null
+
   const stats = {
     abertos: porAba.filter(i => !i.resolved).length,
     resolvidos: porAba.filter(i => i.resolved).length,
     urgentes: porAba.filter(i => !i.resolved && i.urgency === 'Alta').length,
-    quarto: aba === 'professor'
-      ? porAba.filter(i => i.problem_type === 'Reclamação').length
-      : porAba.length,
+    tempoMedioResolucao,
   }
 
   const filtrados = useMemo(() => {
@@ -156,8 +177,13 @@ export function IncidentesPage() {
           <p className="text-2xl font-semibold text-ink tabular-nums">{stats.urgentes}</p>
         </div>
         <div className="card-surface p-4 transition-shadow hover:shadow-sm">
-          <p className="text-[11px] text-ink-muted">{aba === 'professor' ? 'Reclamações' : 'Total'}</p>
-          <p className="text-2xl font-semibold text-ink tabular-nums">{stats.quarto}</p>
+          <p className="text-[11px] text-ink-muted flex items-center gap-1"><Clock className="h-3 w-3" />Tempo médio de resolução</p>
+          <p className="text-2xl font-semibold text-ink tabular-nums">
+            {stats.tempoMedioResolucao === null ? '—' : fmtDuracao(stats.tempoMedioResolucao)}
+          </p>
+          <p className="text-[10px] text-ink-subtle mt-0.5">
+            {stats.resolvidos > 0 ? `${stats.resolvidos} resolvido${stats.resolvidos !== 1 ? 's' : ''}` : 'nada resolvido ainda'}
+          </p>
         </div>
       </div>
 
@@ -266,7 +292,15 @@ export function IncidentesPage() {
                   </span>
                 </div>
                 <p className="text-[13px] text-ink-secondary mt-1.5 truncate" title={i.description}>{i.description}</p>
-                <p className="text-[11px] text-ink-muted mt-1.5">{i.coordinator} · {tempoRelativo(i.created_at)}</p>
+                <p className="text-[11px] text-ink-muted mt-1.5">
+                  {i.coordinator} · {tempoRelativo(i.created_at)}
+                  {(() => {
+                    const d = diasResolucao(i)
+                    return d !== null
+                      ? <span className="text-urg-lowFg"> · resolvido em {fmtDuracao(d)}</span>
+                      : null
+                  })()}
+                </p>
                 {i.image_urls.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {i.image_urls.map((url, idx) => (

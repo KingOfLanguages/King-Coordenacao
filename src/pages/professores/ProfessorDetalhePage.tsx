@@ -108,6 +108,8 @@ export function ProfessorDetalhePage() {
 
   // Deriva do que useNexusDados já busca — sem query extra.
   const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === MES_ANALISE_PROBLEM_TYPE && !i.resolved) ?? null
+  // Quantas vezes o professor já passou por Mês de Análise (cada "colocar" gera 1 registro).
+  const mesAnaliseCount = nexusData?.incidentes.filter(i => i.problem_type === MES_ANALISE_PROBLEM_TYPE).length ?? 0
 
   if (isLoading) return (
     <div className="flex h-64 items-center justify-center text-ink-muted text-[13px]">
@@ -195,6 +197,15 @@ export function ProfessorDetalhePage() {
               <span className="inline-flex items-center gap-1">
                 <CalendarDays className="h-3 w-3" />
                 Última reunião {new Date(professor.data_ultima_reuniao).toLocaleDateString('pt-BR')}
+              </span>
+            )}
+            {mesAnaliseCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1"
+                title={`Passou ${mesAnaliseCount} ${mesAnaliseCount === 1 ? 'vez' : 'vezes'} por Mês de Análise`}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {mesAnaliseCount}x em Mês de Análise
               </span>
             )}
             {negativos > 0 && (

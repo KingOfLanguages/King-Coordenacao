@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { useDashboardCoord, type DashboardCoordData } from '@/hooks/useDashboardCoord'
 import { useContatosHoje, useMarcarContato, reuniaoUltimaDe, type ContatoDia } from '@/hooks/useContatosDia'
+import { useLinksCoordenador } from '@/hooks/useMeusLinksAgendamento'
 import { getDefaultTemplate } from '@/lib/messageTemplates'
 import { mesesDeCasa, cn } from '@/lib/utils'
 import {
@@ -207,9 +208,12 @@ function MediaCard({ titulo, valor, meta }: { titulo: string; valor: number; met
 
 function MensagensDoDia({ coordId, coordNome }: { coordId: string | null; coordNome: string }) {
   const { data: contatos = [], isLoading } = useContatosHoje(coordId)
+  const { data: links } = useLinksCoordenador(coordId)
   const marcar = useMarcarContato()
   const navigate = useNavigate()
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
+
+  const linkAgendamento = links?.koalendar_link?.trim() || links?.google_appointment_link?.trim() || null
 
   const enviados = contatos.filter(c => c.enviado).length
   const total    = contatos.length
@@ -231,6 +235,7 @@ function MensagensDoDia({ coordId, coordNome }: { coordId: string | null; coordN
       dataUltimaReuniao: ultima
         ? new Date(ultima).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
         : null,
+      linkAgendamento,
     })
     await navigator.clipboard.writeText(mensagem)
     setCopiadoId(c.id)
@@ -257,6 +262,12 @@ function MensagensDoDia({ coordId, coordNome }: { coordId: string | null; coordN
           style={{ width: `${pct}%`, background: completo ? 'var(--urg-low-fg)' : 'var(--accent-blue)' }}
         />
       </div>
+
+      {total > 0 && !linkAgendamento && (
+        <p className="text-[11px] text-ink-muted">
+          Sem link de agendamento cadastrado — as mensagens saem sem o link. Configure em Agendamento → Links.
+        </p>
+      )}
 
       {isLoading ? (
         <div className="space-y-2">
