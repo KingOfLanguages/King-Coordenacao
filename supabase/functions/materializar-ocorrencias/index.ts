@@ -132,10 +132,11 @@ async function criarEventoMeet(
 }
 
 type RecorrenciaRow = { id: string; dia_semana: number; hora: string; capacidade: number; ativo: boolean }
+type CoordRef = { email: string | null; google_email: string | null }
 type AgendaRow = {
   id: string
   titulo: string
-  coordenador: { google_email: string | null } | { google_email: string | null }[] | null
+  coordenador: CoordRef | CoordRef[] | null
   recorrencias: RecorrenciaRow[] | null
 }
 
@@ -171,7 +172,7 @@ serve(async (req) => {
     .from('agenda_reunioes')
     .select(`
       id, titulo,
-      coordenador:profiles!coordenador_id (google_email),
+      coordenador:profiles!coordenador_id (email, google_email),
       recorrencias:agenda_recorrencias (id, dia_semana, hora, capacidade, ativo)
     `)
     .eq('ativo', true)
@@ -212,7 +213,9 @@ serve(async (req) => {
 
   for (const a of agendas) {
     const coord = Array.isArray(a.coordenador) ? a.coordenador[0] : a.coordenador
-    const coordEmail = coord?.google_email ?? null
+    // Prefere o e-mail alternativo (google_email) quando cadastrado; senão usa o
+    // e-mail de cadastro/login do coordenador.
+    const coordEmail = coord?.google_email ?? coord?.email ?? null
 
     for (const r of (a.recorrencias ?? []).filter(r => r.ativo)) {
       for (const iso of proximasOcorrencias(r.dia_semana, r.hora, JANELA_DIAS)) {

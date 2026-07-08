@@ -305,7 +305,11 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: tokenErr.message }), { status: 500 })
   }
 
-  // Mapa: googleEmail (lower) → supabase user_id
+  // Mapa: email (lower) → supabase user_id.
+  // Fontes mescladas (no caso comum todas apontam pro mesmo UUID):
+  //   - google_tokens.google_email → conta que conectou a automação
+  //   - profiles.email             → e-mail de cadastro/login (fonte primária)
+  //   - profiles.google_email      → e-mail alternativo (quando a agenda usa outro)
   // ex: { 'coordenacaoking7@gmail.com': 'uuid-ariel', 'caio.velloso.king@gmail.com': 'uuid-caio', ... }
   const emailToUserId: Record<string, string> = {}
   for (const row of tokenRows ?? []) {
@@ -314,18 +318,16 @@ serve(async (req) => {
     }
   }
 
-  // Também usa o e-mail Google pessoal cadastrado no perfil (profiles.google_email).
-  // Permite atribuir o coordenador correto mesmo quando a conexão OAuth é feita
-  // por uma conta única (ex: conta compartilhada que recebe todos os calendários).
+  // E-mail de cadastro (profiles.email) atribui o coordenador direto, sem precisar
+  // recadastrar nada à mão. O google_email fica só como alias extra pro caso em que
+  // a conexão OAuth é feita por uma conta única / a agenda usa outro e-mail.
   const { data: coordProfiles } = await admin
     .from('profiles')
-    .select('id, google_email')
-    .not('google_email', 'is', null)
+    .select('id, email, google_email')
 
   for (const p of coordProfiles ?? []) {
-    if (p.google_email) {
-      emailToUserId[p.google_email.toLowerCase()] = p.id
-    }
+    if (p.email)        emailToUserId[p.email.toLowerCase()]        = p.id
+    if (p.google_email) emailToUserId[p.google_email.toLowerCase()] = p.id
   }
 
   // Set de emails de coordenadores — usado para excluir da busca de email do professor

@@ -318,16 +318,18 @@ export function useConfirmarReuniaoInterna() {
   })
 }
 
-/** Perfis (coordenação/liderança) com e-mail Google conhecido — usado pra resolver nome a
- *  partir do e-mail dos participantes de uma reunião interna (participantes_emails). */
+/** Perfis com e-mail conhecido — usado pra resolver nome a partir do e-mail dos
+ *  participantes de uma reunião interna (participantes_emails). Considera tanto o
+ *  e-mail de cadastro/login (profiles.email) quanto o alternativo (google_email). */
 export function usePerfisPorEmail() {
   return useQuery({
     queryKey: ['perfis-por-email'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('profiles').select('id, nome, google_email').not('google_email', 'is', null)
+      const { data, error } = await supabase.from('profiles').select('id, nome, email, google_email')
       if (error) throw error
       const mapa = new Map<string, string>()
       for (const p of data ?? []) {
+        if (p.email)        mapa.set(p.email.toLowerCase(), p.nome)
         if (p.google_email) mapa.set(p.google_email.toLowerCase(), p.nome)
       }
       return mapa

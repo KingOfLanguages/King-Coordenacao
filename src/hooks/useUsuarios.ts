@@ -5,12 +5,13 @@ import type { RoleUsuario } from '@/types'
 export type UsuarioAdmin = {
   id:           string
   nome:         string
+  email:        string | null   // e-mail de cadastro/login — fonte primária de atribuição
   role:         RoleUsuario
   is_lider:     boolean
   is_admin:     boolean
   ativo:        boolean
   created_at:   string
-  google_email: string | null
+  google_email: string | null   // e-mail alternativo (opcional, só quando a agenda usa outro)
 }
 
 /** Lista todos os usuários (apenas admin deve ter acesso via RLS). */
@@ -20,7 +21,7 @@ export function useUsuarios() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, nome, role, is_lider, is_admin, ativo, created_at, google_email')
+        .select('id, nome, email, role, is_lider, is_admin, ativo, created_at, google_email')
         .order('nome')
       if (error) throw error
       return data as UsuarioAdmin[]

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Search, ShieldCheck, UserCheck, UserX, Info, Trash2, AlertTriangle, Mail, Check, X } from 'lucide-react'
+import { Search, ShieldCheck, UserCheck, UserX, Info, Trash2, AlertTriangle, Mail, Check, X, Plus, CornerDownRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -132,9 +132,10 @@ export function UsuariosPage() {
             .
           </p>
           <p>
-            O e-mail Google sob o nome de cada coordenador identifica de quem é cada
-            reunião importada do Calendar — útil quando a conexão automática usa uma
-            conta compartilhada em vez da conta pessoal de cada um.
+            As reuniões importadas do Calendar são atribuídas a cada coordenador
+            pelo <strong>e-mail de cadastro</strong> — automaticamente, sem precisar
+            configurar nada. Só adicione um <strong>e-mail alternativo</strong> se a
+            agenda do Google da pessoa usar um e-mail diferente do de login.
           </p>
         </div>
       </div>
@@ -229,8 +230,17 @@ function UsuarioRow({
         <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accentBlue-soft text-accentBlue text-[11px] font-semibold select-none">
           {initials}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-0.5">
           <span className="block text-[13px] font-medium text-ink truncate">{usuario.nome}</span>
+          {/* E-mail de cadastro/login — vinculado automaticamente, usado direto na atribuição */}
+          <span
+            className="flex items-center gap-1 text-[11px] text-ink-muted max-w-full"
+            title="E-mail de cadastro — reuniões desta pessoa são atribuídas por ele automaticamente"
+          >
+            <Mail className="h-2.5 w-2.5 flex-shrink-0" />
+            <span className="truncate">{usuario.email ?? '—'}</span>
+          </span>
+          {/* Fluxo extra: e-mail alternativo, só quando a agenda usa outro e-mail */}
           <GoogleEmailField
             value={usuario.google_email}
             onSave={onGoogleEmail}
@@ -374,7 +384,10 @@ function UsuarioRow({
   )
 }
 
-// ─── Campo de e-mail Google (edição inline) ───────────────────────────────────
+// ─── E-mail alternativo do Google (fluxo extra, opcional) ─────────────────────
+// Só é necessário quando a agenda do Google da pessoa usa um e-mail diferente do
+// e-mail de cadastro. No caso comum fica vazio — a atribuição vem do e-mail de
+// cadastro automaticamente.
 
 function GoogleEmailField({ value, onSave, disabled }: {
   value: string | null
@@ -385,14 +398,28 @@ function GoogleEmailField({ value, onSave, disabled }: {
   const [draft, setDraft]     = useState(value ?? '')
 
   if (!editing) {
+    if (!value) {
+      return (
+        <button
+          type="button"
+          onClick={() => { setDraft(''); setEditing(true) }}
+          className="btn-press flex items-center gap-1 text-[10.5px] text-ink-muted/70 hover:text-accentBlue"
+          title="Adicionar um e-mail Google alternativo (só se a agenda usar outro e-mail)"
+        >
+          <Plus className="h-2.5 w-2.5 flex-shrink-0" />
+          <span>e-mail alternativo</span>
+        </button>
+      )
+    }
     return (
       <button
         type="button"
-        onClick={() => { setDraft(value ?? ''); setEditing(true) }}
-        className="btn-press flex items-center gap-1 text-[11px] text-ink-muted hover:text-accentBlue max-w-full"
+        onClick={() => { setDraft(value); setEditing(true) }}
+        className="btn-press flex items-center gap-1 text-[10.5px] text-accentBlue hover:opacity-80 max-w-full"
+        title="E-mail Google alternativo — clique para editar ou remover"
       >
-        <Mail className="h-2.5 w-2.5 flex-shrink-0" />
-        <span className="truncate">{value || 'Adicionar e-mail Google'}</span>
+        <CornerDownRight className="h-2.5 w-2.5 flex-shrink-0" />
+        <span className="truncate">também {value}</span>
       </button>
     )
   }
@@ -412,13 +439,13 @@ function GoogleEmailField({ value, onSave, disabled }: {
           if (e.key === 'Enter') commit()
           if (e.key === 'Escape') setEditing(false)
         }}
-        placeholder="email@gmail.com"
-        className="h-6 text-[11px] px-1.5 bg-surface-canvas border-line w-40"
+        placeholder="e-mail alternativo (opcional)"
+        className="h-6 text-[11px] px-1.5 bg-surface-canvas border-line w-44"
       />
-      <button onClick={commit} disabled={disabled} className="btn-press text-urg-lowFg">
+      <button onClick={commit} disabled={disabled} className="btn-press text-urg-lowFg" title="Salvar">
         <Check className="h-3 w-3" />
       </button>
-      <button onClick={() => setEditing(false)} className="btn-press text-ink-muted">
+      <button onClick={() => setEditing(false)} className="btn-press text-ink-muted" title="Cancelar">
         <X className="h-3 w-3" />
       </button>
     </div>
