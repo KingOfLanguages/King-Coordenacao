@@ -31,6 +31,7 @@ export interface Professor {
   id: string
   nome: string
   email: string | null
+  telefone: string | null
   kms_id: string | null
   status: StatusProfessor
   grupo_id: string | null

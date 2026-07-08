@@ -25,6 +25,7 @@ import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
 import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
+import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,11 @@ export default function App() {
               <Route path="/incidentes" element={
                 <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <IncidentesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/onboarding" element={
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                  <OnboardingPage />
                 </ProtectedRoute>
               } />
               <Route path="/suporte/reunioes" element={
