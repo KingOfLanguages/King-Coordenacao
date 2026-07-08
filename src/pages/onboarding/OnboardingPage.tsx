@@ -46,16 +46,43 @@ function norm(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 }
 
+// ─── Estado do acompanhamento (baseado no que foi enviado) ────────────────────
+
+function enviados(dias: StatusDia[]): number {
+  return dias.filter(d => d === 2).length
+}
+
+/** Concluído = os 7 dias enviados. SÓ então o professor sai da lista ativa. */
+function concluido(dias: StatusDia[]): boolean {
+  return dias.length === 7 && dias.every(d => d === 2)
+}
+
+/** Tem algum dia já vencido (anterior a hoje) que não foi enviado. */
+function temAtraso(dias: StatusDia[], dataInicio: string | null): boolean {
+  const n = diaOnboarding(dataInicio)
+  if (n == null || n < 2) return false
+  const vencidos = Math.min(n - 1, 7) // dias 1..(n-1) já deveriam estar enviados
+  for (let i = 0; i < vencidos; i++) if (dias[i] !== 2) return true
+  return false
+}
+
 // ─── Chip de situação do acompanhamento ───────────────────────────────────────
 
-function SituacaoChip({ dataInicio }: { dataInicio: string | null }) {
+function SituacaoChip({ dias, dataInicio }: { dias: StatusDia[]; dataInicio: string | null }) {
+  const env = enviados(dias)
   const n = diaOnboarding(dataInicio)
-  let cls = 'bg-surface-subtle text-ink-muted'
-  let label = 'Sem data'
-  if (n != null) {
-    if (n <= 0) { cls = 'bg-accentBlue-soft text-accentBlue'; label = `Começa em ${1 - n}d` }
-    else if (n <= 7) { cls = 'bg-urg-medBg text-urg-medFg'; label = `Dia ${n} de 7` }
-    else { cls = 'bg-surface-subtle text-ink-muted'; label = 'Encerrado' }
+  let cls: string
+  let label: string
+
+  if (concluido(dias)) {
+    cls = 'bg-urg-lowBg text-urg-lowFg'; label = 'Concluído'
+  } else if (n != null && n <= 0) {
+    cls = 'bg-accentBlue-soft text-accentBlue'; label = `Começa em ${1 - n}d`
+  } else if (temAtraso(dias, dataInicio)) {
+    cls = 'bg-urg-highBg text-urg-highFg'; label = `${env}/7 · atrasado`
+  } else {
+    cls = 'bg-urg-medBg text-urg-medFg'
+    label = n != null && n >= 1 && n <= 7 ? `${env}/7 · Dia ${n}` : `${env}/7 enviados`
   }
   return (
     <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-medium', cls)}>
@@ -113,6 +140,11 @@ function OnboardingRowView({ row }: { row: OnboardingRow }) {
   const idxAtual = n != null && n >= 1 && n <= 7 ? n - 1 : -1
   const dias: StatusDia[] = row.dias ?? [0, 0, 0, 0, 0, 0, 0]
 
+  const feito      = concluido(dias)
+  const atrasado   = !feito && temAtraso(dias, dataInicio)
+  const iniciado   = n != null && n >= 1
+  const emDestaque = !feito && !atrasado && iniciado // em acompanhamento, no prazo
+
   function cycle(i: number) {
     const next = [...dias]
     next[i] = ((next[i] + 1) % 3) as StatusDia
@@ -130,7 +162,16 @@ function OnboardingRowView({ row }: { row: OnboardingRow }) {
   }
 
   return (
-    <tr className="border-b border-line-soft hover:bg-surface-subtle/40">
+    <tr className={cn(
+      'border-b border-line-soft transition-colors',
+      feito
+        ? 'opacity-55 hover:opacity-100 hover:bg-surface-subtle/40'
+        : atrasado
+          ? 'border-l-2 border-l-urg-highFg/60 bg-urg-highBg/10 hover:bg-urg-highBg/20'
+          : emDestaque
+            ? 'border-l-2 border-l-accentBlue/50 bg-accentBlue-soft/15 hover:bg-accentBlue-soft/25'
+            : 'hover:bg-surface-subtle/40',
+    )}>
       {/* Nome */}
       <td className="p-2 align-middle">
         <p className="text-[13px] font-medium text-ink whitespace-nowrap">{prof?.nome ?? 'Professor removido'}</p>
@@ -152,7 +193,7 @@ function OnboardingRowView({ row }: { row: OnboardingRow }) {
       <td className="p-2 align-middle">
         <div className="flex flex-col gap-1 min-w-[130px]">
           <span className="text-[12px] text-ink-secondary tabular-nums">{fmtData(dataInicio)}</span>
-          <SituacaoChip dataInicio={dataInicio} />
+          <SituacaoChip dias={dias} dataInicio={dataInicio} />
         </div>
       </td>
 
@@ -256,7 +297,18 @@ function AdicionarProfessorDialog({ idsExistentes }: { idsExistentes: Set<string
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
-type Filtro = 'andamento' | 'encerrados' | 'todos'
+type Filtro = 'andamento' | 'concluidos' | 'todos'
+
+// Ordena por urgência: atrasados primeiro, depois em andamento, depois quem ainda
+// não começou, e concluídos por último. Empate → começo mais antigo primeiro.
+function ordem(r: OnboardingRow): number {
+  const dias = r.dias ?? []
+  const di = r.professor?.data_inicio ?? r.data_inicio
+  if (concluido(dias)) return 3
+  if (temAtraso(dias, di)) return 0
+  const n = diaOnboarding(di)
+  return n != null && n >= 1 ? 1 : 2
+}
 
 export function OnboardingPage() {
   const { data: rows = [], isLoading } = useOnboarding()
@@ -265,18 +317,18 @@ export function OnboardingPage() {
 
   const idsExistentes = useMemo(() => new Set(rows.map(r => r.professor_id)), [rows])
 
+  // Um professor só sai de "Em andamento" quando os 7 dias estão enviados.
   function bucketDe(r: OnboardingRow): Exclude<Filtro, 'todos'> {
-    const n = diaOnboarding(r.professor?.data_inicio ?? r.data_inicio)
-    return n != null && n > 7 ? 'encerrados' : 'andamento'
+    return concluido(r.dias ?? []) ? 'concluidos' : 'andamento'
   }
 
   const contagem = useMemo(() => {
-    let andamento = 0, encerrados = 0
+    let andamento = 0, concluidos = 0
     for (const r of rows) {
-      if (bucketDe(r) === 'encerrados') encerrados++
+      if (bucketDe(r) === 'concluidos') concluidos++
       else andamento++
     }
-    return { andamento, encerrados, todos: rows.length }
+    return { andamento, concluidos, todos: rows.length }
   }, [rows])
 
   const visiveis = useMemo(() => {
@@ -284,11 +336,18 @@ export function OnboardingPage() {
     return rows
       .filter(r => filtro === 'todos' || bucketDe(r) === filtro)
       .filter(r => q.length === 0 || norm(r.professor?.nome ?? '').includes(q))
+      .sort((a, b) => {
+        const oa = ordem(a), ob = ordem(b)
+        if (oa !== ob) return oa - ob
+        const da = a.professor?.data_inicio ?? a.data_inicio ?? ''
+        const db = b.professor?.data_inicio ?? b.data_inicio ?? ''
+        return da.localeCompare(db) // começo mais antigo primeiro
+      })
   }, [rows, filtro, busca])
 
   const chips: { id: Filtro; label: string; count: number }[] = [
     { id: 'andamento',  label: 'Em andamento', count: contagem.andamento },
-    { id: 'encerrados', label: 'Encerrados',   count: contagem.encerrados },
+    { id: 'concluidos', label: 'Concluídos',   count: contagem.concluidos },
     { id: 'todos',      label: 'Todos',        count: contagem.todos },
   ]
 
@@ -377,7 +436,7 @@ export function OnboardingPage() {
       )}
 
       {/* Legenda */}
-      <div className="flex flex-wrap items-center gap-4 text-[11.5px] text-ink-muted">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11.5px] text-ink-muted">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded bg-urg-lowBg" /> Enviado
         </span>
@@ -387,8 +446,16 @@ export function OnboardingPage() {
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded border border-line bg-surface-subtle" /> Não enviado
         </span>
+        <span className="text-line-soft">·</span>
         <span className="flex items-center gap-1.5">
-          <Check className="h-3 w-3" /> Clique numa célula para alternar o status
+          <span className="inline-block h-3 w-1 rounded-full bg-accentBlue/60" /> Em acompanhamento
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-1 rounded-full bg-urg-highFg/70" /> Dia atrasado
+        </span>
+        <span className="text-line-soft">·</span>
+        <span className="flex items-center gap-1.5">
+          <Check className="h-3 w-3" /> Clique numa célula pra alternar; sai da lista só quando os 7 dias forem enviados
         </span>
       </div>
     </div>
