@@ -43,13 +43,17 @@
 // deste gate de score.
 //
 // ── Aviso de agendamento recente ────────────────────────────────────────────
-// Professores entre 8 e 90 dias de casa (passaram da janela de "1ª reunião",
-// ainda no 1º-3º mês) fazem acompanhamento mensal. Se a última reunião
-// vinculada (status realizada/pendente) tiver acontecido há menos de 30 dias,
-// a resposta inclui `avisoAgendamentoRecente` — o front mostra um aviso antes
-// das opções normais de agendamento, com duas saídas: declarar que a reunião
-// não aconteceu (via portal-agendamento-declarar-nao-fez, libera o reagendamento)
-// ou seguir direto pras opções (p.ex. só tirar uma dúvida).
+// Professores que já passaram da janela de "1ª reunião" (>7 dias de casa) têm
+// uma cadência mínima de 30 dias entre reuniões de acompanhamento:
+//   - 8 a 90 dias de casa (1º-3º mês):  cadência MENSAL fixa (janela 30-30).
+//   - mais de 90 dias de casa:          janela FLEXÍVEL de 30 a 60 dias.
+// Se a última reunião vinculada (status realizada/pendente) tiver acontecido
+// há menos de 30 dias, a resposta inclui `avisoAgendamentoRecente` — o front
+// mostra um aviso antes das opções normais de agendamento, com duas saídas:
+// declarar que a reunião não aconteceu (via portal-agendamento-declarar-nao-fez,
+// libera o reagendamento) ou seguir direto pras opções (p.ex. só tirar uma dúvida).
+// Não há bloqueio por estar "atrasado" (>60 dias) — a janela máxima é só
+// informativa na mensagem, nunca impede o agendamento.
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
@@ -67,8 +71,9 @@
 //       reuniaoProfessorId: string,
 //       data: string,             // data da última reunião vinculada (ISO)
 //       diasDesdeUltima: number,
-//       diasParaProxima: number,  // dias que faltam pra completar os 30 dias de cadência
-//       proximaDataSugerida: string, // ISO
+//       diasParaProxima: number,  // dias que faltam pra completar os 30 dias mínimos de cadência
+//       proximaDataSugerida: string, // ISO — última data + 30 dias (início da janela)
+//       janela: { min: number, max: number }, // 30-30 (mensal) ou 30-60 (flexível, >90 dias de casa)
 //     } | null,
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,8 +88,10 @@ const CORS = {
 
 const SCORE_MINIMO_GRUPO = 1400
 const DIAS_JANELA_PRIMEIRA_REUNIAO = 7
-const DIAS_JANELA_ACOMPANHAMENTO_MENSAL = 90 // ~3 meses de casa
-const CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS = 30
+const DIAS_JANELA_ACOMPANHAMENTO_MENSAL = 90 // ~3 meses de casa — cadência mensal fixa (30 dias)
+const CADENCIA_MIN_DIAS = 30
+const CADENCIA_MAX_DIAS_MENSAL    = 30 // professores 8-90 dias de casa: cadência fixa
+const CADENCIA_MAX_DIAS_FLEXIVEL  = 60 // professores >90 dias de casa: janela livre de 30-60 dias
 const NOME_MIN_CHARS = 3
 const STOPWORDS = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
 
@@ -224,41 +231,54 @@ serve(async (req) => {
   const scoreAtual = acompanhamento?.score_atual ?? null
   const elegivelGrupo = scoreAtual != null && scoreAtual >= SCORE_MINIMO_GRUPO
 
-  // ── 7. Aviso de agendamento recente (acompanhamento mensal, 8-90 dias de casa) ─
+  // ── 7. Aviso de agendamento recente (cadência mínima de 30 dias, >7 dias de casa) ─
   let avisoAgendamentoRecente: {
     reuniaoProfessorId: string
     data: string
     diasDesdeUltima: number
     diasParaProxima: number
     proximaDataSugerida: string
+    janela: { min: number; max: number }
   } | null = null
 
-  const dentroDoAcompanhamentoMensal =
-    dias != null && dias > DIAS_JANELA_PRIMEIRA_REUNIAO && dias <= DIAS_JANELA_ACOMPANHAMENTO_MENSAL
+  const passouDaPrimeiraReuniao = dias != null && dias > DIAS_JANELA_PRIMEIRA_REUNIAO
+  const cadenciaMaxDias = dias != null && dias <= DIAS_JANELA_ACOMPANHAMENTO_MENSAL
+    ? CADENCIA_MAX_DIAS_MENSAL
+    : CADENCIA_MAX_DIAS_FLEXIVEL
 
-  if (dentroDoAcompanhamentoMensal) {
-    const { data: ultimasReunioes } = await admin
+  if (passouDaPrimeiraReuniao) {
+    // Traz todas as participações realizada/pendente e escolhe a de data mais recente em JS —
+    // `.order(..., { referencedTable })` não ordena de forma confiável a tabela embutida aqui.
+    const { data: reunioesDoProfessor } = await admin
       .from('reuniao_professores')
       .select('id, reuniao:reunioes!inner(data)')
       .eq('professor_id', professor.id)
       .in('status', ['realizada', 'pendente'])
-      .order('data', { referencedTable: 'reuniao', ascending: false })
-      .limit(1)
 
-    const ultima = ultimasReunioes?.[0] as { id: string; reuniao: { data: string } | { data: string }[] } | undefined
-    const reuniaoUltima = ultima ? (Array.isArray(ultima.reuniao) ? ultima.reuniao[0] : ultima.reuniao) : null
+    type LinhaReuniao = { id: string; reuniao: { data: string } | { data: string }[] }
+    const linhas = (reunioesDoProfessor ?? []) as LinhaReuniao[]
 
-    if (ultima && reuniaoUltima) {
-      const diasDesdeUltima = diasDesde(reuniaoUltima.data)
-      if (diasDesdeUltima != null && diasDesdeUltima < CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS) {
-        const dataUltima = new Date(reuniaoUltima.data)
-        const proximaData = new Date(dataUltima.getTime() + CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS * 86400000)
+    let ultima: { id: string; data: string } | null = null
+    for (const linha of linhas) {
+      const r = Array.isArray(linha.reuniao) ? linha.reuniao[0] : linha.reuniao
+      if (!r) continue
+      if (!ultima || new Date(r.data) > new Date(ultima.data)) {
+        ultima = { id: linha.id, data: r.data }
+      }
+    }
+
+    if (ultima) {
+      const diasDesdeUltima = diasDesde(ultima.data)
+      if (diasDesdeUltima != null && diasDesdeUltima < CADENCIA_MIN_DIAS) {
+        const dataUltima = new Date(ultima.data)
+        const proximaData = new Date(dataUltima.getTime() + CADENCIA_MIN_DIAS * 86400000)
         avisoAgendamentoRecente = {
           reuniaoProfessorId: ultima.id,
-          data: reuniaoUltima.data,
+          data: ultima.data,
           diasDesdeUltima,
-          diasParaProxima: Math.max(CADENCIA_ACOMPANHAMENTO_MENSAL_DIAS - diasDesdeUltima, 0),
+          diasParaProxima: Math.max(CADENCIA_MIN_DIAS - diasDesdeUltima, 0),
           proximaDataSugerida: proximaData.toISOString(),
+          janela: { min: CADENCIA_MIN_DIAS, max: cadenciaMaxDias },
         }
       }
     }

@@ -38,13 +38,17 @@ export function AvisoAgendamentoRecente({
           Sua última reunião foi marcada para <strong className="text-ink">{dataFmt(aviso.data)}</strong>.
         </p>
         <p className="text-[13px] text-ink-muted leading-relaxed">
-          Para professores no início da jornada (1 a 3 meses de casa), o acompanhamento é mensal —
+          {aviso.janela.min === aviso.janela.max ? (
+            <>Para professores no início da jornada (1 a 3 meses de casa), o acompanhamento é mensal — </>
+          ) : (
+            <>Você já passou dos primeiros 3 meses, então pode escolher fazer suas reuniões de acompanhamento entre {aviso.janela.min} e {aviso.janela.max} dias após o último encontro — </>
+          )}
           {aviso.diasParaProxima > 0 ? (
-            <> sua próxima reunião pode ser agendada a partir de{' '}
+            <>sua próxima reunião pode ser agendada a partir de{' '}
               <strong className="text-ink-secondary">{dataFmt(aviso.proximaDataSugerida)}</strong>{' '}
               (em {aviso.diasParaProxima} {aviso.diasParaProxima === 1 ? 'dia' : 'dias'}).</>
           ) : (
-            <> já é possível agendar sua próxima reunião.</>
+            <>já é possível agendar sua próxima reunião.</>
           )}
         </p>
       </div>

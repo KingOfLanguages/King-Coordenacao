@@ -10,6 +10,8 @@ export type AvisoAgendamentoRecente = {
   diasDesdeUltima: number
   diasParaProxima: number
   proximaDataSugerida: string
+  /** min/max dias de cadência: 30-30 (acompanhamento mensal, 1º-3º mês) ou 30-60 (flexível, >3 meses). */
+  janela: { min: number; max: number }
 }
 
 export type PortalLookupResult = {
