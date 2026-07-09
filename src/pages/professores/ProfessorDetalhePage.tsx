@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
-  CalendarDays, Clock, DollarSign, Users, User,
+  CalendarDays, Clock, DollarSign, Users, User, MapPin, GraduationCap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -255,6 +255,17 @@ export function ProfessorDetalhePage() {
             {tempoCasa && (
               <span className="inline-flex items-center gap-1 text-ink-muted">
                 <Clock className="h-3 w-3" />{tempoCasa} de casa
+              </span>
+            )}
+            {(professor.cidade || professor.estado) && (
+              <span className="inline-flex items-center gap-1 text-ink-muted">
+                <MapPin className="h-3 w-3" />
+                {[professor.cidade, professor.estado].filter(Boolean).join(' · ')}
+              </span>
+            )}
+            {professor.nivel_recomendado_alunos && (
+              <span className="inline-flex items-center gap-1 text-ink-muted">
+                <GraduationCap className="h-3 w-3" />{professor.nivel_recomendado_alunos}
               </span>
             )}
           </div>

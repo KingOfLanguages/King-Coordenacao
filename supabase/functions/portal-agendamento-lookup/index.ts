@@ -2,11 +2,18 @@
 // Edge Function: portal-agendamento-lookup
 //
 // Usada pela tela pública /agendar (sem login) como primeiro passo do Portal
-// de Agendamento. A maioria dos professores sincronizados do KMS não tem
-// e-mail cadastrado (professor_emails), então a identificação é feita só
-// pelo nome — em 3 tentativas escalonadas, cada uma mais precisa que a
-// anterior, pra minimizar tanto falso-negativo (não achar) quanto
-// falso-positivo (achar a pessoa errada):
+// de Agendamento. A identificação é feita PRIMEIRO pelo e-mail (exato, via
+// professor_emails) — hoje ~todos os professores têm e-mail cadastrado, então
+// esse caminho resolve com 100% de certeza e sem ambiguidade. Só caímos no
+// casamento por nome quando o professor não informou e-mail OU o e-mail não
+// bate com nenhum cadastro (e-mail novo / os poucos que ainda faltam). Nesse
+// fallback, se o professor for resolvido pelo nome e um e-mail válido tiver
+// sido informado, ele é APRENDIDO (origem 'portal') — assim o portal vai
+// preenchendo sozinho quem ainda não tem e-mail.
+//
+// O casamento por nome continua em 3 tentativas escalonadas, cada uma mais
+// precisa que a anterior, pra minimizar tanto falso-negativo (não achar)
+// quanto falso-positivo (achar a pessoa errada):
 //
 //   1ª tentativa — nome parcial (mín. 3 caracteres), casamento por token.
 //   2ª tentativa — se ambíguo (>1 professor ativo bate), o front pede o
@@ -57,7 +64,9 @@
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
-//   Body: { "nome": "Fulano de Tal", "mesInicio"?: 3, "anoInicio"?: 2026 }
+//   Body: { "email"?: "prof@exemplo.com", "nome"?: "Fulano de Tal",
+//           "mesInicio"?: 3, "anoInicio"?: 2026 }
+//   (e-mail e nome são opcionais isoladamente, mas pelo menos um é obrigatório)
 //   Retorna: {
 //     professor:   { id, nome } | null,
 //     coordenador: { id, nome } | null,
@@ -94,6 +103,7 @@ const CADENCIA_MAX_DIAS_MENSAL    = 30 // professores 8-90 dias de casa: cadênc
 const CADENCIA_MAX_DIAS_FLEXIVEL  = 60 // professores >90 dias de casa: janela livre de 30-60 dias
 const NOME_MIN_CHARS = 3
 const STOPWORDS = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
+const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -152,15 +162,21 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { nome?: unknown; mesInicio?: unknown; anoInicio?: unknown }
+  let body: { nome?: unknown; email?: unknown; mesInicio?: unknown; anoInicio?: unknown }
   try {
     body = await req.json()
   } catch {
     return json({ error: 'JSON inválido.' }, 400)
   }
 
-  const nome = typeof body.nome === 'string' ? body.nome.trim() : ''
-  if (nome.length < NOME_MIN_CHARS) return json({ error: `Nome precisa ter ao menos ${NOME_MIN_CHARS} caracteres.` }, 400)
+  const nome  = typeof body.nome  === 'string' ? body.nome.trim()  : ''
+  const email = typeof body.email === 'string' ? body.email.trim() : ''
+  const emailValido = EMAILRE.test(email.toLowerCase())
+  const temNome     = nome.length >= NOME_MIN_CHARS
+
+  if (!temNome && !emailValido) {
+    return json({ error: `Informe seu e-mail ou ao menos ${NOME_MIN_CHARS} caracteres do seu nome.` }, 400)
+  }
 
   const mesInicio = typeof body.mesInicio === 'number' ? body.mesInicio : null
   const anoInicio = typeof body.anoInicio === 'number' ? body.anoInicio : null
@@ -170,24 +186,58 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // ── 1. Identifica candidatos pelo nome (casamento por token, não por e-mail) ─
-  const { data: ativos } = await admin
-    .from('professores')
-    .select('id, nome, status, coordenador_id, data_inicio')
-    .eq('status', 'ativo')
+  type ProfRow = { id: string; nome: string; status: string; coordenador_id: string | null; data_inicio: string | null }
 
-  const tokensInformados = tokens(nome)
-  let candidatos = (ativos ?? []).filter(p => nomeCorresponde(tokensInformados, tokens(p.nome)))
+  // ── 1. Identificação: e-mail primeiro (exato), nome como reserva ─────────────
+  let professor: ProfRow | null = null
 
-  // ── 2. Desempate por mês/ano de início, só quando ainda ambíguo ──────────────
-  if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
-    candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
+  if (emailValido) {
+    const { data: emailRow } = await admin
+      .from('professor_emails')
+      .select('professor_id')
+      .ilike('email', email)
+      .maybeSingle()
+    if (emailRow) {
+      const { data: p } = await admin
+        .from('professores')
+        .select('id, nome, status, coordenador_id, data_inicio')
+        .eq('id', emailRow.professor_id)
+        .maybeSingle()
+      if (p && p.status === 'ativo') professor = p as ProfRow
+    }
   }
 
-  if (candidatos.length === 0) return json(respostaVazia(false))
-  if (candidatos.length > 1)   return json(respostaVazia(true))
+  // ── 2. Fallback por nome (token match) + aprendizado do e-mail informado ─────
+  if (!professor) {
+    // Sem nome (ex.: 1º passo só com e-mail que não bateu) → front pede o nome.
+    if (!temNome) return json(respostaVazia(false))
 
-  const professor = candidatos[0]
+    const { data: ativos } = await admin
+      .from('professores')
+      .select('id, nome, status, coordenador_id, data_inicio')
+      .eq('status', 'ativo')
+
+    const tokensInformados = tokens(nome)
+    let candidatos = ((ativos ?? []) as ProfRow[]).filter(p => nomeCorresponde(tokensInformados, tokens(p.nome)))
+
+    // Desempate por mês/ano de início, só quando ainda ambíguo.
+    if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
+      candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
+    }
+
+    if (candidatos.length === 0) return json(respostaVazia(false))
+    if (candidatos.length > 1)   return json(respostaVazia(true))
+
+    professor = candidatos[0]
+
+    // Aprende o e-mail informado pra esse professor (auto-preenche quem falta).
+    // Conflito (e-mail já vinculado a alguém) é ignorado — nunca "rouba" vínculo.
+    if (emailValido) {
+      await admin.from('professor_emails').insert({ professor_id: professor.id, email, origem: 'portal' })
+    }
+  }
+
+  if (!professor) return json(respostaVazia(false))
 
   if (!professor.coordenador_id) {
     return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })

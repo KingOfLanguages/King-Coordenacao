@@ -43,6 +43,9 @@ export interface Professor {
   saiu: boolean
   renda: string | null
   data_ultima_reuniao: string | null
+  cidade: string | null
+  estado: string | null
+  nivel_recomendado_alunos: string | null
   created_at: string
 }
 

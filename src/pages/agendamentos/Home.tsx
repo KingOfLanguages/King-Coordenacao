@@ -36,8 +36,11 @@ function iniciais(nome: string): string {
 
 type Tentativa = 1 | 2 | 3
 
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
 type Step =
-  | { tipo: 'identificacao'; tentativa: Tentativa; nome: string; erro: string }
+  | { tipo: 'identificacao-email'; email: string; erro: string }
+  | { tipo: 'identificacao'; tentativa: Tentativa; nome: string; erro: string; emailInformado: string }
   | { tipo: 'confirmar-identidade'; resultado: PortalLookupResult }
   | { tipo: 'aviso-agendamento-recente'; resultado: PortalLookupResult }
   | { tipo: 'opcoes'; resultado: PortalLookupResult }
@@ -45,7 +48,7 @@ type Step =
   | { tipo: 'confirmacao'; reuniao: ReuniaoConfirmada }
 
 export function Home() {
-  const [step, setStep] = useState<Step>({ tipo: 'identificacao', tentativa: 1, nome: '', erro: '' })
+  const [step, setStep] = useState<Step>({ tipo: 'identificacao-email', email: '', erro: '' })
   const [mes, setMes] = useState<number | null>(null)
   const [ano, setAno] = useState<number | null>(null)
 
@@ -53,6 +56,31 @@ export function Home() {
   const teacherLookup    = useTeacherLookup()
   const book             = useBookMeeting()
   const declararNaoFez   = useDeclararNaoFezReuniao()
+
+  async function handleSubmitEmail(e: React.FormEvent) {
+    e.preventDefault()
+    if (step.tipo !== 'identificacao-email') return
+    const emailAtual = step.email.trim()
+    if (!EMAIL_RE.test(emailAtual)) {
+      setStep({ ...step, erro: 'Digite um e-mail válido.' })
+      return
+    }
+
+    try {
+      const resultado = await lookup.mutateAsync({ email: emailAtual })
+
+      if (resultado.professor) {
+        setStep({ tipo: 'confirmar-identidade', resultado })
+        return
+      }
+
+      // E-mail não bateu com nenhum cadastro → cai no fluxo por nome, guardando
+      // o e-mail informado pra ser aprendido quando o professor for identificado.
+      setStep({ tipo: 'identificacao', tentativa: 1, nome: '', erro: '', emailInformado: emailAtual })
+    } catch {
+      setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -70,6 +98,7 @@ export function Home() {
     try {
       const resultado = await lookup.mutateAsync({
         nome: nomeAtual,
+        ...(step.emailInformado ? { email: step.emailInformado } : {}),
         ...(step.tentativa === 3 && mes != null && ano != null ? { mesInicio: mes, anoInicio: ano } : {}),
       })
 
@@ -79,7 +108,7 @@ export function Home() {
       }
 
       if (resultado.ambiguo && step.tentativa < 3) {
-        setStep({ tipo: 'identificacao', tentativa: (step.tentativa + 1) as Tentativa, nome: nomeAtual, erro: '' })
+        setStep({ tipo: 'identificacao', tentativa: (step.tentativa + 1) as Tentativa, nome: nomeAtual, erro: '', emailInformado: step.emailInformado })
         return
       }
 
@@ -92,7 +121,7 @@ export function Home() {
   function recomecar() {
     setMes(null)
     setAno(null)
-    setStep({ tipo: 'identificacao', tentativa: 1, nome: '', erro: '' })
+    setStep({ tipo: 'identificacao-email', email: '', erro: '' })
   }
 
   async function handleEscolherGrupo() {
@@ -166,6 +195,72 @@ export function Home() {
       />
 
       <div className="relative z-10 flex items-center justify-center w-full">
+        {step.tipo === 'identificacao-email' && (
+          <div className="w-full max-w-sm space-y-6 animate-fade-up">
+            <div className="space-y-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accentBlue-soft text-accentBlue shadow-inner-top">
+                <CalendarClock className="h-6 w-6" />
+              </div>
+              <div className="space-y-1.5">
+                <span className="label-micro flex items-center gap-1.5 text-accentBlue">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
+                  Portal do professor
+                </span>
+                <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
+                  Agendamento de Reuniões
+                </h1>
+                <p className="text-[14px] text-ink-muted leading-relaxed">
+                  Informe seu e-mail cadastrado para ver as opções de agendamento disponíveis para você.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
+                            shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
+              <div className="rounded-[1.5rem] bg-surface-canvas px-6 py-7 space-y-5">
+                <form onSubmit={handleSubmitEmail} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="text-[12px] text-ink-secondary font-medium">
+                      E-mail
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      inputMode="email"
+                      value={step.email}
+                      onChange={ev => setStep({ ...step, email: ev.target.value })}
+                      required
+                      autoComplete="email"
+                      placeholder="seu.email@exemplo.com"
+                      className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
+                    />
+                  </div>
+
+                  {step.erro && (
+                    <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
+                                    text-[12.5px] text-brand-strong font-medium">
+                      <p>{step.erro}</p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={lookup.isPending}
+                    className={cn(
+                      'btn-press w-full h-11 rounded-full bg-ink text-ink-inverse',
+                      'flex items-center justify-center',
+                      'hover:bg-ink/90 disabled:opacity-60 disabled:cursor-not-allowed',
+                      'font-medium text-[13.5px]',
+                    )}
+                  >
+                    {lookup.isPending ? 'Buscando…' : 'Continuar'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
         {step.tipo === 'identificacao' && (
           <div className="w-full max-w-sm space-y-6 animate-fade-up">
             <div className="space-y-3">
@@ -181,7 +276,9 @@ export function Home() {
                   Agendamento de Reuniões
                 </h1>
                 <p className="text-[14px] text-ink-muted leading-relaxed">
-                  {step.tentativa === 1 && 'Informe seu nome para ver as opções de agendamento disponíveis para você.'}
+                  {step.tentativa === 1 && (step.emailInformado
+                    ? 'Não encontramos esse e-mail no cadastro. Confirme seu nome completo para continuar.'
+                    : 'Informe seu nome para ver as opções de agendamento disponíveis para você.')}
                   {step.tentativa === 2 && 'Encontramos mais de uma pessoa com esse nome. Digite seu nome completo, como está no seu cadastro.'}
                   {step.tentativa === 3 && 'Ainda encontramos mais de uma pessoa. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'}
                 </p>

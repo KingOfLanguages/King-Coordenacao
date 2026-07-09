@@ -27,15 +27,20 @@ export type PortalLookupResult = {
 }
 
 export type PortalLookupInput = {
-  nome: string
+  /** E-mail informado pelo professor — caminho primário (exato). */
+  email?: string
+  /** Nome — usado quando o e-mail não veio ou não bateu com nenhum cadastro. */
+  nome?: string
   mesInicio?: number
   anoInicio?: number
 }
 
 /**
- * Identifica o professor só pelo nome (a maioria não tem e-mail cadastrado).
- * Se `ambiguo` voltar true, reenviar com nome mais completo e/ou mesInicio+anoInicio
- * como desempate — ver comentário de portal-agendamento-lookup/index.ts.
+ * Identifica o professor PRIMEIRO pelo e-mail (exato) e, como reserva, pelo nome.
+ * Quando resolvido pelo nome com um `email` válido junto, o e-mail é aprendido
+ * (origem 'portal'). Se `ambiguo` voltar true, reenviar com nome mais completo
+ * e/ou mesInicio+anoInicio como desempate — ver portal-agendamento-lookup/index.ts.
+ * Pelo menos um entre `email` e `nome` precisa ir preenchido.
  */
 export function usePortalLookup() {
   return useMutation({
