@@ -13,6 +13,8 @@ import {
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
 import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
 import { nivelLabel, nivelChip } from '@/lib/nexusLabels'
+import { useAuth } from '@/contexts/AuthContext'
+import { canEdit } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 type Aba = 'pendentes' | 'concluidos' | 'sugestoes'
@@ -29,6 +31,8 @@ function statusPrazo(dataIso: string): { label: string; cls: string; vencido: bo
 
 export function MesAnalisePage() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
+  const podeEditar = canEdit(profile) // colocar/resolver/reabrir = só coordenação/admin
   const { data: incidentes = [], isLoading } = useMesAnaliseIncidentes()
   const { data: sugestoesData, isLoading: carregandoSugestoes } = useMesAnaliseSugestoes()
 
@@ -111,13 +115,15 @@ export function MesAnalisePage() {
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Mês de Análise</h1>
           <p className="text-[13px] text-ink-muted">Acompanhamento de 30 dias, integrado ao King Nexus.</p>
         </div>
-        <Button
-          size="sm"
-          className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
-          onClick={abrirColocarManual}
-        >
-          <Plus className="h-3.5 w-3.5" />Colocar em Mês de Análise
-        </Button>
+        {podeEditar && (
+          <Button
+            size="sm"
+            className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
+            onClick={abrirColocarManual}
+          >
+            <Plus className="h-3.5 w-3.5" />Colocar em Mês de Análise
+          </Button>
+        )}
       </header>
 
       {/* Stats */}
@@ -192,6 +198,7 @@ export function MesAnalisePage() {
           sugestoes={sugestoesData?.sugestoes ?? []}
           semIdentificacao={sugestoesData?.semIdentificacao ?? 0}
           alunosPorProfessor={alunosPorProfessor}
+          podeEditar={podeEditar}
           onMarcar={abrirColocarDeSugestao}
           onVerProfessor={id => navigate(`/professores/${id}`)}
         />
@@ -264,7 +271,9 @@ export function MesAnalisePage() {
                       </td>
                     )}
                     <td className="px-4 py-2.5 text-center">
-                      {aba === 'pendentes' ? (
+                      {!podeEditar ? (
+                        <span className="text-[11px] text-ink-subtle">—</span>
+                      ) : aba === 'pendentes' ? (
                         <button
                           onClick={() => setResolverAlvo(i)}
                           className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-md bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity"
@@ -359,12 +368,13 @@ function ReabrirConfirmDialog({
 // ─── Sugestões ─────────────────────────────────────────────────────────────────
 
 function SugestoesTab({
-  isLoading, sugestoes, semIdentificacao, alunosPorProfessor, onMarcar, onVerProfessor,
+  isLoading, sugestoes, semIdentificacao, alunosPorProfessor, podeEditar, onMarcar, onVerProfessor,
 }: {
   isLoading: boolean
   sugestoes: MesAnaliseSugestao[]
   semIdentificacao: number
   alunosPorProfessor: Map<string, { total: number; nomes: string[] }>
+  podeEditar: boolean
   onMarcar: (s: MesAnaliseSugestao) => void
   onVerProfessor: (id: string) => void
 }) {
@@ -440,13 +450,15 @@ function SugestoesTab({
                       Último em {new Date(s.ultimoIncidenteEm).toLocaleDateString('pt-BR')}
                     </p>
                   </div>
-                  <button
-                    onClick={() => onMarcar(s)}
-                    className="btn-press flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium rounded-md bg-urg-highBg text-urg-highFg hover:opacity-80 transition-opacity flex-shrink-0"
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    Colocar em Mês de Análise
-                  </button>
+                  {podeEditar && (
+                    <button
+                      onClick={() => onMarcar(s)}
+                      className="btn-press flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium rounded-md bg-urg-highBg text-urg-highFg hover:opacity-80 transition-opacity flex-shrink-0"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Colocar em Mês de Análise
+                    </button>
+                  )}
                 </div>
               </div>
             )

@@ -12,6 +12,7 @@ import { RedefinirSenha } from '@/pages/RedefinirSenha'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
+import { RetornoPausaPage } from '@/pages/professores/RetornoPausaPage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
@@ -26,6 +27,7 @@ import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
 import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
 import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
+import { TarefasPage } from '@/pages/tarefas/TarefasPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,12 +41,14 @@ const queryClient = new QueryClient({
   },
 })
 
-// Home: todos vão para o Dashboard da Coordenação.
+// Home: coordenação/líder/admin vão pro Dashboard; suporte vai pra Professores
+// (o suporte não tem acesso ao Dashboard).
 function IndexRedirect() {
   const { profile, loading } = useAuth()
   if (loading) return null
   if (!profile) return <Navigate to="/login" replace />
-  return <Navigate to="/dashboard" replace />
+  const podeDashboard = profile.role === 'coordenacao' || profile.is_admin || profile.role === 'admin' || profile.is_lider
+  return <Navigate to={podeDashboard ? '/dashboard' : '/professores'} replace />
 }
 
 // Quem já tem sessão não deveria ver o formulário de login/cadastro de novo.
@@ -76,7 +80,7 @@ export default function App() {
               <Route path="/" element={<IndexRedirect />} />
 
               <Route path="/dashboard" element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['coordenacao']} admin lider>
                   <DashboardCoordPage />
                 </ProtectedRoute>
               } />
@@ -122,13 +126,23 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/onboarding" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute roles={['coordenacao']} admin>
                   <OnboardingPage />
                 </ProtectedRoute>
               } />
+              <Route path="/retorno-pausa" element={
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                  <RetornoPausaPage />
+                </ProtectedRoute>
+              } />
               <Route path="/suporte/reunioes" element={
-                <ProtectedRoute roles={['suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute roles={['suporte']} admin>
                   <SuporteReunioesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/tarefas" element={
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                  <TarefasPage />
                 </ProtectedRoute>
               } />
               {/* Admin */}

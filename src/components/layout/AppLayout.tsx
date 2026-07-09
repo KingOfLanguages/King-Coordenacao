@@ -20,17 +20,6 @@ const groupReunioes: NavGroupEntry = {
     { to: '/admin/agendas', label: 'Agendas' },
   ],
 }
-const groupProfessores: NavGroupEntry = {
-  type: 'group',
-  label: 'Professores',
-  items: [
-    { to: '/professores', label: 'Professores' },
-    { to: '/onboarding', label: 'Onboarding' },
-    { to: '/acompanhamento', label: 'Acompanhamento' },
-    { to: '/mes-analise', label: 'Mês de Análise' },
-    { to: '/incidentes', label: 'Incidentes' },
-  ],
-}
 const groupAdmin: NavGroupEntry = {
   type: 'group',
   label: 'Administração',
@@ -89,11 +78,27 @@ export function AppLayout() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const openRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
-  const isAdmin   = profile?.is_admin === true || profile?.role === 'admin'
-  const isLider   = profile?.is_lider === true
-  const isCoord   = profile?.role === 'coordenacao' || isAdmin
-  const isSuporte = profile?.role === 'suporte' || profile?.role === 'suporte_aluno'
+  const isAdmin       = profile?.is_admin === true || profile?.role === 'admin'
+  const isLider       = profile?.is_lider === true
+  const isCoord       = profile?.role === 'coordenacao' || isAdmin
+  const isSuportePleno = profile?.role === 'suporte'
+  const isSuporte     = isSuportePleno || profile?.role === 'suporte_aluno'
 
+  // Onboarding é só de coordenação/admin; o resto do grupo é visível pro suporte também.
+  const groupProfessores: NavGroupEntry = {
+    type: 'group',
+    label: 'Professores',
+    items: [
+      { to: '/professores', label: 'Professores' },
+      ...(isCoord ? [{ to: '/onboarding', label: 'Onboarding' }] : []),
+      { to: '/retorno-pausa', label: 'Retorno de Pausa' },
+      { to: '/acompanhamento', label: 'Acompanhamento' },
+      { to: '/mes-analise', label: 'Mês de Análise' },
+      { to: '/incidentes', label: 'Incidentes' },
+    ],
+  }
+
+  // Dashboard: só coordenação, líder e admin (suporte não vê).
   const dashboardEntry: NavEntry = (isAdmin || isLider)
     ? { type: 'group', label: 'Dashboard', items: [
         { to: '/dashboard', label: 'Dashboard', exact: true },
@@ -102,12 +107,16 @@ export function AppLayout() {
     : { type: 'link', to: '/dashboard', label: 'Dashboard', exact: true }
 
   const suporteEntry: NavEntry = { type: 'link', to: '/suporte/reunioes', label: 'Buscar Reuniões' }
+  const tarefasEntry: NavEntry = { type: 'link', to: '/tarefas', label: 'Tarefas' }
 
   const entries: NavEntry[] = [
     ...(isCoord ? [groupReunioes] : []),
     ...(isCoord || isSuporte ? [groupProfessores] : []),
-    dashboardEntry,
-    ...(isSuporte || isAdmin ? [suporteEntry] : []),
+    ...(isCoord || isLider ? [dashboardEntry] : []),
+    // Buscar Reuniões: suporte pleno e admin (suporte_aluno não).
+    ...(isSuportePleno || isAdmin ? [suporteEntry] : []),
+    // Tarefas: coordenação e suporte (nos dois sentidos) + admin.
+    ...(isCoord || isSuporte ? [tarefasEntry] : []),
     ...(isAdmin ? [groupAdmin] : []),
   ]
 

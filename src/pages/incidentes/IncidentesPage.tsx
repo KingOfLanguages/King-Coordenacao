@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -68,6 +68,7 @@ export function IncidentesPage() {
   const [urgenciaFiltro, setUrgenciaFiltro] = useState<FiltroUrgencia>('todas')
   const [professorFiltro, setProfessorFiltro] = useState<string>('todos')
   const [ordem, setOrdem] = useState<Ordem>('novo')
+  const [soMeus, setSoMeus] = useState(false)
 
   const porAba = useMemo(
     () => incidentes.filter(i => (aba === 'professor' ? !!i.professor_id : !i.professor_id)),
@@ -101,6 +102,7 @@ export function IncidentesPage() {
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     const lista = porAba.filter(i => {
+      if (soMeus && i.created_by !== profile?.id) return false
       if (status === 'abertos' && i.resolved) return false
       if (status === 'resolvidos' && !i.resolved) return false
       if (categoria !== 'todas' && i.problem_type !== categoria) return false
@@ -116,7 +118,7 @@ export function IncidentesPage() {
     })
     const sinal = ordem === 'novo' ? -1 : 1
     return [...lista].sort((a, b) => sinal * a.created_at.localeCompare(b.created_at))
-  }, [porAba, busca, categoria, status, urgenciaFiltro, professorFiltro, ordem])
+  }, [porAba, busca, categoria, status, urgenciaFiltro, professorFiltro, ordem, soMeus, profile?.id])
 
   function trocarAba(novaAba: Aba) {
     setAba(novaAba)
@@ -253,6 +255,19 @@ export function IncidentesPage() {
         >
           {ordem === 'novo' ? <ArrowDownNarrowWide className="h-3.5 w-3.5" /> : <ArrowUpNarrowWide className="h-3.5 w-3.5" />}
           {ordem === 'novo' ? 'Mais recentes' : 'Mais antigos'}
+        </button>
+        <button
+          onClick={() => setSoMeus(v => !v)}
+          className={cn(
+            'btn-press flex items-center gap-1.5 h-9 px-3 rounded-full text-[12px] font-medium transition-colors',
+            soMeus
+              ? 'bg-accentBlue text-white'
+              : 'text-ink-secondary bg-surface-subtle hover:text-ink',
+          )}
+          title="Mostrar só os chamados que eu abri"
+        >
+          <UserCheck className="h-3.5 w-3.5" />
+          Meus chamados
         </button>
       </div>
 

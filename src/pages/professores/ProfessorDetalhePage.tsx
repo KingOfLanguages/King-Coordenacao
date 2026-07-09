@@ -3,13 +3,14 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
   CalendarDays, Clock, DollarSign, Users, User, MapPin, GraduationCap,
+  PlayCircle, CheckCircle2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor } from '@/hooks/useProfessores'
+import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useTirarDaPausa, useConcluirAcompanhamentoPausa } from '@/hooks/useProfessores'
 import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
 import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
@@ -27,6 +28,7 @@ import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesA
 import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
+import { toast } from 'sonner'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
@@ -91,6 +93,8 @@ export function ProfessorDetalhePage() {
   const { data: nexusData } = useNexusDados(id)
   const atualizarMonitoramento = useAtualizarMonitoramento()
   const atualizarGrupo = useAtualizarGrupoProfessor()
+  const tirarDaPausa = useTirarDaPausa()
+  const concluirAcompPausa = useConcluirAcompanhamentoPausa()
   const resolverObservacao = useResolverObservacao()
   const { profile } = useAuth()
   const { data: grupos = [] } = useGrupos()
@@ -226,6 +230,15 @@ export function ProfessorDetalhePage() {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] pt-0.5">
             <StatusProfessorChip status={professor.status} />
 
+            {professor.status_manual && professor.despausado_em && professor.status !== 'pausa' && (
+              <span
+                title={`Tirado da pausa em ${new Date(professor.despausado_em).toLocaleDateString('pt-BR')}`}
+                className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg text-urg-lowFg px-2 py-0.5 text-[11px] font-medium"
+              >
+                <PlayCircle className="h-3 w-3" />Retorno de pausa
+              </span>
+            )}
+
             {podeEditar ? (
               <Select
                 value={professor.grupo_id ?? ''}
@@ -289,6 +302,32 @@ export function ProfessorDetalhePage() {
               onClick={() => setColocarMesAnaliseAberto(true)}
             >
               <AlertTriangle className="h-3.5 w-3.5" />Mês de Análise
+            </Button>
+          )}
+          {podeEditar && professor.status === 'pausa' && (
+            <Button
+              variant="outline" size="sm"
+              className="btn-press border-urg-lowFg/30 text-urg-lowFg hover:bg-urg-lowBg gap-1.5"
+              disabled={tirarDaPausa.isPending}
+              onClick={() => tirarDaPausa.mutate(professor.id, {
+                onSuccess: () => toast.success('Professor tirado da pausa. O sync do KMS não vai re-pausar.'),
+                onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao tirar da pausa.'),
+              })}
+            >
+              <PlayCircle className="h-3.5 w-3.5" />Tirar da pausa
+            </Button>
+          )}
+          {podeEditar && professor.status_manual && professor.despausado_em && professor.status !== 'pausa' && (
+            <Button
+              variant="outline" size="sm"
+              className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
+              disabled={concluirAcompPausa.isPending}
+              onClick={() => concluirAcompPausa.mutate(professor.id, {
+                onSuccess: () => toast.success('Acompanhamento encerrado. O status volta a ser governado pelo KMS.'),
+                onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao encerrar acompanhamento.'),
+              })}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />Concluir acompanhamento
             </Button>
           )}
           <Button

@@ -41,6 +41,9 @@ export interface Professor {
   tempo_na_king: string | null
   pausa: boolean
   saiu: boolean
+  status_manual: boolean
+  despausado_em: string | null
+  despausado_por: string | null
   renda: string | null
   data_ultima_reuniao: string | null
   cidade: string | null

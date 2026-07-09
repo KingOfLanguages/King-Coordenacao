@@ -70,6 +70,7 @@ export interface Incidente {
   teacher_name: string
   aluno_nome: string | null
   coordinator: string
+  created_by: string | null
   problem_type: string
   urgency: string
   description: string
@@ -81,7 +82,7 @@ export interface Incidente {
   image_urls: string[]
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, created_at, image_urls'
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, created_at, image_urls'
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
@@ -146,6 +147,7 @@ export function useCriarIncidente() {
         image_urls: input.image_urls ?? [],
         created_at: nowIso,
         professor_id: input.professor_id ?? null,
+        created_by: profile?.id ?? null,
         synced_at: nowIso,
       })
       if (error) throw error
