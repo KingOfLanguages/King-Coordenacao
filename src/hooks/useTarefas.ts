@@ -49,7 +49,8 @@ export function useTarefas() {
   })
 }
 
-/** Perfis internos que podem receber uma tarefa (coordenação / suporte / admin). */
+/** Perfis que podem receber uma tarefa — interno a quem cuida dos professores
+ *  (coordenação / suporte ao professor / admin). Suporte ao aluno fica de fora. */
 export interface PessoaAtribuivel {
   id: string
   nome: string
@@ -64,7 +65,7 @@ export function usePessoasAtribuiveis() {
         .from('profiles')
         .select('id, nome, role')
         .eq('ativo', true)
-        .in('role', ['coordenacao', 'suporte', 'suporte_aluno', 'admin'])
+        .in('role', ['coordenacao', 'suporte', 'admin'])
         .order('nome')
       if (error) throw error
       return (data ?? []) as PessoaAtribuivel[]

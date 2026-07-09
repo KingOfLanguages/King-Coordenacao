@@ -115,8 +115,9 @@ export function AppLayout() {
     ...(isCoord || isLider ? [dashboardEntry] : []),
     // Buscar Reuniões: suporte pleno e admin (suporte_aluno não).
     ...(isSuportePleno || isAdmin ? [suporteEntry] : []),
-    // Tarefas: coordenação e suporte (nos dois sentidos) + admin.
-    ...(isCoord || isSuporte ? [tarefasEntry] : []),
+    // Tarefas: interno a quem cuida dos professores — coordenação + suporte ao
+    // professor + admin. Suporte ao aluno não tem acesso.
+    ...(isCoord || isSuportePleno ? [tarefasEntry] : []),
     ...(isAdmin ? [groupAdmin] : []),
   ]
 

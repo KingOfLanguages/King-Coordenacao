@@ -141,7 +141,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/tarefas" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte']} admin>
                   <TarefasPage />
                 </ProtectedRoute>
               } />
