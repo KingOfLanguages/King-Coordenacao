@@ -23,10 +23,10 @@ export function ResolverIncidenteDialog({ open, onOpenChange, incidente }: Props
     if (!incidente || !solucao.trim()) return
     try {
       await resolver.mutateAsync({ id: incidente.id, solution: solucao.trim(), professor_id: incidente.professor_id ?? undefined })
-      toast.success(`Incidente de ${incidente.teacher_name} resolvido.`)
+      toast.success(`Chamado de ${incidente.teacher_name} concluído.`)
       onOpenChange(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao resolver incidente.')
+      toast.error(e instanceof Error ? e.message : 'Erro ao concluir chamado.')
     }
   }
 
@@ -34,7 +34,7 @@ export function ResolverIncidenteDialog({ open, onOpenChange, incidente }: Props
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-surface-canvas border-line text-ink max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-ink font-semibold">Resolver incidente</DialogTitle>
+          <DialogTitle className="text-ink font-semibold">Concluir chamado</DialogTitle>
         </DialogHeader>
         {incidente && (
           <div className="space-y-4">
@@ -60,7 +60,7 @@ export function ResolverIncidenteDialog({ open, onOpenChange, incidente }: Props
                 disabled={!solucao.trim() || resolver.isPending}
                 className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
               >
-                {resolver.isPending ? 'Salvando…' : 'Confirmar resolução'}
+                {resolver.isPending ? 'Salvando…' : 'Concluir chamado'}
               </Button>
             </div>
           </div>

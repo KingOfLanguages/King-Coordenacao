@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck, CircleDot, Hand, Undo2, Pencil } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
-  useIncidentes, useReabrirIncidente,
-  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, type Incidente,
+  useIncidentes, useReabrirIncidente, useAssumirIncidente, useLargarIncidente,
+  statusChamado, CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, type Incidente, type StatusChamado,
 } from '@/hooks/useIncidentes'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
+import { EditarIncidenteDialog } from '@/components/incidentes/EditarIncidenteDialog'
 import { ResolverIncidenteDialog } from '@/components/incidentes/ResolverIncidenteDialog'
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
@@ -18,7 +19,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { canEditIncidente } from '@/lib/permissions'
 
 type Aba = 'professor' | 'geral'
-type FiltroStatus = 'todos' | 'abertos' | 'resolvidos'
+type FiltroStatus = 'ativos' | 'aberto' | 'em_andamento' | 'concluido' | 'todos'
 type FiltroUrgencia = 'todas' | 'Baixa' | 'Média' | 'Alta'
 type Ordem = 'novo' | 'antigo'
 
@@ -27,6 +28,21 @@ const URG_BAR: Record<string, string> = {
   Média: 'bg-urg-medFg',
   Alta:  'bg-urg-highFg',
 }
+
+/** Rótulo + cor de cada estado do chamado. */
+const STATUS_META: Record<StatusChamado, { label: string; chip: string }> = {
+  aberto:       { label: 'Em aberto',    chip: 'bg-urg-medBg text-urg-medFg' },
+  em_andamento: { label: 'Em andamento', chip: 'bg-accentBlue-soft text-accentBlue' },
+  concluido:    { label: 'Concluído',    chip: 'bg-urg-lowBg text-urg-lowFg' },
+}
+
+const FILTROS_STATUS: [FiltroStatus, string][] = [
+  ['ativos', 'Ativos'],
+  ['aberto', 'Em aberto'],
+  ['em_andamento', 'Em andamento'],
+  ['concluido', 'Concluídos'],
+  ['todos', 'Todos'],
+]
 
 function tempoRelativo(iso: string): string {
   const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
@@ -56,15 +72,18 @@ export function IncidentesPage() {
   const podeEditar = canEditIncidente(profile)
   const { data: incidentes = [], isLoading } = useIncidentes()
   const reabrir = useReabrirIncidente()
+  const assumir = useAssumirIncidente()
+  const largar = useLargarIncidente()
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [resolverAlvo, setResolverAlvo] = useState<Incidente | null>(null)
+  const [editarAlvo, setEditarAlvo] = useState<Incidente | null>(null)
   const [excluirAlvo, setExcluirAlvo] = useState<Incidente | null>(null)
   const [detalheAlvo, setDetalheAlvo] = useState<Incidente | null>(null)
   const [aba, setAba] = useState<Aba>('professor')
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<string>('todas')
-  const [status, setStatus] = useState<FiltroStatus>('abertos')
+  const [status, setStatus] = useState<FiltroStatus>('ativos')
   const [urgenciaFiltro, setUrgenciaFiltro] = useState<FiltroUrgencia>('todas')
   const [professorFiltro, setProfessorFiltro] = useState<string>('todos')
   const [ordem, setOrdem] = useState<Ordem>('novo')
@@ -93,9 +112,9 @@ export function IncidentesPage() {
     : null
 
   const stats = {
-    abertos: porAba.filter(i => !i.resolved).length,
-    resolvidos: porAba.filter(i => i.resolved).length,
-    urgentes: porAba.filter(i => !i.resolved && i.urgency === 'Alta').length,
+    aberto: porAba.filter(i => statusChamado(i) === 'aberto').length,
+    emAndamento: porAba.filter(i => statusChamado(i) === 'em_andamento').length,
+    concluidos: porAba.filter(i => i.resolved).length,
     tempoMedioResolucao,
   }
 
@@ -103,8 +122,11 @@ export function IncidentesPage() {
     const termo = busca.trim().toLowerCase()
     const lista = porAba.filter(i => {
       if (soMeus && i.created_by !== profile?.id) return false
-      if (status === 'abertos' && i.resolved) return false
-      if (status === 'resolvidos' && !i.resolved) return false
+      const st = statusChamado(i)
+      if (status === 'ativos' && st === 'concluido') return false
+      if (status === 'aberto' && st !== 'aberto') return false
+      if (status === 'em_andamento' && st !== 'em_andamento') return false
+      if (status === 'concluido' && st !== 'concluido') return false
       if (categoria !== 'todas' && i.problem_type !== categoria) return false
       if (urgenciaFiltro !== 'todas' && i.urgency !== urgenciaFiltro) return false
       if (professorFiltro !== 'todos' && i.professor_id !== professorFiltro) return false
@@ -166,25 +188,34 @@ export function IncidentesPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="card-surface p-4 transition-shadow hover:shadow-sm">
-          <p className="text-[11px] text-urg-highFg flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Abertos</p>
-          <p className="text-2xl font-semibold text-urg-highFg tabular-nums">{stats.abertos}</p>
-        </div>
-        <div className="card-surface p-4 transition-shadow hover:shadow-sm">
-          <p className="text-[11px] text-urg-lowFg flex items-center gap-1"><CheckCircle className="h-3 w-3" />Resolvidos</p>
-          <p className="text-2xl font-semibold text-urg-lowFg tabular-nums">{stats.resolvidos}</p>
-        </div>
-        <div className="card-surface p-4 transition-shadow hover:shadow-sm">
-          <p className="text-[11px] text-ink-muted">Urgentes (abertos)</p>
-          <p className="text-2xl font-semibold text-ink tabular-nums">{stats.urgentes}</p>
-        </div>
-        <div className="card-surface p-4 transition-shadow hover:shadow-sm">
+        <button
+          onClick={() => setStatus('aberto')}
+          className={cn('card-surface p-4 text-left transition-all hover:shadow-sm', status === 'aberto' && 'ring-1 ring-urg-medFg/40')}
+        >
+          <p className="text-[11px] text-urg-medFg flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Em aberto</p>
+          <p className="text-2xl font-semibold text-urg-medFg tabular-nums">{stats.aberto}</p>
+        </button>
+        <button
+          onClick={() => setStatus('em_andamento')}
+          className={cn('card-surface p-4 text-left transition-all hover:shadow-sm', status === 'em_andamento' && 'ring-1 ring-accentBlue/40')}
+        >
+          <p className="text-[11px] text-accentBlue flex items-center gap-1"><CircleDot className="h-3 w-3" />Em andamento</p>
+          <p className="text-2xl font-semibold text-accentBlue tabular-nums">{stats.emAndamento}</p>
+        </button>
+        <button
+          onClick={() => setStatus('concluido')}
+          className={cn('card-surface p-4 text-left transition-all hover:shadow-sm', status === 'concluido' && 'ring-1 ring-urg-lowFg/40')}
+        >
+          <p className="text-[11px] text-urg-lowFg flex items-center gap-1"><CheckCircle className="h-3 w-3" />Concluídos</p>
+          <p className="text-2xl font-semibold text-urg-lowFg tabular-nums">{stats.concluidos}</p>
+        </button>
+        <div className="card-surface p-4">
           <p className="text-[11px] text-ink-muted flex items-center gap-1"><Clock className="h-3 w-3" />Tempo médio de resolução</p>
           <p className="text-2xl font-semibold text-ink tabular-nums">
             {stats.tempoMedioResolucao === null ? '—' : fmtDuracao(stats.tempoMedioResolucao)}
           </p>
           <p className="text-[10px] text-ink-subtle mt-0.5">
-            {stats.resolvidos > 0 ? `${stats.resolvidos} resolvido${stats.resolvidos !== 1 ? 's' : ''}` : 'nada resolvido ainda'}
+            {stats.concluidos > 0 ? `${stats.concluidos} concluído${stats.concluidos !== 1 ? 's' : ''}` : 'nada concluído ainda'}
           </p>
         </div>
       </div>
@@ -235,7 +266,7 @@ export function IncidentesPage() {
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1">
-          {([['abertos', 'Abertos'], ['resolvidos', 'Resolvidos'], ['todos', 'Todos']] as [FiltroStatus, string][]).map(([value, label]) => (
+          {FILTROS_STATUS.map(([value, label]) => (
             <button
               key={value}
               onClick={() => setStatus(value)}
@@ -279,7 +310,10 @@ export function IncidentesPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {filtrados.map(i => (
+          {filtrados.map(i => {
+            const st = statusChamado(i)
+            const meta = STATUS_META[st]
+            return (
             <div
               key={i.id}
               role="button"
@@ -292,6 +326,9 @@ export function IncidentesPage() {
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', meta.chip)}>
+                    {meta.label}
+                  </span>
                   {i.professor_id ? (
                     <span className="text-[14px] font-medium text-ink">{i.teacher_name}</span>
                   ) : (
@@ -309,11 +346,15 @@ export function IncidentesPage() {
                 <p className="text-[13px] text-ink-secondary mt-1.5 truncate" title={i.description}>{i.description}</p>
                 <p className="text-[11px] text-ink-muted mt-1.5">
                   {i.coordinator} · {tempoRelativo(i.created_at)}
-                  {(() => {
+                  {st === 'em_andamento' && i.assumido_por_nome && (
+                    <span className="text-accentBlue"> · sendo resolvido por {i.assumido_por_nome}</span>
+                  )}
+                  {st === 'concluido' && (() => {
                     const d = diasResolucao(i)
+                    const por = i.assumido_por_nome ? ` por ${i.assumido_por_nome}` : ''
                     return d !== null
-                      ? <span className="text-urg-lowFg"> · resolvido em {fmtDuracao(d)}</span>
-                      : null
+                      ? <span className="text-urg-lowFg"> · concluído em {fmtDuracao(d)}{por}</span>
+                      : (por ? <span className="text-urg-lowFg"> · concluído{por}</span> : null)
                   })()}
                 </p>
                 {i.image_urls.length > 0 && (
@@ -340,11 +381,34 @@ export function IncidentesPage() {
                 </span>
                 {podeEditar && (
                   <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                    {i.resolved ? (
+                    {st === 'aberto' && (
+                      <button
+                        onClick={() => assumir.mutate(
+                          { id: i.id, professor_id: i.professor_id },
+                          { onSuccess: () => toast.success('Você assumiu este chamado.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao assumir.') },
+                        )}
+                        className="btn-press flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-accentBlue-soft text-accentBlue hover:opacity-80 transition-opacity"
+                      >
+                        <Hand className="h-3.5 w-3.5" />Assumir
+                      </button>
+                    )}
+                    {st === 'em_andamento' && (
+                      <button
+                        onClick={() => largar.mutate(
+                          { id: i.id, professor_id: i.professor_id },
+                          { onSuccess: () => toast.success('Chamado devolvido para "em aberto".'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao largar.') },
+                        )}
+                        className="btn-press flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-surface-subtle text-ink-secondary hover:text-ink transition-colors"
+                        title="Devolver para em aberto"
+                      >
+                        <Undo2 className="h-3.5 w-3.5" />Largar
+                      </button>
+                    )}
+                    {st === 'concluido' ? (
                       <button
                         onClick={() => reabrir.mutate(
                           { id: i.id, professor_id: i.professor_id },
-                          { onSuccess: () => toast.success('Incidente reaberto.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao reabrir.') },
+                          { onSuccess: () => toast.success('Chamado reaberto.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao reabrir.') },
                         )}
                         className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-medBg text-urg-medFg hover:opacity-80 transition-opacity"
                       >
@@ -355,9 +419,17 @@ export function IncidentesPage() {
                         onClick={() => setResolverAlvo(i)}
                         className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity"
                       >
-                        Resolver
+                        Concluir
                       </button>
                     )}
+                    <button
+                      onClick={() => setEditarAlvo(i)}
+                      aria-label="Editar chamado"
+                      title="Editar"
+                      className="btn-press p-1.5 rounded-lg text-ink-subtle hover:text-ink hover:bg-surface-subtle transition-colors"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       onClick={() => setExcluirAlvo(i)}
                       aria-label="Excluir incidente"
@@ -369,11 +441,17 @@ export function IncidentesPage() {
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
       <NovoIncidenteDialog open={novoAberto} onOpenChange={setNovoAberto} />
+      <EditarIncidenteDialog
+        open={!!editarAlvo}
+        onOpenChange={o => !o && setEditarAlvo(null)}
+        incidente={editarAlvo}
+      />
       <ResolverIncidenteDialog
         open={!!resolverAlvo}
         onOpenChange={o => !o && setResolverAlvo(null)}
@@ -388,6 +466,8 @@ export function IncidentesPage() {
         open={!!detalheAlvo}
         onOpenChange={o => !o && setDetalheAlvo(null)}
         incidente={detalheAlvo}
+        podeEditar={podeEditar}
+        onEditar={() => { const alvo = detalheAlvo; setDetalheAlvo(null); setEditarAlvo(alvo) }}
       />
     </div>
   )

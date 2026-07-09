@@ -1,15 +1,23 @@
 import { useNavigate } from 'react-router-dom'
-import { GraduationCap, User2, CalendarClock, CheckCircle2 } from 'lucide-react'
+import { GraduationCap, User2, CalendarClock, CheckCircle2, Pencil } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { urgenciaChip } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
-import type { Incidente } from '@/hooks/useIncidentes'
+import { statusChamado, type Incidente } from '@/hooks/useIncidentes'
+
+const STATUS_DETALHE: Record<string, { label: string; cls: string }> = {
+  aberto:       { label: 'Em aberto',    cls: 'bg-urg-medBg text-urg-medFg' },
+  em_andamento: { label: 'Em andamento', cls: 'bg-accentBlue-soft text-accentBlue' },
+  concluido:    { label: 'Concluído',    cls: 'bg-urg-lowBg text-urg-lowFg' },
+}
 
 interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
   incidente: Incidente | null
+  podeEditar?: boolean
+  onEditar?: () => void
 }
 
 function dataFmt(iso: string): string {
@@ -18,7 +26,7 @@ function dataFmt(iso: string): string {
   })
 }
 
-export function IncidenteDetalheDialog({ open, onOpenChange, incidente }: Props) {
+export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEditar, onEditar }: Props) {
   const navigate = useNavigate()
   if (!incidente) return null
 
@@ -31,15 +39,14 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente }: Props)
             <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium', urgenciaChip[incidente.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
               {incidente.urgency}
             </span>
-            {incidente.resolved ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg text-urg-lowFg px-2 py-0.5 text-[11px] font-medium">
-                <CheckCircle2 className="h-3 w-3" />Resolvido
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-full bg-urg-highBg text-urg-highFg px-2 py-0.5 text-[11px] font-medium">
-                Aberto
-              </span>
-            )}
+            {(() => {
+              const meta = STATUS_DETALHE[statusChamado(incidente)]
+              return (
+                <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', meta.cls)}>
+                  {incidente.resolved && <CheckCircle2 className="h-3 w-3" />}{meta.label}
+                </span>
+              )
+            })()}
           </div>
         </DialogHeader>
 
@@ -58,6 +65,13 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente }: Props)
             </div>
           )}
 
+          {!incidente.resolved && incidente.assumido_por_nome && (
+            <p className="text-[12px] text-accentBlue">
+              Sendo resolvido por <strong>{incidente.assumido_por_nome}</strong>
+              {incidente.assumido_em && <> desde {dataFmt(incidente.assumido_em)}</>}
+            </p>
+          )}
+
           <div className="space-y-1">
             <p className="label-micro">Descrição</p>
             <p className="text-[13.5px] text-ink-secondary whitespace-pre-wrap">{incidente.description}</p>
@@ -68,7 +82,10 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente }: Props)
               <p className="label-micro">Solução / resultado</p>
               <p className="text-[13.5px] text-ink-secondary whitespace-pre-wrap">{incidente.solution}</p>
               {incidente.resolved_at && (
-                <p className="text-[11px] text-ink-muted">Resolvido em {dataFmt(incidente.resolved_at)}</p>
+                <p className="text-[11px] text-ink-muted">
+                  Concluído em {dataFmt(incidente.resolved_at)}
+                  {incidente.assumido_por_nome && <> por {incidente.assumido_por_nome}</>}
+                </p>
               )}
             </div>
           )}
@@ -92,16 +109,28 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente }: Props)
             </div>
           )}
 
-          {incidente.professor_id && (
-            <div className="flex justify-end pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="btn-press h-8 text-[12px] border-line"
-                onClick={() => { onOpenChange(false); navigate(`/professores/${incidente.professor_id}`) }}
-              >
-                Ver professor
-              </Button>
+          {(podeEditar || incidente.professor_id) && (
+            <div className="flex justify-end gap-2 pt-1">
+              {podeEditar && onEditar && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="btn-press h-8 text-[12px] border-line gap-1.5"
+                  onClick={onEditar}
+                >
+                  <Pencil className="h-3.5 w-3.5" />Editar
+                </Button>
+              )}
+              {incidente.professor_id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="btn-press h-8 text-[12px] border-line"
+                  onClick={() => { onOpenChange(false); navigate(`/professores/${incidente.professor_id}`) }}
+                >
+                  Ver professor
+                </Button>
+              )}
             </div>
           )}
         </div>

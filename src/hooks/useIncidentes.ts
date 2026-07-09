@@ -64,6 +64,8 @@ export const CATEGORIAS_GERAL = [
 /** Lista combinada — usada no filtro "todas categorias" da listagem. */
 export const CATEGORIAS_INCIDENTE = [...CATEGORIAS_PROFESSOR, ...CATEGORIAS_GERAL] as const
 
+export type StatusChamado = 'aberto' | 'em_andamento' | 'concluido'
+
 export interface Incidente {
   id: string
   professor_id: string | null
@@ -78,11 +80,21 @@ export interface Incidente {
   needs_follow_up: boolean
   resolved: boolean
   resolved_at: string | null
+  assumido_por: string | null
+  assumido_em: string | null
+  assumido_por_nome: string | null
   created_at: string
   image_urls: string[]
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, created_at, image_urls'
+/** Estado derivado do chamado a partir de resolved + assumido_por. */
+export function statusChamado(i: Pick<Incidente, 'resolved' | 'assumido_por'>): StatusChamado {
+  if (i.resolved) return 'concluido'
+  if (i.assumido_por) return 'em_andamento'
+  return 'aberto'
+}
+
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, assumido_por, assumido_em, created_at, image_urls, assumido_por_perfil:profiles!assumido_por (nome)'
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
@@ -96,7 +108,17 @@ export function useIncidentes() {
         .neq('problem_type', PROBLEM_TYPE_MES_ANALISE)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return (data ?? []).map(i => ({ ...i, image_urls: i.image_urls ?? [] })) as Incidente[]
+      return (data ?? []).map(row => {
+        const { assumido_por_perfil, ...i } = row as Record<string, unknown> & {
+          assumido_por_perfil?: { nome: string } | { nome: string }[] | null
+        }
+        const perfil = Array.isArray(assumido_por_perfil) ? assumido_por_perfil[0] : assumido_por_perfil
+        return {
+          ...(i as unknown as Incidente),
+          image_urls: (i as { image_urls?: string[] }).image_urls ?? [],
+          assumido_por_nome: perfil?.nome ?? null,
+        }
+      }) as Incidente[]
     },
   })
 }
@@ -150,6 +172,88 @@ export function useCriarIncidente() {
         created_by: profile?.id ?? null,
         synced_at: nowIso,
       })
+      if (error) throw error
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['incidentes'] })
+      if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
+    },
+  })
+}
+
+/** Edita os campos de conteúdo de um incidente (não muda o professor vinculado). */
+export function useAtualizarIncidente() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: {
+      id: string
+      problem_type: string
+      urgency: string
+      description: string
+      needs_follow_up: boolean
+      aluno_nome?: string | null
+      /** Só para incidentes gerais (sem professor): o rótulo livre exibido. */
+      titulo_livre?: string
+      professor_id?: string | null
+    }) => {
+      const patch: Record<string, unknown> = {
+        problem_type: input.problem_type,
+        urgency: input.urgency,
+        description: input.description.trim(),
+        needs_follow_up: input.needs_follow_up,
+        aluno_nome: input.aluno_nome?.trim() || null,
+      }
+      // Para geral, o teacher_name é o rótulo livre (cai no problem_type se vazio).
+      if (!input.professor_id) {
+        patch.teacher_name = input.titulo_livre?.trim() || input.problem_type
+      }
+      const { data, error } = await supabase
+        .from('nexus_incidents')
+        .update(patch)
+        .eq('id', input.id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('Nada foi atualizado — você não tem permissão para editar este chamado.')
+      }
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['incidentes'] })
+      if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
+    },
+  })
+}
+
+/** Assumir um incidente (começar a resolver) — passa pra "em andamento". */
+export function useAssumirIncidente() {
+  const qc = useQueryClient()
+  const { profile } = useAuth()
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; professor_id?: string | null }) => {
+      const { data, error } = await supabase
+        .from('nexus_incidents')
+        .update({ assumido_por: profile?.id ?? null, assumido_em: new Date().toISOString() })
+        .eq('id', id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('Nada foi atualizado — sem permissão para assumir este chamado.')
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['incidentes'] })
+      if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
+    },
+  })
+}
+
+/** Largar um incidente assumido — volta pra "em aberto". */
+export function useLargarIncidente() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; professor_id?: string | null }) => {
+      const { error } = await supabase
+        .from('nexus_incidents')
+        .update({ assumido_por: null, assumido_em: null })
+        .eq('id', id)
       if (error) throw error
     },
     onSuccess: (_data, vars) => {
