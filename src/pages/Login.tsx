@@ -119,7 +119,7 @@ export function Login() {
               </span>
             </span>
             <span className="text-[13px] font-semibold tracking-[0.22em] text-ink">
-              KING <span className="text-brand">TEACHERTRACK</span>
+              KING <span className="text-brand">CODEX</span>
             </span>
           </div>
 
@@ -190,7 +190,7 @@ export function Login() {
                 </span>
               </span>
               <span className="text-[13px] font-semibold tracking-[0.22em] text-ink">
-                KING <span className="text-brand">TEACHERTRACK</span>
+                KING <span className="text-brand">CODEX</span>
               </span>
             </div>
 

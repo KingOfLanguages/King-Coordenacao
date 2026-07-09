@@ -39,32 +39,59 @@ export function useAlunosDoProfessor(professorId: string | null) {
 
 /** Categorias de incidentes sobre professor (aluno, sala de aula, conduta). */
 export const CATEGORIAS_PROFESSOR = [
-  'Aluno',
-  'Didático',
+  'No-show',
+  'Erros de lançamento',
+  'Reclamação',
   'Muitas faltas',
   'Muitas pendências',
-  'No-Show',
-  'Ocorrência',
+  'Problemas didáticos reportados em atendimento',
   'Profissionalismo',
-  'Reclamação',
+  'Organização',
+  'Problemas graves de professores',
 ] as const
 
-/** Categorias gerais/plataforma — não dependem de um professor específico. */
+/** Categorias gerais — questões administrativas/operacionais que não dependem de um professor específico. */
 export const CATEGORIAS_GERAL = [
-  'Administrativo',
-  'Dúvida',
-  'Erros de lançamento',
-  'Financeiro',
-  'Organização',
-  'Plataforma',
-  'Suporte',
-  'Outro',
+  'Questões administrativas',
+  'Ocorrências gerais',
+  'Problemas de cadastro de alunos/turmas',
+  'Problemas em procedimentos do suporte do aluno',
+  'Problemas em procedimentos de vendedores',
+] as const
+
+/** Categorias da aba Plataforma — bugs e melhorias reportados ao TI. */
+export const CATEGORIAS_PLATAFORMA = ['Bugs', 'Melhorias'] as const
+
+/** Categorias visíveis só pra coordenação/admin — ocultas de suporte/suporte_aluno
+ *  tanto na UI (filtros/formulários) quanto por RLS (ver migration 20260723). */
+export const CATEGORIAS_COORD_ONLY = [
+  'Problemas em procedimentos do suporte do aluno',
+  'Problemas em procedimentos de vendedores',
+  'Problemas graves de professores',
 ] as const
 
 /** Lista combinada — usada no filtro "todas categorias" da listagem. */
-export const CATEGORIAS_INCIDENTE = [...CATEGORIAS_PROFESSOR, ...CATEGORIAS_GERAL] as const
+export const CATEGORIAS_INCIDENTE = [...CATEGORIAS_PROFESSOR, ...CATEGORIAS_GERAL, ...CATEGORIAS_PLATAFORMA] as const
+
+/** Filtra categorias coordenação-only de uma lista, a menos que `podeVer` seja true. */
+export function categoriasVisiveis(categorias: readonly string[], podeVer: boolean): string[] {
+  return podeVer ? [...categorias] : categorias.filter(c => !(CATEGORIAS_COORD_ONLY as readonly string[]).includes(c))
+}
+
+export type Aba = 'professor' | 'geral' | 'plataforma'
+
+/** Aba de um incidente: derivada de professor_id + categoria, nunca armazenada.
+ *  Categoria de Plataforma manda mais que professor_id — um bug/melhoria com
+ *  professor/aluno vinculado (pra ajudar o TI) continua na aba Plataforma. */
+export function abaDoIncidente(i: Pick<Incidente, 'professor_id' | 'problem_type'>): Aba {
+  if ((CATEGORIAS_PLATAFORMA as readonly string[]).includes(i.problem_type)) return 'plataforma'
+  if (i.professor_id) return 'professor'
+  return 'geral'
+}
 
 export type StatusChamado = 'aberto' | 'em_andamento' | 'concluido'
+export type Natureza = 'informe' | 'desafio'
+export type TiStatus = 'chamado_aberto' | 'em_analise_ti'
 
 export interface Incidente {
   id: string
@@ -85,6 +112,8 @@ export interface Incidente {
   assumido_por_nome: string | null
   created_at: string
   image_urls: string[]
+  natureza: Natureza | null
+  ti_status: TiStatus | null
 }
 
 /** Estado derivado do chamado a partir de resolved + assumido_por. */
@@ -94,7 +123,12 @@ export function statusChamado(i: Pick<Incidente, 'resolved' | 'assumido_por'>): 
   return 'aberto'
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, assumido_por, assumido_em, created_at, image_urls, assumido_por_perfil:profiles!assumido_por (nome)'
+/** natureza é opcional/nullable — linhas antigas sem valor são tratadas como "desafio" (fluxo normal). */
+export function natureza(i: Pick<Incidente, 'natureza'>): Natureza {
+  return i.natureza ?? 'desafio'
+}
+
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, assumido_por, assumido_em, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome)'
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
@@ -139,6 +173,10 @@ export function useCriarIncidente() {
       aluno_nome?: string
       /** URLs de imagens já enviadas ao Storage (bucket "incidentes"). */
       image_urls?: string[]
+      /** Informe (só registro) ou Desafio (segue o fluxo normal de resolução). Default: desafio. */
+      natureza?: Natureza
+      /** Só pra categorias da aba Plataforma — estado inicial do chamado junto ao TI. */
+      ti_status?: TiStatus | null
     }) => {
       let teacherName: string
       if (input.professor_id) {
@@ -167,6 +205,8 @@ export function useCriarIncidente() {
         under_analysis: false,
         incident_mode: input.professor_id ? 'professor' : 'interno',
         image_urls: input.image_urls ?? [],
+        natureza: input.natureza ?? 'desafio',
+        ti_status: input.ti_status ?? null,
         created_at: nowIso,
         professor_id: input.professor_id ?? null,
         created_by: profile?.id ?? null,
@@ -195,6 +235,7 @@ export function useAtualizarIncidente() {
       /** Só para incidentes gerais (sem professor): o rótulo livre exibido. */
       titulo_livre?: string
       professor_id?: string | null
+      natureza?: Natureza
     }) => {
       const patch: Record<string, unknown> = {
         problem_type: input.problem_type,
@@ -202,6 +243,7 @@ export function useAtualizarIncidente() {
         description: input.description.trim(),
         needs_follow_up: input.needs_follow_up,
         aluno_nome: input.aluno_nome?.trim() || null,
+        natureza: input.natureza ?? 'desafio',
       }
       // Para geral, o teacher_name é o rótulo livre (cai no problem_type se vazio).
       if (!input.professor_id) {
@@ -241,6 +283,26 @@ export function useAssumirIncidente() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
       if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
+    },
+  })
+}
+
+/** Alterna o estado de atendimento do TI (só faz sentido pra aba Plataforma) —
+ *  ação rápida, independente do fluxo aberto/em_andamento/concluido. */
+export function useAtualizarTiStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ti_status }: { id: string; ti_status: TiStatus }) => {
+      const { data, error } = await supabase
+        .from('nexus_incidents')
+        .update({ ti_status })
+        .eq('id', id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('Nada foi atualizado — sem permissão para editar este chamado.')
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['incidentes'] })
     },
   })
 }

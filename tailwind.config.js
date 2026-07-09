@@ -54,6 +54,7 @@ export default {
           lowFg:  'var(--urg-low-fg)',  lowBg:  'var(--urg-low-bg)',
           medFg:  'var(--urg-med-fg)',  medBg:  'var(--urg-med-bg)',
           highFg: 'var(--urg-high-fg)', highBg: 'var(--urg-high-bg)',
+          critFg: 'var(--urg-crit-fg)', critBg: 'var(--urg-crit-bg)',
         },
         king: {
           red:    'var(--brand-red)',

@@ -1,33 +1,42 @@
 import { useMemo, useState } from 'react'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck, CircleDot, Hand, Undo2, Pencil } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck, CircleDot, Hand, Undo2, Pencil, Ticket, ScanSearch } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  useIncidentes, useReabrirIncidente, useAssumirIncidente, useLargarIncidente,
-  statusChamado, CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, type Incidente, type StatusChamado,
+  useIncidentes, useReabrirIncidente, useAssumirIncidente, useLargarIncidente, useAtualizarTiStatus,
+  statusChamado, natureza as naturezaDe, abaDoIncidente, categoriasVisiveis,
+  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA,
+  type Incidente, type StatusChamado, type Aba, type TiStatus,
 } from '@/hooks/useIncidentes'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { EditarIncidenteDialog } from '@/components/incidentes/EditarIncidenteDialog'
 import { ResolverIncidenteDialog } from '@/components/incidentes/ResolverIncidenteDialog'
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
-import { urgenciaChip } from '@/lib/nexusLabels'
+import { urgenciaChip, URGENCIA_EXPLICACAO, tiStatusLabel } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
-import { canEditIncidente } from '@/lib/permissions'
+import { canEditIncidente, podeVerCategoriasCoordOnly } from '@/lib/permissions'
 
-type Aba = 'professor' | 'geral'
 type FiltroStatus = 'ativos' | 'aberto' | 'em_andamento' | 'concluido' | 'todos'
-type FiltroUrgencia = 'todas' | 'Baixa' | 'Média' | 'Alta'
+type FiltroUrgencia = 'todas' | 'Baixa' | 'Média' | 'Alta' | 'Crítico'
 type Ordem = 'novo' | 'antigo'
 
 const URG_BAR: Record<string, string> = {
   Baixa: 'bg-urg-lowFg',
   Média: 'bg-urg-medFg',
   Alta:  'bg-urg-highFg',
+  Crítico: 'bg-urg-critFg',
 }
+
+const ABAS: [Aba, string][] = [
+  ['professor', 'Professor'],
+  ['geral', 'Geral'],
+  ['plataforma', 'Plataforma'],
+]
 
 /** Rótulo + cor de cada estado do chamado. */
 const STATUS_META: Record<StatusChamado, { label: string; chip: string }> = {
@@ -70,10 +79,12 @@ function diasResolucao(i: { created_at: string; resolved: boolean; resolved_at: 
 export function IncidentesPage() {
   const { profile } = useAuth()
   const podeEditar = canEditIncidente(profile)
+  const podeVerCoordOnly = podeVerCategoriasCoordOnly(profile)
   const { data: incidentes = [], isLoading } = useIncidentes()
   const reabrir = useReabrirIncidente()
   const assumir = useAssumirIncidente()
   const largar = useLargarIncidente()
+  const atualizarTiStatus = useAtualizarTiStatus()
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [resolverAlvo, setResolverAlvo] = useState<Incidente | null>(null)
@@ -90,11 +101,12 @@ export function IncidentesPage() {
   const [soMeus, setSoMeus] = useState(false)
 
   const porAba = useMemo(
-    () => incidentes.filter(i => (aba === 'professor' ? !!i.professor_id : !i.professor_id)),
+    () => incidentes.filter(i => abaDoIncidente(i) === aba),
     [incidentes, aba],
   )
 
-  const categoriasAba = aba === 'professor' ? CATEGORIAS_PROFESSOR : CATEGORIAS_GERAL
+  const categoriasAbaBase = aba === 'professor' ? CATEGORIAS_PROFESSOR : aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : CATEGORIAS_GERAL
+  const categoriasAba = categoriasVisiveis(categoriasAbaBase, podeVerCoordOnly)
 
   const professoresComIncidente = useMemo(() => {
     const mapa = new Map<string, string>()
@@ -149,12 +161,15 @@ export function IncidentesPage() {
   }
 
   return (
+    <TooltipProvider>
     <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Incidentes</h1>
           <p className="text-[13px] text-ink-muted">
-            {aba === 'professor' ? 'Incidentes vinculados a um professor.' : 'Incidentes gerais, de plataforma e questões que não dependem do professor.'}
+            {aba === 'professor' && 'Incidentes vinculados a um professor.'}
+            {aba === 'geral' && 'Questões administrativas, operacionais e ocorrências que não dependem do professor.'}
+            {aba === 'plataforma' && 'Bugs e melhorias reportados ao TI.'}
           </p>
         </div>
         <Button
@@ -167,24 +182,18 @@ export function IncidentesPage() {
       </header>
 
       <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
-        <button
-          onClick={() => trocarAba('professor')}
-          className={cn(
-            'btn-press px-4 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
-            aba === 'professor' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-          )}
-        >
-          Professor <span className="text-ink-muted tabular-nums">{incidentes.filter(i => !!i.professor_id).length}</span>
-        </button>
-        <button
-          onClick={() => trocarAba('geral')}
-          className={cn(
-            'btn-press px-4 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
-            aba === 'geral' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-          )}
-        >
-          Geral / plataforma <span className="text-ink-muted tabular-nums">{incidentes.filter(i => !i.professor_id).length}</span>
-        </button>
+        {ABAS.map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => trocarAba(value)}
+            className={cn(
+              'btn-press px-4 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+              aba === value ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+            )}
+          >
+            {label} <span className="text-ink-muted tabular-nums">{incidentes.filter(i => abaDoIncidente(i) === value).length}</span>
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -263,6 +272,7 @@ export function IncidentesPage() {
             <SelectItem value="Baixa">Baixa</SelectItem>
             <SelectItem value="Média">Média</SelectItem>
             <SelectItem value="Alta">Alta</SelectItem>
+            <SelectItem value="Crítico">Crítico</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1">
@@ -309,10 +319,13 @@ export function IncidentesPage() {
           <p className="text-[13px] text-ink-muted">Nenhum incidente encontrado.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {filtrados.map(i => {
             const st = statusChamado(i)
             const meta = STATUS_META[st]
+            const isInforme = naturezaDe(i) === 'informe'
+            const isPlataforma = abaDoIncidente(i) === 'plataforma'
+            const urgenciaAlta = i.urgency === 'Alta' || i.urgency === 'Crítico'
             return (
             <div
               key={i.id}
@@ -320,31 +333,48 @@ export function IncidentesPage() {
               tabIndex={0}
               onClick={() => setDetalheAlvo(i)}
               onKeyDown={e => { if (e.key === 'Enter') setDetalheAlvo(i) }}
-              className="flex gap-3 rounded-xl border border-line bg-surface-canvas px-4 py-3.5 items-start transition-colors hover:bg-surface-subtle/40 cursor-pointer"
+              className={cn(
+                'flex gap-2.5 rounded-lg border border-line bg-surface-canvas px-3 py-2.5 items-start transition-colors hover:bg-surface-subtle/40 cursor-pointer',
+                i.urgency === 'Crítico' && 'ring-1 ring-urg-critFg/30',
+              )}
             >
-              <div className={cn('w-[3px] self-stretch rounded-full flex-shrink-0', URG_BAR[i.urgency] ?? 'bg-ink-subtle')} />
+              <div className={cn(
+                'w-[3px] self-stretch rounded-full flex-shrink-0',
+                URG_BAR[i.urgency] ?? 'bg-ink-subtle',
+                i.urgency === 'Crítico' && 'animate-pulse',
+              )} />
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', meta.chip)}>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[10.5px] font-medium', meta.chip)}>
                     {meta.label}
                   </span>
-                  {i.professor_id ? (
-                    <span className="text-[14px] font-medium text-ink">{i.teacher_name}</span>
-                  ) : (
-                    <span className="text-[14px] font-medium text-ink-secondary italic">{i.teacher_name}</span>
-                  )}
-                  {i.aluno_nome && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-2 py-0.5 text-[11px] font-medium">
-                      <GraduationCap className="h-3 w-3" />Aluno: {i.aluno_nome}
+                  {isInforme && (
+                    <span className="inline-flex items-center rounded-full bg-surface-muted text-ink-muted px-1.5 py-0.5 text-[10.5px] font-medium">
+                      Informe
                     </span>
                   )}
-                  <span className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-2 py-0.5 text-[11px] font-medium">
+                  {isPlataforma && i.ti_status && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-1.5 py-0.5 text-[10.5px] font-medium">
+                      <Ticket className="h-3 w-3" />{tiStatusLabel[i.ti_status] ?? i.ti_status}
+                    </span>
+                  )}
+                  {i.professor_id ? (
+                    <span className="text-[13px] font-medium text-ink">{i.teacher_name}</span>
+                  ) : (
+                    <span className="text-[13px] font-medium text-ink-secondary italic">{i.teacher_name}</span>
+                  )}
+                  {i.aluno_nome && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-1.5 py-0.5 text-[10.5px] font-medium">
+                      <GraduationCap className="h-3 w-3" />{i.aluno_nome}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-1.5 py-0.5 text-[10.5px] font-medium">
                     {i.problem_type}
                   </span>
                 </div>
-                <p className="text-[13px] text-ink-secondary mt-1.5 truncate" title={i.description}>{i.description}</p>
-                <p className="text-[11px] text-ink-muted mt-1.5">
+                <p className="text-[12.5px] text-ink-secondary mt-1 truncate" title={i.description}>{i.description}</p>
+                <p className="text-[10.5px] text-ink-muted mt-1">
                   {i.coordinator} · {tempoRelativo(i.created_at)}
                   {st === 'em_andamento' && i.assumido_por_nome && (
                     <span className="text-accentBlue"> · sendo resolvido por {i.assumido_por_nome}</span>
@@ -358,7 +388,7 @@ export function IncidentesPage() {
                   })()}
                 </p>
                 {i.image_urls.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
                     {i.image_urls.map((url, idx) => (
                       <a
                         key={idx}
@@ -366,7 +396,7 @@ export function IncidentesPage() {
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="block h-12 w-12 overflow-hidden rounded-md border border-line hover:opacity-90"
+                        className="block h-10 w-10 overflow-hidden rounded-md border border-line hover:opacity-90"
                       >
                         <img src={url} alt={`Anexo ${idx + 1}`} loading="lazy" className="h-full w-full object-cover" />
                       </a>
@@ -375,13 +405,37 @@ export function IncidentesPage() {
                 )}
               </div>
 
-              <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium', urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
-                  {i.urgency}
-                </span>
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={cn(
+                      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium cursor-help',
+                      urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary',
+                    )}>
+                      {urgenciaAlta && <AlertTriangle className="h-3 w-3" />}
+                      {i.urgency}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent onClick={e => e.stopPropagation()}>
+                    {URGENCIA_EXPLICACAO[i.urgency] ?? 'Nível de urgência do chamado.'}
+                  </TooltipContent>
+                </Tooltip>
                 {podeEditar && (
                   <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                    {st === 'aberto' && (
+                    {isPlataforma && (
+                      <button
+                        onClick={() => atualizarTiStatus.mutate(
+                          { id: i.id, ti_status: (i.ti_status === 'em_analise_ti' ? 'chamado_aberto' : 'em_analise_ti') as TiStatus },
+                          { onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao atualizar estado do TI.') },
+                        )}
+                        className="btn-press flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-accentBlue-soft text-accentBlue hover:opacity-80 transition-opacity"
+                        title="Alternar estado junto ao TI"
+                      >
+                        <ScanSearch className="h-3.5 w-3.5" />
+                        {i.ti_status === 'em_analise_ti' ? 'Em análise' : 'Chamado aberto'}
+                      </button>
+                    )}
+                    {!isInforme && st === 'aberto' && (
                       <button
                         onClick={() => assumir.mutate(
                           { id: i.id, professor_id: i.professor_id },
@@ -392,7 +446,7 @@ export function IncidentesPage() {
                         <Hand className="h-3.5 w-3.5" />Assumir
                       </button>
                     )}
-                    {st === 'em_andamento' && (
+                    {!isInforme && st === 'em_andamento' && (
                       <button
                         onClick={() => largar.mutate(
                           { id: i.id, professor_id: i.professor_id },
@@ -404,7 +458,7 @@ export function IncidentesPage() {
                         <Undo2 className="h-3.5 w-3.5" />Largar
                       </button>
                     )}
-                    {st === 'concluido' ? (
+                    {!isInforme && (st === 'concluido' ? (
                       <button
                         onClick={() => reabrir.mutate(
                           { id: i.id, professor_id: i.professor_id },
@@ -421,7 +475,7 @@ export function IncidentesPage() {
                       >
                         Concluir
                       </button>
-                    )}
+                    ))}
                     <button
                       onClick={() => setEditarAlvo(i)}
                       aria-label="Editar chamado"
@@ -470,5 +524,6 @@ export function IncidentesPage() {
         onEditar={() => { const alvo = detalheAlvo; setDetalheAlvo(null); setEditarAlvo(alvo) }}
       />
     </div>
+    </TooltipProvider>
   )
 }

@@ -6,7 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useAtualizarIncidente, CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, type Incidente } from '@/hooks/useIncidentes'
+import {
+  useAtualizarIncidente, abaDoIncidente, categoriasVisiveis, natureza as naturezaDe,
+  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, type Incidente, type Natureza,
+} from '@/hooks/useIncidentes'
+import { useAuth } from '@/contexts/AuthContext'
+import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -16,13 +21,17 @@ interface Props {
 }
 
 export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) {
+  const { profile } = useAuth()
+  const podeVerCoordOnly = podeVerCategoriasCoordOnly(profile)
   const atualizar = useAtualizarIncidente()
-  const ehGeral = !incidente?.professor_id
+  const aba = incidente ? abaDoIncidente(incidente) : 'geral'
+  const ehGeral = aba === 'geral'
 
   const [titulo, setTitulo] = useState('')
   const [alunoNome, setAlunoNome] = useState('')
   const [categoria, setCategoria] = useState('')
   const [urgencia, setUrgencia] = useState('Média')
+  const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [descricao, setDescricao] = useState('')
   const [precisaAcompanhamento, setPrecisaAcompanhamento] = useState(false)
 
@@ -32,13 +41,15 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
     setAlunoNome(incidente.aluno_nome ?? '')
     setCategoria(incidente.problem_type)
     setUrgencia(incidente.urgency)
+    setNatureza(naturezaDe(incidente))
     setDescricao(incidente.description)
     setPrecisaAcompanhamento(incidente.needs_follow_up)
   }, [open, incidente])
 
-  const categorias = ehGeral ? CATEGORIAS_GERAL : CATEGORIAS_PROFESSOR
+  const categoriasBase = aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : ehGeral ? CATEGORIAS_GERAL : CATEGORIAS_PROFESSOR
+  const categorias = categoriasVisiveis(categoriasBase, podeVerCoordOnly)
   // A categoria salva pode não estar na lista da aba (dado legado) — garante que aparece.
-  const opcoesCategoria = categoria && !categorias.includes(categoria as never)
+  const opcoesCategoria = categoria && !categorias.includes(categoria)
     ? [categoria, ...categorias]
     : [...categorias]
 
@@ -56,6 +67,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
         aluno_nome: alunoNome,
         titulo_livre: ehGeral ? titulo : undefined,
         professor_id: incidente.professor_id,
+        natureza,
       })
       toast.success('Chamado atualizado.')
       onOpenChange(false)
@@ -128,8 +140,35 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                     <SelectItem value="Baixa">Baixa</SelectItem>
                     <SelectItem value="Média">Média</SelectItem>
                     <SelectItem value="Alta">Alta</SelectItem>
+                    <SelectItem value="Crítico">Crítico</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="label-micro">Natureza</Label>
+              <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setNatureza('desafio')}
+                  className={cn(
+                    'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+                    natureza === 'desafio' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+                  )}
+                >
+                  Desafio
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNatureza('informe')}
+                  className={cn(
+                    'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+                    natureza === 'informe' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+                  )}
+                >
+                  Informe
+                </button>
               </div>
             </div>
 

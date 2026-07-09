@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router-dom'
-import { GraduationCap, User2, CalendarClock, CheckCircle2, Pencil } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog as DialogPrimitive } from 'radix-ui'
+import { GraduationCap, User2, CalendarClock, CheckCircle2, Pencil, Ticket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { urgenciaChip } from '@/lib/nexusLabels'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
+import { urgenciaChip, tiStatusLabel } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
-import { statusChamado, type Incidente } from '@/hooks/useIncidentes'
+import { statusChamado, natureza as naturezaDe, abaDoIncidente, type Incidente } from '@/hooks/useIncidentes'
 
 const STATUS_DETALHE: Record<string, { label: string; cls: string }> = {
   aberto:       { label: 'Em aberto',    cls: 'bg-urg-medBg text-urg-medFg' },
@@ -30,27 +32,53 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
   const navigate = useNavigate()
   if (!incidente) return null
 
+  const isInforme = naturezaDe(incidente) === 'informe'
+  const isPlataforma = abaDoIncidente(incidente) === 'plataforma'
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-surface-canvas border-line text-ink max-w-lg">
-        <DialogHeader>
-          <div className="flex items-center gap-2 flex-wrap pr-6">
-            <DialogTitle className="text-ink font-semibold text-[15px]">{incidente.teacher_name}</DialogTitle>
-            <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium', urgenciaChip[incidente.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+        <DialogPrimitive.Content
+          className={cn(
+            'fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto',
+            'bg-surface-canvas border-l border-line px-5 py-5 text-ink shadow-popover outline-none',
+            'duration-200 data-open:animate-in data-open:slide-in-from-right data-closed:animate-out data-closed:slide-out-to-right',
+          )}
+        >
+          <DialogPrimitive.Close asChild>
+            <Button variant="ghost" className="absolute top-3 right-3" size="icon-sm">
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              <span className="sr-only">Fechar</span>
+            </Button>
+          </DialogPrimitive.Close>
+
+          <div className="flex items-center gap-1.5 flex-wrap pr-8">
+            <DialogPrimitive.Title className="text-ink font-semibold text-[14.5px]">{incidente.teacher_name}</DialogPrimitive.Title>
+            <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium', urgenciaChip[incidente.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
               {incidente.urgency}
             </span>
             {(() => {
               const meta = STATUS_DETALHE[statusChamado(incidente)]
               return (
-                <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', meta.cls)}>
+                <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium', meta.cls)}>
                   {incidente.resolved && <CheckCircle2 className="h-3 w-3" />}{meta.label}
                 </span>
               )
             })()}
+            {isInforme && (
+              <span className="inline-flex items-center rounded-full bg-surface-muted text-ink-muted px-2 py-0.5 text-[10.5px] font-medium">
+                Informe
+              </span>
+            )}
+            {isPlataforma && incidente.ti_status && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-2 py-0.5 text-[10.5px] font-medium">
+                <Ticket className="h-3 w-3" />{tiStatusLabel[incidente.ti_status] ?? incidente.ti_status}
+              </span>
+            )}
           </div>
-        </DialogHeader>
 
-        <div className="space-y-4">
+          <div className="space-y-4 flex-1">
           <div className="flex flex-wrap items-center gap-3 text-[12px] text-ink-muted">
             <span className="inline-flex items-center gap-1"><User2 className="h-3.5 w-3.5" />{incidente.coordinator}</span>
             <span className="inline-flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5" />{dataFmt(incidente.created_at)}</span>
@@ -133,8 +161,9 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
               )}
             </div>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   )
 }

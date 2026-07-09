@@ -85,7 +85,7 @@ export function ExtensaoConteudo() {
             </PassoItem>
 
             <PassoItem numero={5} titulo="Entre com sua conta">
-              Clique no ícone da extensão na barra do navegador e entre com as mesmas credenciais do King TeacherTrack.
+              Clique no ícone da extensão na barra do navegador e entre com as mesmas credenciais do KingCodex.
               Depois disso, é só entrar numa chamada do Meet — o painel aparece sozinho.
             </PassoItem>
           </ol>

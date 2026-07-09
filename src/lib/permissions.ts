@@ -49,3 +49,11 @@ export function canEditIncidente(perfil?: PerfilComoAdmin): boolean {
       || perfil?.role === 'suporte_aluno'
       || ehAdmin(perfil)
 }
+
+/** Ver/usar as categorias de incidente restritas à coordenação (procedimentos
+ *  de suporte do aluno, de vendedores, problemas graves de professores).
+ *  Espelha a policy de SELECT criada em 20260723_nexus_incidents_plataforma_natureza.sql —
+ *  suporte/suporte_aluno nem chegam a receber essas linhas via RLS. */
+export function podeVerCategoriasCoordOnly(perfil?: PerfilComoAdmin): boolean {
+  return perfil?.role === 'coordenacao' || ehAdmin(perfil)
+}

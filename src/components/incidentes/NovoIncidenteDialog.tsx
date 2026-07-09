@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Search, X, GraduationCap, ImagePlus } from 'lucide-react'
+import { Search, X, GraduationCap, ImagePlus, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -7,12 +7,15 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
-import { useCriarIncidente, useAlunosDoProfessor, uploadImagemIncidente, CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL } from '@/hooks/useIncidentes'
+import {
+  useCriarIncidente, useAlunosDoProfessor, uploadImagemIncidente, categoriasVisiveis,
+  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, type Aba, type Natureza,
+} from '@/hooks/useIncidentes'
+import { useAuth } from '@/contexts/AuthContext'
+import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 const MAX_IMAGENS = 3
-
-type Aba = 'professor' | 'geral'
 
 interface Props {
   open: boolean
@@ -22,6 +25,8 @@ interface Props {
 }
 
 export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props) {
+  const { profile } = useAuth()
+  const podeVerCoordOnly = podeVerCategoriasCoordOnly(profile)
   const { data: professores = [] } = useProfessoresAtivos()
   const criar = useCriarIncidente()
 
@@ -33,6 +38,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [alunoBusca, setAlunoBusca] = useState(false)
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_PROFESSOR[0])
   const [urgencia, setUrgencia] = useState('Média')
+  const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [descricao, setDescricao] = useState('')
   const [precisaAcompanhamento, setPrecisaAcompanhamento] = useState(false)
   const [imagens, setImagens] = useState<File[]>([])
@@ -83,16 +89,19 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setAlunoNome('')
     setCategoria(CATEGORIAS_PROFESSOR[0])
     setUrgencia('Média')
+    setNatureza('desafio')
     setDescricao('')
     setPrecisaAcompanhamento(false)
     setImagens([])
   }, [open, professorFixo])
 
-  const categorias = aba === 'professor' ? CATEGORIAS_PROFESSOR : CATEGORIAS_GERAL
+  const categoriasBase = aba === 'professor' ? CATEGORIAS_PROFESSOR : aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : CATEGORIAS_GERAL
+  const categorias = categoriasVisiveis(categoriasBase, podeVerCoordOnly)
 
   function trocarAba(novaAba: Aba) {
     setAba(novaAba)
-    setCategoria(novaAba === 'professor' ? CATEGORIAS_PROFESSOR[0] : CATEGORIAS_GERAL[0])
+    const base = novaAba === 'professor' ? CATEGORIAS_PROFESSOR : novaAba === 'plataforma' ? CATEGORIAS_PLATAFORMA : CATEGORIAS_GERAL
+    setCategoria(categoriasVisiveis(base, podeVerCoordOnly)[0])
   }
 
   const resultados = useMemo(() => {
@@ -107,7 +116,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     return roster.filter(a => a.primeiro_nome.toLowerCase().includes(termo)).slice(0, 6)
   }, [alunoNome, roster])
 
-  const podeConfirmar = !!descricao.trim() && (aba === 'geral' || !!selecionado)
+  const podeConfirmar = !!descricao.trim() && (aba !== 'professor' || !!selecionado)
 
   async function handleConfirmar() {
     if (!podeConfirmar || criar.isPending || enviandoImagens) return
@@ -124,10 +133,12 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         urgency: urgencia,
         description: descricao.trim(),
         needs_follow_up: precisaAcompanhamento,
-        professor_id: aba === 'professor' ? selecionado?.id : null,
+        professor_id: aba !== 'geral' ? selecionado?.id : null,
         titulo_livre: aba === 'geral' ? tituloLivre : undefined,
         aluno_nome: alunoNome,
         image_urls: imageUrls,
+        natureza,
+        ti_status: aba === 'plataforma' ? 'chamado_aberto' : null,
       })
       toast.success('Incidente registrado.')
       onOpenChange(false)
@@ -163,14 +174,34 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                   aba === 'geral' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
                 )}
               >
-                Geral / plataforma
+                Geral
+              </button>
+              <button
+                onClick={() => trocarAba('plataforma')}
+                className={cn(
+                  'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+                  aba === 'plataforma' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+                )}
+              >
+                Plataforma
               </button>
             </div>
           )}
 
-          {aba === 'professor' ? (
+          {aba === 'geral' ? (
             <div className="space-y-1.5">
-              <Label className="label-micro">Professor</Label>
+              <Label className="label-micro">Título / referência (opcional)</Label>
+              <Input
+                value={tituloLivre}
+                onChange={e => setTituloLivre(e.target.value)}
+                placeholder={`Ex: ${categoria}`}
+                className="h-9 bg-surface-canvas border-line"
+              />
+              <p className="text-[11px] text-ink-subtle">Sem professor vinculado — aparece na aba geral.</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label className="label-micro">Professor{aba === 'plataforma' ? ' (opcional)' : ''}</Label>
               {professorFixo ? (
                 <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-subtle px-3 py-2 text-[13px] text-ink">
                   {professorFixo.nome}
@@ -208,16 +239,15 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                 </div>
               )}
             </div>
-          ) : (
-            <div className="space-y-1.5">
-              <Label className="label-micro">Título / referência (opcional)</Label>
-              <Input
-                value={tituloLivre}
-                onChange={e => setTituloLivre(e.target.value)}
-                placeholder={`Ex: ${categoria}`}
-                className="h-9 bg-surface-canvas border-line"
-              />
-              <p className="text-[11px] text-ink-subtle">Sem professor vinculado — aparece na aba geral/plataforma.</p>
+          )}
+
+          {aba === 'plataforma' && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-line-soft bg-surface-subtle/60 px-3.5 py-2.5">
+              <Info className="h-3.5 w-3.5 text-accentBlue flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-ink-secondary leading-relaxed">
+                Se o bug/melhoria envolve um professor ou aluno específico, selecione-os acima e no campo
+                "Aluno" abaixo — isso agiliza o trabalho do TI.
+              </p>
             </div>
           )}
 
@@ -281,9 +311,39 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                   <SelectItem value="Baixa">Baixa</SelectItem>
                   <SelectItem value="Média">Média</SelectItem>
                   <SelectItem value="Alta">Alta</SelectItem>
+                  <SelectItem value="Crítico">Crítico</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="label-micro">Natureza</Label>
+            <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
+              <button
+                type="button"
+                onClick={() => setNatureza('desafio')}
+                className={cn(
+                  'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+                  natureza === 'desafio' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+                )}
+              >
+                Desafio
+              </button>
+              <button
+                type="button"
+                onClick={() => setNatureza('informe')}
+                className={cn(
+                  'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
+                  natureza === 'informe' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+                )}
+              >
+                Informe
+              </button>
+            </div>
+            <p className="text-[11px] text-ink-subtle">
+              {natureza === 'desafio' ? 'Precisa ser resolvido — segue o fluxo de aberto → em andamento → concluído.' : 'Só um registro — não exige resolução, fica agregado à plataforma.'}
+            </p>
           </div>
 
           <div className="space-y-1.5">

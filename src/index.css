@@ -43,6 +43,8 @@
     --urg-med-bg:  #fbe0c0;
     --urg-high-fg: #ae1122;
     --urg-high-bg: #fad4d8;
+    --urg-crit-fg: #6b1a8f;
+    --urg-crit-bg: #ecd6f7;
 
     /* shadcn */
     --background:           var(--bg-app);
