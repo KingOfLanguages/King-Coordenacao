@@ -287,11 +287,14 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             )}
           </div>
 
+          {/* min-w-0 nas colunas + w-full no trigger: sem isso o SelectTrigger é
+              w-fit e cresce com a categoria longa, invadindo a coluna da urgência.
+              Com w-full o valor respeita o line-clamp-1 e trunca dentro da coluna. */}
           <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <Label className="label-micro">Categoria</Label>
               <Select value={categoria} onValueChange={setCategoria}>
-                <SelectTrigger className="bg-surface-canvas border-line text-ink">
+                <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
@@ -301,10 +304,10 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <Label className="label-micro">Urgência</Label>
               <Select value={urgencia} onValueChange={setUrgencia}>
-                <SelectTrigger className="bg-surface-canvas border-line text-ink">
+                <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-surface-canvas border-line text-ink">

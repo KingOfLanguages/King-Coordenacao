@@ -194,6 +194,12 @@ serve(async (req) => {
     return json({ error: 'Professor e horário são obrigatórios.' }, 400)
   }
 
+  // Log de correlação: identifica QUAL professor/horário em cada request, para
+  // que os console.error de falha abaixo (token Google, materialização, insert)
+  // possam ser rastreados até a reserva específica que quebrou. Sem isso, o
+  // relato "professor X não consegue agendar" não tinha como ser diagnosticado.
+  console.log(`[create-booking] req professor_id=${professorId || '(via email)'} email=${emailInformado || '—'} horario_id=${horarioId}`)
+
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
