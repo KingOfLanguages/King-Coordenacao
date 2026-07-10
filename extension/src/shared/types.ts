@@ -39,13 +39,25 @@ export interface ReuniaoHistoricoItem {
   numero: number | null
 }
 
+/** Participante de uma reunião de grupo. */
+export interface ParticipanteReuniao {
+  reuniao_professor_id: string
+  professor_id: string
+  professor_nome: string
+  status: 'pendente' | 'realizada' | 'cancelada'
+  presente?: boolean  // Local state na extensão (não salvo; presente = realizada)
+}
+
 /** Participação (reuniao_professores) do professor numa reunião de hoje — mesma tabela que a
  * plataforma web usa em Reuniões do Dia, então confirmar/anotar aqui aparece lá também. */
 export interface ReuniaoHojeInfo {
   participanteId: string
+  reuniao_id?: string  // Necessário pra atualizar grupo; undefined se reunião 1:1 legada
+  tipo_reuniao?: 'professor' | 'grupo'  // Detecta se é 1:1 ou grupo (Fase 3)
   status: 'pendente' | 'realizada' | 'cancelada'
   numero: number | null
   observacao: string | null
+  participantes?: ParticipanteReuniao[]  // Preenchido só se tipo_reuniao='grupo'
 }
 
 export interface ObservacaoResumo {
@@ -125,6 +137,7 @@ export type MensagemParaBackground =
   | { tipo: 'CRIAR_REUNIAO_AGORA'; professorId: string }
   | { tipo: 'CONFIRMAR_REUNIAO'; participanteId: string; professorId: string; aconteceu: boolean; observacao: string }
   | { tipo: 'SALVAR_OBSERVACAO_REUNIAO'; participanteId: string; observacao: string }
+  | { tipo: 'CONFIRMAR_GRUPO'; reuniaoId: string; presentesIds: string[]; observacao: string; professorId: string }
   | { tipo: 'COLOCAR_MES_ANALISE'; professorId: string; descricao: string; urgencia?: string }
   | { tipo: 'RESOLVER_MES_ANALISE'; professorId: string; incidentId: string; resultado: string }
   | { tipo: 'RESOLVER_OBSERVACAO'; professorId: string; id: string; resolvido: boolean }

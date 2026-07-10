@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { extrairCandidatos } from './scrape'
+import { GrupoParticipantes } from './GrupoParticipantes'
 import type { MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada, AvaliacaoAlunos } from '../shared/types'
 
 const C = {
@@ -309,22 +310,54 @@ export function Panel() {
                   </button>
                 </div>
               ) : resultado.reuniaoHoje.status === 'pendente' ? (
-                <div>
-                  <textarea
-                    value={obsReuniao}
-                    onChange={e => setObsReuniao(e.target.value)}
-                    placeholder="Observações da reunião…"
-                    style={textarea}
+                resultado.reuniaoHoje.tipo_reuniao === 'grupo' && resultado.reuniaoHoje.participantes ? (
+                  // Reunião de grupo: lista de presença
+                  <GrupoParticipantes
+                    participantes={resultado.reuniaoHoje.participantes}
+                    observacaoComum={resultado.reuniaoHoje.observacao}
+                    onSalvar={async (presentesIds, obs) => {
+                      setSalvandoReuniao(true)
+                      try {
+                        if (!resultado.reuniaoHoje!.reuniao_id) {
+                          throw new Error('Reunião de grupo sem ID')
+                        }
+                        const r = await enviar({
+                          tipo: 'CONFIRMAR_GRUPO',
+                          reuniaoId: resultado.reuniaoHoje!.reuniao_id,
+                          presentesIds,
+                          observacao: obs,
+                          professorId: resultado.professor.id,
+                        })
+                        if (r.ok && 'resultado' in r) {
+                          setResultado(r.resultado)
+                          // Recarrega resultado após confirmar
+                          const r2 = await enviar({ tipo: 'BUSCAR_PROFESSOR', nomes: [], emails: [resultado.professor.email ?? ''] })
+                          if (r2.ok && 'resultado' in r2) setResultado(r2.resultado)
+                        }
+                      } finally {
+                        setSalvandoReuniao(false)
+                      }
+                    }}
                   />
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    <button onClick={() => confirmarReuniao(true)} disabled={salvandoReuniao} style={botaoSucesso}>
-                      Realizada
-                    </button>
-                    <button onClick={() => confirmarReuniao(false)} disabled={salvandoReuniao} style={botaoSecundario}>
-                      Não aconteceu
-                    </button>
+                ) : (
+                  // Reunião individual (1:1)
+                  <div>
+                    <textarea
+                      value={obsReuniao}
+                      onChange={e => setObsReuniao(e.target.value)}
+                      placeholder="Observações da reunião…"
+                      style={textarea}
+                    />
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      <button onClick={() => confirmarReuniao(true)} disabled={salvandoReuniao} style={botaoSucesso}>
+                        Realizada
+                      </button>
+                      <button onClick={() => confirmarReuniao(false)} disabled={salvandoReuniao} style={botaoSecundario}>
+                        Não aconteceu
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )
               ) : (
                 <div>
                   <textarea

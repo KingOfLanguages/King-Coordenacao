@@ -37,7 +37,7 @@ async function buscarReuniaoHoje(professorId: string): Promise<ReuniaoHojeInfo |
   const { inicio, fim } = limitesDeHoje()
   const { data } = await supabase
     .from('reuniao_professores')
-    .select('id, status, numero, observacao, reuniao:reunioes!reuniao_id!inner (data)')
+    .select('id, reuniao_id, status, numero, observacao, reuniao:reunioes!reuniao_id!inner (data)')
     .eq('professor_id', professorId)
     .gte('reuniao.data', inicio)
     .lte('reuniao.data', fim)
@@ -46,7 +46,37 @@ async function buscarReuniaoHoje(professorId: string): Promise<ReuniaoHojeInfo |
 
   const row = data?.[0]
   if (!row) return null
-  return { participanteId: row.id, status: row.status, numero: row.numero, observacao: row.observacao }
+
+  // Se reunião tem múltiplos participantes, é do tipo 'grupo'
+  let tipoReuniao: 'professor' | 'grupo' | undefined
+  let participantes: { reuniao_professor_id: string; professor_id: string; professor_nome: string; status: 'pendente' | 'realizada' | 'cancelada' }[] | undefined
+
+  if (row.reuniao_id) {
+    const { data: rpDados } = await supabase
+      .from('reuniao_professores')
+      .select('id, professor_id, professor:professores!professor_id (nome), status')
+      .eq('reuniao_id', row.reuniao_id)
+
+    if (rpDados && rpDados.length > 1) {
+      tipoReuniao = 'grupo'
+      participantes = rpDados.map(rp => ({
+        reuniao_professor_id: rp.id,
+        professor_id: rp.professor_id,
+        professor_nome: (rp.professor as { nome: string }).nome,
+        status: rp.status,
+      }))
+    }
+  }
+
+  return {
+    participanteId: row.id,
+    reuniao_id: row.reuniao_id,
+    tipo_reuniao: tipoReuniao,
+    status: row.status,
+    numero: row.numero,
+    observacao: row.observacao,
+    participantes,
+  }
 }
 
 async function handleLogin(email: string, senha: string): Promise<RespostaDoBackground> {
@@ -340,7 +370,7 @@ async function handleConfirmarReuniao(
   return {
     ok: true,
     reuniaoHoje: {
-      participanteId: atualizado.id, status: atualizado.status,
+      participanteId: atualizado.id, reuniao_id: '', status: atualizado.status,
       numero: atualizado.numero, observacao: atualizado.observacao,
     },
   }
@@ -413,6 +443,44 @@ async function handleResolverObservacao(
   return resultado ? { ok: true, resultado } : { ok: false, erro: 'Professor não encontrado após atualizar.' }
 }
 
+/** Confirma presença de múltiplos professores em reunião de grupo. */
+async function handleConfirmarGrupo(
+  reuniaoId: string, presentesIds: string[], observacao: string, professorId: string,
+): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+
+  const agora = new Date().toISOString()
+
+  // Atualiza todos os presentes como 'realizada'
+  if (presentesIds.length > 0) {
+    const { error: updateErr } = await supabase
+      .from('reuniao_professores')
+      .update({
+        status: 'realizada',
+        confirmado_em: agora,
+        confirmado_por: session.user.id,
+      })
+      .in('id', presentesIds)
+    if (updateErr) return { ok: false, erro: updateErr.message }
+  }
+
+  // Atualiza observação comum na reunião
+  const { error: obsErr } = await supabase
+    .from('reunioes')
+    .update({ notas: observacao.trim() || null })
+    .eq('id', reuniaoId)
+  if (obsErr) return { ok: false, erro: obsErr.message }
+
+  // Atualiza data_ultima_reuniao do professor
+  if (presentesIds.length > 0) {
+    await supabase.from('professores').update({ data_ultima_reuniao: agora }).eq('id', professorId)
+  }
+
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Erro ao confirmar grupo.' }
+}
+
 chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, sendResponse) => {
   (async () => {
     try {
@@ -439,6 +507,8 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
           sendResponse(await handleResolverMesAnalise(msg.professorId, msg.incidentId, msg.resultado)); break
         case 'RESOLVER_OBSERVACAO':
           sendResponse(await handleResolverObservacao(msg.professorId, msg.id, msg.resolvido)); break
+        case 'CONFIRMAR_GRUPO':
+          sendResponse(await handleConfirmarGrupo(msg.reuniaoId, msg.presentesIds, msg.observacao, msg.professorId)); break
       }
     } catch (err) {
       sendResponse({ ok: false, erro: err instanceof Error ? err.message : String(err) })
