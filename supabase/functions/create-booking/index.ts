@@ -260,7 +260,7 @@ serve(async (req) => {
   type AgendaInfo = {
     id: string; titulo: string; meet_link: string | null; ativo: boolean
     grupos_autorizados: string[] | null
-    coordenador: { nome: string } | null
+    coordenador: { id: string; nome: string } | null
   }
   let horario: { id: string; data_hora: string; capacidade: number; meet_link: string | null; ativo: boolean }
   let agenda: AgendaInfo
@@ -275,8 +275,8 @@ serve(async (req) => {
       .select(`
         id, capacidade, meet_link, ativo,
         agenda:agenda_reunioes (
-          id, titulo, meet_link, ativo, grupos_autorizados,
-          coordenador:profiles!coordenador_id (nome)
+          id, titulo, meet_link, ativo, grupos_autorizados, coordenador_id,
+          coordenador:profiles!coordenador_id (id, nome)
         )
       `)
       .eq('id', recorrenciaId)
@@ -345,8 +345,8 @@ serve(async (req) => {
       .select(`
         id, data_hora, capacidade, meet_link, ativo,
         agenda:agenda_reunioes (
-          id, titulo, meet_link, ativo, grupos_autorizados,
-          coordenador:profiles!coordenador_id (nome)
+          id, titulo, meet_link, ativo, grupos_autorizados, coordenador_id,
+          coordenador:profiles!coordenador_id (id, nome)
         )
       `)
       .eq('id', horarioId)
@@ -413,7 +413,52 @@ serve(async (req) => {
     return json({ error: 'Não há mais vagas neste horário.' }, 409)
   }
 
-  // ── 5. E-mail de confirmação (best-effort, não bloqueia a resposta) ──────────
+  // ── 5. Fase 3: Criar/atualizar reunião de grupo via RPC transacional ────────
+  // Atomicidade: insere reunioes + atualiza agenda_horarios.reuniao_id +
+  // insere reuniao_professores para cada professor já inscrito + novo.
+  const coordenadorId = agenda.coordenador?.id ?? null
+  if (!coordenadorId) {
+    console.error('[create-booking] Agenda sem coordenador_id: agenda_id=%s', agenda.id)
+    return json({ error: 'Erro de configuração da agenda. Avise a coordenação.' }, 500)
+  }
+
+  const { data: rpcResult, error: rpcErr } = await admin.rpc('criar_reuniao_grupo', {
+    p_horario_id: horario.id,
+    p_professor_id: professor.id,
+    p_agenda_id: agenda.id,
+    p_agenda_titulo: agenda.titulo,
+    p_data_hora: horario.data_hora,
+    p_coordenador_id: coordenadorId,
+  })
+
+  if (rpcErr) {
+    console.error('[create-booking] Erro ao criar reunião de grupo:', rpcErr.message)
+    // CRÍTICO: inscrição entrou em agenda_inscricoes mas reunião falhou — estado inconsistente.
+    // Reverter a inscrição pra evitar overbooking/inconsistência.
+    await admin
+      .from('agenda_inscricoes')
+      .delete()
+      .eq('horario_id', horario.id)
+      .eq('professor_id', professor.id)
+      .eq('status', 'confirmada')
+    return json({ error: 'Erro ao confirmar participação. Tente novamente.' }, 500)
+  }
+
+  if (!rpcResult || !Array.isArray(rpcResult) || rpcResult.length === 0) {
+    console.error('[create-booking] RPC retornou resultado vazio')
+    await admin
+      .from('agenda_inscricoes')
+      .delete()
+      .eq('horario_id', horario.id)
+      .eq('professor_id', professor.id)
+      .eq('status', 'confirmada')
+    return json({ error: 'Erro ao confirmar participação. Tente novamente.' }, 500)
+  }
+
+  const criadaReuniaoId = rpcResult[0].reuniao_id
+  console.log(`[create-booking] reunião criada/atualizada: reuniao_id=%s professor=%s`, criadaReuniaoId, professor.id)
+
+  // ── 6. E-mail de confirmação (best-effort, não bloqueia a resposta) ──────────
   const brevoKey = Deno.env.get('BREVO_API_KEY')
   const dataHoraFmt = new Date(horario.data_hora).toLocaleString('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
