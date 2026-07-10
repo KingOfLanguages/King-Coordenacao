@@ -46,6 +46,104 @@ export function useDashboardGeralScoreTrend() {
   })
 }
 
+// ─── Reuniões por coordenação + movimento de professores (Fase 5) ────────────
+
+export interface ReuniaoPeriodoRow {
+  grupo_id: string | null
+  ano_mes: number        // AAAAMM
+  realizadas: number
+}
+
+export interface MovimentoRow {
+  tipo: 'entrada' | 'saida'
+  data: string           // 'AAAA-MM-DD'
+  grupo_id: string | null
+}
+
+export function useDashboardGeralReunioes() {
+  return useQuery({
+    queryKey: ['dashboard-geral', 'reunioes-periodo'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('dashboard_geral_reunioes_por_periodo')
+      if (error) throw error
+      return (data ?? []) as ReuniaoPeriodoRow[]
+    },
+  })
+}
+
+export function useDashboardGeralMovimento() {
+  return useQuery({
+    queryKey: ['dashboard-geral', 'movimento'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('dashboard_geral_movimento_professores')
+      if (error) throw error
+      return (data ?? []) as MovimentoRow[]
+    },
+  })
+}
+
+// ─── Agrupamento por período (semana / mês / trimestre / ano) ────────────────
+
+export type Granularidade = 'semana' | 'mes' | 'trimestre' | 'ano'
+
+export const LABEL_GRANULARIDADE: Record<Granularidade, string> = {
+  semana: 'Semana', mes: 'Mês', trimestre: 'Trimestre', ano: 'Ano',
+}
+
+/** Semana ISO (segunda a domingo) de uma data — ano+número, padrão internacional. */
+function semanaIso(date: Date): { ano: number; semana: number } {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const diaSeg0 = (d.getUTCDay() + 6) % 7          // segunda=0 … domingo=6
+  d.setUTCDate(d.getUTCDate() - diaSeg0 + 3)       // quinta-feira desta semana
+  const primeiraQuinta = new Date(Date.UTC(d.getUTCFullYear(), 0, 4))
+  const diaSeg0Jan = (primeiraQuinta.getUTCDay() + 6) % 7
+  primeiraQuinta.setUTCDate(primeiraQuinta.getUTCDate() - diaSeg0Jan + 3)
+  const semana = 1 + Math.round((d.getTime() - primeiraQuinta.getTime()) / (7 * 864e5))
+  return { ano: d.getUTCFullYear(), semana }
+}
+
+/** Chave ordenável + rótulo curto pt-BR de um período, na granularidade escolhida. */
+export function bucketPeriodo(dataISO: string, gran: Granularidade): { key: string; label: string; ordem: number } {
+  const d = new Date(dataISO + 'T00:00:00')
+  const ano = d.getFullYear()
+  const mes = d.getMonth() + 1
+  const yy = String(ano).slice(2)
+  switch (gran) {
+    case 'ano':
+      return { key: String(ano), label: String(ano), ordem: ano * 1000 }
+    case 'trimestre': {
+      const q = Math.floor((mes - 1) / 3) + 1
+      return { key: `${ano}-T${q}`, label: `${q}º tri/${yy}`, ordem: ano * 10 + q }
+    }
+    case 'mes': {
+      const mm = String(mes).padStart(2, '0')
+      return { key: `${ano}-${mm}`, label: `${mm}/${yy}`, ordem: ano * 100 + mes }
+    }
+    case 'semana': {
+      const { ano: wAno, semana } = semanaIso(d)
+      return { key: `${wAno}-W${semana}`, label: `S${semana}/${String(wAno).slice(2)}`, ordem: wAno * 100 + semana }
+    }
+  }
+}
+
+export interface PontoMovimento { periodo: string; ordem: number; entradas: number; saidas: number; saldo: number }
+
+/** Agrupa eventos de movimento por período, prontos pro gráfico (ordenados no tempo). */
+export function agruparMovimento(rows: MovimentoRow[], gran: Granularidade): PontoMovimento[] {
+  const mapa = new Map<string, PontoMovimento>()
+  for (const r of rows) {
+    if (!r.data) continue
+    const { key, label, ordem } = bucketPeriodo(r.data, gran)
+    let ponto = mapa.get(key)
+    if (!ponto) { ponto = { periodo: label, ordem, entradas: 0, saidas: 0, saldo: 0 }; mapa.set(key, ponto) }
+    if (r.tipo === 'entrada') ponto.entradas++
+    else ponto.saidas++
+  }
+  const pontos = [...mapa.values()]
+  for (const p of pontos) p.saldo = p.entradas - p.saidas
+  return pontos.sort((a, b) => a.ordem - b.ordem)
+}
+
 // ─── Faixas de score (200–1500) ────────────────────────────────────────────
 
 export const SCORE_BUCKETS = [

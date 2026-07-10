@@ -11,9 +11,10 @@ import {
 import { useGrupos } from '@/hooks/useGrupos'
 import {
   useDashboardGeralProfessores, useDashboardGeralScoreTrend,
+  useDashboardGeralReunioes, useDashboardGeralMovimento,
   SCORE_BUCKETS, bucketFor, media, mediana, motivosAlerta, agregarPorCoordenacao,
-  LABEL_ALERTA,
-  type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta,
+  agruparMovimento, LABEL_ALERTA, LABEL_GRANULARIDADE,
+  type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta, type Granularidade,
 } from '@/hooks/useDashboardGeral'
 import { cn } from '@/lib/utils'
 
@@ -67,6 +68,8 @@ function SortHeader({
 export function DashboardGeralPage() {
   const { data: rows = [], isLoading } = useDashboardGeralProfessores()
   const { data: trend = [] } = useDashboardGeralScoreTrend()
+  const { data: reunioesPeriodo = [] } = useDashboardGeralReunioes()
+  const { data: movimento = [] } = useDashboardGeralMovimento()
   const { data: grupos = [] } = useGrupos()
 
   const [coordenacaoFiltro, setCoordenacaoFiltro] = useState(TODAS)
@@ -74,6 +77,7 @@ export function DashboardGeralPage() {
   const [faixaFiltro, setFaixaFiltro] = useState(TODAS)
   const [dataInicial, setDataInicial] = useState('')
   const [dataFinal, setDataFinal] = useState('')
+  const [granMovimento, setGranMovimento] = useState<Granularidade>('mes')
   const [expandido, setExpandido] = useState<Set<string>>(new Set())
 
   const filteredRows = useMemo(() => rows.filter(r =>
@@ -87,6 +91,48 @@ export function DashboardGeralPage() {
     const to   = dataFinal   ? Number(dataFinal.slice(0, 7).replace('-', ''))   : null
     return trend.filter(t => (from == null || t.ano_mes >= from) && (to == null || t.ano_mes <= to))
   }, [trend, dataInicial, dataFinal])
+
+  // Reuniões realizadas por coordenação (respeita filtro de coordenação + intervalo de datas)
+  const reunioesPorCoord = useMemo(() => {
+    const from = dataInicial ? Number(dataInicial.slice(0, 7).replace('-', '')) : null
+    const to   = dataFinal   ? Number(dataFinal.slice(0, 7).replace('-', ''))   : null
+    const porGrupo = new Map<string, number>()
+    let total = 0
+    for (const r of reunioesPeriodo) {
+      if (from != null && r.ano_mes < from) continue
+      if (to != null && r.ano_mes > to) continue
+      if (coordenacaoFiltro !== TODAS && r.grupo_id !== coordenacaoFiltro) continue
+      const key = r.grupo_id ?? '__sem_grupo__'
+      porGrupo.set(key, (porGrupo.get(key) ?? 0) + r.realizadas)
+      total += r.realizadas
+    }
+    const linhas = [...porGrupo.entries()]
+      .map(([key, realizadas]) => ({
+        grupo_id: key === '__sem_grupo__' ? null : key,
+        grupo_nome: key === '__sem_grupo__' ? 'Sem grupo' : (grupos.find(g => g.id === key)?.nome ?? '—'),
+        realizadas,
+      }))
+      .sort((a, b) => b.realizadas - a.realizadas)
+    return { linhas, total }
+  }, [reunioesPeriodo, dataInicial, dataFinal, coordenacaoFiltro, grupos])
+
+  // Movimento de professores (entradas/saídas) — respeita filtro de coordenação + datas
+  const movimentoFiltrado = useMemo(() => movimento.filter(m =>
+    (coordenacaoFiltro === TODAS || m.grupo_id === coordenacaoFiltro) &&
+    (!dataInicial || m.data >= dataInicial) &&
+    (!dataFinal || m.data <= dataFinal)
+  ), [movimento, coordenacaoFiltro, dataInicial, dataFinal])
+
+  const movimentoPontos = useMemo(
+    () => agruparMovimento(movimentoFiltrado, granMovimento),
+    [movimentoFiltrado, granMovimento],
+  )
+
+  const movimentoResumo = useMemo(() => {
+    const entradas = movimentoFiltrado.filter(m => m.tipo === 'entrada').length
+    const saidas   = movimentoFiltrado.filter(m => m.tipo === 'saida').length
+    return { entradas, saidas, saldo: entradas - saidas }
+  }, [movimentoFiltrado])
 
   const scores = useMemo(
     () => filteredRows.map(r => r.score_atual).filter((s): s is number => s != null),
@@ -210,7 +256,7 @@ export function DashboardGeralPage() {
           <input type="date" value={dataFinal} onChange={e => setDataFinal(e.target.value)}
             className="h-9 rounded-md border border-line bg-surface-canvas px-2 text-[12px] text-ink" />
         </div>
-        <span className="text-[11px] text-ink-subtle">(data afeta o gráfico de evolução do score)</span>
+        <span className="text-[11px] text-ink-subtle">(as datas afetam os gráficos de score, reuniões e movimento)</span>
       </section>
 
       {/* ── 1. Resumo geral ── */}
@@ -388,7 +434,92 @@ export function DashboardGeralPage() {
         </table>
       </section>
 
-      {/* ── 6. Alertas inteligentes ── */}
+      {/* ── 6. Reuniões por coordenação ── */}
+      <section className="card-surface p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="label-micro">Reuniões realizadas por coordenação</h2>
+          <span className="text-[12px] text-ink-muted">
+            Total: <span className="font-semibold text-ink tabular-nums">{reunioesPorCoord.total}</span>
+          </span>
+        </div>
+        {reunioesPorCoord.linhas.length === 0 ? (
+          <p className="text-[13px] text-ink-muted">Nenhuma reunião realizada no período selecionado.</p>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-center">
+            <ResponsiveContainer width="100%" height={Math.max(160, reunioesPorCoord.linhas.length * 44)}>
+              <BarChart data={reunioesPorCoord.linhas} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                <YAxis type="category" dataKey="grupo_nome" tick={{ fontSize: 11 }} width={92} />
+                <Tooltip />
+                <Bar dataKey="realizadas" name="Reuniões" fill="var(--accent-blue)" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-line text-[11px] text-ink-muted uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left font-medium">Coordenação</th>
+                  <th className="px-3 py-2 text-left font-medium">Reuniões</th>
+                  <th className="px-3 py-2 text-left font-medium">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reunioesPorCoord.linhas.map(l => (
+                  <tr key={l.grupo_id ?? '__sem_grupo__'} className="border-b border-line-soft last:border-0">
+                    <td className="px-3 py-2 font-medium text-ink">{l.grupo_nome}</td>
+                    <td className="px-3 py-2 tabular-nums">{l.realizadas}</td>
+                    <td className="px-3 py-2 tabular-nums text-ink-muted">
+                      {reunioesPorCoord.total ? ((l.realizadas / reunioesPorCoord.total) * 100).toFixed(1) : '0.0'}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── 7. Movimento de professores (entradas / saídas) ── */}
+      <section className="card-surface p-5 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="label-micro">Movimento de professores</h2>
+          <Select value={granMovimento} onValueChange={v => setGranMovimento(v as Granularidade)}>
+            <SelectTrigger className="h-8 w-[130px] text-[12px] bg-surface-canvas border-line text-ink">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-surface-canvas border-line text-ink">
+              {(['semana', 'mes', 'trimestre', 'ano'] as Granularidade[]).map(g => (
+                <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard label="Entradas no período" value={movimentoResumo.entradas} />
+          <StatCard label="Saídas no período" value={movimentoResumo.saidas} tone={movimentoResumo.saidas > 0 ? 'warn' : undefined} />
+          <StatCard label="Saldo" value={movimentoResumo.saldo > 0 ? `+${movimentoResumo.saldo}` : String(movimentoResumo.saldo)} />
+        </div>
+        {movimentoPontos.length === 0 ? (
+          <p className="text-[13px] text-ink-muted">Sem entradas ou saídas no período selecionado.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={movimentoPontos}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+              <XAxis dataKey="periodo" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+              <Tooltip />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="entradas" name="Entradas" fill="#22c55e" isAnimationActive={false} />
+              <Bar dataKey="saidas" name="Saídas" fill="#ef4444" isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+        <p className="text-[11px] text-ink-subtle">
+          Saídas passaram a ser datadas em 2026-07-10; desligamentos anteriores não aparecem na série temporal.
+        </p>
+      </section>
+
+      {/* ── 8. Alertas inteligentes ── */}
       <section className="card-surface p-5 space-y-3">
         <h2 className="label-micro">Alertas inteligentes ({alertas.length})</h2>
         {coordenacoesAbaixoMedia.length > 0 && (
