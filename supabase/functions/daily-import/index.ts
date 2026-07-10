@@ -242,42 +242,72 @@ function precomputeProfessores<T extends { id: string; nome: string }>(
   })
 }
 
+/**
+ * Compara TODOS os professores antes de decidir — não retorna no primeiro
+ * professor que bater. Bug encontrado 2026-07-10: nomes tipo "Ana Luísa"
+ * são comuns o bastante para que a heurística fraca (só primeiro+segundo
+ * nome) batesse com o professor errado que por acaso vinha antes na lista,
+ * mesmo havendo um professor com nome EXATO mais adiante. Agora cada
+ * professor recebe um "tier" (1 = nome completo bate exato, 4 = heurística
+ * fraca de 2 partes do nome) e só o(s) professor(es) do melhor tier entram
+ * na disputa; se mais de um empatar no melhor tier, não arrisca — retorna
+ * null (fica pendente de vínculo manual em Reuniões do Dia) em vez de
+ * roubar a reunião do professor certo.
+ */
 function matchProfessor<T extends { id: string; nome: string } & ComNomeNormalizado>(ev: CalEvent, professores: T[]): T | null {
   if (!professores.length) return null
   const titleNorm    = norm(ev.summary ?? '')
   const extracted    = extrairNomeDeTitulo(ev.summary ?? '').map(norm)
   const attendeeNorm = (ev.attendees ?? []).filter(a => !a.self).map(a => norm(a.displayName ?? '')).filter(Boolean)
-  const scores: Array<{ prof: T; score: number }> = []
+
+  let bestTier = Infinity
+  let candidates: T[] = []
 
   for (const prof of professores) {
     const { nomeNorm, nameParts } = prof
+    let tier = Infinity
 
-    if (extracted.some(e => e === nomeNorm))                              return prof
-    if (attendeeNorm.some(a => a === nomeNorm))                           return prof
-    if (extracted.some(e => nameParts.every(p => e.includes(p))))        return prof
-    if (attendeeNorm.some(a => nameParts.every(p => a.includes(p))))     return prof
-    if (nameParts.every(p => titleNorm.includes(p)))                      return prof
-    if (nameParts.length < 2) continue
+    if (extracted.some(e => e === nomeNorm) || attendeeNorm.some(a => a === nomeNorm)) {
+      tier = 1
+    } else if (
+      extracted.some(e => nameParts.every(p => e.includes(p))) ||
+      attendeeNorm.some(a => nameParts.every(p => a.includes(p))) ||
+      nameParts.every(p => titleNorm.includes(p))
+    ) {
+      tier = 2
+    } else if (nameParts.length >= 2) {
+      const first = nameParts[0], second = nameParts[1], last = nameParts[nameParts.length - 1]
+      const doisNomes =
+        extracted.some(e => e.includes(first) && e.includes(second)) ||
+        extracted.some(e => e.includes(first) && e.includes(last)) ||
+        (titleNorm.includes(first) && titleNorm.includes(second)) ||
+        (titleNorm.includes(first) && titleNorm.includes(last)) ||
+        attendeeNorm.some(a => a.includes(first) && a.includes(second)) ||
+        attendeeNorm.some(a => a.includes(first) && a.includes(last))
 
-    const first = nameParts[0], second = nameParts[1], last = nameParts[nameParts.length - 1]
-    if (extracted.some(e => e.includes(first) && e.includes(second)))    return prof
-    if (extracted.some(e => e.includes(first) && e.includes(last)))      return prof
-    if (titleNorm.includes(first) && titleNorm.includes(second))         return prof
-    if (titleNorm.includes(first) && titleNorm.includes(last))           return prof
-    if (attendeeNorm.some(a => a.includes(first) && a.includes(second))) return prof
-    if (attendeeNorm.some(a => a.includes(first) && a.includes(last)))   return prof
+      if (doisNomes) {
+        tier = 3
+      } else {
+        const bestScore = Math.max(
+          extracted.reduce((b, e) => Math.max(b, nameParts.filter(p => e.includes(p)).length), 0),
+          nameParts.filter(p => titleNorm.includes(p)).length,
+          attendeeNorm.reduce((b, a) => Math.max(b, nameParts.filter(p => a.includes(p)).length), 0),
+        )
+        const hasFirst = extracted.some(e => e.includes(first)) || titleNorm.includes(first) || attendeeNorm.some(a => a.includes(first))
+        if (hasFirst && bestScore >= 2) tier = 4
+      }
+    }
 
-    const bestScore = Math.max(
-      extracted.reduce((b, e) => Math.max(b, nameParts.filter(p => e.includes(p)).length), 0),
-      nameParts.filter(p => titleNorm.includes(p)).length,
-      attendeeNorm.reduce((b, a) => Math.max(b, nameParts.filter(p => a.includes(p)).length), 0),
-    )
-    const hasFirst = extracted.some(e => e.includes(first)) || titleNorm.includes(first) || attendeeNorm.some(a => a.includes(first))
-    if (hasFirst && bestScore >= 2) scores.push({ prof, score: bestScore })
+    if (tier < bestTier) {
+      bestTier = tier
+      candidates = [prof]
+    } else if (tier === bestTier) {
+      candidates.push(prof)
+    }
   }
 
-  if (!scores.length) return null
-  return scores.sort((a, b) => b.score - a.score)[0].prof
+  if (bestTier === Infinity) return null
+  return candidates.length === 1 ? candidates[0] : null
 }
 
 // ─── Servidor ─────────────────────────────────────────────────────────────────
