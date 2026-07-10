@@ -94,6 +94,7 @@ export function AppLayout() {
       { to: '/acompanhamento', label: 'Acompanhamento' },
       { to: '/mes-analise', label: 'Mês de Análise' },
       { to: '/incidentes', label: 'Incidentes' },
+      { to: '/alunos', label: 'Reclamações por Aluno' },
     ],
   }
 

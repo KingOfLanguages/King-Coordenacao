@@ -17,6 +17,7 @@ import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
+import { AlunosPage } from '@/pages/alunos/AlunosPage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
@@ -123,6 +124,11 @@ export default function App() {
               <Route path="/incidentes" element={
                 <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <IncidentesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/alunos" element={
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                  <AlunosPage />
                 </ProtectedRoute>
               } />
               <Route path="/onboarding" element={
