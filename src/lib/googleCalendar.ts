@@ -60,12 +60,21 @@ export async function obterTokenGoogle(): Promise<string> {
   })
 }
 
+// Cliente de code flow criado UMA vez (em prepararCodigoGoogle) e reusado.
+// O popup do Google só abre se `requestCode()` for chamado *sincronamente*
+// dentro do gesto do usuário (o clique) — qualquer `await` antes dele joga a
+// chamada pra um microtask e o Chrome bloqueia o window.open ("Failed to open
+// popup window"). Por isso separamos: a preparação (async, no mount) cria o
+// cliente; a solicitação (sync, no clique) só dispara requestCode().
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _codeClient: any = null
+let _codeResolvers: { resolve: (code: string) => void; reject: (err: Error) => void } | null = null
+
 /**
- * Abre o popup de autorização Google (code flow com offline access).
- * Retorna o authorization code para ser trocado por tokens no servidor.
- * Necessário para ativar a importação automática diária.
+ * Pré-carrega o GIS e cria o code client. Deve ser chamada no mount da tela
+ * (não no clique), pra que solicitarCodigoGoogle() seja 100% síncrona depois.
  */
-export async function solicitarCodigoGoogle(): Promise<string> {
+export async function prepararCodigoGoogle(): Promise<void> {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
   if (!clientId) {
     throw new Error(
@@ -75,29 +84,37 @@ export async function solicitarCodigoGoogle(): Promise<string> {
   }
 
   await loadGIS()
+  if (_codeClient) return
 
-  return new Promise((resolve, reject) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const client = (window.google.accounts.oauth2 as any).initCodeClient({
-      client_id: clientId,
-      scope:     CALENDAR_SCOPE,
-      ux_mode:   'popup',
-      callback:  (resp: { code?: string; error?: string; error_description?: string }) => {
-        if (resp.error) {
-          reject(new Error(resp.error_description ?? resp.error))
-          return
-        }
-        if (!resp.code) {
-          reject(new Error('Código de autorização não recebido.'))
-          return
-        }
-        resolve(resp.code)
-      },
-      error_callback: (err: { message?: string; type?: string }) => {
-        reject(new Error(err.message ?? err.type ?? 'Erro na autorização Google.'))
-      },
-    })
-    client.requestCode()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _codeClient = (window.google.accounts.oauth2 as any).initCodeClient({
+    client_id: clientId,
+    scope:     CALENDAR_SCOPE,
+    ux_mode:   'popup',
+    callback:  (resp: { code?: string; error?: string; error_description?: string }) => {
+      if (resp.error)  { _codeResolvers?.reject(new Error(resp.error_description ?? resp.error)); return }
+      if (!resp.code)  { _codeResolvers?.reject(new Error('Código de autorização não recebido.')); return }
+      _codeResolvers?.resolve(resp.code)
+    },
+    error_callback: (err: { message?: string; type?: string }) => {
+      _codeResolvers?.reject(new Error(err.message ?? err.type ?? 'Erro na autorização Google.'))
+    },
+  })
+}
+
+/**
+ * Abre o popup de autorização Google (code flow) e retorna o authorization
+ * code. IMPORTANTE: chamar SINCRONAMENTE dentro do onClick — a função dispara
+ * requestCode() na hora (sem await interno) pra não perder o gesto do usuário.
+ * Requer prepararCodigoGoogle() ter rodado antes (feito no mount da tela).
+ */
+export function solicitarCodigoGoogle(): Promise<string> {
+  if (!_codeClient) {
+    return Promise.reject(new Error('Autorização do Google ainda carregando — tente novamente em instantes.'))
+  }
+  return new Promise<string>((resolve, reject) => {
+    _codeResolvers = { resolve, reject }
+    _codeClient.requestCode()
   })
 }
 

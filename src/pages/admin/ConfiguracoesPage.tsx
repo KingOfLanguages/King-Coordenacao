@@ -15,7 +15,7 @@ import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import type { CoordenadorPerfil } from '@/hooks/useAcompanhamento'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
 import { useGoogleAutomation, useDesativarAutomacao } from '@/hooks/useGoogleAutomation'
-import { solicitarCodigoGoogle, loadGIS } from '@/lib/googleCalendar'
+import { solicitarCodigoGoogle, prepararCodigoGoogle } from '@/lib/googleCalendar'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import type { GrupoComCoordenador } from '@/types'
@@ -102,13 +102,12 @@ function GoogleAutomationCard() {
   const [ativando, setAtivando] = useState(false)
   const ativa = automation.data?.ativo ?? false
 
-  // Pré-carrega o script do Google Identity Services assim que a tela abre —
-  // se ele só carrega dentro de handleAtivar, o `await loadGIS()` antes do
-  // requestCode() quebra a cadeia de gesto do usuário (o clique) e o Chrome
-  // bloqueia o popup ("Failed to open popup window"). Carregando cedo, o
-  // clique já encontra window.google.accounts.oauth2 pronto.
+  // Prepara o GIS + o code client assim que a tela abre. Precisa ser aqui (não
+  // no clique): solicitarCodigoGoogle() dispara o popup de forma síncrona, e
+  // qualquer await antes do requestCode() quebra o gesto do usuário e o Chrome
+  // bloqueia o popup ("Failed to open popup window").
   useEffect(() => {
-    loadGIS().catch(() => { /* tenta de novo no clique, com o toast de erro normal */ })
+    prepararCodigoGoogle().catch(() => { /* erro real reaparece no clique, com toast */ })
   }, [])
 
   async function handleAtivar() {
