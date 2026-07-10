@@ -37,6 +37,19 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
+
+/** Dias completos desde data_inicio (meia-noite UTC). null se sem data / inválida. */
+function diasDeCasa(dataIso: string | null): number | null {
+  if (!dataIso) return null
+  const d = new Date(dataIso)
+  if (isNaN(d.getTime())) return null
+  const agora = new Date()
+  const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  const agoraUTC = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())
+  return Math.round((agoraUTC - dUTC) / 86400000)
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -219,11 +232,20 @@ serve(async (req) => {
 
   const { data: professor } = await admin
     .from('professores')
-    .select('id, nome, grupo_id, status, email')
+    .select('id, nome, grupo_id, status, email, data_inicio')
     .eq('id', idProfessor)
     .maybeSingle()
   if (!professor || professor.status !== 'ativo') {
     return json({ error: 'Professor não encontrado.' }, 404)
+  }
+
+  // Trava dos 2 meses: create-booking só reserva reunião em grupo, então a regra
+  // vale para toda reserva aqui. Gate autoritativo (server-side) — o portal e o
+  // teacher-lookup já escondem/não listam, mas a validação real é esta.
+  const diasCasa = diasDeCasa(professor.data_inicio)
+  if (diasCasa == null || diasCasa < DIAS_MIN_GRUPO) {
+    console.log(`[create-booking] bloqueado por tempo de casa: professor=${professor.id} dias=${diasCasa}`)
+    return json({ error: 'As reuniões em grupo ficam disponíveis a partir de 2 meses de casa.' }, 403)
   }
 
   // E-mail real pra registrar/enviar confirmação: o informado no request,

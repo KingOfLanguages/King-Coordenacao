@@ -96,6 +96,7 @@ const CORS = {
 }
 
 const SCORE_MINIMO_GRUPO = 1400
+const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
 const DIAS_JANELA_PRIMEIRA_REUNIAO = 7
 const DIAS_JANELA_ACOMPANHAMENTO_MENSAL = 90 // ~3 meses de casa — cadência mensal fixa (30 dias)
 const CADENCIA_MIN_DIAS = 30
@@ -279,7 +280,12 @@ serve(async (req) => {
     .maybeSingle()
 
   const scoreAtual = acompanhamento?.score_atual ?? null
+  // Reunião em grupo exige score mínimo E pelo menos 2 meses de casa (dias já
+  // computado no passo 5). data_inicio nulo → não elegível (não dá pra provar os
+  // 2 meses); hoje todos os professores ativos têm data_inicio, então isso não
+  // bloqueia ninguém real — é só a trava segura.
   const elegivelGrupo = scoreAtual != null && scoreAtual >= SCORE_MINIMO_GRUPO
+    && dias != null && dias >= DIAS_MIN_GRUPO
 
   // ── 7. Aviso de agendamento recente (cadência mínima de 30 dias, >7 dias de casa) ─
   let avisoAgendamentoRecente: {

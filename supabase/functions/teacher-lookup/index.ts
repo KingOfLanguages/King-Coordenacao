@@ -39,12 +39,24 @@ const CORS = {
 
 const SEMANAS_FUTURAS = 6
 const BR_OFFSET = '-03:00' // Brasil não observa horário de verão desde 2019.
+const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   })
+}
+
+/** Dias completos desde data_inicio (meia-noite UTC). null se sem data / inválida. */
+function diasDeCasa(dataIso: string | null): number | null {
+  if (!dataIso) return null
+  const d = new Date(dataIso)
+  if (isNaN(d.getTime())) return null
+  const agora = new Date()
+  const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  const agoraUTC = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())
+  return Math.round((agoraUTC - dUTC) / 86400000)
 }
 
 /** Próximas N datas (uma por semana) em que `diaSemana` (0=dom…6=sáb) cai, a partir de hoje, no horário `hora` (HH:MM:SS). */
@@ -103,12 +115,20 @@ serve(async (req) => {
 
   const { data: professor } = await admin
     .from('professores')
-    .select('id, nome, status')
+    .select('id, nome, status, data_inicio')
     .eq('id', idProfessor)
     .maybeSingle()
 
   if (!professor || professor.status !== 'ativo') {
     return json({ professor: null, agendas: [] })
+  }
+
+  // Trava dos 2 meses: reunião em grupo só para quem já tem >= 60 dias de casa.
+  // Defesa em profundidade — o portal já esconde a opção (portal-agendamento-lookup),
+  // mas se alguém chamar direto aqui, não listamos horário nenhum.
+  const dias = diasDeCasa(professor.data_inicio)
+  if (dias == null || dias < DIAS_MIN_GRUPO) {
+    return json({ professor: { id: professor.id, nome: professor.nome }, agendas: [] })
   }
 
   // ── 2. Agendas ativas de todos os coordenadores ──────────────────────────────
