@@ -84,13 +84,12 @@ export function AppLayout() {
   const isSuportePleno = profile?.role === 'suporte'
   const isSuporte     = isSuportePleno || profile?.role === 'suporte_aluno'
 
-  // Onboarding é só de coordenação/admin; o resto do grupo é visível pro suporte também.
   const groupProfessores: NavGroupEntry = {
     type: 'group',
     label: 'Professores',
     items: [
       { to: '/professores', label: 'Professores' },
-      ...(isCoord ? [{ to: '/onboarding', label: 'Onboarding' }] : []),
+      ...(isCoord || isSuportePleno ? [{ to: '/onboarding', label: 'Onboarding' }] : []),
       { to: '/retorno-pausa', label: 'Retorno de Pausa' },
       { to: '/acompanhamento', label: 'Acompanhamento' },
       { to: '/mes-analise', label: 'Mês de Análise' },

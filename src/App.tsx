@@ -126,7 +126,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/onboarding" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute roles={['coordenacao', 'suporte']} admin>
                   <OnboardingPage />
                 </ProtectedRoute>
               } />
