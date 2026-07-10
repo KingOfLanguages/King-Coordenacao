@@ -8,7 +8,7 @@ const CALENDAR_API   = 'https://www.googleapis.com/calendar/v3'
 
 let _accessToken: string | null = null
 
-function loadGIS(): Promise<void> {
+export function loadGIS(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
       resolve()
