@@ -59,12 +59,16 @@ async function buscarReuniaoHoje(professorId: string): Promise<ReuniaoHojeInfo |
 
     if (rpDados && rpDados.length > 1) {
       tipoReuniao = 'grupo'
-      participantes = rpDados.map(rp => ({
-        reuniao_professor_id: rp.id,
-        professor_id: rp.professor_id,
-        professor_nome: (rp.professor as { nome: string }).nome,
-        status: rp.status,
-      }))
+      participantes = rpDados.map(rp => {
+        // O embed aninhado (professor:professores…) vem tipado como array pelo supabase-js.
+        const prof = Array.isArray(rp.professor) ? rp.professor[0] : rp.professor
+        return {
+          reuniao_professor_id: rp.id,
+          professor_id: rp.professor_id,
+          professor_nome: (prof as { nome?: string } | null)?.nome ?? '—',
+          status: rp.status as 'pendente' | 'realizada' | 'cancelada',
+        }
+      })
     }
   }
 
