@@ -1,5 +1,5 @@
 import { supabase } from '../shared/supabase'
-import { matchProfessorPorNome, matchProfessorPorEmail } from '../shared/match'
+import { matchProfessorPorNome, matchProfessorPorEmail, sugerirProfessores } from '../shared/match'
 import type {
   MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, ReuniaoHistoricoItem, ReuniaoHojeInfo,
 } from '../shared/types'
@@ -293,17 +293,101 @@ async function handleBuscarPorTexto(texto: string): Promise<RespostaDoBackground
   if (!session) return { ok: false, erro: 'Não autenticado.' }
   if (!texto.trim()) return { ok: true, resultado: null }
 
-  const { data: professores } = await supabase
+  // 1 — Casamento por trecho do nome (ilike). Se resolver num único, abre direto.
+  const { data: porNome } = await supabase
     .from('professores')
     .select('id, nome')
     .ilike('nome', `%${texto.trim()}%`)
-    .limit(1)
+    .limit(8)
 
-  const alvo = professores?.[0]
-  if (!alvo) return { ok: true, resultado: null }
+  const lista = porNome ?? []
+  if (lista.length === 1) {
+    const resultado = await montarResultado(lista[0].id, 'nome')
+    return { ok: true, resultado }
+  }
+  if (lista.length > 1) {
+    // Vários batem o trecho → devolve como sugestões pra escolher.
+    return { ok: true, resultado: null, sugestoes: lista.slice(0, 6).map(p => ({ id: p.id, nome: p.nome })) }
+  }
 
-  const resultado = await montarResultado(alvo.id, 'nome')
-  return { ok: true, resultado }
+  // 2 — Nada bateu o trecho → nomes próximos (fuzzy) entre ativos, pra typos.
+  const { data: ativos } = await supabase
+    .from('professores')
+    .select('id, nome')
+    .eq('saiu', false)
+    .eq('pausa', false)
+  const sugestoes = sugerirProfessores(texto, ativos ?? [])
+  return { ok: true, resultado: null, sugestoes }
+}
+
+/** Carrega o perfil completo de um professor escolhido (ex.: da lista de sugestões). */
+async function handleCarregarProfessor(professorId: string): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Professor não encontrado.' }
+}
+
+/** Lança rápido uma observação/feedback do professor — mesma tabela (observacoes)
+ *  e trigger de snapshot usados por useSalvarObservacao na plataforma web. */
+async function handleCriarObservacao(professorId: string, tipoObs: string, texto: string): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+  if (!texto.trim()) return { ok: false, erro: 'Escreva a observação.' }
+
+  const { error } = await supabase.from('observacoes').insert({
+    professor_id: professorId,
+    coordenador_id: session.user.id,
+    tipo: tipoObs,
+    texto: texto.trim(),
+  })
+  if (error) return { ok: false, erro: error.message }
+
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Erro após salvar.' }
+}
+
+/** Abre um incidente vinculado ao professor — mesma tabela/campos de useCriarIncidente na web. */
+async function handleAbrirIncidente(
+  professorId: string, problemType: string, urgency: string, description: string,
+): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+  if (!description.trim()) return { ok: false, erro: 'Descreva o incidente.' }
+
+  const [{ data: prof }, { data: perfil }] = await Promise.all([
+    supabase.from('professores').select('nome').eq('id', professorId).maybeSingle(),
+    supabase.from('profiles').select('nome').eq('id', session.user.id).maybeSingle(),
+  ])
+  if (!prof) return { ok: false, erro: 'Professor não encontrado.' }
+
+  const nowIso = new Date().toISOString()
+  const { error } = await supabase.from('nexus_incidents').insert({
+    id: crypto.randomUUID(),
+    teacher_name: prof.nome,
+    aluno_nome: null,
+    coordinator: perfil?.nome ?? 'KTM',
+    problem_type: problemType,
+    urgency,
+    description: description.trim(),
+    solution: '',
+    needs_follow_up: false,
+    resolved: false,
+    resolved_at: null,
+    under_analysis: false,
+    incident_mode: 'professor',
+    image_urls: [],
+    natureza: 'desafio',
+    ti_status: null,
+    created_at: nowIso,
+    professor_id: professorId,
+    created_by: session.user.id,
+    synced_at: nowIso,
+  })
+  if (error) return { ok: false, erro: error.message }
+
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Erro após abrir incidente.' }
 }
 
 /** Cria uma reunião avulsa "agora" para o professor (mesmo formato de useCriarReuniaoManual na
@@ -483,6 +567,12 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
           sendResponse(await handleBuscarProfessor(msg.nomes, msg.emails)); break
         case 'BUSCAR_PROFESSOR_POR_TEXTO':
           sendResponse(await handleBuscarPorTexto(msg.texto)); break
+        case 'CARREGAR_PROFESSOR':
+          sendResponse(await handleCarregarProfessor(msg.professorId)); break
+        case 'CRIAR_OBSERVACAO':
+          sendResponse(await handleCriarObservacao(msg.professorId, msg.tipoObs, msg.texto)); break
+        case 'ABRIR_INCIDENTE':
+          sendResponse(await handleAbrirIncidente(msg.professorId, msg.problemType, msg.urgency, msg.description)); break
         case 'CRIAR_REUNIAO_AGORA':
           sendResponse(await handleCriarReuniaoAgora(msg.professorId)); break
         case 'CONFIRMAR_REUNIAO':
