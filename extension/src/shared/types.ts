@@ -128,9 +128,12 @@ export interface SessaoArmazenada {
 
 // ─── Mensagens entre content script / popup e background ─────────────────────
 
+export type SugestaoProfessor = { id: string; nome: string }
+
 export type MensagemParaBackground =
   | { tipo: 'BUSCAR_PROFESSOR'; nomes: string[]; emails: string[] }
   | { tipo: 'BUSCAR_PROFESSOR_POR_TEXTO'; texto: string }
+  | { tipo: 'CARREGAR_PROFESSOR'; professorId: string }
   | { tipo: 'OBTER_SESSAO' }
   | { tipo: 'LOGIN'; email: string; senha: string }
   | { tipo: 'LOGOUT' }
@@ -141,8 +144,10 @@ export type MensagemParaBackground =
   | { tipo: 'COLOCAR_MES_ANALISE'; professorId: string; descricao: string; urgencia?: string }
   | { tipo: 'RESOLVER_MES_ANALISE'; professorId: string; incidentId: string; resultado: string }
   | { tipo: 'RESOLVER_OBSERVACAO'; professorId: string; id: string; resolvido: boolean }
+  | { tipo: 'CRIAR_OBSERVACAO'; professorId: string; tipoObs: string; texto: string }
+  | { tipo: 'ABRIR_INCIDENTE'; professorId: string; problemType: string; urgency: string; description: string }
 
-export type RespostaBuscarProfessor   = { ok: true; resultado: ProfessorEncontrado | null }
+export type RespostaBuscarProfessor   = { ok: true; resultado: ProfessorEncontrado | null; sugestoes?: SugestaoProfessor[] }
 export type RespostaSessao            = { ok: true; sessao: SessaoArmazenada | null }
 export type RespostaLogin             = { ok: true } | { ok: false; erro: string }
 export type RespostaLogout            = { ok: true }

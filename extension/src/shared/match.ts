@@ -50,3 +50,59 @@ export function matchProfessorPorEmail(
   const hit = emailRows.find(r => lower.includes(r.email.toLowerCase().trim()))
   return hit?.professor_id ?? null
 }
+
+// ── Sugestão de "nomes próximos" para a busca manual ─────────────────────────
+// Quando a busca por texto não resolve num único professor, oferece os nomes
+// mais parecidos pra o coordenador escolher (mesma ideia do portal /agendar).
+// Ferramenta interna e autenticada, então o limiar é mais generoso.
+
+function toks(s: string): string[] {
+  return norm(s).split(' ').filter(p => p.length > 1 && !CONECTIVOS.has(p))
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  if (!m) return n
+  if (!n) return m
+  const dp = Array.from({ length: n + 1 }, (_, j) => j)
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]; dp[0] = i
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j]
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1))
+      prev = tmp
+    }
+  }
+  return dp[n]
+}
+
+function simToken(a: string, b: string): number {
+  if (a === b) return 1
+  if (b.startsWith(a) || a.startsWith(b)) return 0.9
+  const maxLen = Math.max(a.length, b.length)
+  return maxLen ? 1 - levenshtein(a, b) / maxLen : 0
+}
+
+function scoreNome(ti: string[], tr: string[]): number {
+  if (!ti.length || !tr.length) return 0
+  let total = 0
+  for (const x of ti) {
+    let best = 0
+    for (const y of tr) best = Math.max(best, simToken(x, y))
+    total += best
+  }
+  return total / ti.length
+}
+
+export function sugerirProfessores<T extends { id: string; nome: string }>(
+  texto: string, professores: T[], max = 6, minScore = 0.5,
+): T[] {
+  const ti = toks(texto)
+  if (!ti.length) return []
+  return professores
+    .map(p => ({ p, s: scoreNome(ti, toks(p.nome)) }))
+    .filter(x => x.s >= minScore)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, max)
+    .map(x => x.p)
+}

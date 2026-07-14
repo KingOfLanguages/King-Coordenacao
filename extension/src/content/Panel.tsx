@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { extrairCandidatos } from './scrape'
 import { GrupoParticipantes } from './GrupoParticipantes'
-import type { MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada, AvaliacaoAlunos } from '../shared/types'
+import type { MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada, AvaliacaoAlunos, SugestaoProfessor } from '../shared/types'
 
 const C = {
   brand:     '#D1333A',
@@ -31,6 +31,19 @@ const REUNIAO_STATUS_LABEL: Record<string, string> = {
   realizada: 'Realizada',
   cancelada: 'Cancelada',
 }
+
+// Ações rápidas (lançar observação / abrir incidente) — mesmos valores da plataforma web.
+const TIPOS_OBSERVACAO: { value: string; label: string }[] = [
+  { value: 'feedback_positivo', label: 'Positivo' },
+  { value: 'feedback_negativo', label: 'Negativo' },
+  { value: 'feedback_neutro',   label: 'Neutro' },
+  { value: 'ocorrencia',        label: 'Ocorrência' },
+]
+const CATEGORIAS_INCIDENTE = [
+  'No-show', 'Erros de lançamento', 'Reclamação', 'Muitas faltas', 'Muitas pendências',
+  'Problemas didáticos reportados em atendimento', 'Profissionalismo', 'Organização',
+] as const
+const URGENCIAS = ['Baixa', 'Média', 'Alta'] as const
 
 const REUNIAO_STATUS_TOM: Record<string, 'neutro' | 'verde' | 'vermelho'> = {
   pendente:  'neutro',
@@ -107,6 +120,18 @@ export function Panel() {
   const [salvandoMesAnalise, setSalvandoMesAnalise] = useState(false)
   const [resolvendoObsId, setResolvendoObsId] = useState<string | null>(null)
   const [erroAcao, setErroAcao] = useState<string | null>(null)
+  const [sugestoes, setSugestoes] = useState<SugestaoProfessor[]>([])
+  // Lançamento rápido de observação
+  const [obsAberta, setObsAberta] = useState(false)
+  const [obsTipo, setObsTipo]     = useState('feedback_positivo')
+  const [obsTexto, setObsTexto]   = useState('')
+  const [salvandoObs, setSalvandoObs] = useState(false)
+  // Abertura de incidente
+  const [incAberto, setIncAberto]     = useState(false)
+  const [incTipo, setIncTipo]         = useState<string>(CATEGORIAS_INCIDENTE[0])
+  const [incUrgencia, setIncUrgencia] = useState<string>('Média')
+  const [incTexto, setIncTexto]       = useState('')
+  const [salvandoInc, setSalvandoInc] = useState(false)
   const ultimosCandidatos = useRef<string>('')
 
   useEffect(() => {
@@ -141,6 +166,8 @@ export function Panel() {
     setMesAnaliseAberto(false)
     setMesAnaliseTexto('')
     setErroAcao(null)
+    setObsAberta(false); setObsTexto('')
+    setIncAberto(false); setIncTexto('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultado?.professor.id])
 
@@ -148,9 +175,43 @@ export function Panel() {
     e.preventDefault()
     if (!buscaManual.trim()) return
     setBuscando(true)
+    setSugestoes([])
     const r = await enviar({ tipo: 'BUSCAR_PROFESSOR_POR_TEXTO', texto: buscaManual })
     setBuscando(false)
-    if (r.ok && 'resultado' in r) setResultado(r.resultado)
+    if (r.ok && 'resultado' in r) {
+      setResultado(r.resultado)
+      if (!r.resultado && 'sugestoes' in r && r.sugestoes) setSugestoes(r.sugestoes)
+    }
+  }
+
+  async function carregarProfessor(id: string) {
+    setBuscando(true)
+    const r = await enviar({ tipo: 'CARREGAR_PROFESSOR', professorId: id })
+    setBuscando(false)
+    if (r.ok && 'resultado' in r && r.resultado) {
+      setSugestoes([])
+      setResultado(r.resultado)
+    }
+  }
+
+  async function salvarNovaObservacao() {
+    if (!resultado || !obsTexto.trim()) return
+    setSalvandoObs(true); setErroAcao(null)
+    const r = await enviar({ tipo: 'CRIAR_OBSERVACAO', professorId: resultado.professor.id, tipoObs: obsTipo, texto: obsTexto })
+    setSalvandoObs(false)
+    if (r.ok && 'resultado' in r && r.resultado) {
+      setResultado(r.resultado); setObsAberta(false); setObsTexto('')
+    } else if (!r.ok) setErroAcao(r.erro)
+  }
+
+  async function abrirIncidente() {
+    if (!resultado || !incTexto.trim()) return
+    setSalvandoInc(true); setErroAcao(null)
+    const r = await enviar({ tipo: 'ABRIR_INCIDENTE', professorId: resultado.professor.id, problemType: incTipo, urgency: incUrgencia, description: incTexto })
+    setSalvandoInc(false)
+    if (r.ok && 'resultado' in r && r.resultado) {
+      setResultado(r.resultado); setIncAberto(false); setIncTexto('')
+    } else if (!r.ok) setErroAcao(r.erro)
   }
 
   function atualizarReuniaoHoje(r: RespostaDoBackground) {
@@ -403,19 +464,7 @@ export function Panel() {
                 )}
 
                 {!!resultado.acompanhamento.avaliacao_alunos?.total_avaliacoes && (
-                  <>
-                    <p style={{ fontSize: 11.5, color: C.ink, margin: '6px 0 0' }}>
-                      ★ {resultado.acompanhamento.avaliacao_alunos.media_estrelas?.toFixed(1) ?? '—'}
-                      <span style={{ color: C.inkMuted }}> ({resultado.acompanhamento.avaliacao_alunos.total_avaliacoes} avaliações,{' '}
-                        {resultado.acompanhamento.avaliacao_alunos.comentarios_positivos ?? 0} pos. / {resultado.acompanhamento.avaliacao_alunos.comentarios_negativos ?? 0} neg.)
-                      </span>
-                    </p>
-                    <p style={{ fontSize: 10.5, color: C.inkMuted, margin: '3px 0 0' }}>
-                      {[5, 4, 3, 2, 1].map(n => (
-                        `${n}★ ${resultado.acompanhamento?.avaliacao_alunos?.[`estrelas_${n}` as keyof AvaliacaoAlunos] ?? 0}`
-                      )).join(' · ')}
-                    </p>
-                  </>
+                  <FeedbackGrafico av={resultado.acompanhamento.avaliacao_alunos} />
                 )}
 
                 {resultado.acompanhamento.alertas.length > 0 && (
@@ -476,6 +525,54 @@ export function Panel() {
               )}
 
               {erroAcao && <p style={{ fontSize: 11, color: C.red, margin: '8px 0 0' }}>{erroAcao}</p>}
+            </div>
+
+            {/* Ações rápidas: lançar observação + abrir incidente */}
+            <div style={secaoBox}>
+              <span style={rotulo}>Ações rápidas</span>
+
+              {!obsAberta ? (
+                <button onClick={() => setObsAberta(true)} style={botaoTexto}>+ Lançar observação</button>
+              ) : (
+                <div style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                    {TIPOS_OBSERVACAO.map(t => (
+                      <button key={t.value} onClick={() => setObsTipo(t.value)} style={obsTipo === t.value ? chipSelAtivo : chipSel}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea value={obsTexto} onChange={e => setObsTexto(e.target.value)} placeholder="Observação sobre o professor…" style={textarea} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    <button onClick={salvarNovaObservacao} disabled={salvandoObs || !obsTexto.trim()} style={botaoSucesso}>
+                      {salvandoObs ? 'Salvando…' : 'Salvar'}
+                    </button>
+                    <button onClick={() => { setObsAberta(false); setObsTexto('') }} style={botaoSecundario}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+
+              {!incAberto ? (
+                <button onClick={() => setIncAberto(true)} style={{ ...botaoTexto, marginTop: 6 }}>+ Abrir incidente</button>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  <select value={incTipo} onChange={e => setIncTipo(e.target.value)} style={selectEstilo}>
+                    {CATEGORIAS_INCIDENTE.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <div style={{ display: 'flex', gap: 4, margin: '6px 0' }}>
+                    {URGENCIAS.map(u => (
+                      <button key={u} onClick={() => setIncUrgencia(u)} style={incUrgencia === u ? chipSelAtivo : chipSel}>{u}</button>
+                    ))}
+                  </div>
+                  <textarea value={incTexto} onChange={e => setIncTexto(e.target.value)} placeholder="Descreva o incidente…" style={textarea} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    <button onClick={abrirIncidente} disabled={salvandoInc || !incTexto.trim()} style={botaoSucesso}>
+                      {salvandoInc ? 'Abrindo…' : 'Abrir incidente'}
+                    </button>
+                    <button onClick={() => { setIncAberto(false); setIncTexto('') }} style={botaoSecundario}>Cancelar</button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {!!(resultado.nexus.ocorrencias.length || resultado.nexus.tracking || resultado.nexus.alertas.length) && (
@@ -599,6 +696,19 @@ export function Panel() {
               />
               <button type="submit" style={botaoPrimario}>Buscar</button>
             </form>
+
+            {sugestoes.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <span style={rotulo}>É algum destes?</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {sugestoes.map(s => (
+                    <button key={s.id} onClick={() => carregarProfessor(s.id)} style={botaoSugestao}>
+                      {s.nome}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -622,6 +732,49 @@ function Chip({ children, tom = 'neutro' }: { children: React.ReactNode; tom?: '
     }}>
       {children}
     </span>
+  )
+}
+
+/** Mini-gráfico de feedbacks: barra positivo/negativo + distribuição de estrelas. */
+function FeedbackGrafico({ av }: { av: AvaliacaoAlunos }) {
+  const pos = av.comentarios_positivos ?? 0
+  const neg = av.comentarios_negativos ?? 0
+  const totalComent = pos + neg
+  const estrelas = [5, 4, 3, 2, 1].map(n => ({ n, v: (av[`estrelas_${n}` as keyof AvaliacaoAlunos] as number | undefined) ?? 0 }))
+  const maxEstrela = Math.max(1, ...estrelas.map(e => e.v))
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <span style={{ fontSize: 11.5, color: C.ink }}>
+        ★ <strong>{av.media_estrelas?.toFixed(1) ?? '—'}</strong>
+        <span style={{ color: C.inkMuted }}> · {av.total_avaliacoes} avaliações</span>
+      </span>
+
+      {totalComent > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ display: 'flex', height: 8, borderRadius: 999, overflow: 'hidden', background: C.bgSubtle }}>
+            <div style={{ width: `${(pos / totalComent) * 100}%`, background: C.green }} />
+            <div style={{ width: `${(neg / totalComent) * 100}%`, background: C.red }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 3 }}>
+            <span style={{ color: C.green, fontWeight: 600 }}>{pos} positivo{pos === 1 ? '' : 's'}</span>
+            <span style={{ color: C.red, fontWeight: 600 }}>{neg} negativo{neg === 1 ? '' : 's'}</span>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {estrelas.map(e => (
+          <div key={e.n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: C.inkMuted, width: 20 }}>{e.n}★</span>
+            <div style={{ flex: 1, height: 6, borderRadius: 999, background: C.bgSubtle, overflow: 'hidden' }}>
+              <div style={{ width: `${(e.v / maxEstrela) * 100}%`, height: '100%', background: C.amber }} />
+            </div>
+            <span style={{ fontSize: 10, color: C.inkMuted, width: 16, textAlign: 'right' }}>{e.v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -702,4 +855,23 @@ const textarea: React.CSSProperties = {
 const botaoTexto: React.CSSProperties = {
   border: 'none', background: 'transparent', color: C.inkMuted, fontSize: 11.5,
   textDecoration: 'underline', cursor: 'pointer', padding: 0,
+}
+
+const chipSel: React.CSSProperties = {
+  padding: '3px 9px', fontSize: 11, fontWeight: 500, color: C.inkMuted,
+  background: '#fff', border: `1px solid ${C.border}`, borderRadius: 999, cursor: 'pointer',
+}
+
+const chipSelAtivo: React.CSSProperties = {
+  ...chipSel, color: '#fff', background: C.ink, border: `1px solid ${C.ink}`,
+}
+
+const selectEstilo: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: 12,
+  border: `1px solid ${C.border}`, borderRadius: 8, outline: 'none', background: '#fff', fontFamily: 'inherit',
+}
+
+const botaoSugestao: React.CSSProperties = {
+  textAlign: 'left', padding: '8px 10px', fontSize: 12.5, fontWeight: 500, color: C.ink,
+  background: C.bgSubtle, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer',
 }
