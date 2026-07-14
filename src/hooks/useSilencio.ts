@@ -56,6 +56,9 @@ export interface SilencioEpisodio {
   msg_resolucao: boolean
   msg_saida_alunos: boolean
   reuniao_solicitada: boolean
+  /** True quando chegou à 3ª etapa sem regularizar — recomendação de Mês de Análise (gera incidente automático). */
+  precisa_mes_analise: boolean
+  precisa_mes_analise_em: string | null
   aberto_em: string
 }
 
@@ -67,7 +70,8 @@ export function useSilencioFila() {
         .from('acompanhamento_silencio')
         .select(`
           professor_id, status, dias_pendente, dias_pico, aulas_pendentes, qtd_alunos, severidade_nx,
-          data_mais_antiga, msg_resolucao, msg_saida_alunos, reuniao_solicitada, aberto_em,
+          data_mais_antiga, msg_resolucao, msg_saida_alunos, reuniao_solicitada,
+          precisa_mes_analise, precisa_mes_analise_em, aberto_em,
           professor:professores!professor_id (
             nome, status,
             grupo:grupos!grupo_id (id, nome),
@@ -98,6 +102,8 @@ export function useSilencioFila() {
           msg_resolucao: r.msg_resolucao,
           msg_saida_alunos: r.msg_saida_alunos,
           reuniao_solicitada: r.reuniao_solicitada,
+          precisa_mes_analise: r.precisa_mes_analise ?? false,
+          precisa_mes_analise_em: r.precisa_mes_analise_em ?? null,
           aberto_em: r.aberto_em,
         }
       })

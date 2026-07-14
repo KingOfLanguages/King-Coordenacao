@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { Copy, Check, Search, CheckCircle2, ArrowUpDown } from 'lucide-react'
+import { Copy, Check, Search, CheckCircle2, ArrowUpDown, AlertTriangle } from 'lucide-react'
 import {
   useSilencioFila, useRegistrarMensagemPendencia, useSilencioSnapshotGeral,
   SILENCIO_LIMIARES, statusChip, flagPorStatus,
@@ -71,6 +71,9 @@ export function SilencioPage() {
     return c
   }, [baseGrupo])
 
+  // Professores que chegaram à 3ª etapa sem regularizar → recomendação de Mês de Análise.
+  const precisaMesAnalise = useMemo(() => baseGrupo.filter(ep => ep.precisa_mes_analise).length, [baseGrupo])
+
   const lista = useMemo(() => {
     let arr = aba === TODOS ? baseGrupo : baseGrupo.filter(ep => ep.status === aba)
     if (!mostrarContatados) arr = arr.filter(pendente)
@@ -102,6 +105,15 @@ export function SilencioPage() {
             <span className="tabular-nums text-ink-secondary font-medium">{fila.length}</span> professores com pendências
             {' · '}
             <span className="tabular-nums text-ink-secondary font-medium">{contagem.todos}</span> aguardando contato
+            {precisaMesAnalise > 0 && (
+              <>
+                {' · '}
+                <span className="inline-flex items-center gap-1 text-urg-highFg font-medium">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <span className="tabular-nums">{precisaMesAnalise}</span> p/ Mês de Análise
+                </span>
+              </>
+            )}
           </p>
         </div>
       </header>
@@ -318,6 +330,14 @@ function FilaRow({ ep, podeAgir, contatado }: { ep: SilencioEpisodio; podeAgir: 
           {ep.professor_status === 'pausa' && (
             <span className="inline-flex items-center rounded-full bg-surface-subtle text-ink-muted px-2 py-0.5 text-[10.5px] font-medium">
               em pausa
+            </span>
+          )}
+          {ep.precisa_mes_analise && (
+            <span
+              title="Chegou à 3ª etapa sem regularizar — incidente de auditoria gerado automaticamente."
+              className="inline-flex items-center gap-1 rounded-full bg-urg-highBg text-urg-highFg px-2 py-0.5 text-[10.5px] font-medium"
+            >
+              <AlertTriangle className="h-3 w-3" /> Precisa de Mês de Análise
             </span>
           )}
           {contatado && (
