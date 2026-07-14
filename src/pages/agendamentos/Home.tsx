@@ -41,6 +41,7 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 type Step =
   | { tipo: 'identificacao-email'; email: string; erro: string }
   | { tipo: 'identificacao'; tentativa: Tentativa; nome: string; erro: string; emailInformado: string }
+  | { tipo: 'sugestoes'; sugestoes: { id: string; nome: string }[]; nome: string; emailInformado: string }
   | { tipo: 'confirmar-identidade'; resultado: PortalLookupResult }
   | { tipo: 'aviso-agendamento-recente'; resultado: PortalLookupResult }
   | { tipo: 'opcoes'; resultado: PortalLookupResult }
@@ -112,6 +113,13 @@ export function Home() {
         return
       }
 
+      // Não achou exato: se houver nomes próximos, oferece a lista pra escolher.
+      const sugestoes = resultado.sugestoes ?? []
+      if (sugestoes.length > 0) {
+        setStep({ tipo: 'sugestoes', sugestoes, nome: nomeAtual, emailInformado: step.emailInformado })
+        return
+      }
+
       setStep({ ...step, nome: nomeAtual, erro: step.tentativa === 3 ? MENSAGEM_FINAL : MENSAGEM_GENERICA })
     } catch {
       setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
@@ -122,6 +130,20 @@ export function Home() {
     setMes(null)
     setAno(null)
     setStep({ tipo: 'identificacao-email', email: '', erro: '' })
+  }
+
+  /** Professor escolheu um nome da lista de sugestões → resolve pelo id (sem ambiguidade). */
+  async function handlePickSugestao(professorId: string) {
+    try {
+      const resultado = await lookup.mutateAsync({ professorId })
+      if (resultado.professor) {
+        setStep({ tipo: 'confirmar-identidade', resultado })
+      } else {
+        toast.error('Não foi possível carregar suas opções agora. Tente novamente.')
+      }
+    } catch {
+      toast.error('Não foi possível carregar suas opções agora. Tente novamente.')
+    }
   }
 
   async function handleEscolherGrupo() {
@@ -363,6 +385,55 @@ export function Home() {
                 </form>
               </div>
             </div>
+          </div>
+        )}
+
+        {step.tipo === 'sugestoes' && (
+          <div className="w-full max-w-sm space-y-6 animate-fade-up">
+            <div className="space-y-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accentBlue-soft text-accentBlue shadow-inner-top">
+                <CalendarClock className="h-6 w-6" />
+              </div>
+              <div className="space-y-1.5">
+                <span className="label-micro flex items-center gap-1.5 text-accentBlue">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
+                  Portal do professor
+                </span>
+                <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
+                  É algum destes?
+                </h1>
+                <p className="text-[14px] text-ink-muted leading-relaxed">
+                  Não encontramos exatamente <span className="text-ink-secondary font-medium">“{step.nome}”</span>. Se você estiver na lista, toque no seu nome.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
+                            shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
+              <div className="rounded-[1.5rem] bg-surface-canvas p-3 space-y-1.5">
+                {step.sugestoes.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => handlePickSugestao(s.id)}
+                    disabled={lookup.isPending}
+                    className="btn-press w-full flex items-center gap-3 rounded-xl px-3.5 py-3 text-left
+                               hover:bg-surface-subtle disabled:opacity-60 transition-colors"
+                  >
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-accentBlue-soft text-[12px] font-semibold text-accentBlue">
+                      {iniciais(s.nome)}
+                    </span>
+                    <span className="text-[13.5px] font-medium text-ink">{s.nome}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={recomecar}
+              className="btn-press w-full h-11 rounded-full border border-line-soft text-[13px] font-medium text-ink-secondary hover:bg-surface-subtle"
+            >
+              Não é nenhum desses
+            </button>
           </div>
         )}
 

@@ -103,6 +103,8 @@ const CADENCIA_MIN_DIAS = 30
 const CADENCIA_MAX_DIAS_MENSAL    = 30 // professores 8-90 dias de casa: cadência fixa
 const CADENCIA_MAX_DIAS_FLEXIVEL  = 60 // professores >90 dias de casa: janela livre de 30-60 dias
 const NOME_MIN_CHARS = 3
+const SUGESTOES_MAX = 5
+const SUGESTOES_MIN_SCORE = 0.62 // só sugere nomes genuinamente próximos — guardrail anti-scan do roster
 const STOPWORDS = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
 const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
@@ -125,6 +127,57 @@ function tokens(s: string): string[] {
 function nomeCorresponde(tokensInformados: string[], tokensReal: string[]): boolean {
   if (!tokensInformados.length) return false
   return tokensInformados.every(t => tokensReal.includes(t))
+}
+
+// ── Similaridade de nome (para sugerir "nomes próximos" quando não bate exato) ──
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  if (!m) return n
+  if (!n) return m
+  const dp = new Array(n + 1)
+  for (let j = 0; j <= n; j++) dp[j] = j
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]; dp[0] = i
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j]
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1))
+      prev = tmp
+    }
+  }
+  return dp[n]
+}
+
+/** 0..1 entre dois tokens: igual=1, prefixo=0.9, senão razão de Levenshtein. */
+function tokenSim(a: string, b: string): number {
+  if (a === b) return 1
+  if (b.startsWith(a) || a.startsWith(b)) return 0.9
+  const maxLen = Math.max(a.length, b.length)
+  return maxLen ? 1 - levenshtein(a, b) / maxLen : 0
+}
+
+/** Média da melhor similaridade de cada token informado contra os tokens reais. */
+function scoreNome(tokensInformados: string[], tokensReal: string[]): number {
+  if (!tokensInformados.length || !tokensReal.length) return 0
+  let total = 0
+  for (const ti of tokensInformados) {
+    let best = 0
+    for (const tr of tokensReal) best = Math.max(best, tokenSim(ti, tr))
+    total += best
+  }
+  return total / tokensInformados.length
+}
+
+/** Top-N nomes mais próximos, só acima do limiar (evita virar scanner de roster). */
+function sugerirNomes(nomeInformado: string, ativos: { id: string; nome: string }[]): { id: string; nome: string }[] {
+  const ti = tokens(nomeInformado)
+  if (!ti.length) return []
+  return ativos
+    .map(p => ({ p, score: scoreNome(ti, tokens(p.nome)) }))
+    .filter(x => x.score >= SUGESTOES_MIN_SCORE)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, SUGESTOES_MAX)
+    .map(x => ({ id: x.p.id, nome: x.p.nome }))
 }
 
 /** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
@@ -155,15 +208,15 @@ const OPCOES_VAZIAS = {
   reuniao_grupo:    { elegivel: false, recomendada: false },
 }
 
-function respostaVazia(ambiguo: boolean) {
-  return { professor: null, coordenador: null, ambiguo, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null }
+function respostaVazia(ambiguo: boolean, sugestoes: { id: string; nome: string }[] = []) {
+  return { professor: null, coordenador: null, ambiguo, sugestoes, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null }
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { nome?: unknown; email?: unknown; mesInicio?: unknown; anoInicio?: unknown }
+  let body: { nome?: unknown; email?: unknown; mesInicio?: unknown; anoInicio?: unknown; professorId?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -172,10 +225,11 @@ serve(async (req) => {
 
   const nome  = typeof body.nome  === 'string' ? body.nome.trim()  : ''
   const email = typeof body.email === 'string' ? body.email.trim() : ''
+  const professorIdInput = typeof body.professorId === 'string' ? body.professorId.trim() : ''
   const emailValido = EMAILRE.test(email.toLowerCase())
   const temNome     = nome.length >= NOME_MIN_CHARS
 
-  if (!temNome && !emailValido) {
+  if (!temNome && !emailValido && !professorIdInput) {
     return json({ error: `Informe seu e-mail ou ao menos ${NOME_MIN_CHARS} caracteres do seu nome.` }, 400)
   }
 
@@ -189,10 +243,19 @@ serve(async (req) => {
 
   type ProfRow = { id: string; nome: string; status: string; coordenador_id: string | null; data_inicio: string | null }
 
-  // ── 1. Identificação: e-mail primeiro (exato), nome como reserva ─────────────
+  // ── 1. Identificação: id direto (escolha de sugestão) > e-mail (exato) > nome ─
   let professor: ProfRow | null = null
 
-  if (emailValido) {
+  if (professorIdInput) {
+    const { data: p } = await admin
+      .from('professores')
+      .select('id, nome, status, coordenador_id, data_inicio')
+      .eq('id', professorIdInput)
+      .maybeSingle()
+    if (p && p.status === 'ativo') professor = p as ProfRow
+  }
+
+  if (!professor && emailValido) {
     const { data: emailRow } = await admin
       .from('professor_emails')
       .select('professor_id')
@@ -226,7 +289,12 @@ serve(async (req) => {
       candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
     }
 
-    if (candidatos.length === 0) return json(respostaVazia(false))
+    if (candidatos.length === 0) {
+      // Não bateu exatamente — oferece nomes próximos (fuzzy) pra escolher, só
+      // quando genuinamente parecidos (guardrail anti-scan em SUGESTOES_MIN_SCORE).
+      const sugestoes = sugerirNomes(nome, (ativos ?? []) as ProfRow[])
+      return json(respostaVazia(false, sugestoes))
+    }
     if (candidatos.length > 1)   return json(respostaVazia(true))
 
     professor = candidatos[0]
@@ -241,7 +309,7 @@ serve(async (req) => {
   if (!professor) return json(respostaVazia(false))
 
   if (!professor.coordenador_id) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 3. Coordenador responsável e seus links ──────────────────────────────────
@@ -252,7 +320,7 @@ serve(async (req) => {
     .maybeSingle()
 
   if (!coordenador) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 4. Já teve reunião realizada? ────────────────────────────────────────────
@@ -344,6 +412,7 @@ serve(async (req) => {
     professor: { id: professor.id, nome: professor.nome },
     coordenador: { id: coordenador.id, nome: coordenador.nome },
     ambiguo: false,
+    sugestoes: [],
     opcoes: {
       primeira_reuniao: {
         elegivel: primeiraReuniaoElegivel,

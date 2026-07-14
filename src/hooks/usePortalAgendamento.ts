@@ -14,10 +14,14 @@ export type AvisoAgendamentoRecente = {
   janela: { min: number; max: number }
 }
 
+export type SugestaoProfessor = { id: string; nome: string }
+
 export type PortalLookupResult = {
   professor: { id: string; nome: string } | null
   coordenador: { id: string; nome: string } | null
   ambiguo: boolean
+  /** Nomes próximos quando a busca por nome não bateu exato (fuzzy). */
+  sugestoes: SugestaoProfessor[]
   opcoes: {
     primeira_reuniao: OpcaoLink
     acompanhamento: OpcaoLink
@@ -33,6 +37,8 @@ export type PortalLookupInput = {
   nome?: string
   mesInicio?: number
   anoInicio?: number
+  /** Id direto — usado quando o professor escolhe um nome da lista de sugestões (resolve sem ambiguidade). */
+  professorId?: string
 }
 
 /**
