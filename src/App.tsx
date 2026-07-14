@@ -15,6 +15,7 @@ import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { RetornoPausaPage } from '@/pages/professores/RetornoPausaPage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
+import { SilencioPage } from '@/pages/silencio/SilencioPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
@@ -114,6 +115,11 @@ export default function App() {
               <Route path="/acompanhamento" element={
                 <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
                   <AcompanhamentoPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/silencio" element={
+                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                  <SilencioPage />
                 </ProtectedRoute>
               } />
               <Route path="/mes-analise" element={

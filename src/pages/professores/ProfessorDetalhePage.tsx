@@ -22,6 +22,7 @@ import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { ObservacaoSnapshotDetalhe } from '@/components/professores/ObservacaoSnapshotDetalhe'
+import { SilencioProfessorCard } from '@/components/professores/SilencioProfessorCard'
 import { EditarReuniaoProfessorDialog } from '@/components/professores/EditarReuniaoProfessorDialog'
 import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirReuniaoProfessorDialog'
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
@@ -366,6 +367,9 @@ export function ProfessorDetalhePage() {
       {acompanhamentoData?.alunos && acompanhamentoData.alunos.length > 0 && (
         <AlunosKmsSection alunos={acompanhamentoData.alunos} />
       )}
+
+      {/* ── Silêncio (aulas não lançadas) ── */}
+      {id && <SilencioProfessorCard professorId={id} />}
 
       {/* ── Ocorrências (King Nexus) ── */}
       {nexusData && (nexusData.incidentes.length > 0 || nexusData.tracking || nexusData.alertas.length > 0) && (

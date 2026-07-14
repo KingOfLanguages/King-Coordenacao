@@ -92,6 +92,7 @@ export function AppLayout() {
       ...(isCoord || isSuportePleno ? [{ to: '/onboarding', label: 'Onboarding' }] : []),
       { to: '/retorno-pausa', label: 'Retorno de Pausa' },
       { to: '/acompanhamento', label: 'Acompanhamento' },
+      { to: '/silencio', label: 'Controle de Pendências' },
       { to: '/mes-analise', label: 'Mês de Análise' },
       { to: '/incidentes', label: 'Incidentes' },
       { to: '/alunos', label: 'Reclamações por Aluno' },
