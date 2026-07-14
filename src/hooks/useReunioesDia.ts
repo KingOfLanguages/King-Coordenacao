@@ -28,10 +28,19 @@ export type ReuniaoCard = {
   professor_email: string | null
   status: string
   notas: string | null
-  tipo_reuniao: 'professor' | 'interna'
+  tipo_reuniao: 'professor' | 'interna' | 'grupo'
   pauta: string | null
   participantes_emails: string[]
   participantes: ParticipanteCard[]
+}
+
+/** True quando a reunião é de grupo (várias participações de professores num
+ *  mesmo horário de agenda). Confia no tipo_reuniao='grupo', mas cai para a
+ *  heurística de 2+ participantes enquanto a migration Fase A não roda. */
+export function isReuniaoGrupo(r: ReuniaoCard): boolean {
+  if (r.tipo_reuniao === 'grupo')   return true
+  if (r.tipo_reuniao === 'interna') return false
+  return r.participantes.length > 1
 }
 
 export type ProfVinculo = { id: string; nome: string; data_inicio: string | null }
@@ -124,7 +133,7 @@ type ParticipanteRaw = {
 type ReuniaoRaw = {
   id: string; data: string; titulo: string | null; meet_link: string | null
   professor_email: string | null; status: string; notas: string | null
-  tipo_reuniao: 'professor' | 'interna'; pauta: string | null; participantes_emails: string[] | null
+  tipo_reuniao: 'professor' | 'interna' | 'grupo'; pauta: string | null; participantes_emails: string[] | null
   participantes: ParticipanteRaw[] | null
 }
 
@@ -393,6 +402,35 @@ export function useConfirmarParticipacao() {
           .update({ data_ultima_reuniao: new Date().toISOString() })
           .eq('id', professorId)
       }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
+      queryClient.invalidateQueries({ queryKey: ['professores'] })
+    },
+  })
+}
+
+/** Confirma a presença de uma reunião de grupo de uma vez: presentes → realizada
+ *  (com numeração de monitoramento), pendentes restantes → cancelada, observação
+ *  comum em reunioes.notas. Usa a RPC confirmar_reuniao_grupo — a MESMA que a
+ *  extensão chama, garantindo numeração consistente entre as duas superfícies. */
+export function useConfirmarReuniaoGrupo() {
+  const queryClient = useQueryClient()
+  const { profile } = useAuth()
+  return useMutation({
+    mutationFn: async ({ reuniaoId, presentesIds, observacao }: {
+      reuniaoId: string
+      presentesIds: string[]
+      observacao?: string
+    }) => {
+      const { error } = await supabase.rpc('confirmar_reuniao_grupo', {
+        p_reuniao_id: reuniaoId,
+        p_presentes: presentesIds,
+        p_observacao: observacao?.trim() || null,
+        p_confirmado_por: profile?.id ?? null,
+      })
+      if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })

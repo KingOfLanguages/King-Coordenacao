@@ -447,39 +447,23 @@ async function handleResolverObservacao(
   return resultado ? { ok: true, resultado } : { ok: false, erro: 'Professor não encontrado após atualizar.' }
 }
 
-/** Confirma presença de múltiplos professores em reunião de grupo. */
+/** Confirma presença de múltiplos professores em reunião de grupo.
+ *  Usa a RPC confirmar_reuniao_grupo — a MESMA da plataforma web — para que a
+ *  numeração do monitoramento (`numero`) e o "não compareceu" fiquem consistentes
+ *  entre as duas superfícies (presentes → realizada+numero, pendentes → cancelada). */
 async function handleConfirmarGrupo(
   reuniaoId: string, presentesIds: string[], observacao: string, professorId: string,
 ): Promise<RespostaDoBackground> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { ok: false, erro: 'Não autenticado.' }
 
-  const agora = new Date().toISOString()
-
-  // Atualiza todos os presentes como 'realizada'
-  if (presentesIds.length > 0) {
-    const { error: updateErr } = await supabase
-      .from('reuniao_professores')
-      .update({
-        status: 'realizada',
-        confirmado_em: agora,
-        confirmado_por: session.user.id,
-      })
-      .in('id', presentesIds)
-    if (updateErr) return { ok: false, erro: updateErr.message }
-  }
-
-  // Atualiza observação comum na reunião
-  const { error: obsErr } = await supabase
-    .from('reunioes')
-    .update({ notas: observacao.trim() || null })
-    .eq('id', reuniaoId)
-  if (obsErr) return { ok: false, erro: obsErr.message }
-
-  // Atualiza data_ultima_reuniao do professor
-  if (presentesIds.length > 0) {
-    await supabase.from('professores').update({ data_ultima_reuniao: agora }).eq('id', professorId)
-  }
+  const { error } = await supabase.rpc('confirmar_reuniao_grupo', {
+    p_reuniao_id: reuniaoId,
+    p_presentes: presentesIds,
+    p_observacao: observacao.trim() || null,
+    p_confirmado_por: session.user.id,
+  })
+  if (error) return { ok: false, erro: error.message }
 
   const resultado = await montarResultado(professorId, 'nome')
   return resultado ? { ok: true, resultado } : { ok: false, erro: 'Erro ao confirmar grupo.' }

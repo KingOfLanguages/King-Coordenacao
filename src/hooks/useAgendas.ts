@@ -287,6 +287,9 @@ export type AgendaOcorrenciaCard = {
   capacidade: number
   meet_link: string | null
   titulo: string
+  /** Reunião de grupo (reunioes) gerada por este horário, se já houver. Quando
+   *  preenchido, o card canônico é o de grupo — este é escondido para não duplicar. */
+  reuniao_id: string | null
   participantes: ParticipanteAgendaCard[]
 }
 
@@ -309,7 +312,7 @@ async function fetchAgendaOcorrencias(coordId: string, inicio: string, fim: stri
   const { data: horarios, error: e2 } = await supabase
     .from('agenda_horarios')
     .select(`
-      id, data_hora, capacidade, meet_link, recorrencia_id,
+      id, data_hora, capacidade, meet_link, recorrencia_id, reuniao_id,
       inscricoes:agenda_inscricoes (
         id, status, email_usado,
         professor:professores (nome, professor_acompanhamento (score_atual))
@@ -332,7 +335,8 @@ async function fetchAgendaOcorrencias(coordId: string, inicio: string, fim: stri
     data_hora: h.data_hora,
     capacidade: h.capacidade,
     meet_link: h.meet_link,
-    titulo: tituloPorRecorrencia.get(h.recorrencia_id as string) ?? 'Reunião de Feedback',
+    reuniao_id: (h.reuniao_id as string | null) ?? null,
+    titulo: tituloPorRecorrencia.get(h.recorrencia_id as string) ?? 'Reunião em Grupo',
     participantes: (h.inscricoes as unknown as InscricaoRaw[])
       .filter(i => i.status === 'confirmada')
       .map(i => {

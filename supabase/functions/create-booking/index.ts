@@ -105,13 +105,18 @@ function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome }: 
               <tr>
                 <td style="padding:20px 24px;">
                   <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Reunião</p>
-                  <p style="margin:0 0 4px;font-size:16px;font-weight:600;color:#1e293b;">${titulo}</p>
-                  <p style="margin:0;font-size:14px;color:#475569;">${dataHoraFmt} · com ${coordNome}</p>
+                  <p style="margin:0 0 8px;font-size:16px;font-weight:600;color:#1e293b;">${titulo}</p>
+                  <p style="margin:0 0 2px;font-size:15px;font-weight:600;color:#1e293b;text-transform:capitalize;">${dataHoraFmt}</p>
+                  <p style="margin:0;font-size:14px;color:#475569;">com ${coordNome}</p>
                 </td>
               </tr>
             </table>
             ${meetBtn}
-            <p style="margin:24px 0 0;font-size:13px;color:#94a3b8;line-height:1.6;">
+            <p style="margin:16px 0 0;font-size:13px;color:#475569;line-height:1.6;">
+              Atenção: este link é exclusivo da reunião de <strong style="color:#1e293b;">${dataHoraFmt}</strong>.
+              Cada data tem um link diferente — entre sempre pelo link desta confirmação.
+            </p>
+            <p style="margin:20px 0 0;font-size:13px;color:#94a3b8;line-height:1.6;">
               Esta confirmação foi enviada pela plataforma King Education.
             </p>
           </td>

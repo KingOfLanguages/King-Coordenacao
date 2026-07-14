@@ -31,7 +31,7 @@ const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const DIAS_PLENO = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
 
 function tituloAgenda(nomeCoordenador: string | null | undefined): string {
-  return `Reunião de Feedback — Coord. ${nomeCoordenador?.trim() || '—'}`
+  return `Reunião em Grupo — Coord. ${nomeCoordenador?.trim() || '—'}`
 }
 
 /** Base pública do portal de agendamento.
@@ -59,7 +59,7 @@ export function AgendasPage() {
         </span>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Agendas</h1>
         <p className="text-[13px] text-ink-muted">
-          Reuniões de feedback recorrentes que professores reservam sozinhos, sem login.
+          Reuniões em grupo recorrentes que professores reservam sozinhos, sem login.
         </p>
       </header>
 

@@ -36,7 +36,7 @@ export function Confirmacao({ reuniao }: { reuniao: ReuniaoConfirmada }) {
 
       <div className="card-surface p-5 space-y-1 text-left">
         <p className="text-[15px] font-semibold text-ink">{reuniao.titulo}</p>
-        <p className="text-[13px] text-ink-secondary capitalize">{dataFmt} às {horaFmt}</p>
+        <p className="text-[14px] font-semibold text-ink capitalize">{dataFmt} às {horaFmt}</p>
         <p className="text-[13px] text-ink-muted">Coordenador: {reuniao.coordenador_nome}</p>
       </div>
 
@@ -53,6 +53,10 @@ export function Confirmacao({ reuniao }: { reuniao: ReuniaoConfirmada }) {
           </a>
         </Button>
       </div>
+
+      <p className="text-[12px] text-ink-secondary">
+        Este link é só desta reunião (<span className="capitalize">{dataFmt}</span>). Cada data tem um link diferente — entre por este.
+      </p>
 
       <p className="text-[12px] text-ink-muted">
         {reuniao.email_enviado

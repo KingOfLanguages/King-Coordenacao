@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarClock, Users, Check, X, CircleUserRound } from 'lucide-react'
+import { CalendarClock, Users, Check, X, CircleUserRound, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgendaDisponivel as AgendaDisponivelType, HorarioDisponivel } from '@/hooks/useTeacherLookup'
 
@@ -101,6 +101,10 @@ export function AgendaDisponivel({
         </h1>
         <p className="text-[14px] text-ink-muted leading-relaxed">
           Escolha o horário que melhor encaixa na sua rotina.
+        </p>
+        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-secondary leading-relaxed">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accentBlue" />
+          Cada data é uma reunião separada, com seu próprio link. Confira o dia antes de confirmar.
         </p>
       </div>
 

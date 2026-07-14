@@ -16,7 +16,8 @@ import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import {
   useReunioesPeriodo, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
   useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna, usePerfisPorEmail,
-  useDesvincularProfessor, sugerirVinculos, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
+  useDesvincularProfessor, useConfirmarReuniaoGrupo, sugerirVinculos, isReuniaoGrupo,
+  type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
@@ -174,7 +175,9 @@ export function ReunioesDiaPage() {
   const { data: agendaOcorrencias, isLoading: isLoadingAgenda } = useAgendaReunioesPeriodo(coordId || null, intervalo.inicio, intervalo.fim)
 
   const lista       = reunioes ?? []
-  const listaAgenda = agendaOcorrencias ?? []
+  // Deduplica: um horário que já virou reunião de grupo aparece pelo card de grupo
+  // (em `lista`), não pelo card de feedback — senão o mesmo evento apareceria 2×.
+  const listaAgenda = (agendaOcorrencias ?? []).filter(o => !o.reuniao_id)
   const carregando  = isLoading || isLoadingAgenda
   const hoje         = new Date()
   const veHoje       = modo === 'dia'    ? isMesmoDia(dataRef, hoje)
@@ -406,22 +409,27 @@ function DiaView({ dia, carregando, lista, listaAgenda, dados }: {
     )
   }
 
+  const grupos      = lista.filter(isReuniaoGrupo)
+  const individuais = lista.filter(r => !isReuniaoGrupo(r))
+  const temGrupo    = grupos.length > 0 || listaAgenda.length > 0
+
   return (
     <div className="space-y-5 max-w-[640px]">
-      {listaAgenda.length > 0 && (
+      {temGrupo && (
         <section className="space-y-2.5">
-          <p className="label-micro">Reuniões de feedback (agendamento)</p>
+          <p className="label-micro">Reuniões em grupo</p>
           <div className="space-y-3">
+            {grupos.map(r => <ReuniaoGrupoCardView key={r.id} reuniao={r} />)}
             {listaAgenda.map(r => <AgendaOcorrenciaCardView key={r.id} ocorrencia={r} />)}
           </div>
         </section>
       )}
 
-      {lista.length > 0 && (
+      {individuais.length > 0 && (
         <section className="space-y-2.5">
-          {listaAgenda.length > 0 && <p className="label-micro">Reuniões 1:1</p>}
+          {temGrupo && <p className="label-micro">Reuniões 1:1</p>}
           <div className="space-y-3">
-            {lista.map(r => <ReuniaoCardView key={r.id} reuniao={r} dados={dados} />)}
+            {individuais.map(r => <ReuniaoCardView key={r.id} reuniao={r} dados={dados} />)}
           </div>
         </section>
       )}
@@ -449,6 +457,7 @@ function rotuloEvento(tipo: 'reuniao' | 'agenda', fonte: ReuniaoCard | AgendaOco
   if (tipo === 'agenda') return (fonte as AgendaOcorrenciaCard).titulo
   const r = fonte as ReuniaoCard
   if (r.tipo_reuniao === 'interna') return r.titulo ?? 'Reunião interna'
+  if (isReuniaoGrupo(r)) return r.titulo ?? `Grupo · ${r.participantes.length}`
   return professorDoEvento(r)?.nome ?? r.professor_email ?? r.titulo ?? '1:1'
 }
 
@@ -792,7 +801,24 @@ function EventoPopover({ evento, onClose, onVerDia }: {
           </div>
         )}
 
-        {reuniao && reuniao.tipo_reuniao === 'professor' && (
+        {reuniao && isReuniaoGrupo(reuniao) && (
+          <div className="space-y-2">
+            <p className="text-[14px] font-medium text-ink">{reuniao.titulo ?? 'Reunião em grupo'}</p>
+            <p className="text-[12px] text-ink-muted">{reuniao.participantes.length} participante(s)</p>
+            {reuniao.participantes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {reuniao.participantes.filter(p => p.professor).map(p => (
+                  <span key={p.id} className="inline-flex items-center gap-1.5 rounded-full bg-surface-subtle px-2.5 py-1 text-[12px] text-ink-secondary">
+                    <span className={cn('h-1.5 w-1.5 rounded-full', scoreVisual(p.professor!.score_atual).dotClass)} />
+                    {p.professor!.nome}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {reuniao && reuniao.tipo_reuniao !== 'interna' && !isReuniaoGrupo(reuniao) && (
           prof ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -905,6 +931,180 @@ function AgendaOcorrenciaCardView({ ocorrencia }: { ocorrencia: AgendaOcorrencia
         ))}
       </div>
     </div>
+  )
+}
+
+// ─── Card — reunião de grupo (presença coletiva) ──────────────────────────────
+
+function ReuniaoGrupoCardView({ reuniao }: { reuniao: ReuniaoCard }) {
+  const { profile } = useAuth()
+  const podeEditar = canEdit(profile)
+  const confirmar = useConfirmarReuniaoGrupo()
+  const hora = new Date(reuniao.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const sv = STATUS_VISUAL[statusReuniao(reuniao)]
+  const [editarAberto, setEditarAberto] = useState(false)
+  const [excluirAberto, setExcluirAberto] = useState(false)
+  const [obs, setObs] = useState(reuniao.notas ?? '')
+
+  const participantes = reuniao.participantes
+  const emAberto = participantes.some(p => p.status === 'pendente')
+
+  // Presença inicial: quem não está marcado como "não compareceu" começa presente.
+  const [presentes, setPresentes] = useState<Set<string>>(
+    () => new Set(participantes.filter(p => p.status !== 'cancelada').map(p => p.id)),
+  )
+  function toggle(id: string) {
+    setPresentes(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function handleConfirmar() {
+    confirmar.mutate(
+      { reuniaoId: reuniao.id, presentesIds: [...presentes], observacao: obs },
+      {
+        onSuccess: () => toast.success('Presença confirmada.'),
+        onError:   () => toast.error('Erro ao confirmar presença.'),
+      },
+    )
+  }
+
+  return (
+    <div className="card-surface relative overflow-hidden p-4 pl-5 space-y-3">
+      <span className={cn('absolute inset-y-0 left-0 w-1', sv.bar)} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[13px] font-semibold text-ink tabular-nums">{hora}</span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', sv.chip)}>{sv.label}</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft px-2 py-0.5 text-[10px] font-medium text-accentBlue">
+              <Users className="h-3 w-3" />Grupo · {participantes.length}
+            </span>
+          </div>
+          {reuniao.titulo && <p className="text-[12px] text-ink-muted truncate mt-0.5">{reuniao.titulo}</p>}
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {podeEditar && (
+            <>
+              <button
+                onClick={() => setEditarAberto(true)}
+                title="Editar reunião"
+                className="btn-press flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-surface-subtle hover:text-ink"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setExcluirAberto(true)}
+                title="Excluir reunião"
+                className="btn-press flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-urg-highBg hover:text-urg-highFg"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+          {reuniao.meet_link && (
+            <a
+              href={reuniao.meet_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-press inline-flex items-center gap-1.5 rounded-full bg-accentBlue px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accentBlue-hov"
+            >
+              <Video className="h-3.5 w-3.5" />Entrar
+            </a>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-line-soft pt-3 space-y-3">
+        {emAberto ? (
+          <>
+            <p className="label-micro">Presentes ({presentes.size}/{participantes.length})</p>
+            <ul className="space-y-1">
+              {participantes.map(p => (
+                <GrupoPresencaRow key={p.id} part={p} presente={presentes.has(p.id)} onToggle={() => toggle(p.id)} />
+              ))}
+            </ul>
+            <textarea
+              value={obs}
+              onChange={e => setObs(e.target.value)}
+              placeholder="Observação comum da reunião…"
+              className="w-full min-h-[64px] resize-y rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accentBlue"
+            />
+            <Button
+              size="sm"
+              disabled={confirmar.isPending}
+              onClick={handleConfirmar}
+              className="btn-press h-8 text-[12px] gap-1.5 bg-urg-lowFg text-white hover:opacity-90"
+            >
+              <Check className="h-3.5 w-3.5" />
+              {confirmar.isPending ? 'Salvando…' : `Confirmar presença (${presentes.size})`}
+            </Button>
+          </>
+        ) : (
+          <>
+            <ul className="space-y-1.5">
+              {participantes.map(p => <GrupoResumoRow key={p.id} part={p} />)}
+            </ul>
+            {reuniao.notas && <p className="text-[12px] text-ink-secondary leading-relaxed">{reuniao.notas}</p>}
+          </>
+        )}
+      </div>
+
+      {editarAberto && <EditarReuniaoDialog reuniao={reuniao} onClose={() => setEditarAberto(false)} />}
+      {excluirAberto && <ExcluirReuniaoDialog reuniao={reuniao} onClose={() => setExcluirAberto(false)} />}
+    </div>
+  )
+}
+
+function GrupoPresencaRow({ part, presente, onToggle }: {
+  part: ParticipanteCard; presente: boolean; onToggle: () => void
+}) {
+  const prof = part.professor
+  const tempo = prof ? tempoDeCasaLabel(prof.data_inicio) : null
+  return (
+    <li className="flex items-center gap-2">
+      <button
+        onClick={onToggle}
+        title={presente ? 'Marcar ausente' : 'Marcar presente'}
+        className={cn(
+          'btn-press flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border transition-colors',
+          presente ? 'border-urg-lowFg bg-urg-lowFg text-white' : 'border-line bg-surface-canvas text-transparent',
+        )}
+      >
+        <Check className="h-3 w-3" />
+      </button>
+      <span className={cn('text-[13px] truncate', presente ? 'text-ink' : 'text-ink-muted')}>
+        {prof?.nome ?? 'Professor não vinculado'}
+      </span>
+      {prof && <ScoreTag score={prof.score_atual} />}
+      {prof?.monitoramento && <span className="h-1.5 w-1.5 rounded-full bg-urg-highFg flex-shrink-0" title="Monitoramento ativo" />}
+      {tempo && <span className="text-[11px] text-ink-muted">· {tempo}</span>}
+    </li>
+  )
+}
+
+function GrupoResumoRow({ part }: { part: ParticipanteCard }) {
+  const prof = part.professor
+  return (
+    <li className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-[13px] text-ink truncate">{prof?.nome ?? 'Professor não vinculado'}</span>
+        {prof && <ScoreTag score={prof.score_atual} />}
+      </div>
+      {part.status === 'realizada' ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg px-2 py-0.5 text-[11px] font-medium text-urg-lowFg flex-shrink-0">
+          <Check className="h-3 w-3" />{part.numero ? `${part.numero}º monit.` : 'Presente'}
+        </span>
+      ) : (
+        <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-medium text-ink-muted flex-shrink-0">
+          Não compareceu
+        </span>
+      )}
+    </li>
   )
 }
 
