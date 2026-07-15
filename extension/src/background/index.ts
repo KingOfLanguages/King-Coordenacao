@@ -1,5 +1,5 @@
 import { supabase } from '../shared/supabase'
-import { matchProfessorPorNome, matchProfessorPorEmail, sugerirProfessores } from '../shared/match'
+import { matchProfessorPorNome, matchProfessorPorEmail, sugerirProfessores, confiancaMatch } from '../shared/match'
 import type {
   MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, ReuniaoHistoricoItem, ReuniaoHojeInfo,
 } from '../shared/types'
@@ -135,6 +135,7 @@ function montarAlertas(acomp: {
 async function montarResultado(
   professorId: string,
   motivo: 'email' | 'nome',
+  confianca: number | null = null,
 ): Promise<ProfessorEncontrado | null> {
   const [
     profRes, acompRes, historicoRes, totalRes, obsRes, obsAbertasRes, reuniaoHoje,
@@ -252,6 +253,7 @@ async function montarResultado(
     },
     mesAnalise: mesAnaliseRes.data?.[0] ?? null,
     motivo,
+    confianca,
   }
 }
 
@@ -271,16 +273,15 @@ async function handleBuscarProfessor(nomes: string[], emails: string[]): Promise
     }
   }
 
-  // 2 — Fallback: match por nome entre os professores ativos
+  // 2 — Fallback: match por nome, SÓ entre professores ativos.
   if (nomes.length) {
     const { data: professores } = await supabase
       .from('professores')
       .select('id, nome')
-      .eq('saiu', false)
-      .eq('pausa', false)
+      .eq('status', 'ativo')
     const match = matchProfessorPorNome(nomes, professores ?? [])
     if (match) {
-      const resultado = await montarResultado(match.id, 'nome')
+      const resultado = await montarResultado(match.id, 'nome', confiancaMatch(nomes, match.nome))
       if (resultado) return { ok: true, resultado }
     }
   }
@@ -293,31 +294,27 @@ async function handleBuscarPorTexto(texto: string): Promise<RespostaDoBackground
   if (!session) return { ok: false, erro: 'Não autenticado.' }
   if (!texto.trim()) return { ok: true, resultado: null }
 
-  // 1 — Casamento por trecho do nome (ilike). Se resolver num único, abre direto.
-  const { data: porNome } = await supabase
-    .from('professores')
-    .select('id, nome')
-    .ilike('nome', `%${texto.trim()}%`)
-    .limit(8)
-
-  const lista = porNome ?? []
-  if (lista.length === 1) {
-    const resultado = await montarResultado(lista[0].id, 'nome')
-    return { ok: true, resultado }
-  }
-  if (lista.length > 1) {
-    // Vários batem o trecho → devolve como sugestões pra escolher.
-    return { ok: true, resultado: null, sugestoes: lista.slice(0, 6).map(p => ({ id: p.id, nome: p.nome })) }
-  }
-
-  // 2 — Nada bateu o trecho → nomes próximos (fuzzy) entre ativos, pra typos.
+  // Busca SÓ entre professores ativos e ranqueia por similaridade (com score).
   const { data: ativos } = await supabase
     .from('professores')
     .select('id, nome')
-    .eq('saiu', false)
-    .eq('pausa', false)
-  const sugestoes = sugerirProfessores(texto, ativos ?? [])
-  return { ok: true, resultado: null, sugestoes }
+    .eq('status', 'ativo')
+
+  const ranqueados = sugerirProfessores(texto, ativos ?? [])
+  if (ranqueados.length === 0) return { ok: true, resultado: null, sugestoes: [] }
+
+  // Um só candidato → abre direto (com a confiança do match).
+  if (ranqueados.length === 1) {
+    const resultado = await montarResultado(ranqueados[0].id, 'nome', ranqueados[0].score)
+    return { ok: true, resultado }
+  }
+
+  // Vários → devolve a lista com a porcentagem de cada um pra escolher.
+  return {
+    ok: true,
+    resultado: null,
+    sugestoes: ranqueados.map(s => ({ id: s.id, nome: s.nome, score: s.score })),
+  }
 }
 
 /** Carrega o perfil completo de um professor escolhido (ex.: da lista de sugestões). */

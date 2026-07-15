@@ -7,19 +7,28 @@ import { Fragment, useState, useRef, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { NavDropdown, type NavDropdownItem } from '@/components/layout/NavDropdown'
 import { ExtensaoConteudo } from '@/pages/extensao/ExtensaoConteudo'
+import { useCanView } from '@/hooks/usePagePermissions'
+import { PAGE_BY_KEY } from '@/lib/pagePermissions'
 
 type NavLinkEntry  = { type: 'link';  to: string; label: string; exact?: boolean }
 type NavGroupEntry = { type: 'group'; label: string; items: NavDropdownItem[] }
 type NavEntry = NavLinkEntry | NavGroupEntry
 
-const groupReunioes: NavGroupEntry = {
-  type: 'group',
-  label: 'Reuniões',
-  items: [
-    { to: '/reunioes-dia', label: 'Reuniões do Dia' },
-    { to: '/admin/agendas', label: 'Agendas' },
-  ],
-}
+// Estrutura do menu por chave de página. A visibilidade de cada item (e do grupo)
+// vem do controle de acesso configurável — ver src/lib/pagePermissions.
+type NavNode =
+  | { kind: 'link';  pageKey: string }
+  | { kind: 'group'; label: string; pageKeys: string[] }
+
+const NAV: NavNode[] = [
+  { kind: 'group', label: 'Reuniões',    pageKeys: ['reunioes-dia', 'agendas'] },
+  { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'retorno-pausa', 'acompanhamento', 'silencio', 'mes-analise', 'incidentes', 'alunos'] },
+  { kind: 'group', label: 'Dashboard',   pageKeys: ['dashboard', 'dashboard-geral'] },
+  { kind: 'link', pageKey: 'suporte-reunioes' },
+  { kind: 'link', pageKey: 'tarefas' },
+]
+
+// Administração continua fixo em admin (não é configurável, pra não travar o admin).
 const groupAdmin: NavGroupEntry = {
   type: 'group',
   label: 'Administração',
@@ -78,49 +87,26 @@ export function AppLayout() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const openRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
-  const isAdmin       = profile?.is_admin === true || profile?.role === 'admin'
-  const isLider       = profile?.is_lider === true
-  const isCoord       = profile?.role === 'coordenacao' || isAdmin
-  const isSuportePleno = profile?.role === 'suporte'
-  const isSuporte     = isSuportePleno || profile?.role === 'suporte_aluno'
+  const { canView } = useCanView()
+  const isAdmin = profile?.is_admin === true || profile?.role === 'admin'
+  const isCoord = profile?.role === 'coordenacao' || isAdmin
 
-  const groupProfessores: NavGroupEntry = {
-    type: 'group',
-    label: 'Professores',
-    items: [
-      { to: '/professores', label: 'Professores' },
-      ...(isCoord || isSuportePleno ? [{ to: '/onboarding', label: 'Onboarding' }] : []),
-      { to: '/retorno-pausa', label: 'Retorno de Pausa' },
-      { to: '/acompanhamento', label: 'Acompanhamento' },
-      { to: '/silencio', label: 'Controle de Pendências' },
-      { to: '/mes-analise', label: 'Mês de Análise' },
-      { to: '/incidentes', label: 'Incidentes' },
-      { to: '/alunos', label: 'Reclamações por Aluno' },
-    ],
+  // Menu derivado do registry + controle de acesso: cada item aparece se o usuário
+  // pode ver a página; o grupo aparece se tiver ao menos um item visível.
+  const entries: NavEntry[] = []
+  for (const node of NAV) {
+    if (node.kind === 'link') {
+      const p = PAGE_BY_KEY[node.pageKey]
+      if (p && canView(p.key)) entries.push({ type: 'link', to: p.path, label: p.label, exact: p.exact })
+    } else {
+      const items: NavDropdownItem[] = node.pageKeys
+        .map(k => PAGE_BY_KEY[k])
+        .filter(p => p && canView(p.key))
+        .map(p => ({ to: p.path, label: p.label, exact: p.exact }))
+      if (items.length) entries.push({ type: 'group', label: node.label, items })
+    }
   }
-
-  // Dashboard: só coordenação, líder e admin (suporte não vê).
-  const dashboardEntry: NavEntry = (isAdmin || isLider)
-    ? { type: 'group', label: 'Dashboard', items: [
-        { to: '/dashboard', label: 'Dashboard', exact: true },
-        { to: '/dashboard/geral', label: 'Dashboard Geral' },
-      ] }
-    : { type: 'link', to: '/dashboard', label: 'Dashboard', exact: true }
-
-  const suporteEntry: NavEntry = { type: 'link', to: '/suporte/reunioes', label: 'Buscar Reuniões' }
-  const tarefasEntry: NavEntry = { type: 'link', to: '/tarefas', label: 'Tarefas' }
-
-  const entries: NavEntry[] = [
-    ...(isCoord ? [groupReunioes] : []),
-    ...(isCoord || isSuporte ? [groupProfessores] : []),
-    ...(isCoord || isLider ? [dashboardEntry] : []),
-    // Buscar Reuniões: suporte pleno e admin (suporte_aluno não).
-    ...(isSuportePleno || isAdmin ? [suporteEntry] : []),
-    // Tarefas: interno a quem cuida dos professores — coordenação + suporte ao
-    // professor + admin. Suporte ao aluno não tem acesso.
-    ...(isCoord || isSuportePleno ? [tarefasEntry] : []),
-    ...(isAdmin ? [groupAdmin] : []),
-  ]
+  if (isAdmin) entries.push(groupAdmin)
 
   type MobileRow = { sectionLabel?: string; item: NavDropdownItem }
   const mobileRows: MobileRow[] = entries.flatMap((entry): MobileRow[] =>

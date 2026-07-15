@@ -95,14 +95,22 @@ function scoreNome(ti: string[], tr: string[]): number {
 }
 
 export function sugerirProfessores<T extends { id: string; nome: string }>(
-  texto: string, professores: T[], max = 6, minScore = 0.5,
-): T[] {
+  texto: string, professores: T[], max = 6, minScore = 0.45,
+): (T & { score: number })[] {
   const ti = toks(texto)
   if (!ti.length) return []
   return professores
-    .map(p => ({ p, s: scoreNome(ti, toks(p.nome)) }))
-    .filter(x => x.s >= minScore)
-    .sort((a, b) => b.s - a.s)
+    .map(p => ({ ...p, score: scoreNome(ti, toks(p.nome)) }))
+    .filter(x => x.score >= minScore)
+    .sort((a, b) => b.score - a.score)
     .slice(0, max)
-    .map(x => x.p)
+}
+
+/** Confiança (0..1) do match automático: melhor similaridade entre os nomes
+ *  candidatos (participantes do Meet) e o nome do professor identificado. */
+export function confiancaMatch(candidatos: string[], nome: string): number {
+  const tr = toks(nome)
+  let best = 0
+  for (const c of candidatos) best = Math.max(best, scoreNome(toks(c), tr))
+  return best
 }

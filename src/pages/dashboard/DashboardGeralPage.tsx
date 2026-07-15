@@ -11,9 +11,9 @@ import {
 import { useGrupos } from '@/hooks/useGrupos'
 import {
   useDashboardGeralProfessores, useDashboardGeralScoreTrend,
-  useDashboardGeralReunioes, useDashboardGeralMovimento,
+  useDashboardGeralReunioes, useDashboardGeralMovimento, useDashboardGeralMetaProfessores,
   SCORE_BUCKETS, bucketFor, media, mediana, motivosAlerta, agregarPorCoordenacao,
-  agruparMovimento, LABEL_ALERTA, LABEL_GRANULARIDADE,
+  agruparMovimento, metaReunioesMensal, LABEL_ALERTA, LABEL_GRANULARIDADE,
   type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta, type Granularidade,
 } from '@/hooks/useDashboardGeral'
 import { cn } from '@/lib/utils'
@@ -70,6 +70,7 @@ export function DashboardGeralPage() {
   const { data: trend = [] } = useDashboardGeralScoreTrend()
   const { data: reunioesPeriodo = [] } = useDashboardGeralReunioes()
   const { data: movimento = [] } = useDashboardGeralMovimento()
+  const { data: metaProfs = [] } = useDashboardGeralMetaProfessores()
   const { data: grupos = [] } = useGrupos()
 
   const [coordenacaoFiltro, setCoordenacaoFiltro] = useState(TODAS)
@@ -115,6 +116,25 @@ export function DashboardGeralPage() {
       .sort((a, b) => b.realizadas - a.realizadas)
     return { linhas, total }
   }, [reunioesPeriodo, dataInicial, dataFinal, coordenacaoFiltro, grupos])
+
+  // Reuniões do mês vigente vs meta esperada (régua de tempo de casa).
+  // Sempre o mês corrente (ignora o intervalo de datas); respeita o filtro de coordenação.
+  const reunioesMesVsMeta = useMemo(() => {
+    const now = new Date()
+    const anoMesAtual = now.getFullYear() * 100 + (now.getMonth() + 1)
+    let realizadas = 0
+    for (const r of reunioesPeriodo) {
+      if (r.ano_mes !== anoMesAtual) continue
+      if (coordenacaoFiltro !== TODAS && r.grupo_id !== coordenacaoFiltro) continue
+      realizadas += r.realizadas
+    }
+    const profsDoFiltro = coordenacaoFiltro === TODAS
+      ? metaProfs
+      : metaProfs.filter(p => p.grupo_id === coordenacaoFiltro)
+    const { meta, admissoesMes, profs2a3, profs4 } = metaReunioesMensal(profsDoFiltro)
+    const pct = meta > 0 ? Math.min(100, Math.round((realizadas / meta) * 100)) : 0
+    return { realizadas, meta, admissoesMes, profs2a3, profs4, pct, atingiu: meta > 0 && realizadas >= meta }
+  }, [reunioesPeriodo, coordenacaoFiltro, metaProfs])
 
   // Movimento de professores (entradas/saídas) — respeita filtro de coordenação + datas
   const movimentoFiltrado = useMemo(() => movimento.filter(m =>
@@ -434,7 +454,34 @@ export function DashboardGeralPage() {
         </table>
       </section>
 
-      {/* ── 6. Reuniões por coordenação ── */}
+      {/* ── 6. Reuniões do mês vigente vs meta ── */}
+      <section className="card-surface p-5 space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="label-micro">Reuniões da coordenação — mês vigente vs meta</h2>
+          <span className="text-[15px] tabular-nums">
+            <span className={cn('text-2xl font-semibold', reunioesMesVsMeta.atingiu ? 'text-urg-lowFg' : 'text-ink')}>
+              {reunioesMesVsMeta.realizadas}
+            </span>
+            <span className="text-ink-muted"> / {reunioesMesVsMeta.meta} esperadas</span>
+          </span>
+        </div>
+        <div className="h-2.5 rounded-full bg-surface-muted overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${reunioesMesVsMeta.pct}%`, background: reunioesMesVsMeta.atingiu ? 'var(--urg-low-fg)' : 'var(--accent-blue)' }}
+          />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] text-ink-muted">
+            Meta = {reunioesMesVsMeta.admissoesMes} admissões do mês + {reunioesMesVsMeta.profs2a3} de 2–3 meses
+            {' '}+ 33,3% de {reunioesMesVsMeta.profs4} (mais de 4 meses)
+            {coordenacaoFiltro === TODAS ? ', somando todas as coordenações' : ', na coordenação selecionada'}.
+          </p>
+          <span className="text-[11px] text-ink-subtle tabular-nums">{reunioesMesVsMeta.pct}% da meta</span>
+        </div>
+      </section>
+
+      {/* ── 7. Reuniões por coordenação ── */}
       <section className="card-surface p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="label-micro">Reuniões realizadas por coordenação</h2>

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { mesesDeCasa } from '@/lib/utils'
 
 // ─── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,55 @@ export function useDashboardGeralMovimento() {
       return (data ?? []) as MovimentoRow[]
     },
   })
+}
+
+// ─── Meta mensal de reuniões (régua de tempo de casa) ─────────────────────────
+// Professores ativos com data de início + grupo, para dimensionar quantas reuniões
+// a coordenação deveria realizar no mês. Mesma régua do Dashboard da Coordenação.
+
+export interface MetaProfRow {
+  data_inicio: string | null
+  grupo_id: string | null
+}
+
+export function useDashboardGeralMetaProfessores() {
+  return useQuery({
+    queryKey: ['dashboard-geral', 'meta-professores'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('professores')
+        .select('data_inicio, grupo_id')
+        .eq('status', 'ativo')
+      if (error) throw error
+      return (data ?? []) as MetaProfRow[]
+    },
+  })
+}
+
+export interface MetaReunioes {
+  meta: number
+  admissoesMes: number
+  profs2a3: number
+  profs4: number
+}
+
+/**
+ * Quantas reuniões a coordenação deve realizar no mês vigente para um conjunto de
+ * professores ativos, pela régua de tempo de casa (idêntica ao Dashboard da Coordenação):
+ *   admissões do mês (1x cada) + professores de 2–3 meses (1x cada) + 33,3% dos +4 meses.
+ */
+export function metaReunioesMensal(profs: { data_inicio: string | null }[]): MetaReunioes {
+  const now = new Date()
+  const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  let admissoesMes = 0, profs2a3 = 0, profs4 = 0
+  for (const p of profs) {
+    if (p.data_inicio && new Date(p.data_inicio).getTime() >= startMonth) admissoesMes++
+    const t = mesesDeCasa(p.data_inicio)
+    if (t !== null && t >= 2 && t <= 3) profs2a3++
+    if (t !== null && t > 4) profs4++
+  }
+  const meta = admissoesMes + profs2a3 + Math.round(0.333 * profs4)
+  return { meta, admissoesMes, profs2a3, profs4 }
 }
 
 // ─── Agrupamento por período (semana / mês / trimestre / ano) ────────────────
