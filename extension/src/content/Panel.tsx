@@ -4,19 +4,25 @@ import { GrupoParticipantes } from './GrupoParticipantes'
 import type { MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada, AvaliacaoAlunos, SugestaoProfessor } from '../shared/types'
 
 const C = {
-  brand:     '#D1333A',
-  ink:       '#131316',
-  inkMuted:  '#818290',
-  border:    '#E5E5EA',
-  bg:        '#FFFFFF',
-  bgSubtle:  '#F4F5F8',
-  green:     '#1A9C5F',
-  greenSoft: '#E4F7EE',
-  amber:     '#B4690E',
-  amberSoft: '#FBEEDC',
-  red:       '#C0272D',
-  redSoft:   '#FBE7E7',
+  brand:      '#D1333A',
+  brandStrong:'#B02128',
+  brandSoft:  '#FCEBEC',
+  ink:        '#0F172A',  // slate-900 (nunca preto puro)
+  inkSoft:    '#334155',  // slate-700
+  inkMuted:   '#64748B',  // slate-500
+  inkSubtle:  '#94A3B8',  // slate-400
+  border:     '#E2E8F0',  // slate-200
+  borderSoft: '#EEF1F5',
+  bg:         '#FFFFFF',
+  bgSubtle:   '#F1F5F9',  // slate-100
+  bgCanvas:   '#F5F7FA',  // fundo do corpo (cards brancos flutuam sobre ele)
+  green:      '#15803D', greenSoft: '#DCFCE7',
+  amber:      '#B45309', amberSoft: '#FEF3C7',
+  red:        '#B91C1C', redSoft:   '#FEE2E2',
+  blue:       '#1D4ED8', blueSoft:  '#E6EDFB',
 }
+const SHADOW    = '0 12px 32px -14px rgba(15,23,42,0.35)'
+const SHADOW_SM = '0 1px 2px rgba(15,23,42,0.05), 0 1px 3px rgba(15,23,42,0.05)'
 
 const TIPO_LABEL: Record<string, string> = {
   reuniao:           'Reunião',
@@ -315,9 +321,11 @@ export function Panel() {
   return (
     <div style={painel}>
       <div style={cabecalho}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <LogoK />
-          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: C.ink }}>KING TEACHERTRACK</span>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: C.ink }}>
+            KING<span style={{ color: C.inkMuted, fontWeight: 600 }}> TEACHERTRACK</span>
+          </span>
         </div>
         <button onClick={() => setColapsado(true)} style={botaoFechar} aria-label="Minimizar">—</button>
       </div>
@@ -329,10 +337,21 @@ export function Panel() {
           </p>
         ) : resultado ? (
           <div>
-            <p style={{ fontSize: 14, fontWeight: 600, color: C.ink, margin: '0 0 1px' }}>{resultado.professor.nome}</p>
-            {resultado.professor.email && (
-              <p style={{ fontSize: 11, color: C.inkMuted, margin: '0 0 8px' }}>{resultado.professor.email}</p>
-            )}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: '0 0 1px', letterSpacing: '-0.01em' }}>{resultado.professor.nome}</p>
+                {resultado.professor.email && (
+                  <p style={{ fontSize: 11, color: C.inkMuted, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resultado.professor.email}</p>
+                )}
+              </div>
+              {resultado.confianca != null && (
+                <span style={{ flexShrink: 0 }} title="Confiança do reconhecimento automático pelo nome">
+                  <Chip tom={resultado.confianca >= 0.8 ? 'verde' : resultado.confianca >= 0.6 ? 'azul' : 'amarelo'}>
+                    {Math.round(resultado.confianca * 100)}% match
+                  </Chip>
+                </span>
+              )}
+            </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
               {resultado.mesAnalise && <Chip tom="vermelho">Em Mês de Análise</Chip>}
@@ -696,14 +715,18 @@ export function Panel() {
               />
               <button type="submit" style={botaoPrimario}>Buscar</button>
             </form>
+            <p style={{ fontSize: 10.5, color: C.inkSubtle, margin: '7px 0 0' }}>Busca só entre professores ativos.</p>
 
             {sugestoes.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <span style={rotulo}>É algum destes?</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ marginTop: 14 }}>
+                <p style={rotulo}>Correspondências mais próximas</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {sugestoes.map(s => (
                     <button key={s.id} onClick={() => carregarProfessor(s.id)} style={botaoSugestao}>
-                      {s.nome}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome}</span>
+                      <Chip tom={s.score >= 0.8 ? 'verde' : s.score >= 0.6 ? 'azul' : 'neutro'}>
+                        {Math.round(s.score * 100)}%
+                      </Chip>
                     </button>
                   ))}
                 </div>
@@ -716,19 +739,21 @@ export function Panel() {
   )
 }
 
-const CHIP_CORES: Record<string, { bg: string; fg: string }> = {
-  neutro:   { bg: C.bgSubtle,  fg: C.inkMuted },
-  verde:    { bg: C.greenSoft, fg: C.green },
-  amarelo:  { bg: C.amberSoft, fg: C.amber },
-  vermelho: { bg: C.redSoft,   fg: C.red },
+const CHIP_CORES: Record<string, { bg: string; fg: string; bd: string }> = {
+  neutro:   { bg: C.bgSubtle,  fg: C.inkSoft, bd: C.border },
+  verde:    { bg: C.greenSoft, fg: C.green,   bd: 'transparent' },
+  amarelo:  { bg: C.amberSoft, fg: C.amber,   bd: 'transparent' },
+  vermelho: { bg: C.redSoft,   fg: C.red,     bd: 'transparent' },
+  azul:     { bg: C.blueSoft,  fg: C.blue,    bd: 'transparent' },
 }
 
-function Chip({ children, tom = 'neutro' }: { children: React.ReactNode; tom?: 'neutro' | 'verde' | 'amarelo' | 'vermelho' }) {
+function Chip({ children, tom = 'neutro' }: { children: React.ReactNode; tom?: 'neutro' | 'verde' | 'amarelo' | 'vermelho' | 'azul' }) {
   const cores = CHIP_CORES[tom] ?? CHIP_CORES.neutro
   return (
     <span style={{
-      fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 999,
-      background: cores.bg, color: cores.fg,
+      fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+      background: cores.bg, color: cores.fg, border: `1px solid ${cores.bd}`,
+      whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
     }}>
       {children}
     </span>
@@ -789,77 +814,78 @@ function LogoK() {
 
 // Canto superior esquerdo, logo abaixo da barra do Meet com hora e nome da reunião.
 const painel: React.CSSProperties = {
-  position: 'fixed', top: 72, left: 16, width: 320, maxHeight: 'calc(100vh - 92px)', zIndex: 2147483647,
-  background: C.bg, borderRadius: 14, border: `1px solid ${C.border}`,
-  boxShadow: '0 12px 32px -8px rgba(0,0,0,0.25)',
-  fontFamily: 'system-ui, -apple-system, sans-serif',
-  display: 'flex', flexDirection: 'column',
+  position: 'fixed', top: 68, left: 16, width: 344, maxHeight: 'calc(100vh - 88px)', zIndex: 2147483647,
+  background: C.bg, borderRadius: 16, border: `1px solid ${C.border}`,
+  boxShadow: SHADOW, color: C.ink,
+  fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  display: 'flex', flexDirection: 'column', overflow: 'hidden',
 }
 
 const corpoRolavel: React.CSSProperties = {
-  padding: 14, overflowY: 'auto',
+  padding: 14, overflowY: 'auto', background: C.bgCanvas,
 }
 
 const secaoBox: React.CSSProperties = {
-  background: C.bgSubtle, borderRadius: 10, padding: '10px 11px', marginBottom: 12,
+  background: C.bg, borderRadius: 12, padding: '11px 12px', marginBottom: 10,
+  border: `1px solid ${C.border}`, boxShadow: SHADOW_SM,
 }
 
 const rotulo: React.CSSProperties = {
-  fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-  color: C.inkMuted, margin: '0 0 6px',
+  fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+  color: C.inkSubtle, margin: '0 0 8px',
 }
 
 const cabecalho: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  padding: '10px 12px', borderBottom: `1px solid ${C.border}`,
+  padding: '11px 13px', borderBottom: `1px solid ${C.border}`, background: C.bg,
 }
 
 const botaoFechar: React.CSSProperties = {
-  border: 'none', background: 'transparent', color: C.inkMuted, fontSize: 14,
-  cursor: 'pointer', lineHeight: 1, padding: 4,
+  border: 'none', background: 'transparent', color: C.inkSubtle, fontSize: 16,
+  cursor: 'pointer', lineHeight: 1, padding: 4, borderRadius: 6,
 }
 
 const botaoFlutuante: React.CSSProperties = {
-  position: 'fixed', top: 72, left: 16, zIndex: 2147483647,
-  width: 36, height: 36, borderRadius: '50%', border: `1px solid ${C.border}`,
-  background: C.bg, boxShadow: '0 6px 16px -4px rgba(0,0,0,0.25)',
+  position: 'fixed', top: 68, left: 16, zIndex: 2147483647,
+  width: 40, height: 40, borderRadius: 12, border: `1px solid ${C.border}`,
+  background: C.bg, boxShadow: SHADOW,
   display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
 }
 
 const input: React.CSSProperties = {
-  flex: 1, minWidth: 0, padding: '7px 9px', fontSize: 12,
-  border: `1px solid ${C.border}`, borderRadius: 8, outline: 'none',
+  flex: 1, minWidth: 0, padding: '8px 10px', fontSize: 12.5, color: C.ink,
+  border: `1px solid ${C.border}`, borderRadius: 9, outline: 'none', background: C.bg,
 }
 
 const botaoPrimario: React.CSSProperties = {
-  padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#fff',
-  background: C.ink, border: 'none', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+  padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: '#fff',
+  background: C.ink, border: 'none', borderRadius: 9, cursor: 'pointer', flexShrink: 0,
 }
 
 const botaoSucesso: React.CSSProperties = {
-  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, color: '#fff',
-  background: C.green, border: 'none', borderRadius: 8, cursor: 'pointer',
+  flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 600, color: '#fff',
+  background: C.green, border: 'none', borderRadius: 9, cursor: 'pointer',
 }
 
 const botaoSecundario: React.CSSProperties = {
-  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, color: C.inkMuted,
-  background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer',
+  flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 600, color: C.inkSoft,
+  background: C.bg, border: `1px solid ${C.border}`, borderRadius: 9, cursor: 'pointer',
 }
 
 const textarea: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box', minHeight: 56, padding: '7px 9px', fontSize: 12,
-  border: `1px solid ${C.border}`, borderRadius: 8, outline: 'none', resize: 'vertical',
-  fontFamily: 'inherit',
+  width: '100%', boxSizing: 'border-box', minHeight: 58, padding: '8px 10px', fontSize: 12.5, color: C.ink,
+  border: `1px solid ${C.border}`, borderRadius: 9, outline: 'none', resize: 'vertical',
+  fontFamily: 'inherit', background: C.bg,
 }
 
 const botaoTexto: React.CSSProperties = {
-  border: 'none', background: 'transparent', color: C.inkMuted, fontSize: 11.5,
-  textDecoration: 'underline', cursor: 'pointer', padding: 0,
+  border: 'none', background: 'transparent', color: C.inkSoft, fontSize: 11.5, fontWeight: 600,
+  cursor: 'pointer', padding: 0,
 }
 
 const chipSel: React.CSSProperties = {
-  padding: '3px 9px', fontSize: 11, fontWeight: 500, color: C.inkMuted,
-  background: '#fff', border: `1px solid ${C.border}`, borderRadius: 999, cursor: 'pointer',
+  padding: '4px 10px', fontSize: 11, fontWeight: 600, color: C.inkMuted,
+  background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer',
 }
 
 const chipSelAtivo: React.CSSProperties = {
@@ -867,11 +893,13 @@ const chipSelAtivo: React.CSSProperties = {
 }
 
 const selectEstilo: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: 12,
-  border: `1px solid ${C.border}`, borderRadius: 8, outline: 'none', background: '#fff', fontFamily: 'inherit',
+  width: '100%', boxSizing: 'border-box', padding: '8px 10px', fontSize: 12.5, color: C.ink,
+  border: `1px solid ${C.border}`, borderRadius: 9, outline: 'none', background: C.bg, fontFamily: 'inherit',
 }
 
 const botaoSugestao: React.CSSProperties = {
-  textAlign: 'left', padding: '8px 10px', fontSize: 12.5, fontWeight: 500, color: C.ink,
-  background: C.bgSubtle, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%',
+  textAlign: 'left', padding: '9px 11px', fontSize: 12.5, fontWeight: 600, color: C.ink,
+  background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer',
+  boxShadow: SHADOW_SM,
 }

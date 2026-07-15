@@ -119,6 +119,8 @@ export interface ProfessorEncontrado {
   nexus: NexusResumo
   mesAnalise: MesAnaliseResumo | null
   motivo: 'email' | 'nome'
+  /** Confiança do match automático por nome (0..1). null quando identificado por e-mail ou escolhido à mão. */
+  confianca: number | null
 }
 
 export interface SessaoArmazenada {
@@ -128,7 +130,7 @@ export interface SessaoArmazenada {
 
 // ─── Mensagens entre content script / popup e background ─────────────────────
 
-export type SugestaoProfessor = { id: string; nome: string }
+export type SugestaoProfessor = { id: string; nome: string; score: number }
 
 export type MensagemParaBackground =
   | { tipo: 'BUSCAR_PROFESSOR'; nomes: string[]; emails: string[] }
