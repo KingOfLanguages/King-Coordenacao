@@ -99,8 +99,8 @@ export function AppLayout() {
     ],
   }
 
-  // Dashboard: só coordenação, líder e admin (suporte não vê).
-  const dashboardEntry: NavEntry = (isAdmin || isLider)
+  // Dashboard: coordenação, líder e admin veem o Geral também (suporte não vê nada).
+  const dashboardEntry: NavEntry = (isCoord || isLider)
     ? { type: 'group', label: 'Dashboard', items: [
         { to: '/dashboard', label: 'Dashboard', exact: true },
         { to: '/dashboard/geral', label: 'Dashboard Geral' },

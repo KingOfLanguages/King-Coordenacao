@@ -87,7 +87,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/dashboard/geral" element={
-                <ProtectedRoute admin lider>
+                <ProtectedRoute roles={['coordenacao']} admin lider>
                   <DashboardGeralPage />
                 </ProtectedRoute>
               } />
