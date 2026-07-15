@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   ShieldCheck, Users, Save, Shuffle, AlertTriangle, Info, Check,
-  Zap, ZapOff, Loader2, CalendarClock,
+  Zap, ZapOff, Loader2, CalendarClock, Lock, RotateCcw,
 } from 'lucide-react'
+import {
+  usePagePermissionOverrides, useSalvarPermissaoPagina, useRestaurarPermissaoPagina,
+} from '@/hooks/usePagePermissions'
+import {
+  PAGES, PAGE_BY_KEY, PERM_SUBJECTS, type PermSubject,
+} from '@/lib/pagePermissions'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -53,6 +59,9 @@ export function ConfiguracoesPage() {
 
       {/* ── Importação automática do Google Calendar ──────────────────────── */}
       <GoogleAutomationCard />
+
+      {/* ── Controle de acesso às páginas ─────────────────────────────────── */}
+      <ControleAcessoCard />
 
       {/* ── Grupos de coordenação ─────────────────────────────────────────── */}
       <section className="space-y-3">
@@ -195,6 +204,196 @@ function GoogleAutomationCard() {
           )}
         </div>
       )}
+    </section>
+  )
+}
+
+// ─── Controle de acesso às páginas ──────────────────────────────────────────
+
+function mesmoConjunto(a: PermSubject[], b: PermSubject[]): boolean {
+  if (a.length !== b.length) return false
+  const sb = new Set(b)
+  return a.every(x => sb.has(x))
+}
+
+// Seções na ordem em que aparecem no registry (agrupa itens consecutivos).
+function paginasPorSecao() {
+  const secoes: { label: string; keys: string[] }[] = []
+  for (const p of PAGES) {
+    const label = p.section || 'Outras páginas'
+    let sec = secoes.find(s => s.label === label)
+    if (!sec) { sec = { label, keys: [] }; secoes.push(sec) }
+    sec.keys.push(p.key)
+  }
+  return secoes
+}
+
+function ControleAcessoCard() {
+  const { data: overrides = {}, isLoading, isError } = usePagePermissionOverrides()
+  const salvar    = useSalvarPermissaoPagina()
+  const restaurar = useRestaurarPermissaoPagina()
+  const [draft, setDraft] = useState<Record<string, PermSubject[]>>({})
+
+  const secoes = useMemo(() => paginasPorSecao(), [])
+
+  const efetivo   = (key: string): PermSubject[] => overrides[key] ?? PAGE_BY_KEY[key].defaultRoles
+  const atual     = (key: string): PermSubject[] => draft[key] ?? efetivo(key)
+  const temOverride = (key: string) => overrides[key] != null
+
+  function toggle(key: string, subj: PermSubject) {
+    const cur = atual(key)
+    const next = cur.includes(subj) ? cur.filter(s => s !== subj) : [...cur, subj]
+    setDraft(d => ({ ...d, [key]: next }))
+  }
+
+  const dirtyKeys = Object.keys(draft).filter(k => !mesmoConjunto(draft[k], efetivo(k)))
+  const salvando = salvar.isPending || restaurar.isPending
+
+  async function salvarTudo() {
+    try {
+      for (const k of dirtyKeys) {
+        await salvar.mutateAsync({ pageKey: k, roles: draft[k] })
+      }
+      setDraft({})
+      toast.success('Acessos atualizados.')
+    } catch {
+      toast.error('Erro ao salvar os acessos. A migração da tabela já foi aplicada?')
+    }
+  }
+
+  async function restaurarPadrao(key: string) {
+    try {
+      await restaurar.mutateAsync(key)
+      setDraft(d => { const n = { ...d }; delete n[key]; return n })
+    } catch {
+      toast.error('Erro ao restaurar o padrão.')
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4 text-ink-secondary" />
+        <h2 className="text-[15px] font-semibold text-ink">Controle de acesso às páginas</h2>
+      </div>
+
+      <div className="card-surface overflow-hidden">
+        <div className="flex items-start gap-3 px-5 py-3.5 border-b border-line-soft bg-surface-subtle/50">
+          <Info className="h-4 w-4 text-accentBlue flex-shrink-0 mt-0.5" />
+          <p className="text-[12px] text-ink-secondary leading-relaxed">
+            Escolha quais cargos enxergam cada página (no menu e ao acessar a rota).
+            <span className="font-medium text-ink"> Admin sempre tem acesso a tudo.</span> Isto controla a
+            visibilidade na interface — a proteção dos dados continua nas regras do banco.
+          </p>
+        </div>
+
+        {isLoading ? (
+          <div className="p-8 text-center text-[13px] text-ink-muted">Carregando…</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px] min-w-[560px]">
+              <thead>
+                <tr className="border-b border-line-soft text-[11px] text-ink-muted uppercase tracking-wide">
+                  <th className="px-5 py-2.5 text-left font-medium">Página</th>
+                  {PERM_SUBJECTS.map(s => (
+                    <th key={s.key} className="px-2 py-2.5 text-center font-medium whitespace-nowrap">{s.label}</th>
+                  ))}
+                  <th className="px-2 py-2.5 text-center font-medium">Admin</th>
+                  <th className="px-3 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {secoes.map(sec => (
+                  <Fragment key={sec.label}>
+                    <tr className="bg-surface-subtle/40">
+                      <td colSpan={PERM_SUBJECTS.length + 3} className="px-5 py-1.5 label-micro">{sec.label}</td>
+                    </tr>
+                    {sec.keys.map(key => {
+                      const page = PAGE_BY_KEY[key]
+                      const cur = atual(key)
+                      const override = temOverride(key)
+                      return (
+                        <tr key={key} className="border-b border-line-soft last:border-0 hover:bg-surface-subtle/40">
+                          <td className="px-5 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-ink">{page.label}</span>
+                              {override && (
+                                <span className="inline-flex items-center rounded-full bg-urg-medBg text-urg-medFg px-1.5 py-0.5 text-[10px] font-medium">
+                                  personalizado
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-ink-subtle">{page.path}</span>
+                          </td>
+                          {PERM_SUBJECTS.map(s => {
+                            const on = cur.includes(s.key)
+                            return (
+                              <td key={s.key} className="px-2 py-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => toggle(key, s.key)}
+                                  aria-pressed={on}
+                                  aria-label={`${on ? 'Remover' : 'Dar'} acesso de ${s.label} a ${page.label}`}
+                                  className={cn(
+                                    'btn-press inline-flex h-5 w-5 items-center justify-center rounded-md border transition-colors',
+                                    on
+                                      ? 'bg-brand border-brand text-white'
+                                      : 'bg-surface-canvas border-line text-transparent hover:border-ink-muted',
+                                  )}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            )
+                          })}
+                          <td className="px-2 py-2.5 text-center">
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-surface-muted text-ink-muted" title="Admin sempre tem acesso">
+                              <Lock className="h-3 w-3" />
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            {override && (
+                              <button
+                                type="button"
+                                onClick={() => restaurarPadrao(key)}
+                                disabled={salvando}
+                                className="btn-press inline-flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink"
+                                title="Voltar ao acesso padrão"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                Padrão
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-line-soft bg-surface-subtle/30">
+          <span className="text-[12px] text-ink-muted">
+            {isError
+              ? 'Tabela de permissões ainda não aplicada — usando os acessos padrão.'
+              : dirtyKeys.length > 0
+                ? `${dirtyKeys.length} página(s) com alterações não salvas.`
+                : 'Nenhuma alteração pendente.'}
+          </span>
+          <Button
+            size="sm"
+            onClick={salvarTudo}
+            disabled={dirtyKeys.length === 0 || salvando}
+            className="btn-press h-8 text-[12px] gap-1.5 bg-brand text-white hover:bg-brand-strong"
+          >
+            {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Salvar alterações
+          </Button>
+        </div>
+      </div>
     </section>
   )
 }

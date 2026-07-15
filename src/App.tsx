@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'sonner'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { useCanView } from '@/hooks/usePagePermissions'
+import { PAGES, PAGE_BY_KEY } from '@/lib/pagePermissions'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Login } from '@/pages/Login'
@@ -43,14 +45,28 @@ const queryClient = new QueryClient({
   },
 })
 
-// Home: coordenação/líder/admin vão pro Dashboard; suporte vai pra Professores
-// (o suporte não tem acesso ao Dashboard).
+// Home: manda o usuário pra primeira página que ele pode ver, segundo o controle
+// de acesso configurável. Prioriza Dashboard, depois Professores, depois o resto —
+// assim ninguém cai numa rota bloqueada (o que causaria loop de redirect).
+const LANDING_PRIORITY = ['dashboard', 'professores', 'suporte-reunioes', 'tarefas']
+
 function IndexRedirect() {
   const { profile, loading } = useAuth()
-  if (loading) return null
+  const { canView, isLoading: permsLoading } = useCanView()
+  if (loading || permsLoading) return null
   if (!profile) return <Navigate to="/login" replace />
-  const podeDashboard = profile.role === 'coordenacao' || profile.is_admin || profile.role === 'admin' || profile.is_lider
-  return <Navigate to={podeDashboard ? '/dashboard' : '/professores'} replace />
+
+  const ordem = [...LANDING_PRIORITY, ...PAGES.map(p => p.key)]
+  for (const key of ordem) {
+    if (canView(key)) return <Navigate to={PAGE_BY_KEY[key].path} replace />
+  }
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center px-6 text-center">
+      <p className="text-[13px] text-ink-muted">
+        Você ainda não tem acesso a nenhuma página. Fale com um administrador.
+      </p>
+    </div>
+  )
 }
 
 // Quem já tem sessão não deveria ver o formulário de login/cadastro de novo.
@@ -82,78 +98,78 @@ export default function App() {
               <Route path="/" element={<IndexRedirect />} />
 
               <Route path="/dashboard" element={
-                <ProtectedRoute roles={['coordenacao']} admin lider>
+                <ProtectedRoute page="dashboard">
                   <DashboardCoordPage />
                 </ProtectedRoute>
               } />
               <Route path="/dashboard/geral" element={
-                <ProtectedRoute roles={['coordenacao']} admin lider>
+                <ProtectedRoute page="dashboard-geral">
                   <DashboardGeralPage />
                 </ProtectedRoute>
               } />
 
               <Route path="/professores" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="professores">
                   <ProfessoresPage />
                 </ProtectedRoute>
               } />
               <Route path="/professores/:id" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="professores">
                   <ProfessorDetalhePage />
                 </ProtectedRoute>
               } />
               <Route path="/observacoes/:id" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="professores">
                   <ObservacaoDetalhePage />
                 </ProtectedRoute>
               } />
               <Route path="/reunioes-dia" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute page="reunioes-dia">
                   <ReunioesDiaPage />
                 </ProtectedRoute>
               } />
               <Route path="/acompanhamento" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="acompanhamento">
                   <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
               <Route path="/silencio" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="silencio">
                   <SilencioPage />
                 </ProtectedRoute>
               } />
               <Route path="/mes-analise" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="mes-analise">
                   <MesAnalisePage />
                 </ProtectedRoute>
               } />
               <Route path="/incidentes" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="incidentes">
                   <IncidentesPage />
                 </ProtectedRoute>
               } />
               <Route path="/alunos" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="alunos">
                   <AlunosPage />
                 </ProtectedRoute>
               } />
               <Route path="/onboarding" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte']} admin>
+                <ProtectedRoute page="onboarding">
                   <OnboardingPage />
                 </ProtectedRoute>
               } />
               <Route path="/retorno-pausa" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte', 'suporte_aluno']} admin>
+                <ProtectedRoute page="retorno-pausa">
                   <RetornoPausaPage />
                 </ProtectedRoute>
               } />
               <Route path="/suporte/reunioes" element={
-                <ProtectedRoute roles={['suporte']} admin>
+                <ProtectedRoute page="suporte-reunioes">
                   <SuporteReunioesPage />
                 </ProtectedRoute>
               } />
               <Route path="/tarefas" element={
-                <ProtectedRoute roles={['coordenacao', 'suporte']} admin>
+                <ProtectedRoute page="tarefas">
                   <TarefasPage />
                 </ProtectedRoute>
               } />
@@ -174,7 +190,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/admin/agendas" element={
-                <ProtectedRoute roles={['coordenacao']} admin>
+                <ProtectedRoute page="agendas">
                   <AgendasPage />
                 </ProtectedRoute>
               } />
