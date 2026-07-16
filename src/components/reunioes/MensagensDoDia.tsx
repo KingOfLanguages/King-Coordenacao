@@ -9,9 +9,9 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 
 // ─── Mensagens do dia (meta: 20 contatos/dia por coordenador) ────────────────
-// Lista diária de professores a contatar pelo coordenador. Mora na tela
-// Reuniões do dia: cada linha tem a mensagem pronta (assinada pelo coordenador),
-// o link pro perfil e o checklist de "enviada".
+// Guia lateral simples na tela Reuniões do dia: lista diária de professores a
+// contatar, com a mensagem pronta (assinada pelo coordenador, link do portal
+// /agendar) e o checklist de "enviada".
 
 export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null; coordNome: string }) {
   const { data: contatos = [], isLoading } = useContatosHoje(coordId)
@@ -19,8 +19,7 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
   const navigate = useNavigate()
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
 
-  // Link enviado ao professor para agendar: o portal público da King (/agendar),
-  // não um link pessoal do coordenador.
+  // Link enviado ao professor para agendar: o portal público da King (/agendar).
   const linkAgendamento = linkAgendamentoPublico()
 
   const enviados = contatos.filter(c => c.enviado).length
@@ -52,23 +51,19 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
   }
 
   return (
-    <section className="card-surface p-5 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="h-4 w-4 text-ink-secondary" />
-          <h2 className="text-[15px] font-semibold text-ink">Mensagens do dia</h2>
+    <aside className="card-surface p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <MessageCircle className="h-4 w-4 text-ink-secondary flex-shrink-0" />
+          <h2 className="text-[14px] font-semibold text-ink truncate">Mensagens do dia</h2>
         </div>
-        <span className="text-[13px] tabular-nums">
+        <span className="text-[12px] tabular-nums flex-shrink-0">
           <span className={cn('font-semibold', completo ? 'text-urg-lowFg' : 'text-ink')}>{enviados}</span>
-          <span className="text-ink-muted"> / {total || 20}</span>
+          <span className="text-ink-muted">/{total || 20}</span>
         </span>
       </div>
 
-      <p className="text-[11.5px] text-ink-muted leading-snug">
-        Mensagem pronta para cada professor, assinada pelo coordenador. Meta de 20 contatos por dia.
-      </p>
-
-      <div className="h-2 rounded-full bg-surface-muted overflow-hidden">
+      <div className="h-1.5 rounded-full bg-surface-muted overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${pct}%`, background: completo ? 'var(--urg-low-fg)' : 'var(--accent-blue)' }}
@@ -77,62 +72,65 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
 
       {isLoading ? (
         <div className="space-y-2">
-          {[1, 2, 3].map(i => <div key={i} className="h-9 rounded bg-surface-subtle animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-12 rounded-lg bg-surface-subtle animate-pulse" />)}
         </div>
       ) : total === 0 ? (
-        <p className="text-[13px] text-ink-muted">
-          Nenhum professor ativo neste grupo para gerar a lista de hoje.
-        </p>
+        <p className="text-[12.5px] text-ink-muted py-2">Nenhum professor a contatar hoje.</p>
       ) : (
-        <ul className="divide-y divide-line-soft max-h-[360px] overflow-y-auto">
+        <ul className="space-y-0.5 max-h-[calc(100vh-14rem)] overflow-y-auto -mr-1 pr-1">
           {contatos.map(c => (
-            <li key={c.id} className="flex items-center justify-between gap-3 py-2">
-              <div className="min-w-0">
-                <p className={cn('text-[13px] truncate', c.enviado ? 'text-ink-muted line-through' : 'text-ink font-medium')}>
+            <li
+              key={c.id}
+              className={cn(
+                'rounded-lg px-2 py-2 space-y-1.5 transition-colors',
+                c.enviado ? 'opacity-60' : 'hover:bg-surface-subtle/50',
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className={cn(
+                  'text-[12.5px] truncate min-w-0',
+                  c.enviado ? 'text-ink-muted line-through' : 'text-ink font-medium',
+                )}>
                   {c.professor?.nome ?? 'Professor removido'}
                 </p>
-                {c.professor?.email && (
-                  <p className="text-[11px] text-ink-muted truncate">{c.professor.email}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
+                <button
                   onClick={() => navigate(`/professores/${c.professor_id}`)}
-                  className="btn-press h-7 w-7 p-0 border-line text-ink-secondary"
                   title="Ver perfil"
+                  className="btn-press flex-shrink-0 text-ink-subtle hover:text-ink"
                 >
-                  <User className="h-3 w-3" />
-                </Button>
+                  <User className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => copiarMensagem(c)}
-                  className="btn-press h-7 text-[11px] gap-1.5 border-line text-ink-secondary"
+                  className="btn-press h-7 text-[11px] gap-1.5 border-line text-ink-secondary flex-1"
                 >
                   {copiadoId === c.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  {copiadoId === c.id ? 'Copiado' : 'Copiar mensagem'}
+                  {copiadoId === c.id ? 'Copiado' : 'Copiar'}
                 </Button>
                 <Button
                   size="sm"
                   variant={c.enviado ? 'outline' : 'default'}
                   disabled={marcar.isPending}
                   onClick={() => toggle(c)}
+                  title={c.enviado ? 'Desfazer envio' : 'Marcar como enviada'}
                   className={cn(
-                    'btn-press h-7 text-[11px] gap-1.5',
+                    'btn-press h-7 w-7 p-0 flex-shrink-0',
                     c.enviado
                       ? 'border-line text-ink-secondary'
                       : 'bg-urg-lowFg text-white hover:opacity-90',
                   )}
                 >
-                  {c.enviado ? <><Undo2 className="h-3 w-3" />Desfazer</> : <><Check className="h-3 w-3" />Marcar enviada</>}
+                  {c.enviado ? <Undo2 className="h-3 w-3" /> : <Check className="h-3 w-3" />}
                 </Button>
               </div>
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </aside>
   )
 }

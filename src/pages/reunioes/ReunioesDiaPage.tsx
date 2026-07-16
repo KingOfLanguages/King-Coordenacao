@@ -282,18 +282,29 @@ export function ReunioesDiaPage() {
         <Toolbar />
       </div>
 
-      {podeVerContatos && podeVerMinhaLista && modo === 'dia' && veHoje && (
-        <MensagensDoDia coordId={coordId || null} coordNome={coordNome} />
-      )}
-
       {modo === 'dia' && (
-        <DiaView
-          dia={dataRef}
-          carregando={carregando}
-          lista={lista}
-          listaAgenda={listaAgenda}
-          dados={dados}
-        />
+        podeVerContatos && podeVerMinhaLista && veHoje ? (
+          <div className="grid gap-6 items-start lg:grid-cols-[minmax(0,1fr)_340px]">
+            <DiaView
+              dia={dataRef}
+              carregando={carregando}
+              lista={lista}
+              listaAgenda={listaAgenda}
+              dados={dados}
+            />
+            <div className="lg:sticky lg:top-20">
+              <MensagensDoDia coordId={coordId || null} coordNome={coordNome} />
+            </div>
+          </div>
+        ) : (
+          <DiaView
+            dia={dataRef}
+            carregando={carregando}
+            lista={lista}
+            listaAgenda={listaAgenda}
+            dados={dados}
+          />
+        )
       )}
 
       {modo === 'semana' && (
