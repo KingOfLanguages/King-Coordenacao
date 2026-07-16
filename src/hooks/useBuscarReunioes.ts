@@ -1,6 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
+type ReuniaoInfo = {
+  id: string
+  data: string
+  titulo: string | null
+  meet_link: string | null
+  status: string
+  // Coordenador que vai realizar a reunião (reunioes.coordenador_id), não o
+  // coordenador responsável pelo professor.
+  coordenador: { nome: string } | { nome: string }[] | null
+}
+
 export type ReuniaoBusca = {
   id: string
   status: 'pendente' | 'realizada' | 'cancelada'
@@ -10,24 +21,18 @@ export type ReuniaoBusca = {
   professor: {
     id: string
     nome: string
-    telefone: string | null
-    coordenador: { nome: string } | { nome: string }[] | null
   } | null
-  reuniao: {
-    id: string
-    data: string
-    titulo: string | null
-    meet_link: string | null
-    status: string
-  } | { id: string; data: string; titulo: string | null; meet_link: string | null; status: string }[] | null
+  reuniao: ReuniaoInfo | ReuniaoInfo[] | null
 }
 
 function um<T>(v: T | T[] | null): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : v
 }
 
+/** Nome do coordenador que vai conduzir a reunião (com quem ela foi agendada). */
 export function coordenadorNomeDe(r: ReuniaoBusca): string {
-  return um(r.professor?.coordenador ?? null)?.nome ?? '—'
+  const reuniao = um(r.reuniao)
+  return um(reuniao?.coordenador ?? null)?.nome ?? '—'
 }
 
 export function reuniaoDe(r: ReuniaoBusca) {
@@ -44,8 +49,8 @@ export function useBuscarReunioesPorProfessor(termo: string) {
         .from('reuniao_professores')
         .select(`
           id, status, numero, observacao, confirmado_em,
-          professor:professores!inner(id, nome, telefone, coordenador:profiles!coordenador_id(nome)),
-          reuniao:reunioes(id, data, titulo, meet_link, status)
+          professor:professores!inner(id, nome),
+          reuniao:reunioes(id, data, titulo, meet_link, status, coordenador:profiles!coordenador_id(nome))
         `)
         .ilike('professor.nome', `%${termo.trim()}%`)
         .order('created_at', { ascending: false })
@@ -68,8 +73,8 @@ export function useReunioesDoDia(diaISO: string) {
         .from('reuniao_professores')
         .select(`
           id, status, numero, observacao, confirmado_em,
-          professor:professores!inner(id, nome, telefone, coordenador:profiles!coordenador_id(nome)),
-          reuniao:reunioes!inner(id, data, titulo, meet_link, status)
+          professor:professores!inner(id, nome),
+          reuniao:reunioes!inner(id, data, titulo, meet_link, status, coordenador:profiles!coordenador_id(nome))
         `)
         .gte('reuniao.data', inicio)
         .lte('reuniao.data', fim)

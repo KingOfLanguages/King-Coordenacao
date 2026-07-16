@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck, CircleDot, Hand, Undo2, Pencil, Ticket, ScanSearch } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -90,8 +91,26 @@ export function IncidentesPage() {
   const [resolverAlvo, setResolverAlvo] = useState<Incidente | null>(null)
   const [editarAlvo, setEditarAlvo] = useState<Incidente | null>(null)
   const [excluirAlvo, setExcluirAlvo] = useState<Incidente | null>(null)
-  const [detalheAlvo, setDetalheAlvo] = useState<Incidente | null>(null)
+  const [detalheClick, setDetalheClick] = useState<Incidente | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [aba, setAba] = useState<Aba>('professor')
+
+  // Deep-link: /incidentes?incidente=<id> abre o detalhe daquele incidente.
+  // Derivado em render (sem setState em efeito): o alvo é o que o usuário clicou
+  // ou, na falta disso, o incidente apontado pela URL.
+  const detalheDeepLink = useMemo(() => {
+    const id = searchParams.get('incidente')
+    return id ? incidentes.find(i => i.id === id) ?? null : null
+  }, [searchParams, incidentes])
+  const detalheAlvo = detalheClick ?? detalheDeepLink
+
+  function fecharDetalhe() {
+    setDetalheClick(null)
+    if (searchParams.get('incidente')) {
+      searchParams.delete('incidente')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<string>('todas')
   const [status, setStatus] = useState<FiltroStatus>('ativos')
@@ -331,8 +350,8 @@ export function IncidentesPage() {
               key={i.id}
               role="button"
               tabIndex={0}
-              onClick={() => setDetalheAlvo(i)}
-              onKeyDown={e => { if (e.key === 'Enter') setDetalheAlvo(i) }}
+              onClick={() => setDetalheClick(i)}
+              onKeyDown={e => { if (e.key === 'Enter') setDetalheClick(i) }}
               className={cn(
                 'flex gap-2.5 rounded-lg border border-line bg-surface-canvas px-3 py-2.5 items-start transition-colors hover:bg-surface-subtle/40 cursor-pointer',
                 i.urgency === 'Crítico' && 'ring-1 ring-urg-critFg/30',
@@ -518,10 +537,10 @@ export function IncidentesPage() {
       />
       <IncidenteDetalheDialog
         open={!!detalheAlvo}
-        onOpenChange={o => !o && setDetalheAlvo(null)}
+        onOpenChange={o => !o && fecharDetalhe()}
         incidente={detalheAlvo}
         podeEditar={podeEditar}
-        onEditar={() => { const alvo = detalheAlvo; setDetalheAlvo(null); setEditarAlvo(alvo) }}
+        onEditar={() => { const alvo = detalheAlvo; fecharDetalhe(); setEditarAlvo(alvo) }}
       />
     </div>
     </TooltipProvider>

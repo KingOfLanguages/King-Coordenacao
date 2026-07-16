@@ -1,12 +1,15 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { GraduationCap, User2, CalendarClock, CheckCircle2, Pencil, Ticket } from 'lucide-react'
+import { GraduationCap, User2, CalendarClock, CheckCircle2, Pencil, Ticket, Copy, Check } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { urgenciaChip, tiStatusLabel } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { statusChamado, natureza as naturezaDe, abaDoIncidente, type Incidente } from '@/hooks/useIncidentes'
+import { buildMensagemIncidente } from '@/lib/incidenteMensagem'
 
 const STATUS_DETALHE: Record<string, { label: string; cls: string }> = {
   aberto:       { label: 'Em aberto',    cls: 'bg-urg-medBg text-urg-medFg' },
@@ -30,10 +33,23 @@ function dataFmt(iso: string): string {
 
 export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEditar, onEditar }: Props) {
   const navigate = useNavigate()
+  const [copiado, setCopiado] = useState(false)
   if (!incidente) return null
+  const inc = incidente
 
   const isInforme = naturezaDe(incidente) === 'informe'
   const isPlataforma = abaDoIncidente(incidente) === 'plataforma'
+
+  async function copiarMensagem() {
+    try {
+      await navigator.clipboard.writeText(buildMensagemIncidente(inc))
+      setCopiado(true)
+      toast.success('Incidente copiado como mensagem.')
+      setTimeout(() => setCopiado(false), 1800)
+    } catch {
+      toast.error('Não foi possível copiar.')
+    }
+  }
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -137,30 +153,38 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
             </div>
           )}
 
-          {(podeEditar || incidente.professor_id) && (
-            <div className="flex justify-end gap-2 pt-1">
-              {podeEditar && onEditar && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="btn-press h-8 text-[12px] border-line gap-1.5"
-                  onClick={onEditar}
-                >
-                  <Pencil className="h-3.5 w-3.5" />Editar
-                </Button>
-              )}
-              {incidente.professor_id && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="btn-press h-8 text-[12px] border-line"
-                  onClick={() => { onOpenChange(false); navigate(`/professores/${incidente.professor_id}`) }}
-                >
-                  Ver professor
-                </Button>
-              )}
-            </div>
-          )}
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="btn-press h-8 text-[12px] border-line gap-1.5"
+              onClick={copiarMensagem}
+              title="Copiar todo o incidente como mensagem para enviar a outra equipe"
+            >
+              {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiado ? 'Copiado' : 'Copiar mensagem'}
+            </Button>
+            {podeEditar && onEditar && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="btn-press h-8 text-[12px] border-line gap-1.5"
+                onClick={onEditar}
+              >
+                <Pencil className="h-3.5 w-3.5" />Editar
+              </Button>
+            )}
+            {incidente.professor_id && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="btn-press h-8 text-[12px] border-line"
+                onClick={() => { onOpenChange(false); navigate(`/professores/${incidente.professor_id}`) }}
+              >
+                Ver professor
+              </Button>
+            )}
+          </div>
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

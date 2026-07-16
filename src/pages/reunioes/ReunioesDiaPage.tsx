@@ -21,6 +21,7 @@ import {
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
+import { MensagensDoDia } from '@/components/reunioes/MensagensDoDia'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { scoreVisual } from '@/lib/score'
 import { toast } from 'sonner'
@@ -167,6 +168,17 @@ export function ReunioesDiaPage() {
   const [dataRef, setDataRef] = useState(() => new Date())
   const [eventoAberto, setEventoAberto] = useState<EventoGrade | null>(null)
   const coordId = canSeeAll ? (sel || coordenadores[0]?.id || '') : (profile?.id ?? '')
+  const coordNome = canSeeAll
+    ? (coordenadores.find(c => c.id === coordId)?.nome ?? '—')
+    : (profile?.nome ?? '—')
+
+  // "Mensagens do dia": lista de contatos diários do coordenador. A RPC/RLS só
+  // libera a própria lista (ou admin de verdade) — por isso só mostramos quando
+  // é a agenda do próprio usuário ou ele é admin, evitando erro pra líderes que
+  // navegam a agenda de outro coordenador.
+  const isRealAdmin = profile?.role === 'admin' || profile?.is_admin === true
+  const podeVerContatos = profile?.role === 'admin' || profile?.role === 'coordenacao'
+  const podeVerMinhaLista = coordId === profile?.id || isRealAdmin
 
   const intervalo = useMemo(() => computarIntervalo(modo, dataRef), [modo, dataRef])
 
@@ -269,6 +281,10 @@ export function ReunioesDiaPage() {
         <LegendaStatus />
         <Toolbar />
       </div>
+
+      {podeVerContatos && podeVerMinhaLista && modo === 'dia' && veHoje && (
+        <MensagensDoDia coordId={coordId || null} coordNome={coordNome} />
+      )}
 
       {modo === 'dia' && (
         <DiaView

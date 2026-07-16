@@ -21,6 +21,7 @@ import { useGrupos } from '@/hooks/useGrupos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { useAuth } from '@/contexts/AuthContext'
 import { MeusLinksAgendamentoCard } from '@/pages/admin/MeusLinksAgendamentoCard'
+import { linkAgendamentoPublico } from '@/lib/portal'
 import { cn } from '@/lib/utils'
 
 const NONE = 'none'
@@ -32,17 +33,6 @@ const DIAS_PLENO = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 
 
 function tituloAgenda(nomeCoordenador: string | null | undefined): string {
   return `Reunião em Grupo — Coord. ${nomeCoordenador?.trim() || '—'}`
-}
-
-/** Base pública do portal de agendamento.
- *  Fixada no domínio de produção (sobrescritível por VITE_PUBLIC_BASE_URL) pra que
- *  o link copiado nunca herde a URL onde o admin está navegando — evita compartilhar
- *  com os professores uma URL de preview da Vercel (protegida por login e congelada
- *  num build antigo). */
-const PORTAL_BASE_URL = import.meta.env.VITE_PUBLIC_BASE_URL || 'https://projeto-king-coord.vercel.app'
-
-function linkPublico(): string {
-  return `${PORTAL_BASE_URL}/agendar`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,7 +90,7 @@ export function AgendasPage() {
 
 function LinkPublicoCard() {
   const [copiado, setCopiado] = useState(false)
-  const link = linkPublico()
+  const link = linkAgendamentoPublico()
 
   async function copiar() {
     await navigator.clipboard.writeText(link)
