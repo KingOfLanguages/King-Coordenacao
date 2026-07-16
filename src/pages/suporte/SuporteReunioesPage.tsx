@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Search, Copy, Check, LifeBuoy, Clock, User2, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { Search, Copy, Check, LifeBuoy, Clock, User2, ChevronLeft, ChevronRight, CalendarDays, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { buildMensagemReuniaoDoDia, linkWhatsApp } from '@/lib/messageTemplates'
 import {
   useBuscarReunioesPorProfessor, useReunioesDoDia,
   coordenadorNomeDe, reuniaoDe, type ReuniaoBusca,
@@ -41,6 +42,13 @@ function labelDia(diaISO: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
 
+function horaDe(r: ReuniaoBusca): string | null {
+  const reuniao = reuniaoDe(r)
+  return reuniao?.data
+    ? new Date(reuniao.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : null
+}
+
 export function SuporteReunioesPage() {
   const [input, setInput]   = useState('')
   const [termo, setTermo]   = useState('')
@@ -57,8 +65,19 @@ export function SuporteReunioesPage() {
 
   const { data: resultados = [], isLoading, isFetching } = buscando ? busca : doDia
 
+  const ehHoje = labelDia(dia) === 'Hoje'
+  // Bloco lateral de mensagens: só na visão do dia (não na busca por nome) e
+  // quando há reuniões marcadas — as mensagens acompanham as reuniões do dia.
+  const mostrarBloco = !buscando && !isLoading && resultados.length > 0
+
+  const lista = (
+    <ul className={cn('space-y-2.5', isFetching && 'opacity-60')}>
+      {resultados.map(r => <ReuniaoRow key={r.id} r={r} mostrarData={buscando} />)}
+    </ul>
+  )
+
   return (
-    <div className="px-6 py-6 max-w-[900px] mx-auto space-y-6">
+    <div className="px-6 py-6 max-w-[1200px] mx-auto space-y-6">
       <header className="space-y-0.5">
         <div className="flex items-center gap-2">
           <LifeBuoy className="h-5 w-5 text-ink-secondary" />
@@ -115,10 +134,13 @@ export function SuporteReunioesPage() {
         <div className="card-surface p-10 text-center text-[13px] text-ink-muted">
           {buscando ? `Nenhuma reunião encontrada para "${termo}".` : 'Nenhuma reunião marcada para este dia.'}
         </div>
+      ) : mostrarBloco ? (
+        <div className="grid gap-5 lg:grid-cols-[1fr_360px] items-start">
+          {lista}
+          <MensagensDoDia reunioes={resultados} ehHoje={ehHoje} />
+        </div>
       ) : (
-        <ul className={cn('space-y-2.5', isFetching && 'opacity-60')}>
-          {resultados.map(r => <ReuniaoRow key={r.id} r={r} mostrarData={buscando} />)}
-        </ul>
+        lista
       )}
     </div>
   )
@@ -182,5 +204,88 @@ function ReuniaoRow({ r, mostrarData }: { r: ReuniaoBusca; mostrarData: boolean 
         {copiado ? 'Copiado' : link ? 'Copiar link' : 'Sem link'}
       </Button>
     </li>
+  )
+}
+
+// ─── Bloco lateral: mensagens de WhatsApp prontas para cada reunião do dia ──────
+
+function MensagensDoDia({ reunioes, ehHoje }: { reunioes: ReuniaoBusca[]; ehHoje: boolean }) {
+  return (
+    <aside className="lg:sticky lg:top-6 card-surface p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <MessageCircle className="h-4 w-4 text-ink-secondary" />
+        <h2 className="text-[14px] font-semibold text-ink">{ehHoje ? 'Mensagens de hoje' : 'Mensagens do dia'}</h2>
+        <span className="ml-auto text-[12px] text-ink-muted tabular-nums">{reunioes.length}</span>
+      </div>
+      <p className="text-[11.5px] text-ink-muted leading-snug">
+        Mensagem pronta para o WhatsApp de cada professor, assinada pelo coordenador da reunião.
+      </p>
+      <div className="space-y-2.5 max-h-[calc(100vh-220px)] overflow-y-auto -mr-1 pr-1">
+        {reunioes.map(r => <MensagemCard key={r.id} r={r} />)}
+      </div>
+    </aside>
+  )
+}
+
+function MensagemCard({ r }: { r: ReuniaoBusca }) {
+  const [copiado, setCopiado] = useState(false)
+
+  const coordNome = coordenadorNomeDe(r)
+  const reuniao = reuniaoDe(r)
+  const hora = horaDe(r)
+
+  const mensagem = buildMensagemReuniaoDoDia({
+    professorNome: r.professor?.nome ?? 'professor(a)',
+    coordenadorNome: coordNome,
+    hora,
+    numeroReuniao: r.numero,
+    meetLink: reuniao?.meet_link ?? null,
+  })
+  const waLink = linkWhatsApp(r.professor?.telefone ?? null, mensagem)
+
+  async function copiar() {
+    await navigator.clipboard.writeText(mensagem)
+    setCopiado(true)
+    toast.success('Mensagem copiada.')
+    setTimeout(() => setCopiado(false), 1800)
+  }
+
+  return (
+    <div className="rounded-xl border border-line-soft bg-surface-canvas p-3 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12.5px] font-medium text-ink truncate">{r.professor?.nome ?? 'Professor removido'}</p>
+        {hora && <span className="text-[11px] text-ink-muted tabular-nums flex-shrink-0">{hora}</span>}
+      </div>
+
+      <pre className="whitespace-pre-wrap break-words font-sans text-[11.5px] leading-relaxed text-ink-secondary bg-surface-subtle rounded-lg p-2.5 max-h-[150px] overflow-y-auto">
+        {mensagem}
+      </pre>
+
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={copiar}
+          className="btn-press h-7 text-[11px] gap-1.5 border-line text-ink-secondary flex-1"
+        >
+          {copiado ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copiado ? 'Copiado' : 'Copiar'}
+        </Button>
+        {waLink ? (
+          <Button
+            asChild
+            size="sm"
+            className="btn-press h-7 text-[11px] gap-1.5 text-white hover:opacity-90"
+            style={{ backgroundColor: '#25D366' }}
+          >
+            <a href={waLink} target="_blank" rel="noreferrer">
+              <MessageCircle className="h-3 w-3" />WhatsApp
+            </a>
+          </Button>
+        ) : (
+          <span className="text-[10.5px] text-ink-muted px-1.5">sem telefone</span>
+        )}
+      </div>
+    </div>
   )
 }

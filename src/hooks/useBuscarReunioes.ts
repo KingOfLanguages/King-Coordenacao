@@ -10,6 +10,7 @@ export type ReuniaoBusca = {
   professor: {
     id: string
     nome: string
+    telefone: string | null
     coordenador: { nome: string } | { nome: string }[] | null
   } | null
   reuniao: {
@@ -43,7 +44,7 @@ export function useBuscarReunioesPorProfessor(termo: string) {
         .from('reuniao_professores')
         .select(`
           id, status, numero, observacao, confirmado_em,
-          professor:professores!inner(id, nome, coordenador:profiles!coordenador_id(nome)),
+          professor:professores!inner(id, nome, telefone, coordenador:profiles!coordenador_id(nome)),
           reuniao:reunioes(id, data, titulo, meet_link, status)
         `)
         .ilike('professor.nome', `%${termo.trim()}%`)
@@ -67,7 +68,7 @@ export function useReunioesDoDia(diaISO: string) {
         .from('reuniao_professores')
         .select(`
           id, status, numero, observacao, confirmado_em,
-          professor:professores!inner(id, nome, coordenador:profiles!coordenador_id(nome)),
+          professor:professores!inner(id, nome, telefone, coordenador:profiles!coordenador_id(nome)),
           reuniao:reunioes!inner(id, data, titulo, meet_link, status)
         `)
         .gte('reuniao.data', inicio)
