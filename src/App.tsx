@@ -17,7 +17,6 @@ import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { RetornoPausaPage } from '@/pages/professores/RetornoPausaPage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
-import { SilencioPage } from '@/pages/silencio/SilencioPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
@@ -133,11 +132,8 @@ export default function App() {
                   <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
-              <Route path="/silencio" element={
-                <ProtectedRoute page="silencio">
-                  <SilencioPage />
-                </ProtectedRoute>
-              } />
+              {/* Controle de Pendências foi fundido em Acompanhamento — mantém o link antigo vivo. */}
+              <Route path="/silencio" element={<Navigate to="/acompanhamento" replace />} />
               <Route path="/mes-analise" element={
                 <ProtectedRoute page="mes-analise">
                   <MesAnalisePage />

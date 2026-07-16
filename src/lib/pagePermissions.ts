@@ -56,7 +56,6 @@ export const PAGES: PageDef[] = [
   { key: 'onboarding',      path: '/onboarding',     label: 'Onboarding',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
   { key: 'retorno-pausa',   path: '/retorno-pausa',  label: 'Retorno de Pausa',     section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'acompanhamento',  path: '/acompanhamento', label: 'Acompanhamento',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'silencio',        path: '/silencio',       label: 'Controle de Pendências', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'mes-analise',     path: '/mes-analise',    label: 'Mês de Análise',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'alunos',          path: '/alunos',         label: 'Reclamações por Aluno', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
