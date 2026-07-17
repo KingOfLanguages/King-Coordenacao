@@ -37,7 +37,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const SEMANAS_FUTURAS = 6
+const DIAS_JANELA_AGENDAMENTO = 7 // professor só vê/reserva ocorrências até 7 dias à frente
 const BR_OFFSET = '-03:00' // Brasil não observa horário de verão desde 2019.
 const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
 
@@ -59,11 +59,12 @@ function diasDeCasa(dataIso: string | null): number | null {
   return Math.round((agoraUTC - dUTC) / 86400000)
 }
 
-/** Próximas N datas (uma por semana) em que `diaSemana` (0=dom…6=sáb) cai, a partir de hoje, no horário `hora` (HH:MM:SS). */
-function proximasOcorrencias(diaSemana: number, hora: string, semanas: number): string[] {
+/** Ocorrências em que `diaSemana` (0=dom…6=sáb) cai no horário `hora` (HH:MM:SS),
+ *  de hoje até `dias` à frente. Numa janela de 7 dias há no máximo uma por regra. */
+function proximasOcorrencias(diaSemana: number, hora: string, dias: number): string[] {
   const hoje = new Date()
+  const limite = new Date(hoje.getTime() + dias * 86_400_000)
   const [hh, mm] = hora.split(':')
-  const datas: string[] = []
 
   // Encontra o primeiro dia (hoje ou futuro) que bate com diaSemana.
   const base = new Date(hoje)
@@ -71,13 +72,19 @@ function proximasOcorrencias(diaSemana: number, hora: string, semanas: number): 
   const delta = (diaSemana - base.getUTCDay() + 7) % 7
   base.setUTCDate(base.getUTCDate() + delta)
 
-  for (let i = 0; i < semanas; i++) {
+  const datas: string[] = []
+  // Duas iterações cobrem o caso de borda em que a 1ª ocorrência do dia já passou
+  // de hora e a próxima (semana seguinte) ainda cai dentro da janela.
+  for (let i = 0; i < 2; i++) {
     const d = new Date(base)
     d.setUTCDate(d.getUTCDate() + i * 7)
-    const dataStr = d.toISOString().slice(0, 10)
-    datas.push(`${dataStr}T${hh}:${mm}:00${BR_OFFSET}`)
+    const iso = `${d.toISOString().slice(0, 10)}T${hh}:${mm}:00${BR_OFFSET}`
+    const dt = new Date(iso)
+    if (dt <= hoje) continue
+    if (dt > limite) break
+    datas.push(iso)
   }
-  return datas.filter(iso => new Date(iso) > hoje)
+  return datas
 }
 
 serve(async (req) => {
@@ -178,6 +185,9 @@ serve(async (req) => {
   // ── 4. Monta a lista de horários (materializados + ocorrências virtuais) ────
   type HorarioSaida = { id: string; data_hora: string; capacidade: number; meet_link: string | null; vagas: number; ja_inscrito: boolean }
 
+  const agora = new Date()
+  const limiteAgendamento = new Date(agora.getTime() + DIAS_JANELA_AGENDAMENTO * 86_400_000)
+
   const resultado = agendasAutorizadas
     .map(a => {
       const horariosExistentes = (a.horarios as HorarioRow[]).filter(h => h.ativo)
@@ -187,7 +197,8 @@ serve(async (req) => {
 
       // 4a. Horários já materializados (avulsos antigos OU de uma recorrência, já com ≥1 reserva).
       for (const h of horariosExistentes) {
-        if (new Date(h.data_hora) <= new Date()) continue
+        if (new Date(h.data_hora) <= agora) continue
+        if (new Date(h.data_hora) > limiteAgendamento) continue // fora da janela de 7 dias
         const vagas = h.capacidade - (contagemPorHorario.get(h.id) ?? 0)
         const jaInscrito = inscritoPorHorario.has(h.id)
         if (vagas <= 0 && !jaInscrito) continue
@@ -212,7 +223,7 @@ serve(async (req) => {
 
       for (const r of recorrencias) {
         const jaMaterializadas = materializadosPorRecorrencia.get(r.id) ?? new Set()
-        for (const iso of proximasOcorrencias(r.dia_semana, r.hora, SEMANAS_FUTURAS)) {
+        for (const iso of proximasOcorrencias(r.dia_semana, r.hora, DIAS_JANELA_AGENDAMENTO)) {
           if (jaMaterializadas.has(new Date(iso).getTime())) continue // já coberto pelo passo 4a
           horarios.push({
             id: `v|${r.id}|${iso}`,

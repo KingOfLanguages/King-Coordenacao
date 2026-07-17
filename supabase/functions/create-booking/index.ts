@@ -9,12 +9,15 @@
 //   - um UUID real de uma linha já materializada em agenda_horarios, OU
 //   - um id virtual "v|<recorrencia_id>|<data_hora ISO>" (ver teacher-lookup),
 //     representando uma ocorrência futura de uma agenda recorrente que ainda
-//     não tem nenhuma reserva. Nesse caso, a linha em agenda_horarios e o
-//     link do Meet são criados aqui, na primeira reserva daquela semana.
+//     não tem nenhuma reserva. Nesse caso, a linha em agenda_horarios é criada
+//     aqui, na primeira reserva daquela semana, herdando o meet_link fixo da
+//     recorrência (informado manualmente pelo coordenador). O sistema NÃO gera
+//     link de Meet nem cria evento no Google — só o professor adiciona o evento
+//     ao próprio calendário (link TEMPLATE na tela/e-mail de confirmação).
+//   Só ocorrências dos próximos 7 dias são reserváveis (DIAS_JANELA_AGENDAMENTO).
 //
 // Secrets necessários (Supabase Dashboard > Edge Functions > Secrets):
 //   BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME   (mesmos de send-reminders)
-//   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             (já existentes — conta-hub)
 //
 // Aceita `email` (fluxo antigo) OU `professor_id` (novo Portal de
 // Agendamento, que identifica o professor só pelo nome — a maioria não tem
@@ -38,6 +41,23 @@ const CORS = {
 }
 
 const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
+const DIAS_JANELA_AGENDAMENTO = 7 // professor só reserva ocorrências até 7 dias à frente
+
+/** Link TEMPLATE do Google Calendar — abre o formulário "adicionar evento" no
+ *  calendário do PRÓPRIO professor (não cria evento em calendário de ninguém). */
+function googleCalendarUrl(titulo: string, dataHoraIso: string, meetLink: string | null): string {
+  const inicio = new Date(dataHoraIso)
+  const fim = new Date(inicio.getTime() + 60 * 60 * 1000)
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: titulo,
+    dates: `${fmt(inicio)}/${fmt(fim)}`,
+    details: meetLink ? `Link da reunião: ${meetLink}` : '',
+    location: meetLink ?? '',
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
 
 /** Dias completos desde data_inicio (meia-noite UTC). null se sem data / inválida. */
 function diasDeCasa(dataIso: string | null): number | null {
@@ -57,22 +77,29 @@ function json(body: unknown, status = 200) {
   })
 }
 
-function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome }: {
+function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome, calendarUrl }: {
   professorNome: string
   titulo:        string
   dataHoraFmt:   string
   meetLink:      string | null
   coordNome:     string
+  calendarUrl:   string
 }): string {
   const meetBtn = meetLink
-    ? `<div style="margin:24px 0;">
-        <a href="${meetLink}"
+    ? `<a href="${meetLink}"
           style="display:inline-block;background:#2563EB;color:#fff;padding:12px 24px;
                  border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
           Entrar na reunião
-        </a>
-      </div>`
+        </a>`
     : ''
+
+  const calendarBtn = `<a href="${calendarUrl}"
+          style="display:inline-block;background:#fff;color:#1e293b;padding:12px 24px;
+                 border:1px solid #cbd5e1;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
+          Adicionar ao calendário
+        </a>`
+
+  const acoesBtn = `<div style="margin:24px 0;line-height:2.4;">${meetBtn}${meetLink ? '&nbsp;&nbsp;' : ''}${calendarBtn}</div>`
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -111,7 +138,7 @@ function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome }: 
                 </td>
               </tr>
             </table>
-            ${meetBtn}
+            ${acoesBtn}
             <p style="margin:16px 0 0;font-size:13px;color:#475569;line-height:1.6;">
               Atenção: este link é exclusivo da reunião de <strong style="color:#1e293b;">${dataHoraFmt}</strong>.
               Cada data tem um link diferente — entre sempre pelo link desta confirmação.
@@ -133,65 +160,6 @@ function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome }: 
   </table>
 </body>
 </html>`
-}
-
-// Gera o Meet de uma ocorrência via Calendar API, usando o refresh_token da
-// conta-hub (mesmo já usado em daily-import). Lança erro com mensagem amigável
-// em caso de falha — chamado só na 1ª reserva da semana.
-async function gerarMeetLink(
-  admin: ReturnType<typeof createClient>,
-  titulo: string,
-  dataHoraIso: string,
-): Promise<string> {
-  const { data: tokenRow } = await admin
-    .from('google_tokens')
-    .select('refresh_token')
-    .limit(1)
-    .maybeSingle()
-  if (!tokenRow?.refresh_token) {
-    throw new Error('A integração com o Google Calendar não está configurada. Avise a coordenação.')
-  }
-
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id:     Deno.env.get('GOOGLE_CLIENT_ID')!,
-      client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
-      refresh_token: tokenRow.refresh_token,
-      grant_type:    'refresh_token',
-    }),
-  })
-  const tokenData = await tokenRes.json()
-  if (tokenData.error) {
-    console.error('[create-booking] Erro ao renovar token Google:', tokenData.error)
-    throw new Error('Não foi possível gerar o link da reunião agora. Tente novamente em instantes.')
-  }
-
-  const inicio = new Date(dataHoraIso)
-  const fim    = new Date(inicio.getTime() + 60 * 60 * 1000)
-
-  const eventRes = await fetch(
-    'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1',
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${tokenData.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        summary: titulo,
-        start: { dateTime: inicio.toISOString(), timeZone: 'America/Sao_Paulo' },
-        end:   { dateTime: fim.toISOString(),    timeZone: 'America/Sao_Paulo' },
-        conferenceData: {
-          createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } },
-        },
-      }),
-    },
-  )
-  const event = await eventRes.json()
-  if (!eventRes.ok || !event.hangoutLink) {
-    console.error('[create-booking] Erro ao criar evento Google:', JSON.stringify(event))
-    throw new Error('Não foi possível gerar o link da reunião agora. Tente novamente em instantes.')
-  }
-  return event.hangoutLink as string
 }
 
 serve(async (req) => {
@@ -237,7 +205,7 @@ serve(async (req) => {
 
   const { data: professor } = await admin
     .from('professores')
-    .select('id, nome, grupo_id, status, email, data_inicio')
+    .select('id, nome, status, email, data_inicio')
     .eq('id', idProfessor)
     .maybeSingle()
   if (!professor || professor.status !== 'ativo') {
@@ -264,23 +232,27 @@ serve(async (req) => {
   //      de uma recorrência ("v|<recorrencia_id>|<data_hora ISO>") ────────────
   type AgendaInfo = {
     id: string; titulo: string; meet_link: string | null; ativo: boolean
-    grupos_autorizados: string[] | null
     coordenador: { id: string; nome: string } | null
   }
   let horario: { id: string; data_hora: string; capacidade: number; meet_link: string | null; ativo: boolean }
   let agenda: AgendaInfo
 
+  // Teto da janela de agendamento: professor só reserva até 7 dias à frente
+  // (espelha o teacher-lookup, que só lista essa janela). Gate autoritativo.
+  const limiteAgendamento = new Date(Date.now() + DIAS_JANELA_AGENDAMENTO * 86400000)
+
   if (horarioId.startsWith('v|')) {
     const [, recorrenciaId, dataHoraIso] = horarioId.split('|')
     if (!recorrenciaId || !dataHoraIso) return json({ error: 'Horário inválido.' }, 400)
     if (new Date(dataHoraIso) <= new Date()) return json({ error: 'Este horário não está mais disponível.' }, 409)
+    if (new Date(dataHoraIso) > limiteAgendamento) return json({ error: 'Só é possível agendar reuniões dos próximos 7 dias.' }, 409)
 
     const { data: recorrencia } = await admin
       .from('agenda_recorrencias')
       .select(`
         id, capacidade, meet_link, ativo,
         agenda:agenda_reunioes (
-          id, titulo, meet_link, ativo, grupos_autorizados, coordenador_id,
+          id, titulo, meet_link, ativo, coordenador_id,
           coordenador:profiles!coordenador_id (id, nome)
         )
       `)
@@ -290,10 +262,6 @@ serve(async (req) => {
     if (!recorrencia || !recorrencia.ativo) return json({ error: 'Horário não encontrado.' }, 404)
     agenda = recorrencia.agenda as unknown as AgendaInfo
     if (!agenda || !agenda.ativo) return json({ error: 'Esta agenda não está mais disponível.' }, 409)
-
-    const grupos = agenda.grupos_autorizados
-    const autorizado = !grupos || grupos.length === 0 || (professor.grupo_id != null && grupos.includes(professor.grupo_id))
-    if (!autorizado) return json({ error: 'Você não está autorizado a se inscrever nesta agenda.' }, 403)
 
     // Tenta achar uma materialização já existente (ex.: outro professor reservou primeiro).
     const { data: existente } = await admin
@@ -306,13 +274,12 @@ serve(async (req) => {
     if (existente) {
       horario = existente
     } else {
-      let meetLink = recorrencia.meet_link
+      // Link SEMPRE vem da recorrência (informado manualmente pelo coordenador).
+      // O sistema não gera mais Meet nem cria evento no Google.
+      const meetLink = recorrencia.meet_link
       if (!meetLink) {
-        try {
-          meetLink = await gerarMeetLink(admin, agenda.titulo, dataHoraIso)
-        } catch (err) {
-          return json({ error: err instanceof Error ? err.message : 'Erro ao gerar link da reunião.' }, 502)
-        }
+        console.error('[create-booking] recorrência sem meet_link:', recorrenciaId)
+        return json({ error: 'Esta reunião ainda não tem link definido. Avise a coordenação.' }, 409)
       }
 
       const { data: criado, error: criarErr } = await admin
@@ -350,7 +317,7 @@ serve(async (req) => {
       .select(`
         id, data_hora, capacidade, meet_link, ativo,
         agenda:agenda_reunioes (
-          id, titulo, meet_link, ativo, grupos_autorizados, coordenador_id,
+          id, titulo, meet_link, ativo, coordenador_id,
           coordenador:profiles!coordenador_id (id, nome)
         )
       `)
@@ -359,13 +326,10 @@ serve(async (req) => {
 
     if (!horarioRow || !horarioRow.ativo) return json({ error: 'Horário não encontrado.' }, 404)
     if (new Date(horarioRow.data_hora) <= new Date()) return json({ error: 'Este horário não está mais disponível.' }, 409)
+    if (new Date(horarioRow.data_hora) > limiteAgendamento) return json({ error: 'Só é possível agendar reuniões dos próximos 7 dias.' }, 409)
 
     agenda = horarioRow.agenda as unknown as AgendaInfo
     if (!agenda || !agenda.ativo) return json({ error: 'Esta agenda não está mais disponível.' }, 409)
-
-    const grupos = agenda.grupos_autorizados
-    const autorizado = !grupos || grupos.length === 0 || (professor.grupo_id != null && grupos.includes(professor.grupo_id))
-    if (!autorizado) return json({ error: 'Você não está autorizado a se inscrever nesta agenda.' }, 403)
 
     horario = horarioRow
   }
@@ -471,6 +435,7 @@ serve(async (req) => {
   })
   const coordNome = agenda.coordenador?.nome ?? 'Coordenação'
   const meetLink  = horario.meet_link ?? agenda.meet_link
+  const calendarUrl = googleCalendarUrl(agenda.titulo, horario.data_hora, meetLink)
 
   if (brevoKey && emailReal) {
     const fromEmail = Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking.agenda@gmail.com'
@@ -489,6 +454,7 @@ serve(async (req) => {
             dataHoraFmt,
             meetLink,
             coordNome,
+            calendarUrl,
           }),
         }),
       })

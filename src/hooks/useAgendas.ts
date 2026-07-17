@@ -6,7 +6,6 @@ export type OcorrenciaComLink = {
   data_hora: string
   meet_link: string | null
   inscritos: number
-  coordenador_confirmado: boolean
 }
 
 export type RecorrenciaComReservas = {
@@ -18,8 +17,6 @@ export type RecorrenciaComReservas = {
   ativo: boolean
   proximas_reservas: number
   proximas_ocorrencias: OcorrenciaComLink[]
-  /** True quando as próximas ocorrências foram pré-criadas com o coordenador confirmado. */
-  coordenador_confirmado: boolean
 }
 
 export type AgendaComRecorrencias = {
@@ -47,7 +44,7 @@ export function useAgendas() {
           recorrencias:agenda_recorrencias (
             id, dia_semana, hora, capacidade, meet_link, ativo,
             horarios:agenda_horarios (
-              id, data_hora, meet_link, coordenador_confirmado,
+              id, data_hora, meet_link,
               inscricoes:agenda_inscricoes (status)
             )
           )
@@ -59,7 +56,7 @@ export function useAgendas() {
       return (data ?? []).map((a: Record<string, unknown>) => ({
         ...a,
         recorrencias: (a.recorrencias as Record<string, unknown>[]).map(r => {
-          const horarios = r.horarios as { id: string; data_hora: string; meet_link: string | null; coordenador_confirmado: boolean; inscricoes: { status: string }[] }[]
+          const horarios = r.horarios as { id: string; data_hora: string; meet_link: string | null; inscricoes: { status: string }[] }[]
           const futuros = horarios
             .filter(h => new Date(h.data_hora).getTime() > agora)
             .sort((x, y) => x.data_hora.localeCompare(y.data_hora))
@@ -78,9 +75,7 @@ export function useAgendas() {
               data_hora: h.data_hora,
               meet_link: h.meet_link,
               inscritos: h.inscricoes.filter(i => i.status === 'confirmada').length,
-              coordenador_confirmado: !!h.coordenador_confirmado,
             })),
-            coordenador_confirmado: futuros.length > 0 && futuros.every(h => !!h.coordenador_confirmado),
           }
         }),
       })) as AgendaComRecorrencias[]
@@ -88,29 +83,9 @@ export function useAgendas() {
   })
 }
 
-export type NovaRecorrencia = { dia_semana: number; hora: string; capacidade: number; meet_link?: string | null }
-
-/** Pré-gera as ocorrências (Meet próprio por ocorrência + coordenador confirmado)
- *  de uma agenda logo após criá-la ou adicionar um horário. Best-effort: se o
- *  Google falhar, a agenda segue criada e o create-booking gera o link na 1ª
- *  reserva (fallback). */
-export type MaterializacaoResultado = { materializou: boolean; aviso?: string }
-
-async function materializarAgenda(agendaId: string): Promise<MaterializacaoResultado> {
-  try {
-    const { data, error } = await supabase.functions.invoke('materializar-ocorrencias', {
-      body: { agenda_id: agendaId },
-    })
-    if (error) return { materializou: false, aviso: 'Não deu pra pré-gerar os links agora — eles serão criados na primeira reserva.' }
-    const d = data as { criadas?: number; erros?: number } | null
-    if (d && (d.erros ?? 0) > 0 && (d.criadas ?? 0) === 0) {
-      return { materializou: false, aviso: 'Não foi possível gerar os links no Google agora. Verifique a integração.' }
-    }
-    return { materializou: true }
-  } catch {
-    return { materializou: false, aviso: 'Não deu pra pré-gerar os links agora — eles serão criados na primeira reserva.' }
-  }
-}
+/** meet_link é obrigatório: o coordenador informa o link fixo de cada horário
+ *  recorrente e ele é reusado em todas as ocorrências. O sistema não gera links. */
+export type NovaRecorrencia = { dia_semana: number; hora: string; capacidade: number; meet_link: string }
 
 /** Cria uma agenda recorrente com suas regras de horário semanal. */
 export function useCriarAgenda() {
@@ -142,13 +117,13 @@ export function useCriarAgenda() {
             dia_semana: r.dia_semana,
             hora: r.hora,
             capacidade: r.capacidade,
-            meet_link: r.meet_link?.trim() || null,
+            meet_link: r.meet_link.trim(),
           })),
         )
         if (e2) throw e2
       }
 
-      return { agendaId: agenda.id, ...(await materializarAgenda(agenda.id)) }
+      return { agendaId: agenda.id }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agendas'] })
@@ -166,11 +141,9 @@ export function useAdicionarRecorrencia() {
         dia_semana: recorrencia.dia_semana,
         hora: recorrencia.hora,
         capacidade: recorrencia.capacidade,
-        meet_link: recorrencia.meet_link?.trim() || null,
+        meet_link: recorrencia.meet_link.trim(),
       })
       if (error) throw error
-
-      return materializarAgenda(agendaId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agendas'] })
@@ -178,21 +151,32 @@ export function useAdicionarRecorrencia() {
   })
 }
 
-/** Edita dia/hora/capacidade/link de uma regra de horário recorrente. */
+/** Edita dia/hora/capacidade/link de uma regra de horário recorrente. O link novo
+ *  é propagado às ocorrências futuras já materializadas — assim todas as semanas
+ *  daquele horário passam a usar o mesmo link atualizado. */
 export function useEditarRecorrencia() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: { id: string; dia_semana: number; hora: string; capacidade: number; meet_link?: string | null }) => {
+    mutationFn: async (input: { id: string; dia_semana: number; hora: string; capacidade: number; meet_link: string }) => {
+      const meetLink = input.meet_link.trim()
       const { error } = await supabase
         .from('agenda_recorrencias')
         .update({
           dia_semana: input.dia_semana,
           hora: input.hora,
           capacidade: input.capacidade,
-          meet_link: input.meet_link?.trim() || null,
+          meet_link: meetLink,
         })
         .eq('id', input.id)
       if (error) throw error
+
+      // Propaga o link às ocorrências futuras já criadas desta recorrência.
+      const { error: propErr } = await supabase
+        .from('agenda_horarios')
+        .update({ meet_link: meetLink })
+        .eq('recorrencia_id', input.id)
+        .gt('data_hora', new Date().toISOString())
+      if (propErr) throw propErr
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agendas'] })
