@@ -395,6 +395,9 @@ export function IncidentesPage() {
                 <p className="text-[12.5px] text-ink-secondary mt-1 truncate" title={i.description}>{i.description}</p>
                 <p className="text-[10.5px] text-ink-muted mt-1">
                   {i.coordinator} · {tempoRelativo(i.created_at)}
+                  {i.responsavel_nome && (
+                    <span> · resp. {i.responsavel_nome}</span>
+                  )}
                   {st === 'em_andamento' && i.assumido_por_nome && (
                     <span className="text-accentBlue"> · sendo resolvido por {i.assumido_por_nome}</span>
                   )}

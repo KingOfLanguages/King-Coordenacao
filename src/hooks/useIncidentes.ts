@@ -110,6 +110,8 @@ export interface Incidente {
   assumido_por: string | null
   assumido_em: string | null
   assumido_por_nome: string | null
+  responsavel_id: string | null
+  responsavel_nome: string | null
   created_at: string
   image_urls: string[]
   natureza: Natureza | null
@@ -128,7 +130,30 @@ export function natureza(i: Pick<Incidente, 'natureza'>): Natureza {
   return i.natureza ?? 'desafio'
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, assumido_por, assumido_em, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome)'
+/** Rótulos + microcopy da natureza. Mantém "Desafio"/"Informe" (vocabulário do
+ *  King) sempre acompanhados de uma frase em linguagem simples que explica a
+ *  consequência — é o que desfaz a confusão na criação do incidente. */
+export const NATUREZA_META: Record<Natureza, {
+  label: string     // termo do King (chip)
+  titulo: string    // o que a pessoa quer fazer, em linguagem simples
+  descricao: string // consequência da escolha
+  verbo: string     // rótulo do botão de confirmar
+}> = {
+  desafio: {
+    label: 'Desafio',
+    titulo: 'Resolver um problema',
+    descricao: 'Entra na fila, alguém assume e é acompanhado até resolver. Tem urgência.',
+    verbo: 'Abrir chamado',
+  },
+  informe: {
+    label: 'Informe',
+    titulo: 'Só deixar registrado',
+    descricao: 'Fica no histórico do professor como sinal. Não precisa de resolução.',
+    verbo: 'Registrar informe',
+  },
+}
+
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, assumido_por, assumido_em, responsavel_id, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome), responsavel_perfil:profiles!responsavel_id (nome)'
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
@@ -143,14 +168,17 @@ export function useIncidentes() {
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []).map(row => {
-        const { assumido_por_perfil, ...i } = row as Record<string, unknown> & {
+        const { assumido_por_perfil, responsavel_perfil, ...i } = row as Record<string, unknown> & {
           assumido_por_perfil?: { nome: string } | { nome: string }[] | null
+          responsavel_perfil?: { nome: string } | { nome: string }[] | null
         }
         const perfil = Array.isArray(assumido_por_perfil) ? assumido_por_perfil[0] : assumido_por_perfil
+        const respPerfil = Array.isArray(responsavel_perfil) ? responsavel_perfil[0] : responsavel_perfil
         return {
           ...(i as unknown as Incidente),
           image_urls: (i as { image_urls?: string[] }).image_urls ?? [],
           assumido_por_nome: perfil?.nome ?? null,
+          responsavel_nome: respPerfil?.nome ?? null,
         }
       }) as Incidente[]
     },

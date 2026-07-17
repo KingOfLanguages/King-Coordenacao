@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Search, X, GraduationCap, ImagePlus, Info } from 'lucide-react'
+import { Search, X, GraduationCap, ImagePlus, Info, Flag, FileText, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -9,13 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
 import {
   useCriarIncidente, useAlunosDoProfessor, uploadImagemIncidente, categoriasVisiveis,
-  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, type Aba, type Natureza,
+  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META,
+  type Aba, type Natureza,
 } from '@/hooks/useIncidentes'
 import { useAuth } from '@/contexts/AuthContext'
 import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 const MAX_IMAGENS = 3
+
+/** Ícone de cada natureza no cartão de escolha do passo 1. */
+const NATUREZA_ICON: Record<Natureza, typeof Flag> = {
+  desafio: Flag,
+  informe: FileText,
+}
 
 interface Props {
   open: boolean
@@ -30,6 +37,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const { data: professores = [] } = useProfessoresAtivos()
   const criar = useCriarIncidente()
 
+  // passo 1 = escolher a intenção (Desafio/Informe); passo 2 = preencher o resto.
+  const [passo, setPasso] = useState<1 | 2>(1)
+  const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [aba, setAba] = useState<Aba>('professor')
   const [busca, setBusca] = useState('')
   const [selecionado, setSelecionado] = useState<{ id: string; nome: string } | null>(professorFixo ?? null)
@@ -38,9 +48,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [alunoBusca, setAlunoBusca] = useState(false)
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_PROFESSOR[0])
   const [urgencia, setUrgencia] = useState('Média')
-  const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [descricao, setDescricao] = useState('')
-  const [precisaAcompanhamento, setPrecisaAcompanhamento] = useState(false)
   const [imagens, setImagens] = useState<File[]>([])
   const [enviandoImagens, setEnviandoImagens] = useState(false)
 
@@ -48,6 +56,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
 
   const alunoBlurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Informe é registro puro — urgência não faz sentido (não segue fluxo de resolução).
+  const mostrarUrgencia = natureza === 'desafio'
 
   // URLs de preview locais — revogadas quando a lista muda ou o diálogo desmonta.
   const previews = useMemo(() => imagens.map(f => URL.createObjectURL(f)), [imagens])
@@ -82,6 +93,8 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
       if (alunoBlurTimeout.current) clearTimeout(alunoBlurTimeout.current)
       return
     }
+    setPasso(1)
+    setNatureza('desafio')
     setAba('professor')
     setSelecionado(professorFixo ?? null)
     setBusca('')
@@ -89,14 +102,17 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setAlunoNome('')
     setCategoria(CATEGORIAS_PROFESSOR[0])
     setUrgencia('Média')
-    setNatureza('desafio')
     setDescricao('')
-    setPrecisaAcompanhamento(false)
     setImagens([])
   }, [open, professorFixo])
 
   const categoriasBase = aba === 'professor' ? CATEGORIAS_PROFESSOR : aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : CATEGORIAS_GERAL
   const categorias = categoriasVisiveis(categoriasBase, podeVerCoordOnly)
+
+  function escolherIntencao(n: Natureza) {
+    setNatureza(n)
+    setPasso(2)
+  }
 
   function trocarAba(novaAba: Aba) {
     setAba(novaAba)
@@ -130,9 +146,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
       }
       await criar.mutateAsync({
         problem_type: categoria,
-        urgency: urgencia,
+        urgency: mostrarUrgencia ? urgencia : 'Baixa',
         description: descricao.trim(),
-        needs_follow_up: precisaAcompanhamento,
+        needs_follow_up: false,
         professor_id: aba !== 'geral' ? selecionado?.id : null,
         titulo_livre: aba === 'geral' ? tituloLivre : undefined,
         aluno_nome: alunoNome,
@@ -140,7 +156,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         natureza,
         ti_status: aba === 'plataforma' ? 'chamado_aberto' : null,
       })
-      toast.success('Incidente registrado.')
+      toast.success(natureza === 'informe' ? 'Informe registrado.' : 'Chamado aberto.')
       onOpenChange(false)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao registrar incidente.')
@@ -149,13 +165,68 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     }
   }
 
+  const meta = NATUREZA_META[natureza]
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-surface-canvas border-line text-ink max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-ink font-semibold">Novo incidente</DialogTitle>
+          <DialogTitle className="text-ink font-semibold">
+            {passo === 1 ? 'Novo incidente' : natureza === 'informe' ? 'Novo informe' : 'Novo chamado'}
+          </DialogTitle>
         </DialogHeader>
+
+        {passo === 1 ? (
+          <div className="space-y-3">
+            <p className="text-[13px] text-ink-secondary">O que você quer fazer?</p>
+            {(['desafio', 'informe'] as const).map(n => {
+              const m = NATUREZA_META[n]
+              const Icone = NATUREZA_ICON[n]
+              const ehDesafio = n === 'desafio'
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => escolherIntencao(n)}
+                  className={cn(
+                    'btn-press w-full text-left rounded-xl border px-4 py-3 transition-colors',
+                    'border-line hover:border-accentBlue hover:bg-surface-subtle/40',
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icone className={cn('h-4 w-4', ehDesafio ? 'text-accentBlue' : 'text-ink-muted')} />
+                    <span className="text-[14px] font-medium text-ink">{m.titulo}</span>
+                    <span className={cn(
+                      'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
+                      ehDesafio ? 'bg-accentBlue-soft text-accentBlue' : 'bg-surface-muted text-ink-muted',
+                    )}>
+                      {m.label}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-ink-secondary mt-1 leading-relaxed">{m.descricao}</p>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
         <div className="space-y-4">
+          {/* Cabeçalho da intenção escolhida — permite voltar e trocar. */}
+          <button
+            type="button"
+            onClick={() => setPasso(1)}
+            className="btn-press flex items-center gap-2 text-[12px] text-ink-secondary hover:text-ink transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span className={cn(
+              'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
+              natureza === 'desafio' ? 'bg-accentBlue-soft text-accentBlue' : 'bg-surface-muted text-ink-muted',
+            )}>
+              {meta.label}
+            </span>
+            <span>{meta.titulo}</span>
+            <span className="text-ink-muted underline underline-offset-2">trocar</span>
+          </button>
+
           {!professorFixo && (
             <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
               <button
@@ -290,7 +361,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
           {/* min-w-0 nas colunas + w-full no trigger: sem isso o SelectTrigger é
               w-fit e cresce com a categoria longa, invadindo a coluna da urgência.
               Com w-full o valor respeita o line-clamp-1 e trunca dentro da coluna. */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn('grid gap-2', mostrarUrgencia ? 'grid-cols-2' : 'grid-cols-1')}>
             <div className="space-y-1.5 min-w-0">
               <Label className="label-micro">Categoria</Label>
               <Select value={categoria} onValueChange={setCategoria}>
@@ -304,49 +375,22 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 min-w-0">
-              <Label className="label-micro">Urgência</Label>
-              <Select value={urgencia} onValueChange={setUrgencia}>
-                <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-surface-canvas border-line text-ink">
-                  <SelectItem value="Baixa">Baixa</SelectItem>
-                  <SelectItem value="Média">Média</SelectItem>
-                  <SelectItem value="Alta">Alta</SelectItem>
-                  <SelectItem value="Crítico">Crítico</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="label-micro">Natureza</Label>
-            <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
-              <button
-                type="button"
-                onClick={() => setNatureza('desafio')}
-                className={cn(
-                  'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
-                  natureza === 'desafio' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-                )}
-              >
-                Desafio
-              </button>
-              <button
-                type="button"
-                onClick={() => setNatureza('informe')}
-                className={cn(
-                  'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
-                  natureza === 'informe' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-                )}
-              >
-                Informe
-              </button>
-            </div>
-            <p className="text-[11px] text-ink-subtle">
-              {natureza === 'desafio' ? 'Precisa ser resolvido — segue o fluxo de aberto → em andamento → concluído.' : 'Só um registro — não exige resolução, fica agregado à plataforma.'}
-            </p>
+            {mostrarUrgencia && (
+              <div className="space-y-1.5 min-w-0">
+                <Label className="label-micro">Urgência</Label>
+                <Select value={urgencia} onValueChange={setUrgencia}>
+                  <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-surface-canvas border-line text-ink">
+                    <SelectItem value="Baixa">Baixa</SelectItem>
+                    <SelectItem value="Média">Média</SelectItem>
+                    <SelectItem value="Alta">Alta</SelectItem>
+                    <SelectItem value="Crítico">Crítico</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -400,16 +444,6 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             />
           </div>
 
-          <label className="flex items-center gap-2 text-[12.5px] text-ink-secondary cursor-pointer">
-            <input
-              type="checkbox"
-              checked={precisaAcompanhamento}
-              onChange={e => setPrecisaAcompanhamento(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-line accent-accentBlue"
-            />
-            Precisa de acompanhamento
-          </label>
-
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-ink-secondary">
               Cancelar
@@ -419,10 +453,11 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
               disabled={!podeConfirmar || criar.isPending || enviandoImagens}
               className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
             >
-              {enviandoImagens ? 'Enviando imagens…' : criar.isPending ? 'Salvando…' : 'Registrar incidente'}
+              {enviandoImagens ? 'Enviando imagens…' : criar.isPending ? 'Salvando…' : meta.verbo}
             </Button>
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   )

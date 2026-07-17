@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   useAtualizarIncidente, abaDoIncidente, categoriasVisiveis, natureza as naturezaDe,
-  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, type Incidente, type Natureza,
+  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META,
+  type Incidente, type Natureza,
 } from '@/hooks/useIncidentes'
 import { useAuth } from '@/contexts/AuthContext'
 import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
@@ -33,7 +34,6 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
   const [urgencia, setUrgencia] = useState('Média')
   const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [descricao, setDescricao] = useState('')
-  const [precisaAcompanhamento, setPrecisaAcompanhamento] = useState(false)
 
   useEffect(() => {
     if (!open || !incidente) return
@@ -43,8 +43,10 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
     setUrgencia(incidente.urgency)
     setNatureza(naturezaDe(incidente))
     setDescricao(incidente.description)
-    setPrecisaAcompanhamento(incidente.needs_follow_up)
   }, [open, incidente])
+
+  // Informe é registro puro — urgência não faz sentido (não segue fluxo de resolução).
+  const mostrarUrgencia = natureza === 'desafio'
 
   const categoriasBase = aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : ehGeral ? CATEGORIAS_GERAL : CATEGORIAS_PROFESSOR
   const categorias = categoriasVisiveis(categoriasBase, podeVerCoordOnly)
@@ -61,9 +63,9 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
       await atualizar.mutateAsync({
         id: incidente.id,
         problem_type: categoria,
-        urgency: urgencia,
+        urgency: mostrarUrgencia ? urgencia : 'Baixa',
         description: descricao,
-        needs_follow_up: precisaAcompanhamento,
+        needs_follow_up: incidente.needs_follow_up,
         aluno_nome: alunoNome,
         titulo_livre: ehGeral ? titulo : undefined,
         professor_id: incidente.professor_id,
@@ -116,7 +118,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className={cn('grid gap-2', mostrarUrgencia ? 'grid-cols-2' : 'grid-cols-1')}>
               <div className="space-y-1.5">
                 <Label className="label-micro">Categoria</Label>
                 <Select value={categoria} onValueChange={setCategoria}>
@@ -130,20 +132,22 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="label-micro">Urgência</Label>
-                <Select value={urgencia} onValueChange={setUrgencia}>
-                  <SelectTrigger className="bg-surface-canvas border-line text-ink">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-surface-canvas border-line text-ink">
-                    <SelectItem value="Baixa">Baixa</SelectItem>
-                    <SelectItem value="Média">Média</SelectItem>
-                    <SelectItem value="Alta">Alta</SelectItem>
-                    <SelectItem value="Crítico">Crítico</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {mostrarUrgencia && (
+                <div className="space-y-1.5">
+                  <Label className="label-micro">Urgência</Label>
+                  <Select value={urgencia} onValueChange={setUrgencia}>
+                    <SelectTrigger className="bg-surface-canvas border-line text-ink">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-surface-canvas border-line text-ink">
+                      <SelectItem value="Baixa">Baixa</SelectItem>
+                      <SelectItem value="Média">Média</SelectItem>
+                      <SelectItem value="Alta">Alta</SelectItem>
+                      <SelectItem value="Crítico">Crítico</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -157,7 +161,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                     natureza === 'desafio' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
                   )}
                 >
-                  Desafio
+                  {NATUREZA_META.desafio.label}
                 </button>
                 <button
                   type="button"
@@ -167,9 +171,10 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                     natureza === 'informe' ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
                   )}
                 >
-                  Informe
+                  {NATUREZA_META.informe.label}
                 </button>
               </div>
+              <p className="text-[11px] text-ink-subtle">{NATUREZA_META[natureza].descricao}</p>
             </div>
 
             <div className="space-y-1.5">
@@ -185,16 +190,6 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                 placeholder="O que aconteceu…"
               />
             </div>
-
-            <label className="flex items-center gap-2 text-[12.5px] text-ink-secondary cursor-pointer">
-              <input
-                type="checkbox"
-                checked={precisaAcompanhamento}
-                onChange={e => setPrecisaAcompanhamento(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-line accent-accentBlue"
-              />
-              Precisa de acompanhamento
-            </label>
 
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-ink-secondary">

@@ -50,7 +50,8 @@ export function buildMensagemIncidente(i: Incidente, origin?: string): string {
   if (isPlataforma && i.ti_status) {
     linhas.push(`Situação no TI: ${tiStatusLabel[i.ti_status] ?? i.ti_status}`)
   }
-  linhas.push(`Coordenador responsável: ${i.coordinator}`)
+  linhas.push(`Registrado por: ${i.coordinator}`)
+  if (i.responsavel_nome) linhas.push(`Responsável: ${i.responsavel_nome}`)
   linhas.push(`Aberto em: ${dataFmt(i.created_at)}`)
   if (!i.resolved && i.assumido_por_nome) {
     linhas.push(`Em atendimento por: ${i.assumido_por_nome}`)

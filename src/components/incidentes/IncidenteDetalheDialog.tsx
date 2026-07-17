@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { GraduationCap, User2, CalendarClock, CheckCircle2, Pencil, Ticket, Copy, Check } from 'lucide-react'
+import { GraduationCap, User2, UserCog, CalendarClock, CheckCircle2, Pencil, Ticket, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -102,6 +102,13 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
               {incidente.problem_type}
             </span>
           </div>
+
+          {incidente.responsavel_nome && (
+            <div className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
+              <UserCog className="h-3.5 w-3.5 text-ink-muted" />
+              Responsável: <strong className="font-medium text-ink">{incidente.responsavel_nome}</strong>
+            </div>
+          )}
 
           {incidente.aluno_nome && (
             <div className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-2.5 py-1 text-[12px] font-medium">

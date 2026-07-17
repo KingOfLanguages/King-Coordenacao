@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { Fragment, useState, useRef, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { NavDropdown, type NavDropdownItem } from '@/components/layout/NavDropdown'
+import { NotificacoesSino } from '@/components/layout/NotificacoesSino'
 import { ExtensaoConteudo } from '@/pages/extensao/ExtensaoConteudo'
 import { useCanView } from '@/hooks/usePagePermissions'
 import { PAGE_BY_KEY } from '@/lib/pagePermissions'
@@ -214,6 +215,13 @@ export function AppLayout() {
 
           {/* Theme toggle */}
           <ThemeToggle />
+
+          {/* Notificações (sino) */}
+          <NotificacoesSino
+            isOpen={openMenu === 'notificacoes'}
+            onToggle={() => setOpenMenu(m => (m === 'notificacoes' ? null : 'notificacoes'))}
+            registerRef={registerRef('notificacoes')}
+          />
 
           {/* Extensão popup trigger */}
           {isCoord && (
