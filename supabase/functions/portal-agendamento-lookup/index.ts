@@ -11,17 +11,15 @@
 // sido informado, ele é APRENDIDO (origem 'portal') — assim o portal vai
 // preenchendo sozinho quem ainda não tem e-mail.
 //
-// O casamento por nome continua em 3 tentativas escalonadas, cada uma mais
-// precisa que a anterior, pra minimizar tanto falso-negativo (não achar)
-// quanto falso-positivo (achar a pessoa errada):
+// O casamento por nome exige o NOME COMPLETO EXATO (letra por letra); só caixa
+// (maiúscula/minúscula) e acentuação não precisam bater. Nada de nome parcial —
+// evita casar "João" com dezenas de "João …" e a atribuição errada que isso dava.
 //
-//   1ª tentativa — nome parcial (mín. 3 caracteres), casamento por token.
-//   2ª tentativa — se ambíguo (>1 professor ativo bate), o front pede o
-//                  nome completo e reenvia com o mesmo parâmetro `nome`.
-//   3ª tentativa — se AINDA ambíguo (nomes idênticos — raro), o front pede
-//                  mês/ano de início e reenvia com `mesInicio`/`anoInicio`,
-//                  usados como desempate (± 1 mês de tolerância) contra
-//                  professores.data_inicio.
+//   • Bateu exatamente 1 professor  → resolvido (front confirma "Você é X?").
+//   • Bateu >1 (nomes idênticos, raro) → o front pede mês/ano de início e reenvia
+//     com `mesInicio`/`anoInicio`, usados como desempate (± 1 mês) contra data_inicio.
+//   • Não bateu exato → oferecemos "nomes próximos" (fuzzy) pra escolher da lista,
+//     só quando genuinamente parecidos (guardrail anti-scan do roster).
 //
 // Em qualquer caso de ambiguidade ou não-encontrado, a resposta é genérica
 // (`professor: null`) — nunca revela quantos bateram nem o motivo exato,
@@ -103,9 +101,6 @@ const CADENCIA_MIN_DIAS = 30
 const CADENCIA_MAX_DIAS_MENSAL    = 30 // professores 8-90 dias de casa: cadência fixa
 const CADENCIA_MAX_DIAS_FLEXIVEL  = 60 // professores >90 dias de casa: janela livre de 30-60 dias
 const NOME_MIN_CHARS = 3
-const SUGESTOES_MAX = 5
-const SUGESTOES_MIN_SCORE = 0.62 // só sugere nomes genuinamente próximos — guardrail anti-scan do roster
-const STOPWORDS = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
 const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 function json(body: unknown, status = 200) {
@@ -119,65 +114,12 @@ function norm(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
-function tokens(s: string): string[] {
-  return norm(s).split(' ').filter(t => t.length > 1 && !STOPWORDS.has(t))
-}
-
-/** Todo token informado precisa aparecer entre os tokens do nome real — permite nome parcial sem abrir mão de precisão. */
-function nomeCorresponde(tokensInformados: string[], tokensReal: string[]): boolean {
-  if (!tokensInformados.length) return false
-  return tokensInformados.every(t => tokensReal.includes(t))
-}
-
-// ── Similaridade de nome (para sugerir "nomes próximos" quando não bate exato) ──
-
-function levenshtein(a: string, b: string): number {
-  const m = a.length, n = b.length
-  if (!m) return n
-  if (!n) return m
-  const dp = new Array(n + 1)
-  for (let j = 0; j <= n; j++) dp[j] = j
-  for (let i = 1; i <= m; i++) {
-    let prev = dp[0]; dp[0] = i
-    for (let j = 1; j <= n; j++) {
-      const tmp = dp[j]
-      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1))
-      prev = tmp
-    }
-  }
-  return dp[n]
-}
-
-/** 0..1 entre dois tokens: igual=1, prefixo=0.9, senão razão de Levenshtein. */
-function tokenSim(a: string, b: string): number {
-  if (a === b) return 1
-  if (b.startsWith(a) || a.startsWith(b)) return 0.9
-  const maxLen = Math.max(a.length, b.length)
-  return maxLen ? 1 - levenshtein(a, b) / maxLen : 0
-}
-
-/** Média da melhor similaridade de cada token informado contra os tokens reais. */
-function scoreNome(tokensInformados: string[], tokensReal: string[]): number {
-  if (!tokensInformados.length || !tokensReal.length) return 0
-  let total = 0
-  for (const ti of tokensInformados) {
-    let best = 0
-    for (const tr of tokensReal) best = Math.max(best, tokenSim(ti, tr))
-    total += best
-  }
-  return total / tokensInformados.length
-}
-
-/** Top-N nomes mais próximos, só acima do limiar (evita virar scanner de roster). */
-function sugerirNomes(nomeInformado: string, ativos: { id: string; nome: string }[]): { id: string; nome: string }[] {
-  const ti = tokens(nomeInformado)
-  if (!ti.length) return []
-  return ativos
-    .map(p => ({ p, score: scoreNome(ti, tokens(p.nome)) }))
-    .filter(x => x.score >= SUGESTOES_MIN_SCORE)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, SUGESTOES_MAX)
-    .map(x => ({ id: x.p.id, nome: x.p.nome }))
+/** Match EXATO do nome completo: o texto informado precisa ser idêntico ao nome
+ *  cadastrado letra por letra — só caixa (maiúscula/minúscula) e acentuação NÃO
+ *  precisam bater. Nada de nome parcial: evita casar "João" com vários "João …". */
+function nomeExato(informado: string, real: string): boolean {
+  const a = norm(informado)
+  return a.length > 0 && a === norm(real)
 }
 
 /** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
@@ -252,7 +194,23 @@ serve(async (req) => {
       .select('id, nome, status, coordenador_id, data_inicio')
       .eq('id', professorIdInput)
       .maybeSingle()
-    if (p && p.status === 'ativo') professor = p as ProfRow
+    if (p && p.status === 'ativo') {
+      professor = p as ProfRow
+      // Cadastro do e-mail do professor (passo "solicita e-mail" após achar pelo
+      // nome): quando o front reenvia professorId + o e-mail confirmado, gravamos
+      // se ainda não existir esse e-mail (professor_emails não tem unique em email).
+      if (emailValido) {
+        const { data: jaTem } = await admin
+          .from('professor_emails')
+          .select('id')
+          .ilike('email', email)
+          .limit(1)
+          .maybeSingle()
+        if (!jaTem) {
+          await admin.from('professor_emails').insert({ professor_id: p.id, email, origem: 'portal' })
+        }
+      }
+    }
   }
 
   if (!professor && emailValido) {
@@ -281,29 +239,23 @@ serve(async (req) => {
       .select('id, nome, status, coordenador_id, data_inicio')
       .eq('status', 'ativo')
 
-    const tokensInformados = tokens(nome)
-    let candidatos = ((ativos ?? []) as ProfRow[]).filter(p => nomeCorresponde(tokensInformados, tokens(p.nome)))
+    let candidatos = ((ativos ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
 
     // Desempate por mês/ano de início, só quando ainda ambíguo.
     if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
       candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
     }
 
-    if (candidatos.length === 0) {
-      // Não bateu exatamente — oferece nomes próximos (fuzzy) pra escolher, só
-      // quando genuinamente parecidos (guardrail anti-scan em SUGESTOES_MIN_SCORE).
-      const sugestoes = sugerirNomes(nome, (ativos ?? []) as ProfRow[])
-      return json(respostaVazia(false, sugestoes))
-    }
+    // Não bateu exato → não achado (o front reforça "nome completo como na
+    // plataforma" e, persistindo, direciona pro contato da coordenação). Sem
+    // sugestões fuzzy: o casamento por nome é exato de propósito.
+    if (candidatos.length === 0) return json(respostaVazia(false))
     if (candidatos.length > 1)   return json(respostaVazia(true))
 
     professor = candidatos[0]
-
-    // Aprende o e-mail informado pra esse professor (auto-preenche quem falta).
-    // Conflito (e-mail já vinculado a alguém) é ignorado — nunca "rouba" vínculo.
-    if (emailValido) {
-      await admin.from('professor_emails').insert({ professor_id: professor.id, email, origem: 'portal' })
-    }
+    // NÃO aprendemos o e-mail aqui: o cadastro do e-mail é um passo explícito no
+    // front (o professor confirma/corrige o e-mail), que reenvia professorId +
+    // e-mail — gravado no bloco do professorIdInput acima.
   }
 
   if (!professor) return json(respostaVazia(false))

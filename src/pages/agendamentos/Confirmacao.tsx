@@ -1,4 +1,6 @@
-import { Calendar, Check } from 'lucide-react'
+import { useState } from 'react'
+import { Calendar, Check, Copy, Link2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import type { ReuniaoConfirmada } from '@/hooks/useBookMeeting'
 
@@ -14,6 +16,51 @@ function googleCalendarUrl(reuniao: ReuniaoConfirmada): string {
     location: reuniao.meet_link ?? '',
   })
   return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
+/** Caixa com o link da reunião em texto + botão de copiar — para o professor
+ *  salvar o link (essencial pra quem não tem e-mail cadastrado). */
+function CopiarLink({ link }: { link: string }) {
+  const [copiado, setCopiado] = useState(false)
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiado(true)
+      toast.success('Link copiado.')
+      setTimeout(() => setCopiado(false), 1800)
+    } catch {
+      toast.error('Não foi possível copiar. Copie manualmente o link abaixo.')
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-line-soft bg-surface-subtle/50 p-3 text-left space-y-2">
+      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+        <Link2 className="h-3 w-3" />
+        Link da reunião
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          readOnly
+          value={link}
+          onFocus={e => e.currentTarget.select()}
+          className="min-w-0 flex-1 rounded-lg border border-line bg-surface-canvas px-2.5 py-1.5 text-[12px] text-ink-secondary focus:outline-none focus:ring-1 focus:ring-accentBlue"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={copiar}
+          className="btn-press h-8 flex-shrink-0 gap-1.5 border-line text-[12px]"
+        >
+          {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copiado ? 'Copiado' : 'Copiar'}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export function Confirmacao({ reuniao }: { reuniao: ReuniaoConfirmada }) {
@@ -53,6 +100,8 @@ export function Confirmacao({ reuniao }: { reuniao: ReuniaoConfirmada }) {
           </a>
         </Button>
       </div>
+
+      {reuniao.meet_link && <CopiarLink link={reuniao.meet_link} />}
 
       <p className="text-[12px] text-ink-secondary">
         Este link é só desta reunião (<span className="capitalize">{dataFmt}</span>). Cada data tem um link diferente — entre por este.

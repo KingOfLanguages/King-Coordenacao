@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarClock } from 'lucide-react'
+import { CalendarClock, Phone, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,8 +22,10 @@ const MESES = [
 const ANO_ATUAL = new Date().getFullYear()
 const ANOS = Array.from({ length: 9 }, (_, i) => ANO_ATUAL - i)
 
-const MENSAGEM_GENERICA = 'Não conseguimos confirmar seu cadastro. Confira o nome digitado ou fale com sua coordenação.'
-const MENSAGEM_FINAL = 'Não conseguimos confirmar automaticamente quem você é. Fale com sua coordenação pra agendar.'
+// Contato da coordenação de professores (solução de desafios) quando não
+// conseguimos identificar o professor nem por e-mail nem por nome completo.
+const COORD_WHATSAPP_NUM = '5511913027763'
+const COORD_TELEFONE     = '+55 11 91302-7763'
 
 /** Iniciais do professor (primeiro + último nome) pro avatar da confirmação. */
 function iniciais(nome: string): string {
@@ -34,17 +36,18 @@ function iniciais(nome: string): string {
   return (primeira + ultima).toUpperCase()
 }
 
-type Tentativa = 1 | 2 | 3
-
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 type Step =
   | { tipo: 'identificacao-email'; email: string; erro: string }
-  | { tipo: 'identificacao'; tentativa: Tentativa; nome: string; erro: string; emailInformado: string }
-  | { tipo: 'sugestoes'; sugestoes: { id: string; nome: string }[]; nome: string; emailInformado: string }
+  // tentativa: 1ª ou 2ª tentativa de nome. desempate: pede mês/ano (nomes idênticos).
+  | { tipo: 'identificacao'; tentativa: 1 | 2; desempate: boolean; nome: string; erro: string; emailInformado: string }
+  // Achou pelo nome → pede o e-mail pra cadastrar antes de seguir.
+  | { tipo: 'cadastro-email'; resultado: PortalLookupResult; email: string; erro: string }
   | { tipo: 'confirmar-identidade'; resultado: PortalLookupResult }
   | { tipo: 'aviso-agendamento-recente'; resultado: PortalLookupResult }
   | { tipo: 'opcoes'; resultado: PortalLookupResult }
+  | { tipo: 'contato-coordenacao' }
   | { tipo: 'grupo-agendas'; professorId: string; professorNome: string; agendas: AgendaDisponivelType[] }
   | { tipo: 'confirmacao'; reuniao: ReuniaoConfirmada }
 
@@ -71,19 +74,20 @@ export function Home() {
       const resultado = await lookup.mutateAsync({ email: emailAtual })
 
       if (resultado.professor) {
+        // E-mail bateu → confirma o nome e segue.
         setStep({ tipo: 'confirmar-identidade', resultado })
         return
       }
 
-      // E-mail não bateu com nenhum cadastro → cai no fluxo por nome, guardando
-      // o e-mail informado pra ser aprendido quando o professor for identificado.
-      setStep({ tipo: 'identificacao', tentativa: 1, nome: '', erro: '', emailInformado: emailAtual })
+      // E-mail não bateu → pede o nome completo (guardando o e-mail informado
+      // pra pré-preencher o cadastro quando o professor for identificado).
+      setStep({ tipo: 'identificacao', tentativa: 1, desempate: false, nome: '', erro: '', emailInformado: emailAtual })
     } catch {
       setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmitNome(e: React.FormEvent) {
     e.preventDefault()
     if (step.tipo !== 'identificacao') return
     const nomeAtual = step.nome.trim()
@@ -91,7 +95,7 @@ export function Home() {
       setStep({ ...step, erro: 'Digite ao menos 3 letras do seu nome.' })
       return
     }
-    if (step.tentativa === 3 && (mes == null || ano == null)) {
+    if (step.desempate && (mes == null || ano == null)) {
       setStep({ ...step, erro: 'Selecione o mês e o ano em que você começou.' })
       return
     }
@@ -100,29 +104,57 @@ export function Home() {
       const resultado = await lookup.mutateAsync({
         nome: nomeAtual,
         ...(step.emailInformado ? { email: step.emailInformado } : {}),
-        ...(step.tentativa === 3 && mes != null && ano != null ? { mesInicio: mes, anoInicio: ano } : {}),
+        ...(step.desempate && mes != null && ano != null ? { mesInicio: mes, anoInicio: ano } : {}),
       })
 
       if (resultado.professor) {
-        setStep({ tipo: 'confirmar-identidade', resultado })
+        // Nome completo bateu → pede o e-mail pra cadastrar.
+        setStep({ tipo: 'cadastro-email', resultado, email: step.emailInformado, erro: '' })
         return
       }
 
-      if (resultado.ambiguo && step.tentativa < 3) {
-        setStep({ tipo: 'identificacao', tentativa: (step.tentativa + 1) as Tentativa, nome: nomeAtual, erro: '', emailInformado: step.emailInformado })
+      if (resultado.ambiguo) {
+        // Mais de uma pessoa com o mesmo nome. Se ainda não pedimos mês/ano, pede;
+        // se já pedimos e continua ambíguo, manda pro contato da coordenação.
+        if (!step.desempate) {
+          setStep({ ...step, nome: nomeAtual, desempate: true, erro: '' })
+        } else {
+          setStep({ tipo: 'contato-coordenacao' })
+        }
         return
       }
 
-      // Não achou exato: se houver nomes próximos, oferece a lista pra escolher.
-      const sugestoes = resultado.sugestoes ?? []
-      if (sugestoes.length > 0) {
-        setStep({ tipo: 'sugestoes', sugestoes, nome: nomeAtual, emailInformado: step.emailInformado })
-        return
+      // Não encontrado. 1ª tentativa → reforça "nome completo" e deixa tentar de
+      // novo; 2ª tentativa (ou desempate sem match) → contato da coordenação.
+      if (step.desempate || step.tentativa >= 2) {
+        setStep({ tipo: 'contato-coordenacao' })
+      } else {
+        setStep({ ...step, nome: nomeAtual, tentativa: 2, erro: 'reforco' })
       }
-
-      setStep({ ...step, nome: nomeAtual, erro: step.tentativa === 3 ? MENSAGEM_FINAL : MENSAGEM_GENERICA })
     } catch {
       setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
+    }
+  }
+
+  async function handleCadastroEmail(e: React.FormEvent) {
+    e.preventDefault()
+    if (step.tipo !== 'cadastro-email' || !step.resultado.professor) return
+    const emailAtual = step.email.trim()
+    if (!EMAIL_RE.test(emailAtual)) {
+      setStep({ ...step, erro: 'Digite um e-mail válido.' })
+      return
+    }
+    try {
+      // Reenvia com professorId + e-mail → o servidor cadastra o e-mail e devolve
+      // as opções de agendamento já com o professor resolvido.
+      const resultado = await lookup.mutateAsync({ professorId: step.resultado.professor.id, email: emailAtual })
+      if (resultado.professor) {
+        handleConfirmarIdentidade(resultado)
+      } else {
+        setStep({ ...step, erro: 'Não foi possível concluir agora. Tente novamente.' })
+      }
+    } catch {
+      setStep({ ...step, erro: 'Não foi possível concluir agora. Tente novamente.' })
     }
   }
 
@@ -130,20 +162,6 @@ export function Home() {
     setMes(null)
     setAno(null)
     setStep({ tipo: 'identificacao-email', email: '', erro: '' })
-  }
-
-  /** Professor escolheu um nome da lista de sugestões → resolve pelo id (sem ambiguidade). */
-  async function handlePickSugestao(professorId: string) {
-    try {
-      const resultado = await lookup.mutateAsync({ professorId })
-      if (resultado.professor) {
-        setStep({ tipo: 'confirmar-identidade', resultado })
-      } else {
-        toast.error('Não foi possível carregar suas opções agora. Tente novamente.')
-      }
-    } catch {
-      toast.error('Não foi possível carregar suas opções agora. Tente novamente.')
-    }
   }
 
   async function handleEscolherGrupo() {
@@ -298,11 +316,9 @@ export function Home() {
                   Agendamento de Reuniões
                 </h1>
                 <p className="text-[14px] text-ink-muted leading-relaxed">
-                  {step.tentativa === 1 && (step.emailInformado
-                    ? 'Não encontramos esse e-mail no cadastro. Confirme seu nome completo para continuar.'
-                    : 'Informe seu nome para ver as opções de agendamento disponíveis para você.')}
-                  {step.tentativa === 2 && 'Encontramos mais de uma pessoa com esse nome. Digite seu nome completo, como está no seu cadastro.'}
-                  {step.tentativa === 3 && 'Ainda encontramos mais de uma pessoa. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'}
+                  {step.desempate
+                    ? 'Encontramos mais de uma pessoa com esse nome. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'
+                    : 'Não encontramos esse e-mail no cadastro. Digite seu nome completo, exatamente como aparece na plataforma da King.'}
                 </p>
               </div>
             </div>
@@ -310,10 +326,10 @@ export function Home() {
             <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
                             shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
               <div className="rounded-[1.5rem] bg-surface-canvas px-6 py-7 space-y-5">
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmitNome} className="space-y-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="nome" className="text-[12px] text-ink-secondary font-medium">
-                      Nome {step.tentativa >= 2 ? 'completo' : ''}
+                      Nome completo
                     </Label>
                     <Input
                       id="nome"
@@ -322,12 +338,15 @@ export function Home() {
                       onChange={ev => setStep({ ...step, nome: ev.target.value })}
                       required
                       autoComplete="name"
-                      placeholder="Seu nome completo"
+                      placeholder="Seu nome completo, como no cadastro"
                       className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
                     />
+                    <p className="text-[11.5px] text-ink-muted">
+                      Digite o nome completo, igual ao que aparece na plataforma da King (sem abreviações nem apelido).
+                    </p>
                   </div>
 
-                  {step.tentativa === 3 && (
+                  {step.desempate && (
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-[12px] text-ink-secondary font-medium">Mês de início</Label>
@@ -358,17 +377,18 @@ export function Home() {
                     </div>
                   )}
 
-                  {step.erro && (
+                  {step.erro === 'reforco' ? (
                     <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
-                                    text-[12.5px] text-brand-strong font-medium space-y-2">
-                      <p>{step.erro}</p>
-                      {step.tentativa === 3 && step.erro === MENSAGEM_FINAL && (
-                        <button type="button" onClick={recomecar} className="underline underline-offset-2">
-                          Tentar novamente
-                        </button>
-                      )}
+                                    text-[12.5px] text-brand-strong font-medium space-y-1">
+                      <p className="font-semibold">Ainda não encontramos você.</p>
+                      <p>Confira: precisa ser o <strong>nome completo</strong>, exatamente igual ao cadastro na plataforma — sem abreviações e sem apelido.</p>
                     </div>
-                  )}
+                  ) : step.erro ? (
+                    <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
+                                    text-[12.5px] text-brand-strong font-medium">
+                      <p>{step.erro}</p>
+                    </div>
+                  ) : null}
 
                   <button
                     type="submit"
@@ -382,58 +402,87 @@ export function Home() {
                   >
                     {lookup.isPending ? 'Buscando…' : 'Continuar'}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={recomecar}
+                    className="btn-press w-full text-[12px] text-ink-muted hover:text-ink-secondary"
+                  >
+                    Voltar e usar o e-mail
+                  </button>
                 </form>
               </div>
             </div>
           </div>
         )}
 
-        {step.tipo === 'sugestoes' && (
+        {step.tipo === 'cadastro-email' && step.resultado.professor && (
           <div className="w-full max-w-sm space-y-6 animate-fade-up">
-            <div className="space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accentBlue-soft text-accentBlue shadow-inner-top">
-                <CalendarClock className="h-6 w-6" />
-              </div>
+            <div className="flex flex-col items-center gap-3.5 text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accentBlue-soft text-[19px] font-semibold text-accentBlue shadow-inner-top">
+                {iniciais(step.resultado.professor.nome)}
+              </span>
               <div className="space-y-1.5">
-                <span className="label-micro flex items-center gap-1.5 text-accentBlue">
-                  <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
-                  Portal do professor
-                </span>
-                <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-                  É algum destes?
+                <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
+                  Encontramos você, {step.resultado.professor.nome.split(' ')[0]}!
                 </h1>
-                <p className="text-[14px] text-ink-muted leading-relaxed">
-                  Não encontramos exatamente <span className="text-ink-secondary font-medium">“{step.nome}”</span>. Se você estiver na lista, toque no seu nome.
+                <p className="text-[13px] text-ink-muted">
+                  Confirme seu e-mail para cadastrarmos — assim seu agendamento fica mais rápido da próxima vez.
                 </p>
               </div>
             </div>
 
             <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
                             shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
-              <div className="rounded-[1.5rem] bg-surface-canvas p-3 space-y-1.5">
-                {step.sugestoes.map(s => (
+              <div className="rounded-[1.5rem] bg-surface-canvas px-6 py-7 space-y-5">
+                <form onSubmit={handleCadastroEmail} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cadastro-email" className="text-[12px] text-ink-secondary font-medium">
+                      Seu e-mail
+                    </Label>
+                    <Input
+                      id="cadastro-email"
+                      type="email"
+                      inputMode="email"
+                      value={step.email}
+                      onChange={ev => setStep({ ...step, email: ev.target.value })}
+                      required
+                      autoComplete="email"
+                      placeholder="seu.email@exemplo.com"
+                      className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
+                    />
+                  </div>
+
+                  {step.erro && (
+                    <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
+                                    text-[12.5px] text-brand-strong font-medium">
+                      <p>{step.erro}</p>
+                    </div>
+                  )}
+
                   <button
-                    key={s.id}
-                    onClick={() => handlePickSugestao(s.id)}
+                    type="submit"
                     disabled={lookup.isPending}
-                    className="btn-press w-full flex items-center gap-3 rounded-xl px-3.5 py-3 text-left
-                               hover:bg-surface-subtle disabled:opacity-60 transition-colors"
+                    className={cn(
+                      'btn-press w-full h-11 rounded-full bg-ink text-ink-inverse',
+                      'flex items-center justify-center',
+                      'hover:bg-ink/90 disabled:opacity-60 disabled:cursor-not-allowed',
+                      'font-medium text-[13.5px]',
+                    )}
                   >
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-accentBlue-soft text-[12px] font-semibold text-accentBlue">
-                      {iniciais(s.nome)}
-                    </span>
-                    <span className="text-[13.5px] font-medium text-ink">{s.nome}</span>
+                    {lookup.isPending ? 'Salvando…' : 'Continuar'}
                   </button>
-                ))}
+
+                  <button
+                    type="button"
+                    onClick={recomecar}
+                    className="btn-press w-full text-[12px] text-ink-muted hover:text-ink-secondary"
+                  >
+                    Não sou eu
+                  </button>
+                </form>
               </div>
             </div>
-
-            <button
-              onClick={recomecar}
-              className="btn-press w-full h-11 rounded-full border border-line-soft text-[13px] font-medium text-ink-secondary hover:bg-surface-subtle"
-            >
-              Não é nenhum desses
-            </button>
           </div>
         )}
 
@@ -464,6 +513,42 @@ export function Home() {
                 Sim, sou eu
               </button>
             </div>
+          </div>
+        )}
+
+        {step.tipo === 'contato-coordenacao' && (
+          <div className="w-full max-w-sm space-y-6 text-center animate-fade-up">
+            <div className="flex flex-col items-center gap-3.5">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand shadow-inner-top">
+                <Phone className="h-6 w-6" />
+              </span>
+              <div className="space-y-1.5">
+                <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
+                  Vamos te ajudar pessoalmente
+                </h1>
+                <p className="text-[13.5px] text-ink-muted leading-relaxed">
+                  Não conseguimos te identificar pelo e-mail nem pelo nome. Fale com a coordenação de professores
+                  para resolver e agendar sua reunião.
+                </p>
+              </div>
+            </div>
+
+            <a
+              href={`https://wa.me/${COORD_WHATSAPP_NUM}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-press flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand text-white text-[13.5px] font-medium hover:bg-brand-strong"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Falar com a coordenação ({COORD_TELEFONE})
+            </a>
+
+            <button
+              onClick={recomecar}
+              className="btn-press w-full h-10 rounded-full border border-line-soft text-[13px] font-medium text-ink-secondary hover:bg-surface-subtle"
+            >
+              Tentar de novo
+            </button>
           </div>
         )}
 
