@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 
 export type TarefaTime = 'coordenacao' | 'suporte'
-export type TarefaStatus = 'aberto' | 'concluido'
+export type TarefaStatus = 'aberto' | 'em_andamento' | 'concluido'
 
 export interface Tarefa {
   id: string
@@ -15,22 +15,34 @@ export interface Tarefa {
   status: TarefaStatus
   concluido_em: string | null
   concluido_por: string | null
+  /** Incidente que originou a tarefa (fluxo "assumir desafio"). NULL = tarefa avulsa. */
+  incidente_id: string | null
   created_at: string
   criador?: { id: string; nome: string } | null
   responsavel?: { id: string; nome: string } | null
+  concluidor?: { id: string; nome: string } | null
 }
 
 const SELECT_TAREFA = `
   id, titulo, descricao, criado_por, atribuido_a, atribuido_time,
-  status, concluido_em, concluido_por, created_at,
+  status, concluido_em, concluido_por, incidente_id, created_at,
   criador:profiles!criado_por (id, nome),
-  responsavel:profiles!atribuido_a (id, nome)
+  responsavel:profiles!atribuido_a (id, nome),
+  concluidor:profiles!concluido_por (id, nome)
 `
 
+function umPerfil(v: unknown): { id: string; nome: string } | null {
+  const p = Array.isArray(v) ? v[0] : v
+  return (p as { id: string; nome: string }) ?? null
+}
+
 function normalizar(row: Record<string, unknown>): Tarefa {
-  const criador = Array.isArray(row.criador) ? row.criador[0] : row.criador
-  const responsavel = Array.isArray(row.responsavel) ? row.responsavel[0] : row.responsavel
-  return { ...(row as unknown as Tarefa), criador: criador ?? null, responsavel: responsavel ?? null }
+  return {
+    ...(row as unknown as Tarefa),
+    criador: umPerfil(row.criador),
+    responsavel: umPerfil(row.responsavel),
+    concluidor: umPerfil(row.concluidor),
+  }
 }
 
 /** Todas as tarefas visíveis ao usuário (a RLS já filtra por criador/destino/time/admin). */
@@ -96,6 +108,31 @@ export function useCriarTarefa() {
         status: 'aberto',
       })
       if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tarefas'] }),
+  })
+}
+
+/** Move uma tarefa AVULSA (sem incidente) entre os estados do Kanban.
+ *  Tarefas com incidente_id são movidas pelas ações do incidente (assumir/
+ *  resolver/largar), não por aqui — ver TarefasPage. */
+export function useMoverTarefa() {
+  const qc = useQueryClient()
+  const { profile } = useAuth()
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: TarefaStatus }) => {
+      const concluida = status === 'concluido'
+      const { data, error } = await supabase
+        .from('tarefas')
+        .update({
+          status,
+          concluido_em: concluida ? new Date().toISOString() : null,
+          concluido_por: concluida ? (profile?.id ?? null) : null,
+        })
+        .eq('id', id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('Sem permissão para mover esta tarefa.')
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tarefas'] }),
   })

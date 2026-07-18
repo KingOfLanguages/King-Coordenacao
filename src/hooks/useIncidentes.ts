@@ -185,6 +185,36 @@ export function useIncidentes() {
   })
 }
 
+/** Um único incidente por id — usado no detalhe da tarefa (mostra infos + fotos
+ *  do desafio que originou a tarefa). Só busca quando `id` está preenchido. */
+export function useIncidente(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['incidente', id],
+    enabled: !!id,
+    queryFn: async (): Promise<Incidente | null> => {
+      const { data, error } = await supabase
+        .from('nexus_incidents')
+        .select(SELECT_INCIDENTE)
+        .eq('id', id!)
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return null
+      const { assumido_por_perfil, responsavel_perfil, ...i } = data as Record<string, unknown> & {
+        assumido_por_perfil?: { nome: string } | { nome: string }[] | null
+        responsavel_perfil?: { nome: string } | { nome: string }[] | null
+      }
+      const perfil = Array.isArray(assumido_por_perfil) ? assumido_por_perfil[0] : assumido_por_perfil
+      const respPerfil = Array.isArray(responsavel_perfil) ? responsavel_perfil[0] : responsavel_perfil
+      return {
+        ...(i as unknown as Incidente),
+        image_urls: (i as { image_urls?: string[] }).image_urls ?? [],
+        assumido_por_nome: perfil?.nome ?? null,
+        responsavel_nome: respPerfil?.nome ?? null,
+      } as Incidente
+    },
+  })
+}
+
 export function useCriarIncidente() {
   const qc = useQueryClient()
   const { profile } = useAuth()
@@ -244,6 +274,7 @@ export function useCriarIncidente() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
+      qc.invalidateQueries({ queryKey: ['tarefas'] }) // triggers de sync mexem nas tarefas
       if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
     },
   })
@@ -289,6 +320,7 @@ export function useAtualizarIncidente() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
+      qc.invalidateQueries({ queryKey: ['tarefas'] }) // triggers de sync mexem nas tarefas
       if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
     },
   })
@@ -310,6 +342,7 @@ export function useAssumirIncidente() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
+      qc.invalidateQueries({ queryKey: ['tarefas'] }) // triggers de sync mexem nas tarefas
       if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
     },
   })
@@ -348,6 +381,7 @@ export function useLargarIncidente() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
+      qc.invalidateQueries({ queryKey: ['tarefas'] }) // triggers de sync mexem nas tarefas
       if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
     },
   })
@@ -365,6 +399,7 @@ export function useResolverIncidente() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
+      qc.invalidateQueries({ queryKey: ['tarefas'] }) // triggers de sync mexem nas tarefas
       if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
     },
   })
@@ -397,6 +432,7 @@ export function useReabrirIncidente() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
+      qc.invalidateQueries({ queryKey: ['tarefas'] }) // triggers de sync mexem nas tarefas
       if (vars.professor_id) qc.invalidateQueries({ queryKey: ['nexus-dados', vars.professor_id] })
     },
   })
