@@ -7,6 +7,10 @@
 -- silenciosamente (net.http_post contra um host que não resolve), então a
 -- sincronização automática de reuniões nunca aconteceu — só funcionava
 -- quando a função era invocada manualmente.
+--
+-- Segurança: a service_role key NÃO é mais hardcoded aqui. Ela é lida do
+-- Supabase Vault. Antes de aplicar/rodar este cron, crie o secret uma vez:
+--   SELECT vault.create_secret('<SERVICE_ROLE_KEY>', 'service_role_key');
 -- ─────────────────────────────────────────────────────────────────────────────
 
 SELECT cron.alter_job(
@@ -16,7 +20,11 @@ SELECT cron.alter_job(
       url     := 'https://dajbzpeduxmsxyukmjfm.supabase.co/functions/v1/daily-import',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
-        'Authorization', 'Bearer REDACTED_SERVICE_ROLE_KEY'
+        'Authorization', 'Bearer ' || (
+          SELECT decrypted_secret
+          FROM vault.decrypted_secrets
+          WHERE name = 'service_role_key'
+        )
       ),
       body    := '{}'::jsonb
     ) AS request_id;
