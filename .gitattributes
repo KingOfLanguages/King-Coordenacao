@@ -1,0 +1,17 @@
+# Normaliza fim de linha no repositório: tudo que é texto vai pro git como LF,
+# independente de quem commitou. Sem isso, com core.autocrlf=true no Windows um
+# arquivo pode entrar com CRLF e, no checkout de quem está em Linux/Mac, o
+# arquivo INTEIRO aparece como modificado — diff gigante sem nenhuma mudança real.
+* text=auto eol=lf
+
+# Binários: nunca converter.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff  binary
+*.woff2 binary
+*.zip  binary
+*.pdf  binary
