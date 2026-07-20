@@ -161,18 +161,24 @@ export function useAlunosKmsPorProfessores(professorIds: string[]) {
 // ─── Mutations — escrevem no Nexus via Edge Function ──────────────────────────
 
 /** supabase-js só expõe error.message genérico em erros HTTP da function —
- *  o corpo JSON real ({error: "..."}) vem em error.context (a Response). */
+ *  o corpo JSON real ({error: "..."}) vem em error.context (a Response).
+ *
+ *  A mensagem é extraída DENTRO do try, mas lançada FORA: um throw lá dentro
+ *  seria capturado pelo próprio catch e descartado, e o usuário acabaria vendo
+ *  só o genérico "Edge Function returned a non-2xx status code" (mesma
+ *  armadilha documentada em useBookMeeting.ts). */
 async function invocarMesAnalise<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('nexus-mes-analise', { body })
   if (error) {
     const ctx = (error as { context?: Response }).context
+    let mensagem: string | null = null
     if (ctx) {
       try {
         const parsed = await ctx.clone().json()
-        if (parsed?.error) throw new Error(parsed.error)
-      } catch { /* corpo não era JSON — usa error.message abaixo */ }
+        if (parsed?.error) mensagem = parsed.error
+      } catch { /* corpo não era JSON — cai na mensagem genérica abaixo */ }
     }
-    throw new Error(error.message)
+    throw new Error(mensagem ?? error.message)
   }
   if (data?.error) throw new Error(data.error)
   return data as T
