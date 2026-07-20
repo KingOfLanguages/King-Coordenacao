@@ -14,7 +14,7 @@ import { RedefinirSenha } from '@/pages/RedefinirSenha'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
-import { RetornoPausaPage } from '@/pages/professores/RetornoPausaPage'
+import { AcompanhamentoPausasPage } from '@/pages/professores/AcompanhamentoPausasPage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
@@ -27,6 +27,7 @@ import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
 import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
+import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
 import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
 import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
@@ -92,6 +93,7 @@ export default function App() {
             {/* Retorno do OAuth (Google) — precisa da sessão viva pra decidir o destino. */}
             <Route path="/auth/callback"  element={<AuthCallback />} />
             <Route path="/agendar"        element={<AgendamentoPage />} />
+            <Route path="/pausa"          element={<PausaPublicaPage />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<IndexRedirect />} />
@@ -154,11 +156,13 @@ export default function App() {
                   <OnboardingPage />
                 </ProtectedRoute>
               } />
-              <Route path="/retorno-pausa" element={
+              <Route path="/pausas" element={
                 <ProtectedRoute page="retorno-pausa">
-                  <RetornoPausaPage />
+                  <AcompanhamentoPausasPage />
                 </ProtectedRoute>
               } />
+              {/* "Retorno de Pausa" virou "Acompanhamento de Pausas" — links antigos seguem valendo. */}
+              <Route path="/retorno-pausa" element={<Navigate to="/pausas" replace />} />
               <Route path="/suporte/reunioes" element={
                 <ProtectedRoute page="suporte-reunioes">
                   <SuporteReunioesPage />

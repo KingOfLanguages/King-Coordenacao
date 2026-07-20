@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select'
 import { useProfessoresComContadores, useProfessoresEmPausa, useCriarProfessor } from '@/hooks/useProfessores'
 import type { ProfessorComContadores } from '@/hooks/useProfessores'
+import { diasAte } from '@/hooks/usePausas'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
@@ -45,6 +46,8 @@ export function ProfessoresPage() {
 
   const emMonitoramento = filtrados.filter(p => p.monitoramento)
   const demais          = filtrados.filter(p => !p.monitoramento)
+  // Pausas cuja data de fim já chegou e ninguém encerrou ainda.
+  const contatosPendentes = emPausaFiltrados.filter(p => p._pausa && diasAte(p._pausa.data_fim) <= 0).length
 
   return (
     <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
@@ -57,7 +60,10 @@ export function ProfessoresPage() {
               <> · <span className="text-urg-highFg font-medium">{emMonitoramento.length} em monitoramento</span></>
             )}
             {emPausaFiltrados.length > 0 && (
-              <> · <span className="text-ink-muted">{emPausaFiltrados.length} em pausa</span></>
+              <> · <span className="text-accentBlue font-medium">{emPausaFiltrados.length} em pausa</span></>
+            )}
+            {contatosPendentes > 0 && (
+              <> · <span className="text-urg-highFg font-medium">{contatosPendentes} aguardando contato</span></>
             )}
           </p>
         </div>
@@ -137,15 +143,21 @@ export function ProfessoresPage() {
             </Section>
           )}
 
-          {/* BUG-14: professores em pausa visíveis em seção separada */}
+          {/* Professores em pausa: seção própria e DESTACADA — quem está em pausa
+              precisa ser visto, não desbotado (antes era `muted`). */}
           {emPausaFiltrados.length > 0 && (
             <Section
               label="Em pausa"
-              icon={<PauseCircle className="h-3.5 w-3.5 text-ink-muted" />}
-              tone="muted"
+              icon={<PauseCircle className="h-3.5 w-3.5 text-accentBlue" />}
+              tone="pausa"
             >
               {emPausaFiltrados.map(p => (
-                <CardProfessor key={p.id} professor={p} onClick={() => navigate(`/professores/${p.id}`)} muted />
+                <CardProfessor
+                  key={p.id}
+                  professor={p}
+                  onClick={() => navigate(`/professores/${p.id}`)}
+                  pausa={p._pausa}
+                />
               ))}
             </Section>
           )}
@@ -261,7 +273,7 @@ function NovoProfessorDialog({ onClose }: { onClose: () => void }) {
 
 function Section({
   label, icon, tone, children,
-}: { label: string; icon?: React.ReactNode; tone?: 'danger' | 'muted'; children: React.ReactNode }) {
+}: { label: string; icon?: React.ReactNode; tone?: 'danger' | 'muted' | 'pausa'; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-2">
@@ -270,6 +282,7 @@ function Section({
           'label-micro',
           tone === 'danger' && 'text-urg-highFg',
           tone === 'muted'  && 'text-ink-muted',
+          tone === 'pausa'  && 'text-accentBlue',
         )}>{label}</h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -282,10 +295,18 @@ function Section({
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 function CardProfessor({
-  professor, onClick, emphasis, muted,
-}: { professor: ProfessorComContadores; onClick: () => void; emphasis?: boolean; muted?: boolean }) {
+  professor, onClick, emphasis, pausa,
+}: {
+  professor: ProfessorComContadores
+  onClick: () => void
+  emphasis?: boolean
+  /** Dados da pausa vigente — presente só nos cards da seção "Em pausa". */
+  pausa?: { motivo: string; data_inicio: string; data_fim: string } | null
+}) {
   const hasAlerts = professor._negativos > 0
   const tempo = tempoDeCasaLabel(professor.data_inicio) ?? professor.tempo_na_king
+  // Passou da data de fim = a coordenação já deveria ter feito o contato.
+  const contatoVencido = !!pausa && diasAte(pausa.data_fim) <= 0
 
   return (
     <button
@@ -294,13 +315,40 @@ function CardProfessor({
         'btn-press text-left card-surface p-4 space-y-3',
         'hover:border-line-strong hover:shadow-card transition-all',
         emphasis && 'border-urg-highFg/20 bg-urg-highBg/10',
-        muted    && 'opacity-60',
+        pausa !== undefined && 'border-accentBlue/25 bg-accentBlue-soft/25',
+        contatoVencido && 'border-urg-highFg/40 bg-urg-highBg/10',
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium text-[14px] text-ink leading-tight truncate flex-1">{professor.nome}</p>
         <PrioridadeBadge professor={professor} />
       </div>
+
+      {pausa !== undefined && (
+        <div className="space-y-1.5">
+          {pausa ? (
+            <>
+              <p className="text-[12px] text-ink-secondary leading-relaxed line-clamp-2" title={pausa.motivo}>
+                {pausa.motivo}
+              </p>
+              <p className={cn(
+                'inline-flex items-center gap-1.5 text-[11.5px] tabular-nums',
+                contatoVencido ? 'text-urg-highFg font-medium' : 'text-ink-muted',
+              )}>
+                <PauseCircle className="h-3 w-3" />
+                {new Date(pausa.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')}
+                {' → '}
+                {new Date(pausa.data_fim + 'T00:00:00').toLocaleDateString('pt-BR')}
+                {contatoVencido && ' · contato pendente'}
+              </p>
+            </>
+          ) : (
+            <p className="text-[11.5px] text-ink-muted">
+              Pausa sem registro de motivo (veio do KMS).
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Grupo + coordenador */}
       {(professor.grupo?.nome || professor.coordenador?.nome) && (

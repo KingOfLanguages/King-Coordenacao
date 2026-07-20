@@ -15,3 +15,8 @@ export const PORTAL_BASE_URL =
 export function linkAgendamentoPublico(): string {
   return `${PORTAL_BASE_URL}/agendar`
 }
+
+/** Link público que os professores usam para oficializar uma pausa (sem login). */
+export function linkPausaPublico(): string {
+  return `${PORTAL_BASE_URL}/pausa`
+}

@@ -54,7 +54,9 @@ export const PAGES: PageDef[] = [
   // ── Professores ──
   { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'onboarding',      path: '/onboarding',     label: 'Onboarding',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
-  { key: 'retorno-pausa',   path: '/retorno-pausa',  label: 'Retorno de Pausa',     section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  // A chave continua 'retorno-pausa' de propósito: é ela que indexa os overrides
+  // de permissão já salvos no banco — renomear apagaria as configurações atuais.
+  { key: 'retorno-pausa',   path: '/pausas',         label: 'Acompanhamento de Pausas', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'acompanhamento',  path: '/acompanhamento', label: 'Acompanhamento',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'mes-analise',     path: '/mes-analise',    label: 'Mês de Análise',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

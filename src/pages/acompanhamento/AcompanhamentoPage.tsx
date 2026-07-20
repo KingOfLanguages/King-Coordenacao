@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Copy, Check, Star, X, Ban, CheckCircle2, ChevronDown, FileText,
+  PauseCircle,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -635,6 +636,19 @@ function PainelRow({ r, podeAgir }: { r: PainelProfessor; podeAgir: boolean }) {
               <FileText className="h-3 w-3" />
               {r.informes_recentes} informe{r.informes_recentes > 1 ? 's' : ''}
               {r.informe_reincidente && ' · reincide'}
+            </span>
+          )}
+          {r.pausa_vencida_dias != null && (
+            <span
+              title={
+                `Pausa com fim previsto em ${new Date(r.pausa_data_fim + 'T00:00:00').toLocaleDateString('pt-BR')}. ` +
+                'A pausa só encerra depois do contato da coordenação — por isso o professor aparece aqui mesmo estando pausado.'
+              }
+              className="inline-flex items-center gap-1 rounded-full bg-urg-medBg text-urg-medFg px-2 py-0.5 text-[10.5px] font-medium"
+            >
+              <PauseCircle className="h-3 w-3" />
+              Pausa vencida
+              {r.pausa_vencida_dias > 0 && ` · ${r.pausa_vencida_dias}d`}
             </span>
           )}
         </div>

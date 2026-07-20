@@ -7,6 +7,9 @@ export type TipoNotificacao =
   | 'incidente_critico'
   | 'incidente_assumido'
   | 'incidente_concluido'
+  /** Pausa de um professor chegou à data de fim — hora do contato da coordenação
+   *  (disparada pelo cron king-cobrar-fim-pausa, ver 20260738_pausas.sql). */
+  | 'pausa_fim'
 
 export interface Notificacao {
   id: string

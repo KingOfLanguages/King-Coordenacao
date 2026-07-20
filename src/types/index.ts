@@ -52,6 +52,36 @@ export interface Professor {
   created_at: string
 }
 
+// ─── Pausa de professores ─────────────────────────────────────────────────────
+
+export type PausaStatus = 'pendente' | 'em_atendimento' | 'concluida' | 'recusada'
+
+export interface Pausa {
+  id: string
+  professor_id: string
+  motivo: string
+  /** Último dia de aula — a pausa ativa nesta data (se já concluída). */
+  data_inicio: string
+  /** Dia em que a coordenação precisa entrar em contato para encerrar. */
+  data_fim: string
+  status: PausaStatus
+  assumido_por: string | null
+  assumido_em: string | null
+  concluido_por: string | null
+  concluido_em: string | null
+  recusado_por: string | null
+  recusado_em: string | null
+  motivo_recusa: string | null
+  /** NULL = ainda não virou status=pausa no professor. */
+  ativada_em: string | null
+  encerrada_em: string | null
+  encerrada_por: string | null
+  observacao_id: string | null
+  tarefa_fim_id: string | null
+  origem: string
+  created_at: string
+}
+
 export interface Reuniao {
   id: string
   professor_id: string | null

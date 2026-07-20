@@ -48,6 +48,11 @@ export interface PainelProfessor {
   informes_recentes: number
   informe_reincidente: boolean   // REINCIDENCIA_MIN+ informes da MESMA categoria
 
+  // Pausa cujo contato de encerramento venceu. Só os pausados NESSA situação
+  // entram no painel — ver a query.
+  pausa_vencida_dias: number | null
+  pausa_data_fim: string | null
+
   // Índice de Prioridade.
   prioridade: number
   nivel: NivelPrioridade
@@ -107,12 +112,17 @@ export function usePainelProfessores() {
             id, nome,
             grupo:grupos!grupo_id (id, nome),
             coordenador:profiles!coordenador_id (nome),
+            status,
             professor_acompanhamento (
               score_atual, score_faixa, elegivel_alocacao, reuniao_status,
               aulas_pendentes_qtd, aulas_pendentes_data_mais_antiga
-            )
+            ),
+            pausas (data_fim, ativada_em, encerrada_em)
           `)
-          .eq('status', 'ativo')
+          // Pausados entram junto, mas só ficam os que estão com o contato de
+          // encerramento vencido (filtro logo abaixo) — para o resto, score e
+          // pendências não querem dizer nada enquanto o professor está parado.
+          .in('status', ['ativo', 'pausa'])
           .order('nome'),
         supabase
           .from('acompanhamento_silencio')
@@ -155,7 +165,25 @@ export function usePainelProfessores() {
         agg.porCategoria.set(row.problem_type, (agg.porCategoria.get(row.problem_type) ?? 0) + 1)
       }
 
-      return (profRes.data ?? []).map((p): PainelProfessor => {
+      type PausaEmbutida = { data_fim: string; ativada_em: string | null; encerrada_em: string | null }
+
+      /** Dias desde a data de fim da pausa vigente. null = sem pausa vigente ou
+       *  contato ainda no prazo. */
+      function pausaVencidaDe(pausas: PausaEmbutida[] | null | undefined): { dias: number; dataFim: string } | null {
+        const vigente = (pausas ?? []).find(x => x.ativada_em && !x.encerrada_em)
+        if (!vigente) return null
+        const dias = diasDesde(vigente.data_fim)
+        // diasDesde satura em 0 para datas futuras — só conta se já venceu.
+        const venceu = new Date(vigente.data_fim + 'T00:00:00').getTime() <= Date.now()
+        return venceu ? { dias, dataFim: vigente.data_fim } : null
+      }
+
+      return (profRes.data ?? []).flatMap((p): PainelProfessor[] => {
+        const pausaVencida = pausaVencidaDe(p.pausas as PausaEmbutida[] | null)
+
+        // Pausado só entra no painel quando o contato de encerramento venceu.
+        if (p.status === 'pausa' && !pausaVencida) return []
+
         const acomp = Array.isArray(p.professor_acompanhamento)
           ? p.professor_acompanhamento[0]
           : p.professor_acompanhamento
@@ -173,9 +201,11 @@ export function usePainelProfessores() {
         const informesRecentes = inf?.total ?? 0
         const informeReincidente = inf ? ehReincidente(inf) : false
 
-        const prioridade = calcularPrioridade(score, qtd, dias, informesRecentes, informeReincidente)
+        const prioridade = calcularPrioridade(
+          score, qtd, dias, informesRecentes, informeReincidente, pausaVencida?.dias ?? null,
+        )
 
-        return {
+        return [{
           professor_id: p.id,
           nome: p.nome,
           grupo_id: grupo?.id ?? null,
@@ -195,9 +225,11 @@ export function usePainelProfessores() {
           ultimo_acompanhamento_estagio: log?.estagio ?? null,
           informes_recentes: informesRecentes,
           informe_reincidente: informeReincidente,
+          pausa_vencida_dias: pausaVencida?.dias ?? null,
+          pausa_data_fim: pausaVencida?.dataFim ?? null,
           prioridade,
           nivel: nivelPrioridade(prioridade),
-        }
+        }]
       })
     },
   })

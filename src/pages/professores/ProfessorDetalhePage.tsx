@@ -10,7 +10,8 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useTirarDaPausa, useConcluirAcompanhamentoPausa } from '@/hooks/useProfessores'
+import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useConcluirAcompanhamentoPausa } from '@/hooks/useProfessores'
+import { useEncerrarPausa } from '@/hooks/usePausas'
 import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
 import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
@@ -94,7 +95,10 @@ export function ProfessorDetalhePage() {
   const { data: nexusData } = useNexusDados(id)
   const atualizarMonitoramento = useAtualizarMonitoramento()
   const atualizarGrupo = useAtualizarGrupoProfessor()
-  const tirarDaPausa = useTirarDaPausa()
+  // Encerrar pausa passou a ser RPC: além de tirar da pausa, fecha a linha em
+  // `pausas` e solta a trava de status na ordem certa (ver 20260738_pausas.sql —
+  // um UPDATE direto seria revertido pelo próprio trigger).
+  const encerrarPausa = useEncerrarPausa()
   const concluirAcompPausa = useConcluirAcompanhamentoPausa()
   const resolverObservacao = useResolverObservacao()
   const { profile } = useAuth()
@@ -309,8 +313,8 @@ export function ProfessorDetalhePage() {
             <Button
               variant="outline" size="sm"
               className="btn-press border-urg-lowFg/30 text-urg-lowFg hover:bg-urg-lowBg gap-1.5"
-              disabled={tirarDaPausa.isPending}
-              onClick={() => tirarDaPausa.mutate(professor.id, {
+              disabled={encerrarPausa.isPending}
+              onClick={() => encerrarPausa.mutate(professor.id, {
                 onSuccess: () => toast.success('Professor tirado da pausa. O sync do KMS não vai re-pausar.'),
                 onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao tirar da pausa.'),
               })}

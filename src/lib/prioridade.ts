@@ -34,6 +34,14 @@ const INFORME_EXP  = 1.3         // >1 → acumular pesa mais que somar linearme
 const INFORME_K    = 30          // amplitude do peso de informe
 const REINCIDENCIA_BONUS = 12    // extra quando repete a MESMA categoria
 
+// Pausa vencida: o contato de encerramento passou da data. É uma pendência
+// operacional binária (não tem "meio atrasado"), então entra como degrau — sobe
+// direto para o patamar de "Alta" e satura em duas semanas de atraso, sem nunca
+// disparar "Crítica" sozinha: quem decide isso é score/pendência.
+const PAUSA_BASE       = 25   // peso no dia em que vence
+const PAUSA_K          = 45   // teto do peso
+const PAUSA_ATRASO_REF = 14   // dias de atraso até saturar
+
 /** Nº de informes da mesma categoria que caracteriza reincidência. */
 export const REINCIDENCIA_MIN = 2
 
@@ -62,17 +70,32 @@ export function pesoInforme(qtdJanela: number, reincidente = false): number {
   return Math.pow(ratio, INFORME_EXP) * INFORME_K + (reincidente ? REINCIDENCIA_BONUS : 0)
 }
 
-/** Índice de Prioridade (maior = mais crítico). */
+/** Peso da pausa vencida: a data de fim chegou e a coordenação ainda não fez o
+ *  contato que encerra a pausa. Diferente dos outros sinais, aqui não há
+ *  gradação de gravidade — ou o contato está em dia, ou está atrasado — então o
+ *  peso é um degrau fixo que cresce devagar com o atraso, até saturar.
+ *  Ex.: no dia ≈ 25 · 1 semana ≈ 34 · 2+ semanas = 45. */
+export function pesoPausaVencida(diasAtraso: number): number {
+  if (diasAtraso < 0) return 0
+  const ratio = Math.min(1, diasAtraso / PAUSA_ATRASO_REF)
+  return PAUSA_BASE + ratio * (PAUSA_K - PAUSA_BASE)
+}
+
+/** Índice de Prioridade (maior = mais crítico).
+ *  `diasPausaVencida` = dias desde a data de fim da pausa vigente; null/negativo
+ *  quando o professor não está em pausa ou o contato ainda não venceu. */
 export function calcularPrioridade(
   score: number | null | undefined,
   qtdPendencias: number,
   diasPendencia: number,
   informesJanela = 0,
   informeReincidente = false,
+  diasPausaVencida: number | null = null,
 ): number {
   return pesoScore(score)
        + pesoPendencia(qtdPendencias, diasPendencia)
        + pesoInforme(informesJanela, informeReincidente)
+       + (diasPausaVencida == null ? 0 : pesoPausaVencida(diasPausaVencida))
 }
 
 // ─── Níveis (rótulo + cor a partir do número) ────────────────────────────────
