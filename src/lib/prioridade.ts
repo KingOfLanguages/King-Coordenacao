@@ -24,6 +24,22 @@ const DIAS_REF = 12       // referência de dias (≈ 3º estágio da régua de 
 const QTD_REF  = 10       // referência de quantidade de aulas pendentes
 const PEND_K   = 100      // amplitude do peso de pendência
 
+// Informe: um registro isolado quase não pesa — o sinal é o ACÚMULO num período
+// curto. Reincidir na mesma categoria é sinal mais forte que informes espalhados.
+// Amplitude propositalmente menor que score/pendência: informe é sinal, não
+// veredito — sozinho ele empurra até "Média", nunca grita "Crítica".
+const INFORME_JANELA_DIAS = 90   // janela de observação dos informes
+const INFORME_REF  = 3           // 3 informes na janela = peso cheio (satura aqui)
+const INFORME_EXP  = 1.3         // >1 → acumular pesa mais que somar linearmente
+const INFORME_K    = 30          // amplitude do peso de informe
+const REINCIDENCIA_BONUS = 12    // extra quando repete a MESMA categoria
+
+/** Nº de informes da mesma categoria que caracteriza reincidência. */
+export const REINCIDENCIA_MIN = 2
+
+/** Janela (dias) em que os informes contam como sinal. */
+export const INFORME_JANELA = INFORME_JANELA_DIAS
+
 /** Peso do score: 0 quando score ≥ SCORE_TETO ou ausente; cresce (curva) ao cair. */
 export function pesoScore(score: number | null | undefined): number {
   if (score == null) return 0
@@ -38,13 +54,25 @@ export function pesoPendencia(qtd: number, dias: number): number {
   return (dias / DIAS_REF) * (qtd / QTD_REF) * PEND_K
 }
 
+/** Peso dos informes: 0 sem informe; satura em INFORME_REF dentro da janela.
+ *  Ex. (sem reincidência): 1 informe ≈ 7 · 2 ≈ 18 · 3+ = 30. */
+export function pesoInforme(qtdJanela: number, reincidente = false): number {
+  if (qtdJanela <= 0) return 0
+  const ratio = Math.min(1, qtdJanela / INFORME_REF)
+  return Math.pow(ratio, INFORME_EXP) * INFORME_K + (reincidente ? REINCIDENCIA_BONUS : 0)
+}
+
 /** Índice de Prioridade (maior = mais crítico). */
 export function calcularPrioridade(
   score: number | null | undefined,
   qtdPendencias: number,
   diasPendencia: number,
+  informesJanela = 0,
+  informeReincidente = false,
 ): number {
-  return pesoScore(score) + pesoPendencia(qtdPendencias, diasPendencia)
+  return pesoScore(score)
+       + pesoPendencia(qtdPendencias, diasPendencia)
+       + pesoInforme(informesJanela, informeReincidente)
 }
 
 // ─── Níveis (rótulo + cor a partir do número) ────────────────────────────────

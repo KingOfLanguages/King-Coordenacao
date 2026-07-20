@@ -889,16 +889,27 @@ function NexusSection({
 }) {
   const [expandido, setExpandido] = useState(false)
   const [excluirAlvo, setExcluirAlvo] = useState<NexusIncidente | null>(null)
-  const abertas = incidentes.filter(i => !i.resolved).length
+  // Informe é registro passivo: nunca é "resolvido", então não pode entrar na
+  // contagem de "em aberto" (senão fica pendurado como aberto pra sempre).
+  const ehInforme = (i: NexusIncidente) => (i.natureza ?? 'desafio') === 'informe'
+  const abertas = incidentes.filter(i => !i.resolved && !ehInforme(i)).length
+  const informes = incidentes.filter(ehInforme).length
   const visiveis = expandido ? incidentes : incidentes.slice(0, 5)
 
   return (
     <section className="card-surface p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="label-micro">Ocorrências (King Nexus)</h2>
-        {abertas > 0 && (
-          <span className="text-[11px] text-urg-highFg font-medium">{abertas} em aberto</span>
-        )}
+        <div className="flex items-center gap-2.5 text-[11px]">
+          {informes > 0 && (
+            <span className="text-ink-muted font-medium" title="Registros sem fluxo de resolução — contam como sinal no Acompanhamento.">
+              {informes} informe{informes > 1 ? 's' : ''}
+            </span>
+          )}
+          {abertas > 0 && (
+            <span className="text-urg-highFg font-medium">{abertas} em aberto</span>
+          )}
+        </div>
       </div>
 
       {(tracking || alertas.length > 0) && (
@@ -954,22 +965,34 @@ function NexusSection({
       ) : (
         <>
           <ul className="space-y-2.5">
-            {visiveis.map(i => (
+            {visiveis.map(i => {
+              const informe = ehInforme(i)
+              return (
               <li
                 key={i.id}
-                className={cn('card-surface p-3.5 space-y-1.5 border-l-2', urgenciaBorda[i.urgency] ?? 'border-line')}
+                className={cn(
+                  'card-surface p-3.5 space-y-1.5 border-l-2',
+                  informe ? 'border-line' : urgenciaBorda[i.urgency] ?? 'border-line',
+                )}
               >
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <span className={cn('inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium', urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
-                      {i.urgency}
-                    </span>
+                    {informe ? (
+                      <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-muted text-ink-muted">
+                        Informe
+                      </span>
+                    ) : (
+                      <span className={cn('inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium', urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary')}>
+                        {i.urgency}
+                      </span>
+                    )}
                     <span className="text-[12px] text-ink font-medium">{i.problem_type}</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px]">
-                    {i.resolved
+                    {/* Informe não tem fluxo de resolução — "em aberto" não se aplica. */}
+                    {!informe && (i.resolved
                       ? <span className="text-urg-lowFg font-medium">Resolvida</span>
-                      : <span className="text-urg-highFg font-medium">Em aberto</span>}
+                      : <span className="text-urg-highFg font-medium">Em aberto</span>)}
                     <span className="text-ink-subtle tabular-nums">
                       {new Date(i.created_at).toLocaleDateString('pt-BR')}
                     </span>
@@ -991,7 +1014,8 @@ function NexusSection({
                   </p>
                 )}
               </li>
-            ))}
+              )
+            })}
           </ul>
           {incidentes.length > 5 && (
             <button

@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { calcularPrioridade, nivelPrioridade, type NivelPrioridade } from '@/lib/prioridade'
+import {
+  calcularPrioridade, nivelPrioridade, INFORME_JANELA, REINCIDENCIA_MIN,
+  type NivelPrioridade,
+} from '@/lib/prioridade'
 import type { SilencioStatus } from '@/hooks/useSilencio'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8,6 +11,7 @@ import type { SilencioStatus } from '@/hooks/useSilencio'
 //   • score + pendências + elegibilidade   → professor_acompanhamento
 //   • estágio da régua de pendência         → acompanhamento_silencio
 //   • último contato registrado             → silencio_mensagem_log
+//   • informes recentes (sinal)             → nexus_incidents (natureza='informe')
 // e calcula o Índice de Prioridade (src/lib/prioridade.ts).
 //
 // Substitui as duas telas antigas (Acompanhamento + Controle de Pendências),
@@ -39,6 +43,10 @@ export interface PainelProfessor {
   // Último acompanhamento = última mensagem de pendência registrada.
   ultimo_acompanhamento_em: string | null
   ultimo_acompanhamento_estagio: SilencioStatus | null
+
+  // Informes como sinal (últimos INFORME_JANELA dias).
+  informes_recentes: number
+  informe_reincidente: boolean   // REINCIDENCIA_MIN+ informes da MESMA categoria
 
   // Índice de Prioridade.
   prioridade: number
@@ -75,11 +83,24 @@ function diasDesde(dataISO: string | null | undefined): number {
   return Math.max(0, Math.floor(ms / 86_400_000))
 }
 
+/** Informes de um professor na janela, agrupados por categoria. */
+interface InformeAgg {
+  total: number
+  porCategoria: Map<string, number>
+}
+
+/** Reincidência = alguma categoria repetida REINCIDENCIA_MIN+ vezes na janela. */
+function ehReincidente(agg: InformeAgg): boolean {
+  for (const n of agg.porCategoria.values()) if (n >= REINCIDENCIA_MIN) return true
+  return false
+}
+
 export function usePainelProfessores() {
   return useQuery({
     queryKey: ['painel-professores'],
     queryFn: async (): Promise<PainelProfessor[]> => {
-      const [profRes, silRes, logRes] = await Promise.all([
+      const desdeInformes = new Date(Date.now() - INFORME_JANELA * 86_400_000).toISOString()
+      const [profRes, silRes, logRes, infRes] = await Promise.all([
         supabase
           .from('professores')
           .select(`
@@ -103,10 +124,17 @@ export function usePainelProfessores() {
           .from('silencio_mensagem_log')
           .select('professor_id, estagio, enviado_em')
           .order('enviado_em', { ascending: false }),
+        supabase
+          .from('nexus_incidents')
+          .select('professor_id, problem_type')
+          .eq('natureza', 'informe')
+          .not('professor_id', 'is', null)
+          .gte('created_at', desdeInformes),
       ])
       if (profRes.error) throw profRes.error
       if (silRes.error) throw silRes.error
       if (logRes.error) throw logRes.error
+      if (infRes.error) throw infRes.error
 
       const silencioPor = new Map<string, SilencioLinha>()
       for (const s of (silRes.data ?? []) as SilencioLinha[]) silencioPor.set(s.professor_id, s)
@@ -117,6 +145,14 @@ export function usePainelProfessores() {
         if (!ultimoLog.has(row.professor_id)) {
           ultimoLog.set(row.professor_id, { estagio: row.estagio as SilencioStatus, enviado_em: row.enviado_em })
         }
+      }
+
+      const informesPor = new Map<string, InformeAgg>()
+      for (const row of (infRes.data ?? []) as { professor_id: string; problem_type: string }[]) {
+        let agg = informesPor.get(row.professor_id)
+        if (!agg) { agg = { total: 0, porCategoria: new Map() }; informesPor.set(row.professor_id, agg) }
+        agg.total++
+        agg.porCategoria.set(row.problem_type, (agg.porCategoria.get(row.problem_type) ?? 0) + 1)
       }
 
       return (profRes.data ?? []).map((p): PainelProfessor => {
@@ -132,7 +168,12 @@ export function usePainelProfessores() {
         const qtd  = acomp?.aulas_pendentes_qtd ?? 0
         const dias = diasDesde(acomp?.aulas_pendentes_data_mais_antiga as string | null | undefined)
         const score = acomp?.score_atual ?? null
-        const prioridade = calcularPrioridade(score, qtd, dias)
+
+        const inf = informesPor.get(p.id)
+        const informesRecentes = inf?.total ?? 0
+        const informeReincidente = inf ? ehReincidente(inf) : false
+
+        const prioridade = calcularPrioridade(score, qtd, dias, informesRecentes, informeReincidente)
 
         return {
           professor_id: p.id,
@@ -152,6 +193,8 @@ export function usePainelProfessores() {
           qtd_alunos: sil?.qtd_alunos ?? null,
           ultimo_acompanhamento_em: log?.enviado_em ?? null,
           ultimo_acompanhamento_estagio: log?.estagio ?? null,
+          informes_recentes: informesRecentes,
+          informe_reincidente: informeReincidente,
           prioridade,
           nivel: nivelPrioridade(prioridade),
         }

@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import {
-  Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Copy, Check, Star, X, Ban, CheckCircle2, ChevronDown,
+  Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Copy, Check, Star, X, Ban, CheckCircle2, ChevronDown, FileText,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -15,7 +15,7 @@ import { useProblemasAbertos, type ProfessorComProblema } from '@/hooks/useObser
 import { ESTAGIOS, mensagemPendencia } from '@/lib/pendenciasMensagens'
 import { scoreVisual } from '@/lib/score'
 import { SCORE_BUCKETS, bucketFor } from '@/hooks/useDashboardGeral'
-import { NIVEIS_ORDEM, nivelInfo } from '@/lib/prioridade'
+import { NIVEIS_ORDEM, nivelInfo, INFORME_JANELA } from '@/lib/prioridade'
 import { useFiltrosFavoritos } from '@/hooks/useFiltrosFavoritos'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils'
 const RECENTE_DIAS = 14   // "acompanhamento recente" = última mensagem nos últimos N dias
 const N_COLUNAS = 9
 
-type QuickId = 'todos' | 'critica' | 'score_baixo' | 'pendencias' | 'bloqueados' | 'acompanhamento'
+type QuickId = 'todos' | 'critica' | 'score_baixo' | 'pendencias' | 'bloqueados' | 'acompanhamento' | 'informes'
 type OrdenarPor = 'prioridade' | 'score' | 'pendencias' | 'dias' | 'ultimo' | 'nome'
 type AgruparPor = 'nenhum' | 'nivel' | 'coordenador' | 'silStatus'
 
@@ -65,6 +65,7 @@ const QUICK_PRED: Record<QuickId, (r: PainelProfessor) => boolean> = {
   pendencias:     r => r.aulas_pendentes_qtd > 0,
   bloqueados:     r => r.elegivel_alocacao === false,
   acompanhamento: r => r.silencio_status != null,
+  informes:       r => r.informes_recentes > 0,
 }
 
 const MIN_PEND_OPTS = [
@@ -187,6 +188,7 @@ export function AcompanhamentoPage() {
       { id: undefined,                   label: 'Aulas pendentes (total)', valor: totalAulas,                                                     tone: 'neutral' as const },
       { id: 'bloqueados'     as QuickId, label: 'Bloqueados p/ alunos',   valor: rows.filter(QUICK_PRED.bloqueados).length,                       tone: 'high'    as const },
       { id: 'acompanhamento' as QuickId, label: 'Em acompanhamento',      valor: rows.filter(QUICK_PRED.acompanhamento).length,                   tone: 'neutral' as const },
+      { id: 'informes'       as QuickId, label: `Com informes (${INFORME_JANELA}d)`, valor: rows.filter(QUICK_PRED.informes).length,               tone: 'med'     as const },
     ]
   }, [rows])
 
@@ -214,7 +216,7 @@ export function AcompanhamentoPage() {
       </header>
 
       {/* ── 1. Cards de resumo ── */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-8">
         {cards.map((c, i) => (
           <CardResumo
             key={i}
@@ -615,6 +617,24 @@ function PainelRow({ r, podeAgir }: { r: PainelProfessor; podeAgir: boolean }) {
               className="inline-flex items-center gap-1 rounded-full bg-urg-highBg text-urg-highFg px-2 py-0.5 text-[10.5px] font-medium"
             >
               <AlertTriangle className="h-3 w-3" /> Mês de Análise
+            </span>
+          )}
+          {r.informes_recentes > 0 && (
+            <span
+              title={
+                `${r.informes_recentes} informe${r.informes_recentes > 1 ? 's' : ''} nos últimos ${INFORME_JANELA} dias` +
+                (r.informe_reincidente
+                  ? ' — com reincidência na mesma categoria. Pesa mais no Índice de Prioridade.'
+                  : '. Conta como sinal no Índice de Prioridade.')
+              }
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium',
+                r.informe_reincidente ? 'bg-urg-medBg text-urg-medFg' : 'bg-surface-subtle text-ink-secondary',
+              )}
+            >
+              <FileText className="h-3 w-3" />
+              {r.informes_recentes} informe{r.informes_recentes > 1 ? 's' : ''}
+              {r.informe_reincidente && ' · reincide'}
             </span>
           )}
         </div>

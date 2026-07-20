@@ -13,6 +13,8 @@ export interface NexusIncidente {
   under_analysis: boolean
   incident_mode: string
   created_at: string
+  /** null em linhas antigas — tratado como 'desafio' (ver useIncidentes.natureza). */
+  natureza: 'informe' | 'desafio' | null
 }
 
 export interface NexusTracking {
@@ -48,7 +50,7 @@ export function useNexusDados(professorId?: string) {
         await Promise.all([
           supabase
             .from('nexus_incidents')
-            .select('id, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, under_analysis, incident_mode, created_at')
+            .select('id, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, under_analysis, incident_mode, created_at, natureza')
             .eq('professor_id', professorId!)
             .order('created_at', { ascending: false }),
           supabase
