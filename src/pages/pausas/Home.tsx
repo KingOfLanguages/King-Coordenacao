@@ -1,11 +1,15 @@
 import { useState } from 'react'
-import { PauseCircle, Phone, MessageCircle, CheckCircle2, CalendarClock } from 'lucide-react'
+import { PauseCircle, Phone, CheckCircle2, CalendarClock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
+import {
+  CabecalhoPortal, CartaoPortal, AvisoErro, BotaoPrimario, BotaoWhatsApp,
+  FundoPortal, AvatarPortal,
+} from '@/components/portal/PortalUI'
+import { dataBR } from '@/lib/formato'
 import { usePausaLookup, useSolicitarPausa, type PausaLookupResult } from '@/hooks/usePortalPausa'
 
 const MESES = [
@@ -15,26 +19,7 @@ const MESES = [
 const ANO_ATUAL = new Date().getFullYear()
 const ANOS = Array.from({ length: 9 }, (_, i) => ANO_ATUAL - i)
 
-// Contato da coordenação de professores, quando não conseguimos identificar o
-// professor nem por e-mail nem por nome completo. Mesmo número do /agendar.
-const COORD_WHATSAPP_NUM = '5511913027763'
-const COORD_TELEFONE     = '+55 11 91302-7763'
-
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-
-/** Iniciais do professor (primeiro + último nome) pro avatar. */
-function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/).filter(Boolean)
-  if (partes.length === 0) return '?'
-  const primeira = partes[0][0]
-  const ultima = partes.length > 1 ? partes[partes.length - 1][0] : ''
-  return (primeira + ultima).toUpperCase()
-}
-
-function dataBR(iso: string): string {
-  const [a, m, d] = iso.split('-')
-  return `${d}/${m}/${a}`
-}
 
 type Step =
   | { tipo: 'identificacao-email'; email: string; erro: string }
@@ -200,21 +185,13 @@ export function Home() {
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-surface-app flex items-center justify-center p-6">
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: [
-            'radial-gradient(ellipse 60% 50% at 15% 0%,   rgba(209,51,58,0.09),  transparent 55%)',
-            'radial-gradient(ellipse 50% 40% at 90% 95%,  rgba(42,92,255,0.07),  transparent 60%)',
-          ].join(','),
-        }}
-      />
+      <FundoPortal />
 
       <div className="relative z-10 flex items-center justify-center w-full">
         {step.tipo === 'identificacao-email' && (
           <div className="w-full max-w-sm space-y-6 animate-fade-up">
             <CabecalhoPortal
+              icone={PauseCircle}
               titulo="Solicitação de Pausa"
               descricao="Informe seu e-mail cadastrado para oficializar sua pausa com a coordenação."
             />
@@ -250,6 +227,7 @@ export function Home() {
         {step.tipo === 'identificacao' && (
           <div className="w-full max-w-sm space-y-6 animate-fade-up">
             <CabecalhoPortal
+              icone={PauseCircle}
               titulo="Solicitação de Pausa"
               descricao={step.desempate
                 ? 'Encontramos mais de uma pessoa com esse nome. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'
@@ -336,9 +314,7 @@ export function Home() {
         {step.tipo === 'cadastro-email' && step.resultado.professor && (
           <div className="w-full max-w-sm space-y-6 animate-fade-up">
             <div className="flex flex-col items-center gap-3.5 text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accentBlue-soft text-[19px] font-semibold text-accentBlue shadow-inner-top">
-                {iniciais(step.resultado.professor.nome)}
-              </span>
+              <AvatarPortal nome={step.resultado.professor.nome} />
               <div className="space-y-1.5">
                 <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
                   Encontramos você, {step.resultado.professor.nome.split(' ')[0]}!
@@ -389,9 +365,7 @@ export function Home() {
         {step.tipo === 'confirmar-identidade' && step.resultado.professor && (
           <div className="w-full max-w-sm space-y-6 text-center animate-fade-up">
             <div className="flex flex-col items-center gap-3.5">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accentBlue-soft text-[19px] font-semibold text-accentBlue shadow-inner-top">
-                {iniciais(step.resultado.professor.nome)}
-              </span>
+              <AvatarPortal nome={step.resultado.professor.nome} />
               <div className="space-y-1.5">
                 <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
                   Você é {step.resultado.professor.nome}?
@@ -468,9 +442,7 @@ export function Home() {
         {step.tipo === 'formulario' && (
           <div className="w-full max-w-md space-y-6 animate-fade-up">
             <div className="flex flex-col items-center gap-3.5 text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accentBlue-soft text-[19px] font-semibold text-accentBlue shadow-inner-top">
-                {iniciais(step.nome)}
-              </span>
+              <AvatarPortal nome={step.nome} />
               <div className="space-y-1.5">
                 <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
                   Oficializar pausa
@@ -588,80 +560,5 @@ export function Home() {
         )}
       </div>
     </div>
-  )
-}
-
-// ─── Pedaços compartilhados entre os passos ───────────────────────────────────
-
-function CabecalhoPortal({ titulo, descricao }: { titulo: string; descricao: string }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accentBlue-soft text-accentBlue shadow-inner-top">
-        <PauseCircle className="h-6 w-6" />
-      </div>
-      <div className="space-y-1.5">
-        <span className="label-micro flex items-center gap-1.5 text-accentBlue">
-          <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
-          Portal do professor
-        </span>
-        <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-          {titulo}
-        </h1>
-        <p className="text-[14px] text-ink-muted leading-relaxed">{descricao}</p>
-      </div>
-    </div>
-  )
-}
-
-function CartaoPortal({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
-                    shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
-      <div className="rounded-[1.5rem] bg-surface-canvas px-6 py-7 space-y-5">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function AvisoErro({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
-                    text-[12.5px] text-brand-strong font-medium">
-      <p>{children}</p>
-    </div>
-  )
-}
-
-function BotaoPrimario({
-  pending, pendingLabel, children,
-}: { pending: boolean; pendingLabel: string; children: React.ReactNode }) {
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className={cn(
-        'btn-press w-full h-11 rounded-full bg-ink text-ink-inverse',
-        'flex items-center justify-center',
-        'hover:bg-ink/90 disabled:opacity-60 disabled:cursor-not-allowed',
-        'font-medium text-[13.5px]',
-      )}
-    >
-      {pending ? pendingLabel : children}
-    </button>
-  )
-}
-
-function BotaoWhatsApp() {
-  return (
-    <a
-      href={`https://wa.me/${COORD_WHATSAPP_NUM}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="btn-press flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand text-white text-[13.5px] font-medium hover:bg-brand-strong"
-    >
-      <MessageCircle className="h-4 w-4" />
-      Falar com a coordenação ({COORD_TELEFONE})
-    </a>
   )
 }

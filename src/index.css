@@ -262,6 +262,94 @@
     transform: translateY(18px);
     animation: slide-nav 420ms cubic-bezier(0.32, 0.72, 0, 1) calc(var(--i, 0) * 55ms + 60ms) forwards;
   }
+
+  /* ── Conteúdo de etapa do Welcome Path ───────────────────────────────
+     Estiliza o HTML escrito pela coordenação no editor de conteúdo. Portado
+     do `.day-content` do app original, trocando os hex fixos pelos tokens
+     do king — sem isso a tabela e as caixas de aviso ficavam com fundo
+     branco cravado e sumiam no dark mode.                                */
+  .conteudo-etapa {
+    color: var(--fg-primary);
+    font-size: 14.5px;
+    line-height: 1.65;
+  }
+  .conteudo-etapa > :first-child { margin-top: 0; }
+  .conteudo-etapa > :last-child  { margin-bottom: 0; }
+  .conteudo-etapa h2 {
+    font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em;
+    margin: 1.5rem 0 0.5rem;
+  }
+  .conteudo-etapa h3 {
+    font-size: 1rem; font-weight: 600; letter-spacing: -0.01em;
+    margin: 1.25rem 0 0.4rem;
+  }
+  .conteudo-etapa p  { margin: 0.6rem 0; }
+  .conteudo-etapa ul { list-style: disc;    padding-left: 1.4rem; margin: 0.6rem 0; }
+  .conteudo-etapa ol { list-style: decimal; padding-left: 1.4rem; margin: 0.6rem 0; }
+  .conteudo-etapa li { margin: 0.25rem 0; }
+  .conteudo-etapa strong { font-weight: 600; }
+  .conteudo-etapa a {
+    color: var(--accent-blue);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .conteudo-etapa img {
+    max-width: 100%; height: auto;
+    border-radius: 0.75rem; border: 1px solid var(--border-soft);
+    margin: 0.75rem 0;
+  }
+  .conteudo-etapa blockquote {
+    margin: 0.75rem 0; padding: 0.5rem 0 0.5rem 1rem;
+    border-left: 3px solid var(--border-default);
+    color: var(--fg-secondary);
+  }
+  .conteudo-etapa code {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.9em;
+    background: var(--bg-subtle);
+    border-radius: 0.3rem;
+    padding: 0.1rem 0.3rem;
+  }
+  /* Tabelas largas rolam dentro do próprio bloco, sem empurrar a página. */
+  .conteudo-etapa .tabela-scroll,
+  .conteudo-etapa table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .conteudo-etapa table {
+    border-collapse: collapse;
+    margin: 0.9rem 0;
+    font-size: 0.92em;
+  }
+  .conteudo-etapa th,
+  .conteudo-etapa td {
+    border: 1px solid var(--border-soft);
+    padding: 0.55rem 0.75rem;
+    vertical-align: top;
+    text-align: left;
+  }
+  .conteudo-etapa thead th {
+    background: var(--bg-subtle);
+    font-weight: 600;
+  }
+  /* Classes que o conteúdo herdado do app antigo já usa. */
+  .conteudo-etapa .alert-red {
+    display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.5rem; align-items: start;
+    background: var(--brand-red-soft);
+    border: 1px solid var(--brand-red);
+    color: var(--brand-red-strong);
+    border-radius: 0.75rem; padding: 0.7rem 0.9rem; margin: 0.9rem 0;
+    font-weight: 600; font-size: 0.92em;
+  }
+  .conteudo-etapa .alert-red::before { content: "⚠"; grid-column: 1; grid-row: 1; }
+  .conteudo-etapa .alert-red > *     { grid-column: 2; }
+  .conteudo-etapa .msg-box {
+    display: flex; gap: 0.6rem; align-items: flex-start;
+    background: var(--urg-low-bg); color: var(--urg-low-fg);
+    border: 1px solid var(--border-soft);
+    border-radius: 0.75rem; padding: 0.85rem 1rem; margin: 0.9rem 0;
+  }
 }
 
 @keyframes slide-nav {

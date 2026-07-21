@@ -20,3 +20,8 @@ export function linkAgendamentoPublico(): string {
 export function linkPausaPublico(): string {
   return `${PORTAL_BASE_URL}/pausa`
 }
+
+/** Link público da trilha de onboarding — o Welcome Path (sem login). */
+export function linkWelcomePathPublico(): string {
+  return `${PORTAL_BASE_URL}/welcome-path`
+}

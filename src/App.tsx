@@ -28,6 +28,7 @@ import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
+import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
 import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
 import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
@@ -94,6 +95,7 @@ export default function App() {
             <Route path="/auth/callback"  element={<AuthCallback />} />
             <Route path="/agendar"        element={<AgendamentoPage />} />
             <Route path="/pausa"          element={<PausaPublicaPage />} />
+            <Route path="/welcome-path"   element={<WelcomePathPage />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<IndexRedirect />} />
