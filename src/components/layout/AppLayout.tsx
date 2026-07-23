@@ -23,7 +23,7 @@ type NavNode =
 
 const NAV: NavNode[] = [
   { kind: 'group', label: 'Reuniões',    pageKeys: ['reunioes-dia', 'agendas'] },
-  { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'retorno-pausa', 'acompanhamento', 'mes-analise', 'incidentes', 'alunos'] },
+  { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'retorno-pausa', 'acompanhamento', 'pendencias', 'mes-analise', 'incidentes', 'alunos'] },
   { kind: 'group', label: 'Dashboard',   pageKeys: ['dashboard', 'dashboard-geral'] },
   { kind: 'link', pageKey: 'suporte-reunioes' },
   { kind: 'link', pageKey: 'tarefas' },

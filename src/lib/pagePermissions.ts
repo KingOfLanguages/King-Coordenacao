@@ -58,6 +58,7 @@ export const PAGES: PageDef[] = [
   // de permissão já salvos no banco — renomear apagaria as configurações atuais.
   { key: 'retorno-pausa',   path: '/pausas',         label: 'Acompanhamento de Pausas', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'acompanhamento',  path: '/acompanhamento', label: 'Acompanhamento',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'pendencias',      path: '/pendencias',     label: 'Central de Pendências', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'mes-analise',     path: '/mes-analise',    label: 'Mês de Análise',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'alunos',          path: '/alunos',         label: 'Reclamações por Aluno', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

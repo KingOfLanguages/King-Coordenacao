@@ -17,6 +17,7 @@ import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { AcompanhamentoPausasPage } from '@/pages/professores/AcompanhamentoPausasPage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
+import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
@@ -136,7 +137,12 @@ export default function App() {
                   <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
-              {/* Controle de Pendências foi fundido em Acompanhamento — mantém o link antigo vivo. */}
+              <Route path="/pendencias" element={
+                <ProtectedRoute page="pendencias">
+                  <CentralPendenciasPage />
+                </ProtectedRoute>
+              } />
+              {/* Controle de Pendências (local, régua 6/9/12) foi fundido em Acompanhamento — mantém o link antigo vivo. */}
               <Route path="/silencio" element={<Navigate to="/acompanhamento" replace />} />
               <Route path="/mes-analise" element={
                 <ProtectedRoute page="mes-analise">
