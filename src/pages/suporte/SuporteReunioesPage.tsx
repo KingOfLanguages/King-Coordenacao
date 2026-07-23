@@ -8,6 +8,7 @@ import {
   useBuscarReunioesPorProfessor, useReunioesDoDia,
   coordenadorNomeDe, reuniaoDe, type ReuniaoBusca,
 } from '@/hooks/useBuscarReunioes'
+import { useNomesPorPerfilId } from '@/hooks/usePerfisPublicos'
 
 const statusCls: Record<string, string> = {
   realizada: 'bg-urg-lowBg text-urg-lowFg',
@@ -54,6 +55,9 @@ export function SuporteReunioesPage() {
   const buscando = termo.trim().length >= 2
   const busca = useBuscarReunioesPorProfessor(termo)
   const doDia = useReunioesDoDia(dia)
+  // Nome do coordenador vem da view perfis_publicos — `profiles` é bloqueado
+  // pela RLS pro cargo suporte, que é justamente quem usa esta tela.
+  const { mapa: nomesPorId } = useNomesPorPerfilId()
 
   const { data: resultados = [], isLoading, isFetching } = buscando ? busca : doDia
 
@@ -66,6 +70,7 @@ export function SuporteReunioesPage() {
         </div>
         <p className="text-[13px] text-ink-muted">
           Veja as reuniões do dia ou encontre rapidamente a de um professor específico.
+          O coordenador mostrado é o dono da agenda em que a reunião aparece.
         </p>
       </header>
 
@@ -117,17 +122,24 @@ export function SuporteReunioesPage() {
         </div>
       ) : (
         <ul className={cn('space-y-2.5', isFetching && 'opacity-60')}>
-          {resultados.map(r => <ReuniaoRow key={r.id} r={r} mostrarData={buscando} />)}
+          {resultados.map(r => (
+            <ReuniaoRow key={r.id} r={r} mostrarData={buscando} nomesPorId={nomesPorId} />
+          ))}
         </ul>
       )}
     </div>
   )
 }
 
-function ReuniaoRow({ r, mostrarData }: { r: ReuniaoBusca; mostrarData: boolean }) {
+function ReuniaoRow({ r, mostrarData, nomesPorId }: {
+  r: ReuniaoBusca
+  mostrarData: boolean
+  nomesPorId: Map<string, string>
+}) {
   const [copiado, setCopiado] = useState(false)
   const reuniao = reuniaoDe(r)
-  const coordNome = coordenadorNomeDe(r)
+  const coordNome = coordenadorNomeDe(r, nomesPorId)
+  const emGrupo = reuniao?.tipo_reuniao === 'grupo'
   const link = reuniao?.meet_link ?? null
 
   async function copiarLink() {
@@ -164,9 +176,15 @@ function ReuniaoRow({ r, mostrarData }: { r: ReuniaoBusca; mostrarData: boolean 
             {r.numero != null && (
               <span className="text-[11px] text-ink-muted">{r.numero}ª reunião</span>
             )}
+            {emGrupo && (
+              <span className="inline-flex items-center rounded-full bg-surface-subtle px-2 py-0.5 text-[10.5px] font-medium text-ink-secondary">
+                Em grupo
+              </span>
+            )}
           </div>
-          <p className="flex items-center gap-1 text-[12.5px] font-medium text-ink-secondary truncate">
-            <User2 className="h-3 w-3 flex-shrink-0" />Coordenador: {coordNome}
+          <p className="flex items-center gap-1 text-[12.5px] text-ink-secondary truncate">
+            <User2 className="h-3 w-3 flex-shrink-0" />
+            Coordenador: <span className="font-semibold text-ink">{coordNome}</span>
           </p>
         </div>
       </div>

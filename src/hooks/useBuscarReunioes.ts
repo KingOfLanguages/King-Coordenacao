@@ -7,9 +7,15 @@ type ReuniaoInfo = {
   titulo: string | null
   meet_link: string | null
   status: string
-  // Coordenador que vai realizar a reunião (reunioes.coordenador_id), não o
-  // coordenador responsável pelo professor.
-  coordenador: { nome: string } | { nome: string }[] | null
+  tipo_reuniao: string | null
+  // Coordenador dono da agenda em que a reunião aparece — no import do Google
+  // Calendar vem do calendário/organizador do evento, e nas reuniões em grupo do
+  // dono da agenda de agendamento. Não é o coordenador responsável pelo professor.
+  //
+  // Guardamos só o id: `profiles` é restrito à própria linha (ou admin) pela RLS,
+  // então o join aninhado voltava NULL pra quem é suporte — justamente o cargo
+  // que usa esta tela. O nome vem da view `perfis_publicos` (useNomesPorPerfilId).
+  coordenador_id: string | null
 }
 
 export type ReuniaoBusca = {
@@ -29,10 +35,14 @@ function um<T>(v: T | T[] | null): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : v
 }
 
-/** Nome do coordenador que vai conduzir a reunião (com quem ela foi agendada). */
-export function coordenadorNomeDe(r: ReuniaoBusca): string {
-  const reuniao = um(r.reuniao)
-  return um(reuniao?.coordenador ?? null)?.nome ?? '—'
+/**
+ * Nome do coordenador responsável pela reunião — o dono da agenda em que ela
+ * aparece. `nomes` é o mapa de useNomesPorPerfilId().
+ */
+export function coordenadorNomeDe(r: ReuniaoBusca, nomes: Map<string, string>): string {
+  const coordId = um(r.reuniao)?.coordenador_id
+  if (!coordId) return 'Sem coordenador'
+  return nomes.get(coordId) ?? '—'
 }
 
 export function reuniaoDe(r: ReuniaoBusca) {
@@ -50,7 +60,7 @@ export function useBuscarReunioesPorProfessor(termo: string) {
         .select(`
           id, status, numero, observacao, confirmado_em,
           professor:professores!inner(id, nome),
-          reuniao:reunioes(id, data, titulo, meet_link, status, coordenador:profiles!coordenador_id(nome))
+          reuniao:reunioes(id, data, titulo, meet_link, status, tipo_reuniao, coordenador_id)
         `)
         .ilike('professor.nome', `%${termo.trim()}%`)
         .order('created_at', { ascending: false })
@@ -74,7 +84,7 @@ export function useReunioesDoDia(diaISO: string) {
         .select(`
           id, status, numero, observacao, confirmado_em,
           professor:professores!inner(id, nome),
-          reuniao:reunioes!inner(id, data, titulo, meet_link, status, coordenador:profiles!coordenador_id(nome))
+          reuniao:reunioes!inner(id, data, titulo, meet_link, status, tipo_reuniao, coordenador_id)
         `)
         .gte('reuniao.data', inicio)
         .lte('reuniao.data', fim)
