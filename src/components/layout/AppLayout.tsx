@@ -22,14 +22,16 @@ type NavNode =
   | { kind: 'group'; label: string; pageKeys: string[] }
 
 const NAV: NavNode[] = [
-  // Convocações e Minha Área ficam no dropdown de Reuniões (ambos são
-  // reunião-relacionados) — como links soltos, estouravam a pill do admin,
-  // sobrepondo o sino/Extensão em "Administração".
-  { kind: 'group', label: 'Reuniões',    pageKeys: ['reunioes-dia', 'agendas', 'convocacoes', 'minha-area'] },
+  // Convocações e Minha Área seguem como links de topo (visíveis). O estouro
+  // que sobrepunha o sino/Extensão em "Administração" foi resolvido alargando a
+  // pill (max-w abaixo), não escondendo itens.
+  { kind: 'group', label: 'Reuniões',    pageKeys: ['reunioes-dia', 'agendas'] },
   { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'retorno-pausa', 'acompanhamento', 'pendencias', 'mes-analise', 'incidentes', 'alunos'] },
   { kind: 'group', label: 'Dashboard',   pageKeys: ['dashboard', 'dashboard-geral'] },
   { kind: 'link', pageKey: 'suporte-reunioes' },
   { kind: 'link', pageKey: 'tarefas' },
+  { kind: 'link', pageKey: 'minha-area' },
+  { kind: 'link', pageKey: 'convocacoes' },
 ]
 
 // Administração continua fixo em admin (não é configurável, pra não travar o admin).
@@ -172,7 +174,7 @@ export function AppLayout() {
           className={cn(
             'glass-pill pointer-events-auto',
             'flex items-center h-[52px] gap-1 pl-2 pr-2',
-            'rounded-full max-w-[74rem] w-[calc(100%-0rem)]',
+            'rounded-full max-w-[90rem] w-[calc(100%-0rem)]',
             'transition-all duration-500 ease-spring',
           )}
         >

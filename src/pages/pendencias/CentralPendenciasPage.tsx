@@ -461,10 +461,16 @@ function DetalheDialog({ ep, onClose }: { ep: PendenciaFila; onClose: () => void
   const [verAuditoria, setVerAuditoria] = useState(false)
   const { data: logs = [],  isLoading: loadingLogs } = usePendenciaLogs(ep.id_Professor)
   const { data: snaps = [] }                          = usePendenciaSnapshots(ep.id_Professor)
-  const { data: hist = [] }                           = usePendenciaHistorico(ep.id_Professor)
+  const { data: hist = [], isLoading: loadingHist }   = usePendenciaHistorico(ep.id_Professor)
   const { data: audit = [], isFetching: loadingAudit } = usePendenciaAuditoria(ep.id_Professor, verAuditoria)
 
   const chartData = snaps.map(s => ({ label: semanaLabel(s.semana), pendencias: s.qtdPendencias }))
+
+  // Recorrência: episódios anteriores (Historico, já encerrados) + o atual (Fila).
+  // estagioFinal é o pico do episódio, então "passou pela etapa N" = pico >= N.
+  const estagiosEp = [...hist.map(h => h.estagioFinal), ep.estagio]
+  const totalPassagens = estagiosEp.length
+  const passouPelaEtapa = (n: number) => estagiosEp.filter(s => s >= n).length
 
   return (
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
@@ -488,6 +494,27 @@ function DetalheDialog({ ep, onClose }: { ep: PendenciaFila; onClose: () => void
           )}
           <span><span className="text-ink-muted">Aberto em:</span> {fmtData(ep.abertoEm)}</span>
         </div>
+
+        {/* Recorrência — quantas vezes passou e em que etapa */}
+        {loadingHist ? (
+          <div className="rounded-lg bg-surface-subtle/60 px-3 py-2 text-[12px] text-ink-muted">Carregando recorrência…</div>
+        ) : (
+          <div className="rounded-lg bg-surface-subtle/60 px-3 py-2 space-y-1.5">
+            <p className="text-[12px] text-ink-secondary">
+              Passou <strong className="tabular-nums">{totalPassagens}×</strong> pela Central de Pendências
+              {hist.length > 0 && (
+                <span className="text-ink-muted"> · {hist.length} encerrado{hist.length > 1 ? 's' : ''} + o atual</span>
+              )}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {ORDEM_ESTAGIOS.map(n => (
+                <span key={n} className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium', ESTAGIO[n].chip)}>
+                  {ESTAGIO[n].titulo}: {passouPelaEtapa(n)}×
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Gráfico semanal */}
         {chartData.length > 0 && (
