@@ -22,13 +22,14 @@ type NavNode =
   | { kind: 'group'; label: string; pageKeys: string[] }
 
 const NAV: NavNode[] = [
-  { kind: 'group', label: 'Reuniões',    pageKeys: ['reunioes-dia', 'agendas'] },
+  // Convocações e Minha Área ficam no dropdown de Reuniões (ambos são
+  // reunião-relacionados) — como links soltos, estouravam a pill do admin,
+  // sobrepondo o sino/Extensão em "Administração".
+  { kind: 'group', label: 'Reuniões',    pageKeys: ['reunioes-dia', 'agendas', 'convocacoes', 'minha-area'] },
   { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'retorno-pausa', 'acompanhamento', 'pendencias', 'mes-analise', 'incidentes', 'alunos'] },
   { kind: 'group', label: 'Dashboard',   pageKeys: ['dashboard', 'dashboard-geral'] },
   { kind: 'link', pageKey: 'suporte-reunioes' },
   { kind: 'link', pageKey: 'tarefas' },
-  { kind: 'link', pageKey: 'minha-area' },
-  { kind: 'link', pageKey: 'convocacoes' },
 ]
 
 // Administração continua fixo em admin (não é configurável, pra não travar o admin).
