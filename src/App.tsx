@@ -19,6 +19,7 @@ import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
+import { CentralConvocacoesPage } from '@/pages/convocacoes/CentralConvocacoesPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
@@ -185,6 +186,11 @@ export default function App() {
               <Route path="/minha-area" element={
                 <ProtectedRoute page="minha-area">
                   <MinhaAreaPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/convocacoes" element={
+                <ProtectedRoute page="convocacoes">
+                  <CentralConvocacoesPage />
                 </ProtectedRoute>
               } />
               {/* Admin */}

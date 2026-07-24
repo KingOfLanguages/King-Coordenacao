@@ -28,6 +28,7 @@ const NAV: NavNode[] = [
   { kind: 'link', pageKey: 'suporte-reunioes' },
   { kind: 'link', pageKey: 'tarefas' },
   { kind: 'link', pageKey: 'minha-area' },
+  { kind: 'link', pageKey: 'convocacoes' },
 ]
 
 // Administração continua fixo em admin (não é configurável, pra não travar o admin).

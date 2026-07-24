@@ -67,6 +67,7 @@ export const PAGES: PageDef[] = [
   { key: 'suporte-reunioes', path: '/suporte/reunioes', label: 'Buscar Reuniões',   section: '',            nav: true,  defaultRoles: ['suporte'] },
   { key: 'tarefas',         path: '/tarefas',        label: 'Tarefas',              section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
   { key: 'minha-area',      path: '/minha-area',     label: 'Minha Área',           section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'convocacoes',     path: '/convocacoes',    label: 'Convocações',          section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
 ]
 
 export const PAGE_BY_KEY: Record<string, PageDef> = Object.fromEntries(PAGES.map(p => [p.key, p]))

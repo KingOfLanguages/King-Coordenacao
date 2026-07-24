@@ -59,6 +59,7 @@ export interface PendenciaApi {
 export interface PendenciaFila extends PendenciaApi {
   professor_uuid: string | null
   professor_status: string | null
+  professor_telefone: string | null
   grupo_id: string | null
   grupo_nome: string | null
   coordenador_nome: string | null
@@ -68,6 +69,7 @@ interface ProfLocalRow {
   id: string
   kms_id: string
   status: string | null
+  telefone: string | null
   grupo: { id: string; nome: string } | { id: string; nome: string }[] | null
   coordenador: { nome: string | null } | { nome: string | null }[] | null
 }
@@ -86,18 +88,19 @@ export function usePendenciasFila() {
       const kmsIds = lista.map(p => String(p.id_Professor))
       const { data: profs, error } = await supabase
         .from('professores')
-        .select('id, kms_id, status, grupo:grupos!grupo_id (id, nome), coordenador:profiles!coordenador_id (nome)')
+        .select('id, kms_id, status, telefone, grupo:grupos!grupo_id (id, nome), coordenador:profiles!coordenador_id (nome)')
         .in('kms_id', kmsIds)
       if (error) throw error
 
       const porKms = new Map<string, Pick<PendenciaFila,
-        'professor_uuid' | 'professor_status' | 'grupo_id' | 'grupo_nome' | 'coordenador_nome'>>()
+        'professor_uuid' | 'professor_status' | 'professor_telefone' | 'grupo_id' | 'grupo_nome' | 'coordenador_nome'>>()
       for (const raw of (profs ?? []) as ProfLocalRow[]) {
         const grupo = um(raw.grupo)
         const coord = um(raw.coordenador)
         porKms.set(String(raw.kms_id), {
           professor_uuid: raw.id,
           professor_status: raw.status,
+          professor_telefone: raw.telefone,
           grupo_id: grupo?.id ?? null,
           grupo_nome: grupo?.nome ?? null,
           coordenador_nome: coord?.nome ?? null,
@@ -107,7 +110,7 @@ export function usePendenciasFila() {
       return lista.map((p): PendenciaFila => ({
         ...p,
         ...(porKms.get(String(p.id_Professor)) ?? {
-          professor_uuid: null, professor_status: null,
+          professor_uuid: null, professor_status: null, professor_telefone: null,
           grupo_id: null, grupo_nome: null, coordenador_nome: null,
         }),
       }))
