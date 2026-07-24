@@ -18,6 +18,7 @@ import { AcompanhamentoPausasPage } from '@/pages/professores/AcompanhamentoPaus
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
+import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
@@ -179,6 +180,11 @@ export default function App() {
               <Route path="/tarefas" element={
                 <ProtectedRoute page="tarefas">
                   <TarefasPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/minha-area" element={
+                <ProtectedRoute page="minha-area">
+                  <MinhaAreaPage />
                 </ProtectedRoute>
               } />
               {/* Admin */}

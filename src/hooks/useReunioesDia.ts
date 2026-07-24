@@ -304,6 +304,98 @@ export function useEditarReuniao() {
   })
 }
 
+/** Cria uma reunião manual na área do coordenador informado.
+ *  - 'professor': vincula 1 professor. Merge — se já existir reunião com o mesmo
+ *    professor no mesmo dia (mesma área), NÃO duplica: junta na existente.
+ *  - 'interna': equipe/liderança, sem professor. */
+export function useCriarReuniao() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: {
+      tipo: 'professor' | 'interna'
+      coordenadorId: string
+      dataISO: string
+      titulo?: string | null
+      meetLink?: string | null
+      professorId?: string | null
+      professorEmail?: string | null
+      pauta?: string | null
+      participantesEmails?: string[]
+      observacao?: string | null
+    }): Promise<{ reuniaoId: string; merged: boolean }> => {
+      const { tipo, coordenadorId, dataISO } = input
+
+      if (tipo === 'professor') {
+        if (!input.professorId) throw new Error('Selecione o professor.')
+
+        // Merge: já existe reunião desse professor nesse dia, nessa área?
+        const { inicio, fim } = dayRange(new Date(dataISO))
+        const { data: doDia, error: errBusca } = await supabase
+          .from('reunioes')
+          .select('id, participantes:reuniao_professores (professor_id)')
+          .eq('coordenador_id', coordenadorId)
+          .gte('data', inicio)
+          .lte('data', fim)
+        if (errBusca) throw errBusca
+        const existente = (doDia ?? []).find(r =>
+          ((r.participantes ?? []) as { professor_id: string | null }[])
+            .some(p => p.professor_id === input.professorId),
+        )
+        if (existente) return { reuniaoId: existente.id as string, merged: true }
+
+        const { data: nova, error: errIns } = await supabase
+          .from('reunioes')
+          .insert({
+            data:            dataISO,
+            titulo:          input.titulo?.trim() || null,
+            meet_link:       input.meetLink?.trim() || null,
+            professor_email: input.professorEmail?.trim() || null,
+            coordenador_id:  coordenadorId,
+            tipo_reuniao:    'professor',
+            status:          'pendente',
+          })
+          .select('id')
+          .single()
+        if (errIns) throw errIns
+
+        const { error: errLink } = await supabase
+          .from('reuniao_professores')
+          .insert({
+            reuniao_id:   nova.id,
+            professor_id: input.professorId,
+            status:       'pendente',
+            observacao:   input.observacao?.trim() || null,
+          })
+        if (errLink) throw errLink
+
+        return { reuniaoId: nova.id as string, merged: false }
+      }
+
+      // interna
+      const { data: nova, error: errIns } = await supabase
+        .from('reunioes')
+        .insert({
+          data:                 dataISO,
+          titulo:               input.titulo?.trim() || null,
+          pauta:                input.pauta?.trim() || null,
+          meet_link:            input.meetLink?.trim() || null,
+          coordenador_id:       coordenadorId,
+          tipo_reuniao:         'interna',
+          status:               'pendente',
+          participantes_emails: input.participantesEmails ?? [],
+        })
+        .select('id')
+        .single()
+      if (errIns) throw errIns
+      return { reuniaoId: nova.id as string, merged: false }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
+    },
+  })
+}
+
 /** Confirma uma reunião interna (equipe/liderança, sem professor) como concluída ou cancelada + observação. */
 export function useConfirmarReuniaoInterna() {
   const queryClient = useQueryClient()

@@ -66,6 +66,7 @@ export const PAGES: PageDef[] = [
   // ── Links soltos ──
   { key: 'suporte-reunioes', path: '/suporte/reunioes', label: 'Buscar Reuniões',   section: '',            nav: true,  defaultRoles: ['suporte'] },
   { key: 'tarefas',         path: '/tarefas',        label: 'Tarefas',              section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
+  { key: 'minha-area',      path: '/minha-area',     label: 'Minha Área',           section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
 ]
 
 export const PAGE_BY_KEY: Record<string, PageDef> = Object.fromEntries(PAGES.map(p => [p.key, p]))

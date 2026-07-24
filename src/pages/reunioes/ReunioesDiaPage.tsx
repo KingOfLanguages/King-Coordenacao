@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   Video, Check, X, Link2, Unlink2, Mail, Sparkles, Pencil, Trash2, Users2,
-  Loader2, ChevronLeft, ChevronRight, CalendarDays, User, Users,
+  Loader2, ChevronLeft, ChevronRight, CalendarDays, User, Users, Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -22,6 +22,8 @@ import {
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
 import { MensagensDoDia } from '@/components/reunioes/MensagensDoDia'
+import { NovaReuniaoDialog } from '@/components/reunioes/NovaReuniaoDialog'
+import { AnotacaoInternaButton } from '@/components/reunioes/AnotacaoInternaButton'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { scoreVisual } from '@/lib/score'
 import { toast } from 'sonner'
@@ -172,6 +174,13 @@ export function ReunioesDiaPage() {
     ? (coordenadores.find(c => c.id === coordId)?.nome ?? '—')
     : (profile?.nome ?? '—')
 
+  const [novaAberta, setNovaAberta] = useState(false)
+  const podeCriar = !!coordId && (
+    profile?.role === 'coordenacao' || profile?.role === 'suporte' ||
+    profile?.role === 'suporte_aluno' || profile?.role === 'admin' ||
+    profile?.is_admin === true || profile?.is_lider === true
+  )
+
   // "Mensagens do dia": lista de contatos diários do coordenador. A RPC/RLS só
   // libera a própria lista (ou admin de verdade) — por isso só mostramos quando
   // é a agenda do próprio usuário ou ele é admin, evitando erro pra líderes que
@@ -279,7 +288,18 @@ export function ReunioesDiaPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <LegendaStatus />
-        <Toolbar />
+        <div className="flex items-center gap-2">
+          {podeCriar && (
+            <Button
+              size="sm"
+              onClick={() => setNovaAberta(true)}
+              className="btn-press h-7 text-[11px] gap-1.5 bg-accentBlue hover:bg-accentBlue-hov text-white"
+            >
+              <Plus className="h-3 w-3" /> Nova reunião
+            </Button>
+          )}
+          <Toolbar />
+        </div>
       </div>
 
       {modo === 'dia' && (
@@ -335,6 +355,14 @@ export function ReunioesDiaPage() {
           evento={eventoAberto}
           onClose={() => setEventoAberto(null)}
           onVerDia={() => { irParaODia(eventoAberto.hora); setEventoAberto(null) }}
+        />
+      )}
+
+      {novaAberta && coordId && (
+        <NovaReuniaoDialog
+          coordenadorId={coordId}
+          dataRef={dataRef}
+          onClose={() => setNovaAberta(false)}
         />
       )}
     </div>
@@ -1015,6 +1043,7 @@ function ReuniaoGrupoCardView({ reuniao }: { reuniao: ReuniaoCard }) {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <AnotacaoInternaButton reuniaoId={reuniao.id} />
           {podeEditar && (
             <>
               <button
@@ -1168,6 +1197,7 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <AnotacaoInternaButton reuniaoId={reuniao.id} />
           {podeEditar && (
             <>
               <button
