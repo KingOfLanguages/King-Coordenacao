@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MessageCircle, Check, Undo2, User, Copy } from 'lucide-react'
-import { useContatosHoje, useMarcarContato, reuniaoUltimaDe, type ContatoDia } from '@/hooks/useContatosDia'
+import { MessageCircle, Check, Undo2, User, Copy, Lock } from 'lucide-react'
+import {
+  useContatosHoje, useMarcarContato, reuniaoUltimaDe, coordenadorResponsavelDe,
+  type ContatoDia,
+} from '@/hooks/useContatosDia'
+import { useNomesPorPerfilId } from '@/hooks/usePerfisPublicos'
 import { getDefaultTemplate } from '@/lib/messageTemplates'
+import { mensagemDoEstagio, ESTAGIO } from '@/lib/centralPendencias'
 import { linkAgendamentoPublico } from '@/lib/portal'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -18,14 +23,19 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
   const marcar = useMarcarContato()
   const navigate = useNavigate()
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
+  // Quem assina a mensagem é o coordenador do grupo do professor, não
+  // necessariamente quem está com a lista aberta (admin/líder navegam agenda dos
+  // outros). Nome resolvido pela view perfis_publicos.
+  const { mapa: nomesPorId } = useNomesPorPerfilId()
 
   // Link enviado ao professor para agendar: o portal público da King (/agendar).
   const linkAgendamento = linkAgendamentoPublico()
 
-  const enviados = contatos.filter(c => c.enviado).length
-  const total    = contatos.length
-  const pct      = total > 0 ? Math.round((enviados / total) * 100) : 0
-  const completo = total > 0 && enviados >= total
+  const enviados   = contatos.filter(c => c.enviado).length
+  const total      = contatos.length
+  const bloqueadas = contatos.filter(c => c.origem !== 'normal').length
+  const pct        = total > 0 ? Math.round((enviados / total) * 100) : 0
+  const completo   = total > 0 && enviados >= total
 
   function toggle(c: ContatoDia) {
     marcar.mutate(
@@ -34,17 +44,40 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
     )
   }
 
-  async function copiarMensagem(c: ContatoDia) {
+  // Texto da mensagem conforme a proveniência do contato:
+  //  • estágio 3 (bloqueada 5+ dias) → mensagem de reunião obrigatória + CTA de agendamento;
+  //  • estágio 2 (bloqueada 3–4 dias) → check-in com aviso de regularização;
+  //  • normal → check-in padrão.
+  function montarMensagem(c: ContatoDia): string {
+    const nome = c.professor?.nome ?? 'professor(a)'
+    const respId = coordenadorResponsavelDe(c)
+    // Cai pro coordenador da lista aberta se o professor estiver sem grupo.
+    const coord = (respId && nomesPorId.get(respId)) || coordNome
+
+    if (c.estagio === 3) {
+      const primeiro = nome.trim().split(/\s+/)[0] || nome
+      const linhas = [`*${coord}*`, '', mensagemDoEstagio(3, primeiro, c.aulas_pendentes ?? 0)]
+      if (linkAgendamento) {
+        linhas.push('', 'Para agendar a reunião de acompanhamento, é só escolher um horário por aqui:', `🔗 ${linkAgendamento}`)
+      }
+      return linhas.join('\n')
+    }
+
     const ultima = reuniaoUltimaDe(c)
-    const mensagem = getDefaultTemplate().build({
-      professorNome: c.professor?.nome ?? 'professor(a)',
-      coordenadorNome: coordNome,
+    return getDefaultTemplate().build({
+      professorNome: nome,
+      coordenadorNome: coord,
       dataUltimaReuniao: ultima
         ? new Date(ultima).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
         : null,
       linkAgendamento,
+      avisoBloqueio: c.estagio === 2,
+      aulasPendentes: c.aulas_pendentes,
     })
-    await navigator.clipboard.writeText(mensagem)
+  }
+
+  async function copiarMensagem(c: ContatoDia) {
+    await navigator.clipboard.writeText(montarMensagem(c))
     setCopiadoId(c.id)
     toast.success('Mensagem copiada.')
     setTimeout(() => setCopiadoId(prev => (prev === c.id ? null : prev)), 1800)
@@ -69,6 +102,13 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
           style={{ width: `${pct}%`, background: completo ? 'var(--urg-low-fg)' : 'var(--accent-blue)' }}
         />
       </div>
+
+      {bloqueadas > 0 && (
+        <p className="text-[11px] text-urg-highFg flex items-center gap-1">
+          <Lock className="h-3 w-3 flex-shrink-0" />
+          {bloqueadas} com agenda bloqueada por pendência
+        </p>
+      )}
 
       {isLoading ? (
         <div className="space-y-2">
@@ -101,6 +141,16 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
                   <User className="h-3.5 w-3.5" />
                 </button>
               </div>
+              {c.origem !== 'normal' && c.estagio && (
+                <span className={cn(
+                  'inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium',
+                  ESTAGIO[c.estagio].chip,
+                )}>
+                  <Lock className="h-2.5 w-2.5" />
+                  {ESTAGIO[c.estagio].titulo}
+                  {c.dias_bloqueio != null && ` · há ${c.dias_bloqueio}d`}
+                </span>
+              )}
               <div className="flex items-center gap-1.5">
                 <Button
                   size="sm"

@@ -9,9 +9,14 @@
 
 export type MessageVars = {
   professorNome: string
+  // Coordenador do grupo de coordenação do professor — quem assina a mensagem.
   coordenadorNome: string
-  dataUltimaReuniao: string | null // já formatada (ex.: "12/06/2026") ou null
+  dataUltimaReuniao: string | null // já formatada (ex.: "9 de março") ou null
   linkAgendamento: string | null   // link do portal público de agendamento (/agendar) ou null
+  // Estágio 2 da Central de Pendências (agenda bloqueada 3–4 dias, "dentro do
+  // prazo"): adiciona uma linha lembrando de regularizar os lançamentos.
+  avisoBloqueio?: boolean
+  aulasPendentes?: number | null    // usado só no aviso de bloqueio, quando conhecido
 }
 
 export type MessageTemplate = {
@@ -28,7 +33,7 @@ export const MESSAGE_TEMPLATES: MessageTemplate[] = [
   {
     id: 'checkin-padrao',
     label: 'Check-in padrão',
-    build: ({ professorNome, coordenadorNome, dataUltimaReuniao, linkAgendamento }) => {
+    build: ({ professorNome, coordenadorNome, dataUltimaReuniao, linkAgendamento, avisoBloqueio, aulasPendentes }) => {
       const referenciaReuniao = dataUltimaReuniao
         ? `Nossa última conversa foi em ${dataUltimaReuniao}.`
         : 'Ainda não tivemos nossa primeira conversa.'
@@ -40,8 +45,21 @@ export const MESSAGE_TEMPLATES: MessageTemplate[] = [
         '',
         `${referenciaReuniao} Passando para saber como você está e acompanhar de perto a sua jornada aqui na King. 💙`,
       ]
+      if (avisoBloqueio) {
+        const qtd = typeof aulasPendentes === 'number' && aulasPendentes > 0
+          ? `${aulasPendentes} lançamento(s) de aula pendente(s)`
+          : 'alguns lançamentos de aula pendentes'
+        linhas.push(
+          '',
+          `Aproveitando: vi por aqui que há ${qtd}. Regularizando, sua agenda volta a receber novos alunos — se precisar de uma mão, é só falar. 🙏`,
+        )
+      }
       if (linkAgendamento) {
-        linhas.push('', 'Se quiser conversar, é só escolher um horário por aqui:', `🔗 ${linkAgendamento}`)
+        linhas.push(
+          '',
+          'Precisamos agendar a nossa próxima reunião de acompanhamento, é só escolher um horário por aqui:',
+          `🔗 ${linkAgendamento}`,
+        )
       }
       linhas.push('', 'Qualquer coisa, é só me chamar por aqui. Até já! 🙌')
 
