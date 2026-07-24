@@ -35,7 +35,6 @@ import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
 import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
 import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
-import { TarefasPage } from '@/pages/tarefas/TarefasPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -178,11 +177,8 @@ export default function App() {
                   <SuporteReunioesPage />
                 </ProtectedRoute>
               } />
-              <Route path="/tarefas" element={
-                <ProtectedRoute page="tarefas">
-                  <TarefasPage />
-                </ProtectedRoute>
-              } />
+              {/* Tarefas foi unificada na Central (/convocacoes) — mantém o link antigo vivo. */}
+              <Route path="/tarefas" element={<Navigate to="/convocacoes?aba=tarefas" replace />} />
               <Route path="/minha-area" element={
                 <ProtectedRoute page="minha-area">
                   <MinhaAreaPage />

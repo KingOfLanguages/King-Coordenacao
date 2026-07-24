@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   RefreshCw, Plus, Send, Trash2, Search, X, MessageCircle,
@@ -25,6 +25,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { TarefasBoard } from '@/components/tarefas/TarefasBoard'
+import { useTarefas } from '@/hooks/useTarefas'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -82,14 +84,19 @@ function WhatsAppBtn({ tel }: { tel: string | null }) {
   )
 }
 
-type Aba = 'reunioes' | 'bloqueadas'
+type Aba = 'tarefas' | 'reunioes' | 'bloqueadas'
 
 export function CentralConvocacoesPage() {
   const { data: convocacoes = [], isLoading: loadingConv, isFetching: fetchingConv, refetch: refetchConv } = useConvocacoes()
   const { data: bloqueadas = [], isFetching: fetchingBloq, refetch: refetchBloq } = usePendenciasFila()
   const { data: coordenadores = [] } = useCoordenadores()
+  const { data: tarefas = [] } = useTarefas()
 
-  const [aba, setAba] = useState<Aba>('reunioes')
+  const [params] = useSearchParams()
+  const abaParam = params.get('aba')
+  const [aba, setAba] = useState<Aba>(
+    abaParam === 'reunioes' || abaParam === 'bloqueadas' ? abaParam : 'tarefas',
+  )
   const [nova, setNova] = useState(false)
 
   const coordNome = useMemo(() => {
@@ -98,13 +105,14 @@ export function CentralConvocacoesPage() {
   }, [coordenadores])
 
   const resumo = useMemo(() => ({
+    tarefas: tarefas.filter(t => t.status !== 'concluido').length,
     contato: convocacoes.filter(c => c.etapa === 'pendente_contato').length
            + bloqueadas.filter(b => b.ultimaMensagemEm == null).length,
     resposta: convocacoes.filter(c => c.etapa === 'aguardando_resposta').length
             + bloqueadas.filter(b => b.ultimaMensagemEm != null && !b.regularizado).length,
     agendadas: convocacoes.filter(c => c.etapa === 'agendada').length,
     bloqueadas: bloqueadas.filter(b => b.agendaBloqueada).length,
-  }), [convocacoes, bloqueadas])
+  }), [tarefas, convocacoes, bloqueadas])
 
   const isFetching = fetchingConv || fetchingBloq
 
@@ -112,8 +120,8 @@ export function CentralConvocacoesPage() {
     <div className="px-6 py-6 space-y-5 max-w-[1400px] mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Central de Convocações</h1>
-          <p className="text-[13px] text-ink-muted">Agendamento de reuniões e agendas bloqueadas num só lugar.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Central</h1>
+          <p className="text-[13px] text-ink-muted">Tarefas, convocações e agendas bloqueadas num só lugar.</p>
         </div>
         <div className="flex items-center gap-2">
           {aba === 'reunioes' && (
@@ -132,7 +140,8 @@ export function CentralConvocacoesPage() {
       </header>
 
       {/* ── Painel da coordenação (resumo) ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <StatCard cor="text-ink" bg="bg-surface-subtle" dot="🗒️" n={resumo.tarefas} label="tarefas abertas" />
         <StatCard cor="text-urg-highFg" bg="bg-urg-highBg" dot="🔴" n={resumo.contato}   label="aguardando contato" />
         <StatCard cor="text-urg-medFg"  bg="bg-urg-medBg"  dot="🟡" n={resumo.resposta}  label="aguardando resposta" />
         <StatCard cor="text-urg-lowFg"  bg="bg-urg-lowBg"  dot="🟢" n={resumo.agendadas} label="reuniões agendadas" />
@@ -141,7 +150,7 @@ export function CentralConvocacoesPage() {
 
       {/* ── Toggle de fluxo ── */}
       <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-        {([['reunioes', 'Reuniões'], ['bloqueadas', 'Agendas bloqueadas']] as const).map(([id, label]) => (
+        {([['tarefas', 'Tarefas'], ['reunioes', 'Reuniões'], ['bloqueadas', 'Agendas bloqueadas']] as const).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setAba(id)}
@@ -155,9 +164,11 @@ export function CentralConvocacoesPage() {
         ))}
       </div>
 
-      {aba === 'reunioes'
-        ? <KanbanReunioes convocacoes={convocacoes} loading={loadingConv} coordNome={coordNome} />
-        : <KanbanBloqueadas fila={bloqueadas} />}
+      {aba === 'tarefas'
+        ? <TarefasBoard />
+        : aba === 'reunioes'
+          ? <KanbanReunioes convocacoes={convocacoes} loading={loadingConv} coordNome={coordNome} />
+          : <KanbanBloqueadas fila={bloqueadas} />}
 
       {nova && <NovaConvocacaoDialog onClose={() => setNova(false)} />}
     </div>

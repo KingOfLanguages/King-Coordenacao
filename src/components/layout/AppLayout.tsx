@@ -29,7 +29,6 @@ const NAV: NavNode[] = [
   { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'retorno-pausa', 'acompanhamento', 'pendencias', 'mes-analise', 'incidentes', 'alunos'] },
   { kind: 'group', label: 'Dashboard',   pageKeys: ['dashboard', 'dashboard-geral'] },
   { kind: 'link', pageKey: 'suporte-reunioes' },
-  { kind: 'link', pageKey: 'tarefas' },
   { kind: 'link', pageKey: 'minha-area' },
   { kind: 'link', pageKey: 'convocacoes' },
 ]

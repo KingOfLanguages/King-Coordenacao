@@ -50,7 +50,7 @@ function tempoRelativo(iso: string): string {
   return `há ${dias} dias`
 }
 
-export function TarefasPage() {
+export function TarefasBoard() {
   const { profile } = useAuth()
   const meuId = profile?.id ?? null
   const meuTime = timeDoUsuario(profile?.role)
@@ -137,17 +137,14 @@ export function TarefasPage() {
   }
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1200px] mx-auto">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Tarefas</h1>
-          <p className="text-[13px] text-ink-muted">
-            Acompanhe o andamento das tarefas até a resolução.
-            {paraMimAbertas > 0 && (
-              <> · <span className="text-accentBlue font-medium">{paraMimAbertas} em aberto para você</span></>
-            )}
-          </p>
-        </div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] text-ink-muted">
+          Acompanhe o andamento das tarefas até a resolução.
+          {paraMimAbertas > 0 && (
+            <> · <span className="text-accentBlue font-medium">{paraMimAbertas} em aberto para você</span></>
+          )}
+        </p>
         <Button
           size="sm"
           onClick={() => setNovoAberto(true)}
@@ -155,7 +152,7 @@ export function TarefasPage() {
         >
           <Plus className="h-3.5 w-3.5" />Nova tarefa
         </Button>
-      </header>
+      </div>
 
       {/* Controles: vista + escopo */}
       <div className="flex flex-wrap items-center gap-2">
