@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Search, X, GraduationCap, ImagePlus, Info, Flag, FileText, ArrowLeft } from 'lucide-react'
+import { Search, X, GraduationCap, ImagePlus, Info, Flag, FileText, ArrowLeft, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
 } from '@/hooks/useIncidentes'
 import { useAuth } from '@/contexts/AuthContext'
 import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
+import { prazoSugeridoInput, prazoInputParaISO } from '@/lib/incidentePrazo'
 import { cn } from '@/lib/utils'
 
 const MAX_IMAGENS = 3
@@ -48,6 +49,10 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [alunoBusca, setAlunoBusca] = useState(false)
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_PROFESSOR[0])
   const [urgencia, setUrgencia] = useState('Média')
+  // Prazo sugerido pela urgência, mas editável — `prazoManual` trava a sugestão
+  // automática assim que a pessoa mexe no campo.
+  const [prazo, setPrazo] = useState(() => prazoSugeridoInput('Média'))
+  const [prazoManual, setPrazoManual] = useState(false)
   const [descricao, setDescricao] = useState('')
   const [imagens, setImagens] = useState<File[]>([])
   const [enviandoImagens, setEnviandoImagens] = useState(false)
@@ -102,9 +107,17 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setAlunoNome('')
     setCategoria(CATEGORIAS_PROFESSOR[0])
     setUrgencia('Média')
+    setPrazo(prazoSugeridoInput('Média'))
+    setPrazoManual(false)
     setDescricao('')
     setImagens([])
   }, [open, professorFixo])
+
+  // Troca a urgência e, enquanto o prazo não foi editado à mão, reajusta a sugestão.
+  function trocarUrgencia(v: string) {
+    setUrgencia(v)
+    if (!prazoManual) setPrazo(prazoSugeridoInput(v))
+  }
 
   const categoriasBase = aba === 'professor' ? CATEGORIAS_PROFESSOR : aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : CATEGORIAS_GERAL
   const categorias = categoriasVisiveis(categoriasBase, podeVerCoordOnly)
@@ -155,6 +168,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         image_urls: imageUrls,
         natureza,
         ti_status: aba === 'plataforma' ? 'chamado_aberto' : null,
+        prazo_resolucao: mostrarUrgencia ? prazoInputParaISO(prazo) : null,
       })
       toast.success(natureza === 'informe' ? 'Informe registrado.' : 'Chamado aberto.')
       onOpenChange(false)
@@ -378,7 +392,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             {mostrarUrgencia && (
               <div className="space-y-1.5 min-w-0">
                 <Label className="label-micro">Urgência</Label>
-                <Select value={urgencia} onValueChange={setUrgencia}>
+                <Select value={urgencia} onValueChange={trocarUrgencia}>
                   <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
                     <SelectValue />
                   </SelectTrigger>
@@ -392,6 +406,22 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
               </div>
             )}
           </div>
+
+          {mostrarUrgencia && (
+            <div className="space-y-1.5">
+              <Label className="label-micro flex items-center gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5 text-ink-muted" />
+                Prazo de resolução
+              </Label>
+              <Input
+                type="date"
+                value={prazo}
+                onChange={e => { setPrazo(e.target.value); setPrazoManual(true) }}
+                className="h-9 bg-surface-canvas border-line w-full"
+              />
+              <p className="text-[11px] text-ink-subtle">Sugerido pela urgência ({urgencia}). Ajuste se precisar.</p>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label className="label-micro">Descrição</Label>

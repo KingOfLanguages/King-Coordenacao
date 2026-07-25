@@ -2,6 +2,7 @@ import { supabase } from '../shared/supabase'
 import { matchProfessorPorNome, matchProfessorPorEmail, sugerirProfessores, confiancaMatch } from '../shared/match'
 import type {
   MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, ReuniaoHistoricoItem, ReuniaoHojeInfo,
+  PendenciaResumo,
 } from '../shared/types'
 
 const PROBLEM_TYPE_MES_ANALISE = 'Mês de análise'
@@ -140,10 +141,11 @@ async function montarResultado(
   const [
     profRes, acompRes, historicoRes, totalRes, obsRes, obsAbertasRes, reuniaoHoje,
     nexusIncidentesRes, nexusAbertasRes, nexusTrackingRes, nexusAlertasRes, mesAnaliseRes,
+    alunosCountRes,
   ] = await Promise.all([
     supabase
       .from('professores')
-      .select('id, nome, email, status, data_inicio, data_ultima_reuniao, monitoramento, grupo:grupos!grupo_id (id, nome), coordenador:profiles!coordenador_id (nome)')
+      .select('id, nome, email, telefone, kms_id, status, data_inicio, data_ultima_reuniao, monitoramento, grupo:grupos!grupo_id (id, nome), coordenador:profiles!coordenador_id (nome)')
       .eq('id', professorId)
       .maybeSingle(),
     supabase
@@ -205,10 +207,18 @@ async function montarResultado(
       .eq('resolved', false)
       .order('created_at', { ascending: false })
       .limit(1),
+    supabase
+      .from('professor_alunos_kms')
+      .select('aluno_id', { count: 'exact', head: true })
+      .eq('professor_id', professorId),
   ])
   if (profRes.error || !profRes.data) return null
   const prof = profRes.data
   const acomp = acompRes.data
+
+  // kms_id → pendência aberta na fila do King (se houver). Habilita o desbloqueio.
+  const kmsId = prof.kms_id && !Number.isNaN(Number(prof.kms_id)) ? Number(prof.kms_id) : null
+  const pendencia = kmsId != null ? await buscarPendencia(kmsId) : null
 
   const historicoReunioes = (historicoRes.data ?? [])
     .map(h => {
@@ -222,6 +232,7 @@ async function montarResultado(
       id: prof.id,
       nome: prof.nome,
       email: prof.email,
+      telefone: prof.telefone,
       status: prof.status,
       data_inicio: prof.data_inicio,
       data_ultima_reuniao: prof.data_ultima_reuniao,
@@ -252,9 +263,68 @@ async function montarResultado(
       alertas: nexusAlertasRes.data ?? [],
     },
     mesAnalise: mesAnaliseRes.data?.[0] ?? null,
+    pendencia,
+    alunosTotal: alunosCountRes.count ?? 0,
+    kmsId,
     motivo,
     confianca,
   }
+}
+
+interface PendenciaApiItem {
+  id_Professor: number
+  estagio: 1 | 2 | 3
+  agendaBloqueada: boolean
+  aulasPendentes: number
+  dias: number
+  qtdAlunos: number | null
+  regularizado: boolean
+  liberacaoManualExigida: boolean
+}
+
+/** Pendência aberta do professor (por kms_id) na fila do motor do King. A Edge
+ *  Function é a mesma do app web (a sessão do usuário já autentica). Falha vira null. */
+async function buscarPendencia(kmsId: number): Promise<PendenciaResumo | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('pendencias-lancamento', { body: { resource: 'fila' } })
+    if (error || data?.error) return null
+    const lista = (data?.object ?? []) as PendenciaApiItem[]
+    const item = lista.find(p => Number(p.id_Professor) === kmsId)
+    if (!item) return null
+    return {
+      estagio: item.estagio,
+      agendaBloqueada: item.agendaBloqueada,
+      aulasPendentes: item.aulasPendentes,
+      dias: item.dias,
+      qtdAlunos: item.qtdAlunos,
+      regularizado: item.regularizado,
+      liberacaoManualExigida: item.liberacaoManualExigida,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Libera a agenda bloqueada do professor direto do Meet — espelha useLiberarAgenda
+ *  do app (resource=liberarAgenda). Re-monta o resultado pra refletir o novo estado. */
+async function handleLiberarAgenda(professorId: string, idProfessor: number): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+
+  const { data, error } = await supabase.functions.invoke('pendencias-lancamento', {
+    body: { resource: 'liberarAgenda', id_Professor: idProfessor },
+  })
+  if (error) {
+    const ctx = (error as { context?: Response }).context
+    if (ctx) {
+      try { const parsed = await ctx.clone().json(); if (parsed?.error) return { ok: false, erro: parsed.error } } catch { /* corpo não-JSON */ }
+    }
+    return { ok: false, erro: error.message }
+  }
+  if (data?.error) return { ok: false, erro: data.error }
+
+  const resultado = await montarResultado(professorId, 'nome')
+  return resultado ? { ok: true, resultado } : { ok: false, erro: 'Agenda liberada, mas não consegui recarregar o professor.' }
 }
 
 async function handleBuscarProfessor(nomes: string[], emails: string[]): Promise<RespostaDoBackground> {
@@ -584,6 +654,8 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
           sendResponse(await handleResolverObservacao(msg.professorId, msg.id, msg.resolvido)); break
         case 'CONFIRMAR_GRUPO':
           sendResponse(await handleConfirmarGrupo(msg.reuniaoId, msg.presentesIds, msg.observacao, msg.professorId)); break
+        case 'LIBERAR_AGENDA':
+          sendResponse(await handleLiberarAgenda(msg.professorId, msg.idProfessor)); break
       }
     } catch (err) {
       sendResponse({ ok: false, erro: err instanceof Error ? err.message : String(err) })

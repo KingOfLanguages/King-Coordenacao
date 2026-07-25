@@ -113,6 +113,14 @@ function tempoDeCasaLabel(dataInicio: string | null): string | null {
   return `${anos} ${anos === 1 ? 'ano' : 'anos'}`
 }
 
+function whatsappLink(tel: string | null): string | null {
+  if (!tel) return null
+  let d = tel.replace(/\D/g, '')
+  if (!d) return null
+  if (d.length <= 11) d = '55' + d
+  return `https://wa.me/${d}`
+}
+
 export function Panel() {
   const [sessao, setSessao]         = useState<SessaoArmazenada | null | undefined>(undefined)
   const [colapsado, setColapsado]   = useState(false)
@@ -127,6 +135,10 @@ export function Panel() {
   const [resolvendoObsId, setResolvendoObsId] = useState<string | null>(null)
   const [erroAcao, setErroAcao] = useState<string | null>(null)
   const [sugestoes, setSugestoes] = useState<SugestaoProfessor[]>([])
+  // Liberar agenda (desbloqueio direto da pendência)
+  const [liberandoAgenda, setLiberandoAgenda] = useState(false)
+  const [confirmLiberar, setConfirmLiberar] = useState(false)
+  const [erroLiberar, setErroLiberar] = useState<string | null>(null)
   // Lançamento rápido de observação
   const [obsAberta, setObsAberta] = useState(false)
   const [obsTipo, setObsTipo]     = useState('feedback_positivo')
@@ -174,6 +186,7 @@ export function Panel() {
     setErroAcao(null)
     setObsAberta(false); setObsTexto('')
     setIncAberto(false); setIncTexto('')
+    setConfirmLiberar(false); setErroLiberar(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultado?.professor.id])
 
@@ -218,6 +231,18 @@ export function Panel() {
     if (r.ok && 'resultado' in r && r.resultado) {
       setResultado(r.resultado); setIncAberto(false); setIncTexto('')
     } else if (!r.ok) setErroAcao(r.erro)
+  }
+
+  async function liberarAgenda() {
+    if (!resultado?.kmsId) return
+    // Dois cliques: o primeiro arma a confirmação (evita liberar sem querer).
+    if (!confirmLiberar) { setConfirmLiberar(true); setTimeout(() => setConfirmLiberar(false), 4000); return }
+    setConfirmLiberar(false)
+    setLiberandoAgenda(true); setErroLiberar(null)
+    const r = await enviar({ tipo: 'LIBERAR_AGENDA', professorId: resultado.professor.id, idProfessor: resultado.kmsId })
+    setLiberandoAgenda(false)
+    if (r.ok && 'resultado' in r && r.resultado) setResultado(r.resultado)
+    else if (!r.ok) setErroLiberar(r.erro)
   }
 
   function atualizarReuniaoHoje(r: RespostaDoBackground) {
@@ -367,7 +392,40 @@ export function Panel() {
                 <Chip>{tempoDeCasaLabel(resultado.professor.data_inicio)} de casa</Chip>
               )}
               {resultado.professor.monitoramento && <Chip>Monitorada</Chip>}
+              {resultado.alunosTotal > 0 && <Chip>{resultado.alunosTotal} aluno{resultado.alunosTotal === 1 ? '' : 's'}</Chip>}
+              {whatsappLink(resultado.professor.telefone) && (
+                <a href={whatsappLink(resultado.professor.telefone)!} target="_blank" rel="noopener noreferrer" style={chipWhatsapp}>
+                  WhatsApp
+                </a>
+              )}
             </div>
+
+            {resultado.pendencia && (
+              <div style={secaoBox}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ ...rotulo, margin: 0 }}>Pendência de lançamento</span>
+                  {resultado.pendencia.agendaBloqueada
+                    ? <Chip tom="vermelho">Agenda bloqueada</Chip>
+                    : <Chip tom="amarelo">Estágio {resultado.pendencia.estagio}</Chip>}
+                </div>
+                <p style={{ fontSize: 12, color: C.ink, margin: '0 0 8px', lineHeight: 1.4 }}>
+                  <strong>{resultado.pendencia.aulasPendentes}</strong> aula(s) pendente(s) · <strong>{resultado.pendencia.dias}</strong> dia(s) sem lançar
+                  {resultado.pendencia.qtdAlunos != null && <> · {resultado.pendencia.qtdAlunos} aluno(s)</>}
+                </p>
+                {resultado.pendencia.agendaBloqueada
+                  && (resultado.pendencia.estagio === 3 || resultado.pendencia.liberacaoManualExigida)
+                  && resultado.kmsId != null ? (
+                  <button onClick={liberarAgenda} disabled={liberandoAgenda} style={confirmLiberar ? botaoPerigo : botaoSecundario}>
+                    {liberandoAgenda ? 'Liberando…' : confirmLiberar ? 'Confirmar liberação?' : 'Liberar agenda'}
+                  </button>
+                ) : resultado.pendencia.agendaBloqueada ? (
+                  <p style={{ fontSize: 11, color: C.inkMuted, margin: 0 }}>
+                    O desbloqueio manual fica disponível no estágio final (5+ dias).
+                  </p>
+                ) : null}
+                {erroLiberar && <p style={{ fontSize: 11, color: C.red, margin: '8px 0 0' }}>{erroLiberar}</p>}
+              </div>
+            )}
 
             <div style={secaoBox}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -870,6 +928,17 @@ const botaoSucesso: React.CSSProperties = {
 const botaoSecundario: React.CSSProperties = {
   flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 600, color: C.inkSoft,
   background: C.bg, border: `1px solid ${C.border}`, borderRadius: 9, cursor: 'pointer',
+}
+
+const botaoPerigo: React.CSSProperties = {
+  flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 600, color: '#fff',
+  background: C.red, border: 'none', borderRadius: 9, cursor: 'pointer',
+}
+
+const chipWhatsapp: React.CSSProperties = {
+  fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+  background: C.greenSoft, color: C.green, border: '1px solid transparent',
+  textDecoration: 'none', whiteSpace: 'nowrap',
 }
 
 const textarea: React.CSSProperties = {

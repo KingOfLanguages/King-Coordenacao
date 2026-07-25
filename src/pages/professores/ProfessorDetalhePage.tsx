@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
   CalendarDays, Clock, DollarSign, Users, User, MapPin, GraduationCap,
-  PlayCircle, CheckCircle2,
+  PlayCircle, CheckCircle2, MessageCircle, Mail, Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select'
 import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useConcluirAcompanhamentoPausa } from '@/hooks/useProfessores'
 import { useEncerrarPausa } from '@/hooks/usePausas'
+import { usePendenciaHistorico, usePendenciaLogs } from '@/hooks/usePendencias'
 import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
 import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
@@ -31,7 +32,7 @@ import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAna
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { toast } from 'sonner'
-import { cn, tempoDeCasaLabel } from '@/lib/utils'
+import { cn, tempoDeCasaLabel, whatsappLink } from '@/lib/utils'
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
 import type { StatusProfessor } from '@/types'
@@ -149,6 +150,10 @@ export function ProfessorDetalhePage() {
   const grupoNome = resolverNomePerfil(professor.grupo)
   const coordNome = resolverNomePerfil(professor.coordenador)
   const tempoCasa = tempoDeCasaLabel(professor.data_inicio)
+  const zap = whatsappLink(professor.telefone)
+  // kms_id (id do professor no King) indexa o histórico de pendências (API do King).
+  const kmsNum = professor.kms_id && !Number.isNaN(Number(professor.kms_id)) ? Number(professor.kms_id) : null
+  const alunosCount = acompanhamentoData?.alunos?.length ?? 0
 
   const obsFiltered = obsFiltro === 'todos'
     ? observacoes
@@ -206,6 +211,12 @@ export function ProfessorDetalhePage() {
               <span className="inline-flex items-center gap-1">
                 <CalendarDays className="h-3 w-3" />
                 Última reunião {new Date(professor.data_ultima_reuniao).toLocaleDateString('pt-BR')}
+              </span>
+            )}
+            {alunosCount > 0 && (
+              <span className="inline-flex items-center gap-1" title="Alunos vinculados (KMS)">
+                <GraduationCap className="h-3 w-3" />
+                {alunosCount} aluno{alunosCount !== 1 ? 's' : ''}
               </span>
             )}
             {mesAnaliseCount > 0 && (
@@ -285,6 +296,20 @@ export function ProfessorDetalhePage() {
               <span className="inline-flex items-center gap-1 text-ink-muted">
                 <GraduationCap className="h-3 w-3" />{professor.nivel_recomendado_alunos}
               </span>
+            )}
+            {professor.telefone && (zap ? (
+              <a href={zap} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#128C4B] hover:underline">
+                <MessageCircle className="h-3 w-3" />{professor.telefone}
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-ink-muted">
+                <MessageCircle className="h-3 w-3" />{professor.telefone}
+              </span>
+            ))}
+            {professor.email && (
+              <a href={`mailto:${professor.email}`} className="inline-flex items-center gap-1 text-ink-muted hover:underline">
+                <Mail className="h-3 w-3" />{professor.email}
+              </a>
             )}
           </div>
         </div>
@@ -374,6 +399,9 @@ export function ProfessorDetalhePage() {
 
       {/* ── Silêncio (aulas não lançadas) ── */}
       {id && <SilencioProfessorCard professorId={id} />}
+
+      {/* ── Pendências de Lançamento (motor do King: recorrência + bloqueios + mensagens) ── */}
+      {kmsNum !== null && <PendenciasLancamentoSection kmsId={kmsNum} />}
 
       {/* ── Ocorrências (King Nexus) ── */}
       {nexusData && (nexusData.incidentes.length > 0 || nexusData.tracking || nexusData.alertas.length > 0) && (
@@ -847,6 +875,75 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
           {expandido ? 'Ver menos' : `+ ${ordenados.length - 16} mais`}
         </button>
       )}
+    </section>
+  )
+}
+
+// ─── Pendências de Lançamento (motor do King: recorrência + bloqueios) ────────
+
+function PendenciasLancamentoSection({ kmsId }: { kmsId: number }) {
+  const { data: hist = [], isLoading: loadingHist } = usePendenciaHistorico(kmsId)
+  const { data: logs = [], isLoading: loadingLogs } = usePendenciaLogs(kmsId)
+  const [expandido, setExpandido] = useState(false)
+
+  const passagens = hist.length
+  const bloqueios = hist.filter(h => h.estagioFinal === 3).length
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString('pt-BR')
+
+  // Professor nunca passou por pendência e não tem mensagem registrada → oculta.
+  if (!loadingHist && !loadingLogs && passagens === 0 && logs.length === 0) return null
+
+  const visiveis = expandido ? hist : hist.slice(0, 5)
+
+  return (
+    <section className="card-surface p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Lock className="h-4 w-4 text-ink-secondary" />
+        <h2 className="label-micro">Pendências de Lançamento (King)</h2>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="space-y-0.5">
+          <p className="text-[11px] text-ink-muted">Passou pela Central</p>
+          <p className="text-xl font-semibold text-ink tabular-nums">{passagens}×</p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-[11px] text-ink-muted">Agenda bloqueada</p>
+          <p className={cn('text-xl font-semibold tabular-nums', bloqueios > 0 ? 'text-urg-highFg' : 'text-ink')}>{bloqueios}×</p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-[11px] text-ink-muted">Mensagens enviadas</p>
+          <p className="text-xl font-semibold text-ink tabular-nums">{logs.length}</p>
+        </div>
+      </div>
+
+      {hist.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-ink-muted">Episódios resolvidos</p>
+          <ul className="space-y-1">
+            {visiveis.map((h, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 text-[12px] border-b border-line-soft last:border-0 pb-1">
+                <span className="text-ink-secondary tabular-nums">{fmt(h.abertoEm)} → {fmt(h.resolvidoEm)}</span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-urg-highBg text-urg-highFg px-2 py-0.5 text-[10.5px] font-medium tabular-nums">
+                    pico {h.diasPico}d
+                  </span>
+                  <span className="text-ink-muted">estágio {h.estagioFinal}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {hist.length > 5 && (
+            <button onClick={() => setExpandido(v => !v)} className="btn-press text-[11px] text-accentBlue font-medium">
+              {expandido ? 'Ver menos' : `+ ${hist.length - 5} mais`}
+            </button>
+          )}
+        </div>
+      )}
+
+      <p className="text-[10.5px] text-ink-subtle">
+        Motor oficial do King (régua 2/3/5 dias). Um episódio atual em aberto aparece na Central de Pendências.
+      </p>
     </section>
   )
 }

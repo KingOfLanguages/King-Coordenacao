@@ -22,12 +22,14 @@ type NavNode =
   | { kind: 'group'; label: string; pageKeys: string[] }
 
 const NAV: NavNode[] = [
-  // Convocações e Minha Área seguem como links de topo (visíveis). O estouro
-  // que sobrepunha o sino/Extensão em "Administração" foi resolvido alargando a
-  // pill (max-w abaixo), não escondendo itens.
-  { kind: 'group', label: 'Reuniões',    pageKeys: ['reunioes-dia', 'agendas'] },
-  { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'retorno-pausa', 'acompanhamento', 'pendencias', 'mes-analise', 'incidentes', 'alunos'] },
-  { kind: 'group', label: 'Dashboard',   pageKeys: ['dashboard', 'dashboard-geral'] },
+  // "Professores" ficou enxuto (só cadastro + onboarding). Pendências, Mês de
+  // Análise e Pausas foram pro grupo "Acompanhamento"; Incidentes e Reclamações
+  // por Aluno pro grupo "Incidentes". Tarefas (ex-Central) segue como link de topo.
+  { kind: 'group', label: 'Reuniões',       pageKeys: ['reunioes-dia', 'agendas'] },
+  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'onboarding'] },
+  { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'pendencias', 'mes-analise', 'retorno-pausa'] },
+  { kind: 'group', label: 'Incidentes',     pageKeys: ['incidentes', 'alunos'] },
+  { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral'] },
   { kind: 'link', pageKey: 'suporte-reunioes' },
   { kind: 'link', pageKey: 'minha-area' },
   { kind: 'link', pageKey: 'convocacoes' },

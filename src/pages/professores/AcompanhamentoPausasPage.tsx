@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   PauseCircle, PlayCircle, User, Users, CalendarClock, CheckCircle2, Search,
-  Hand, XCircle, Plus, FileWarning, Link2, Check, AlertTriangle,
+  Hand, XCircle, Plus, FileWarning, Link2, Check, AlertTriangle, Phone, MessageCircle,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
   usePausasFila, usePausasVigentes, useAssumirPausa, useLargarPausa,
-  useConcluirPausa, useRecusarPausa, useEncerrarPausa,
+  useConcluirPausa, useRecusarPausa, useEncerrarPausa, useAlunosDePausas,
   faixaDaPausa, diasAte, FAIXA_META, STATUS_PAUSA_META,
   type PausaComProfessor, type FaixaPausa,
 } from '@/hooks/usePausas'
@@ -17,7 +17,7 @@ import { canEdit } from '@/lib/permissions'
 import { linkPausaPublico } from '@/lib/portal'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
-import { cn } from '@/lib/utils'
+import { cn, whatsappLink } from '@/lib/utils'
 import { toast } from 'sonner'
 
 const ORDEM_FAIXAS: FaixaPausa[] = ['atrasada', 'hoje', 'proxima', 'futura']
@@ -55,6 +55,15 @@ export function AcompanhamentoPausasPage() {
   const { data: fila = [], isLoading } = usePausasFila()
   const { data: vigentes = [] } = usePausasVigentes()
   const [busca, setBusca] = useState('')
+
+  // Alunos na agenda de cada professor da fila/vigentes — uma query só (Map por professor).
+  const idsPausas = useMemo(() => {
+    const ids = new Set<string>()
+    for (const p of fila) if (p.professor?.id) ids.add(p.professor.id)
+    for (const p of vigentes) if (p.professor?.id) ids.add(p.professor.id)
+    return [...ids]
+  }, [fila, vigentes])
+  const { data: alunosMap } = useAlunosDePausas(idsPausas)
 
   const filtrar = (lista: PausaComProfessor[]) => {
     const termo = busca.trim().toLowerCase()
@@ -139,6 +148,7 @@ export function AcompanhamentoPausasPage() {
                     <CardSolicitacao
                       key={p.id}
                       pausa={p}
+                      alunos={alunosMap?.get(p.professor?.id ?? '') ?? []}
                       onVerPerfil={() => p.professor && navigate(`/professores/${p.professor.id}`)}
                     />
                   ))}
@@ -166,6 +176,7 @@ export function AcompanhamentoPausasPage() {
                     key={p.id}
                     pausa={p}
                     podeEncerrar={podeEncerrar}
+                    alunos={alunosMap?.get(p.professor?.id ?? '') ?? []}
                     onVerPerfil={() => p.professor && navigate(`/professores/${p.professor.id}`)}
                   />
                 ))}
@@ -247,8 +258,8 @@ function SecaoFaixa({
 
 // A fila não tem "Tirar da pausa": o professor ainda não está pausado aqui.
 function CardSolicitacao({
-  pausa, onVerPerfil,
-}: { pausa: PausaComProfessor; onVerPerfil: () => void }) {
+  pausa, alunos, onVerPerfil,
+}: { pausa: PausaComProfessor; alunos: string[]; onVerPerfil: () => void }) {
   const assumir  = useAssumirPausa()
   const largar   = useLargarPausa()
   const concluir = useConcluirPausa()
@@ -329,6 +340,8 @@ function CardSolicitacao({
           </p>
         )}
       </div>
+
+      <ContatoAlunos telefone={pausa.professor?.telefone} alunos={alunos} />
 
       {recusando ? (
         <div className="space-y-2 pt-1">
@@ -448,8 +461,8 @@ function CardSolicitacao({
 // ─── Card de pausa vigente (professor já pausado) ─────────────────────────────
 
 function CardVigente({
-  pausa, podeEncerrar, onVerPerfil,
-}: { pausa: PausaComProfessor; podeEncerrar: boolean; onVerPerfil: () => void }) {
+  pausa, podeEncerrar, alunos, onVerPerfil,
+}: { pausa: PausaComProfessor; podeEncerrar: boolean; alunos: string[]; onVerPerfil: () => void }) {
   const encerrar = useEncerrarPausa()
   const [obsAberta, setObsAberta] = useState(false)
   const [incidenteAberto, setIncidenteAberto] = useState(false)
@@ -498,6 +511,8 @@ function CardVigente({
         )}
       </div>
 
+      <ContatoAlunos telefone={pausa.professor?.telefone} alunos={alunos} />
+
       {podeEncerrar && (
         <Button
           size="sm"
@@ -533,6 +548,56 @@ function CardVigente({
             professorFixo={{ id: pausa.professor.id, nome: pausa.professor.nome }}
           />
         </>
+      )}
+    </div>
+  )
+}
+
+/** Contato do professor (telefone/WhatsApp) + alunos que estão na agenda dele —
+ *  o contexto que a coordenação precisa pra ligar e combinar a retirada dos alunos. */
+function ContatoAlunos({ telefone, alunos }: { telefone: string | null | undefined; alunos: string[] }) {
+  const [expandido, setExpandido] = useState(false)
+  const zap = whatsappLink(telefone)
+  if (!telefone && alunos.length === 0) return null
+  const visiveis = expandido ? alunos : alunos.slice(0, 8)
+
+  return (
+    <div className="rounded-lg bg-surface-subtle/60 p-2.5 space-y-2">
+      {telefone && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary tabular-nums">
+            <Phone className="h-3.5 w-3.5 text-ink-muted" />{telefone}
+          </span>
+          {zap && (
+            <a
+              href={zap}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-press inline-flex items-center gap-1 rounded-md bg-[#25D366]/12 px-2 py-1 text-[11px] font-medium text-[#128C4B] hover:bg-[#25D366]/20 transition-colors"
+            >
+              <MessageCircle className="h-3 w-3" /> WhatsApp
+            </a>
+          )}
+        </div>
+      )}
+      {alunos.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-muted">
+            {alunos.length} aluno{alunos.length !== 1 ? 's' : ''} na agenda
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {visiveis.map((nome, i) => (
+              <span key={i} className="inline-flex items-center rounded-full border border-line-soft bg-surface-canvas px-2 py-0.5 text-[11px] text-ink-secondary">
+                {nome}
+              </span>
+            ))}
+            {alunos.length > 8 && (
+              <button onClick={() => setExpandido(v => !v)} className="btn-press px-1 text-[11px] font-medium text-accentBlue">
+                {expandido ? 'menos' : `+${alunos.length - 8}`}
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

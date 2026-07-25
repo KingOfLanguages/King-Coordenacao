@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MessageCircle, Check, Undo2, User, Copy, Lock } from 'lucide-react'
 import {
-  useContatosHoje, useMarcarContato, reuniaoUltimaDe, coordenadorResponsavelDe,
+  useContatosHoje, useMarcarContato, coordenadorResponsavelDe,
   type ContatoDia,
 } from '@/hooks/useContatosDia'
 import { useNomesPorPerfilId } from '@/hooks/usePerfisPublicos'
-import { getDefaultTemplate } from '@/lib/messageTemplates'
-import { mensagemDoEstagio, ESTAGIO } from '@/lib/centralPendencias'
+import { montarMensagemContato } from '@/lib/mensagemContato'
+import { ESTAGIO } from '@/lib/centralPendencias'
 import { linkAgendamentoPublico } from '@/lib/portal'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -44,36 +44,11 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
     )
   }
 
-  // Texto da mensagem conforme a proveniência do contato:
-  //  • estágio 3 (bloqueada 5+ dias) → mensagem de reunião obrigatória + CTA de agendamento;
-  //  • estágio 2 (bloqueada 3–4 dias) → check-in com aviso de regularização;
-  //  • normal → check-in padrão.
   function montarMensagem(c: ContatoDia): string {
-    const nome = c.professor?.nome ?? 'professor(a)'
     const respId = coordenadorResponsavelDe(c)
     // Cai pro coordenador da lista aberta se o professor estiver sem grupo.
     const coord = (respId && nomesPorId.get(respId)) || coordNome
-
-    if (c.estagio === 3) {
-      const primeiro = nome.trim().split(/\s+/)[0] || nome
-      const linhas = [`*${coord}*`, '', mensagemDoEstagio(3, primeiro, c.aulas_pendentes ?? 0)]
-      if (linkAgendamento) {
-        linhas.push('', 'Para agendar a reunião de acompanhamento, é só escolher um horário por aqui:', `🔗 ${linkAgendamento}`)
-      }
-      return linhas.join('\n')
-    }
-
-    const ultima = reuniaoUltimaDe(c)
-    return getDefaultTemplate().build({
-      professorNome: nome,
-      coordenadorNome: coord,
-      dataUltimaReuniao: ultima
-        ? new Date(ultima).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
-        : null,
-      linkAgendamento,
-      avisoBloqueio: c.estagio === 2,
-      aulasPendentes: c.aulas_pendentes,
-    })
+    return montarMensagemContato(c, coord, linkAgendamento)
   }
 
   async function copiarMensagem(c: ContatoDia) {

@@ -54,20 +54,25 @@ export const PAGES: PageDef[] = [
   // ── Professores ──
   { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'onboarding',      path: '/onboarding',     label: 'Onboarding',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
+
+  // ── Acompanhamento ──
+  // 'acompanhamento' é o Índice de Prioridade; o rótulo evita colidir com o nome do grupo.
+  { key: 'acompanhamento',  path: '/acompanhamento', label: 'Índice de Prioridade', section: 'Acompanhamento', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'pendencias',      path: '/pendencias',     label: 'Central de Pendências', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'mes-analise',     path: '/mes-analise',    label: 'Mês de Análise',       section: 'Acompanhamento', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   // A chave continua 'retorno-pausa' de propósito: é ela que indexa os overrides
   // de permissão já salvos no banco — renomear apagaria as configurações atuais.
-  { key: 'retorno-pausa',   path: '/pausas',         label: 'Acompanhamento de Pausas', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'acompanhamento',  path: '/acompanhamento', label: 'Acompanhamento',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'pendencias',      path: '/pendencias',     label: 'Central de Pendências', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'mes-analise',     path: '/mes-analise',    label: 'Mês de Análise',       section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'alunos',          path: '/alunos',         label: 'Reclamações por Aluno', section: 'Professores', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'retorno-pausa',   path: '/pausas',         label: 'Acompanhamento de Pausas', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+
+  // ── Incidentes ──
+  { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Incidentes', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'alunos',          path: '/alunos',         label: 'Reclamações por Aluno', section: 'Incidentes', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
 
   // ── Links soltos ──
   { key: 'suporte-reunioes', path: '/suporte/reunioes', label: 'Buscar Reuniões',   section: '',            nav: true,  defaultRoles: ['suporte'] },
-  { key: 'tarefas',         path: '/tarefas',        label: 'Tarefas',              section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
   { key: 'minha-area',      path: '/minha-area',     label: 'Minha Área',           section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'convocacoes',     path: '/convocacoes',    label: 'Central',              section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
+  // 'convocacoes' é a rota da página; o rótulo é "Tarefas" (o /tarefas antigo redireciona pra cá).
+  { key: 'convocacoes',     path: '/convocacoes',    label: 'Tarefas',              section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
 ]
 
 export const PAGE_BY_KEY: Record<string, PageDef> = Object.fromEntries(PAGES.map(p => [p.key, p]))

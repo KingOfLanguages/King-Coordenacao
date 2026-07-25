@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { GraduationCap } from 'lucide-react'
+import { GraduationCap, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import {
 } from '@/hooks/useIncidentes'
 import { useAuth } from '@/contexts/AuthContext'
 import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
+import { isoParaPrazoInput, prazoInputParaISO, prazoSugeridoInput } from '@/lib/incidentePrazo'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -32,6 +33,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
   const [alunoNome, setAlunoNome] = useState('')
   const [categoria, setCategoria] = useState('')
   const [urgencia, setUrgencia] = useState('Média')
+  const [prazo, setPrazo] = useState('')
   const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [descricao, setDescricao] = useState('')
 
@@ -41,6 +43,8 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
     setAlunoNome(incidente.aluno_nome ?? '')
     setCategoria(incidente.problem_type)
     setUrgencia(incidente.urgency)
+    // Prazo salvo; na falta dele (linha antiga), sugere pela urgência.
+    setPrazo(isoParaPrazoInput(incidente.prazo_resolucao) || prazoSugeridoInput(incidente.urgency))
     setNatureza(naturezaDe(incidente))
     setDescricao(incidente.description)
   }, [open, incidente])
@@ -70,6 +74,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
         titulo_livre: ehGeral ? titulo : undefined,
         professor_id: incidente.professor_id,
         natureza,
+        prazo_resolucao: mostrarUrgencia ? prazoInputParaISO(prazo) : null,
       })
       toast.success('Chamado atualizado.')
       onOpenChange(false)
@@ -149,6 +154,21 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                 </div>
               )}
             </div>
+
+            {mostrarUrgencia && (
+              <div className="space-y-1.5">
+                <Label className="label-micro flex items-center gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5 text-ink-muted" />
+                  Prazo de resolução
+                </Label>
+                <Input
+                  type="date"
+                  value={prazo}
+                  onChange={e => setPrazo(e.target.value)}
+                  className="h-9 bg-surface-canvas border-line w-full"
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label className="label-micro">Natureza</Label>

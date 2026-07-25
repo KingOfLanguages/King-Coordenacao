@@ -107,6 +107,8 @@ export interface Incidente {
   needs_follow_up: boolean
   resolved: boolean
   resolved_at: string | null
+  /** Data-limite de resolução (SLA). Sugerida pela urgência na criação, editável. */
+  prazo_resolucao: string | null
   assumido_por: string | null
   assumido_em: string | null
   assumido_por_nome: string | null
@@ -153,7 +155,7 @@ export const NATUREZA_META: Record<Natureza, {
   },
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, assumido_por, assumido_em, responsavel_id, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome), responsavel_perfil:profiles!responsavel_id (nome)'
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, prazo_resolucao, assumido_por, assumido_em, responsavel_id, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome), responsavel_perfil:profiles!responsavel_id (nome)'
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
@@ -235,6 +237,8 @@ export function useCriarIncidente() {
       natureza?: Natureza
       /** Só pra categorias da aba Plataforma — estado inicial do chamado junto ao TI. */
       ti_status?: TiStatus | null
+      /** Data-limite de resolução (ISO). Sugerida pela urgência, editável. */
+      prazo_resolucao?: string | null
     }) => {
       let teacherName: string
       if (input.professor_id) {
@@ -260,6 +264,7 @@ export function useCriarIncidente() {
         needs_follow_up: input.needs_follow_up,
         resolved: false,
         resolved_at: null,
+        prazo_resolucao: input.prazo_resolucao ?? null,
         under_analysis: false,
         incident_mode: input.professor_id ? 'professor' : 'interno',
         image_urls: input.image_urls ?? [],
@@ -295,6 +300,8 @@ export function useAtualizarIncidente() {
       titulo_livre?: string
       professor_id?: string | null
       natureza?: Natureza
+      /** Data-limite de resolução (ISO). undefined = não mexe; null limpa. */
+      prazo_resolucao?: string | null
     }) => {
       const patch: Record<string, unknown> = {
         problem_type: input.problem_type,
@@ -304,6 +311,8 @@ export function useAtualizarIncidente() {
         aluno_nome: input.aluno_nome?.trim() || null,
         natureza: input.natureza ?? 'desafio',
       }
+      // undefined = manter o prazo atual (edições que não tocam no campo não o apagam).
+      if (input.prazo_resolucao !== undefined) patch.prazo_resolucao = input.prazo_resolucao
       // Para geral, o teacher_name é o rótulo livre (cai no problem_type se vazio).
       if (!input.professor_id) {
         patch.teacher_name = input.titulo_livre?.trim() || input.problem_type

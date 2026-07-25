@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck, CircleDot, Hand, Undo2, Pencil, Ticket, ScanSearch } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck, CircleDot, Hand, Undo2, Pencil, Ticket, ScanSearch, CalendarClock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -17,6 +17,7 @@ import { ResolverIncidenteDialog } from '@/components/incidentes/ResolverInciden
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
 import { urgenciaChip, URGENCIA_EXPLICACAO, tiStatusLabel } from '@/lib/nexusLabels'
+import { statusPrazo } from '@/lib/incidentePrazo'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -345,6 +346,8 @@ export function IncidentesPage() {
             const isInforme = naturezaDe(i) === 'informe'
             const isPlataforma = abaDoIncidente(i) === 'plataforma'
             const urgenciaAlta = i.urgency === 'Alta' || i.urgency === 'Crítico'
+            // Informe não tem fluxo de resolução → não mostra prazo.
+            const sp = isInforme ? null : statusPrazo(i.prazo_resolucao, i.resolved)
             return (
             <div
               key={i.id}
@@ -391,6 +394,21 @@ export function IncidentesPage() {
                   <span className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-1.5 py-0.5 text-[10.5px] font-medium">
                     {i.problem_type}
                   </span>
+                  {sp && !i.resolved && (
+                    <span
+                      title="Prazo de resolução"
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
+                        sp.atrasado
+                          ? 'bg-urg-critBg text-urg-critFg'
+                          : sp.diasRestantes <= 1
+                            ? 'bg-urg-medBg text-urg-medFg'
+                            : 'bg-surface-subtle text-ink-secondary',
+                      )}
+                    >
+                      <CalendarClock className="h-3 w-3" />{sp.label}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[12.5px] text-ink-secondary mt-1 truncate" title={i.description}>{i.description}</p>
                 <p className="text-[10.5px] text-ink-muted mt-1">

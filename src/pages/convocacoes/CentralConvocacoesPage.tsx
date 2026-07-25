@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   RefreshCw, Plus, Send, Trash2, Search, X, MessageCircle,
-  Lock, Unlock, ArrowRight, CalendarClock, Copy,
+  ArrowRight, CalendarClock,
 } from 'lucide-react'
 import {
   useConvocacoes, useCriarConvocacao, useMoverEtapaConvocacao,
@@ -11,21 +11,20 @@ import {
   ETAPAS_CONVOCACAO, ORIGEM_LABEL,
   type Convocacao, type EtapaConvocacao, type OrigemConvocacao,
 } from '@/hooks/useConvocacoes'
-import {
-  usePendenciasFila, useRegistrarMensagem, useLiberarAgenda,
-  type PendenciaFila,
-} from '@/hooks/usePendencias'
-import { ESTAGIO, mensagemDoEstagio } from '@/lib/centralPendencias'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { useDadosVinculo } from '@/hooks/useReunioesDia'
+import { useIncidentes } from '@/hooks/useIncidentes'
+import { statusPrazo } from '@/lib/incidentePrazo'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
+import { cn, whatsappLink } from '@/lib/utils'
 import { TarefasBoard } from '@/components/tarefas/TarefasBoard'
+import { AgendaIncidentesTab } from '@/components/tarefas/AgendaIncidentesTab'
+import { MensagensDoDiaBoard } from '@/components/tarefas/MensagensDoDiaBoard'
 import { useTarefas } from '@/hooks/useTarefas'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,13 +40,6 @@ function tempoAguardando(iso: string): string {
   if (h < 1) return 'agora'
   if (h < 24) return `${h}h`
   return `${Math.floor(h / 24)}d`
-}
-function whatsappLink(tel: string | null): string | null {
-  if (!tel) return null
-  let d = tel.replace(/\D/g, '')
-  if (!d) return null
-  if (d.length <= 11) d = '55' + d
-  return `https://wa.me/${d}`
 }
 function fmtData(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'
@@ -84,18 +76,18 @@ function WhatsAppBtn({ tel }: { tel: string | null }) {
   )
 }
 
-type Aba = 'tarefas' | 'reunioes' | 'bloqueadas'
+type Aba = 'tarefas' | 'reunioes' | 'convocacoes' | 'agenda'
 
 export function CentralConvocacoesPage() {
   const { data: convocacoes = [], isLoading: loadingConv, isFetching: fetchingConv, refetch: refetchConv } = useConvocacoes()
-  const { data: bloqueadas = [], isFetching: fetchingBloq, refetch: refetchBloq } = usePendenciasFila()
+  const { data: incidentes = [] } = useIncidentes()
   const { data: coordenadores = [] } = useCoordenadores()
   const { data: tarefas = [] } = useTarefas()
 
   const [params] = useSearchParams()
   const abaParam = params.get('aba')
   const [aba, setAba] = useState<Aba>(
-    abaParam === 'reunioes' || abaParam === 'bloqueadas' ? abaParam : 'tarefas',
+    abaParam === 'reunioes' || abaParam === 'convocacoes' || abaParam === 'agenda' ? abaParam : 'tarefas',
   )
   const [nova, setNova] = useState(false)
 
@@ -106,31 +98,29 @@ export function CentralConvocacoesPage() {
 
   const resumo = useMemo(() => ({
     tarefas: tarefas.filter(t => t.status !== 'concluido').length,
-    contato: convocacoes.filter(c => c.etapa === 'pendente_contato').length
-           + bloqueadas.filter(b => b.ultimaMensagemEm == null).length,
-    resposta: convocacoes.filter(c => c.etapa === 'aguardando_resposta').length
-            + bloqueadas.filter(b => b.ultimaMensagemEm != null && !b.regularizado).length,
+    contato: convocacoes.filter(c => c.etapa === 'pendente_contato').length,
+    resposta: convocacoes.filter(c => c.etapa === 'aguardando_resposta').length,
     agendadas: convocacoes.filter(c => c.etapa === 'agendada').length,
-    bloqueadas: bloqueadas.filter(b => b.agendaBloqueada).length,
-  }), [tarefas, convocacoes, bloqueadas])
+    vencidos: incidentes.filter(i => statusPrazo(i.prazo_resolucao, i.resolved)?.atrasado).length,
+  }), [tarefas, convocacoes, incidentes])
 
-  const isFetching = fetchingConv || fetchingBloq
+  const isFetching = fetchingConv
 
   return (
     <div className="px-6 py-6 space-y-5 max-w-[1400px] mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Central</h1>
-          <p className="text-[13px] text-ink-muted">Tarefas, convocações e agendas bloqueadas num só lugar.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Tarefas</h1>
+          <p className="text-[13px] text-ink-muted">Tarefas, mensagens do dia, convocações e a agenda de incidentes num só lugar.</p>
         </div>
         <div className="flex items-center gap-2">
-          {aba === 'reunioes' && (
+          {aba === 'convocacoes' && (
             <Button size="sm" onClick={() => setNova(true)} className="btn-press h-8 gap-1.5 bg-accentBlue hover:bg-accentBlue-hov text-white">
               <Plus className="h-3.5 w-3.5" /> Nova convocação
             </Button>
           )}
           <button
-            onClick={() => { refetchConv(); refetchBloq() }}
+            onClick={() => refetchConv()}
             disabled={isFetching}
             className="btn-press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-canvas px-3 py-1.5 text-[12.5px] font-medium text-ink-secondary hover:text-ink transition-colors disabled:opacity-50"
           >
@@ -145,12 +135,12 @@ export function CentralConvocacoesPage() {
         <StatCard cor="text-urg-highFg" bg="bg-urg-highBg" dot="🔴" n={resumo.contato}   label="aguardando contato" />
         <StatCard cor="text-urg-medFg"  bg="bg-urg-medBg"  dot="🟡" n={resumo.resposta}  label="aguardando resposta" />
         <StatCard cor="text-urg-lowFg"  bg="bg-urg-lowBg"  dot="🟢" n={resumo.agendadas} label="reuniões agendadas" />
-        <StatCard cor="text-accentBlue" bg="bg-accentBlue-soft" dot="🔵" n={resumo.bloqueadas} label="agendas bloqueadas" />
+        <StatCard cor="text-urg-critFg" bg="bg-urg-critBg" dot="⏰" n={resumo.vencidos} label="incidentes vencidos" />
       </div>
 
       {/* ── Toggle de fluxo ── */}
       <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-        {([['tarefas', 'Tarefas'], ['reunioes', 'Reuniões'], ['bloqueadas', 'Agendas bloqueadas']] as const).map(([id, label]) => (
+        {([['tarefas', 'Tarefas'], ['reunioes', 'Reuniões'], ['convocacoes', 'Convocações'], ['agenda', 'Agenda']] as const).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setAba(id)}
@@ -167,8 +157,10 @@ export function CentralConvocacoesPage() {
       {aba === 'tarefas'
         ? <TarefasBoard />
         : aba === 'reunioes'
-          ? <KanbanReunioes convocacoes={convocacoes} loading={loadingConv} coordNome={coordNome} />
-          : <KanbanBloqueadas fila={bloqueadas} />}
+          ? <MensagensDoDiaBoard />
+          : aba === 'convocacoes'
+            ? <KanbanReunioes convocacoes={convocacoes} loading={loadingConv} coordNome={coordNome} />
+            : <AgendaIncidentesTab />}
 
       {nova && <NovaConvocacaoDialog onClose={() => setNova(false)} />}
     </div>
@@ -248,6 +240,9 @@ function ConvocacaoCard({ c, coordNome }: { c: Convocacao; coordNome: string | n
             {c.professor_nome}
           </Link>
           <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+            <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft px-1.5 py-px text-[10px] font-medium text-accentBlue">
+              <CalendarClock className="h-2.5 w-2.5" /> Reunião
+            </span>
             <span className="inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-px text-[10px] font-medium text-ink-secondary">
               {ORIGEM_LABEL[c.origem]}
             </span>
@@ -280,112 +275,6 @@ function ConvocacaoCard({ c, coordNome }: { c: Convocacao; coordNome: string | n
           <WhatsAppBtn tel={c.professor_telefone} />
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── Kanban de agendas bloqueadas (derivado da Central de Pendências) ─────────
-
-const COLS_BLOQ: { id: string; titulo: string; emoji: string; match: (p: PendenciaFila) => boolean }[] = [
-  { id: 'contato',     titulo: 'Pendente de contato',   emoji: '📥', match: p => p.ultimaMensagemEm == null },
-  { id: 'enviada',     titulo: 'Mensagem enviada',      emoji: '📨', match: p => p.ultimaMensagemEm != null && !p.regularizado },
-  { id: 'desbloqueio', titulo: 'Aguardando desbloqueio', emoji: '⏳', match: p => p.regularizado },
-]
-
-function KanbanBloqueadas({ fila }: { fila: PendenciaFila[] }) {
-  return (
-    <>
-      <div className="overflow-x-auto pb-2">
-        <div className="grid grid-cols-3 gap-3 min-w-[720px]">
-          {COLS_BLOQ.map(col => {
-            const cards = fila.filter(col.match)
-            return (
-              <div key={col.id} className="space-y-2.5">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-[12.5px] font-medium text-ink-secondary">{col.emoji} {col.titulo}</span>
-                  <span className="tabular-nums text-[11px] text-ink-muted bg-surface-subtle rounded-full px-1.5 py-px">{cards.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {cards.map(p => <BloqueadaCard key={p.id_Professor} p={p} />)}
-                  {cards.length === 0 && <div className="rounded-lg border border-dashed border-line-soft py-6 text-center text-[11.5px] text-ink-subtle">vazio</div>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      <p className="text-[11px] text-ink-subtle">
-        Fluxo derivado da Central de Pendências (motor do King, ~1×/dia). Ao liberar, o professor sai da fila — a coluna "Desbloqueada" fica implícita.
-      </p>
-    </>
-  )
-}
-
-function BloqueadaCard({ p }: { p: PendenciaFila }) {
-  const registrar = useRegistrarMensagem()
-  const liberar   = useLiberarAgenda()
-  const [confirmLib, setConfirmLib] = useState(false)
-  const contatado = p.ultimaMensagemEstagio === p.estagio && p.ultimaMensagemEm != null
-
-  async function handleRegistrar() {
-    try {
-      const texto = mensagemDoEstagio(p.estagio, p.nome, p.aulasPendentes)
-      await navigator.clipboard.writeText(texto).catch(() => {})
-      await registrar.mutateAsync({ id_Professor: p.id_Professor, estagio: p.estagio, texto })
-      toast.success('Mensagem registrada (texto copiado).')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao registrar.')
-    }
-  }
-  async function handleLiberar() {
-    if (!confirmLib) { setConfirmLib(true); setTimeout(() => setConfirmLib(false), 4000); return }
-    setConfirmLib(false)
-    try {
-      await liberar.mutateAsync({ id_Professor: p.id_Professor })
-      toast.success('Agenda liberada.', { description: 'Registrado. Bloqueio por outro motivo permanece.' })
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao liberar.')
-    }
-  }
-
-  return (
-    <div className="card-surface p-3 space-y-2.5">
-      <div className="flex items-start gap-2.5">
-        <Avatar nome={p.nome} />
-        <div className="min-w-0 flex-1">
-          {p.professor_uuid ? (
-            <Link to={`/professores/${p.professor_uuid}`} className="text-[13px] font-medium text-ink hover:text-accentBlue hover:underline block truncate">{p.nome}</Link>
-          ) : (
-            <span className="text-[13px] font-medium text-ink block truncate">{p.nome}</span>
-          )}
-          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-            <span className={cn('inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[10px] font-medium', ESTAGIO[p.estagio].chip)}>
-              <Lock className="h-2.5 w-2.5" /> {ESTAGIO[p.estagio].titulo}
-            </span>
-            <span className="text-[10.5px] text-ink-muted tabular-nums">{p.dias}d parado</span>
-          </div>
-        </div>
-      </div>
-
-      <p className="text-[10.5px] text-ink-subtle">
-        {p.grupo_nome && <>{p.grupo_nome} · </>}
-        {p.ultimaMensagemEm ? `última msg ${fmtData(p.ultimaMensagemEm)}` : 'sem mensagem'}
-        {p.regularizado && <span className="text-urg-lowFg"> · regularizou</span>}
-      </p>
-
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {!contatado && (
-          <button onClick={handleRegistrar} disabled={registrar.isPending} className="btn-press inline-flex items-center gap-1.5 rounded-md bg-surface-subtle px-2.5 py-1.5 text-[11.5px] font-medium text-ink-secondary hover:text-ink disabled:opacity-50">
-            <Copy className="h-3.5 w-3.5" /> Registrar mensagem
-          </button>
-        )}
-        {p.estagio === 3 && (
-          <button onClick={handleLiberar} disabled={liberar.isPending} className={cn('btn-press inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11.5px] font-medium disabled:opacity-50', confirmLib ? 'bg-urg-highBg text-urg-highFg' : 'bg-surface-subtle text-ink-secondary hover:text-ink')}>
-            <Unlock className="h-3.5 w-3.5" /> {confirmLib ? 'Confirmar?' : 'Liberar'}
-          </button>
-        )}
-        <WhatsAppBtn tel={p.professor_telefone} />
-      </div>
     </div>
   )
 }

@@ -5,6 +5,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// ─── Contato ───────────────────────────────────────────────────────────────────
+
+/** Link do WhatsApp a partir de um telefone livre. Só dígitos; assume DDI 55
+ *  (Brasil) quando vem sem código de país (≤ 11 dígitos). Retorna null se vazio. */
+export function whatsappLink(tel: string | null | undefined): string | null {
+  if (!tel) return null
+  let d = tel.replace(/\D/g, '')
+  if (!d) return null
+  if (d.length <= 11) d = '55' + d
+  return `https://wa.me/${d}`
+}
+
 // ─── Tempo de casa ─────────────────────────────────────────────────────────────
 
 /** Meses completos desde a data de início (entrada na empresa). */

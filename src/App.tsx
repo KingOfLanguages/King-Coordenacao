@@ -51,7 +51,7 @@ const queryClient = new QueryClient({
 // Home: manda o usuário pra primeira página que ele pode ver, segundo o controle
 // de acesso configurável. Prioriza Dashboard, depois Professores, depois o resto —
 // assim ninguém cai numa rota bloqueada (o que causaria loop de redirect).
-const LANDING_PRIORITY = ['dashboard', 'professores', 'suporte-reunioes', 'tarefas']
+const LANDING_PRIORITY = ['dashboard', 'professores', 'suporte-reunioes', 'convocacoes']
 
 function IndexRedirect() {
   const { profile, loading } = useAuth()

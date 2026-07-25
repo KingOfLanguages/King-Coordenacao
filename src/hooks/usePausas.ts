@@ -9,6 +9,7 @@ export type PausaComProfessor = Pausa & {
     id: string
     nome: string
     status: string
+    telefone: string | null
     grupo?: { id: string; nome: string } | null
     coordenador?: { id: string; nome: string } | null
   } | null
@@ -59,7 +60,7 @@ export const STATUS_PAUSA_META: Record<PausaStatus, { label: string; cls: string
 const SELECT_PAUSA = `
   *,
   professor:professores!professor_id (
-    id, nome, status,
+    id, nome, status, telefone,
     grupo:grupos!grupo_id (id, nome),
     coordenador:profiles!coordenador_id (id, nome)
   ),
@@ -116,6 +117,33 @@ export function usePausasFinalizadas() {
         .limit(100)
       if (error) throw error
       return (data ?? []) as unknown as PausaComProfessor[]
+    },
+  })
+}
+
+/** Alunos vinculados (roster KMS) de vários professores numa query só —
+ *  usado pra destacar quem está na agenda de cada professor na fila de pausas
+ *  sem disparar uma query por card. Devolve um Map professor_id → nomes. */
+export function useAlunosDePausas(professorIds: string[]) {
+  const ids = [...new Set(professorIds)].sort()
+  return useQuery({
+    queryKey: ['pausas', 'alunos', ids.join(',')],
+    enabled: ids.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<Map<string, string[]>> => {
+      const { data, error } = await supabase
+        .from('professor_alunos_kms')
+        .select('professor_id, primeiro_nome')
+        .in('professor_id', ids)
+        .order('primeiro_nome')
+      if (error) throw error
+      const mapa = new Map<string, string[]>()
+      for (const row of (data ?? []) as { professor_id: string; primeiro_nome: string | null }[]) {
+        const arr = mapa.get(row.professor_id) ?? []
+        if (row.primeiro_nome) arr.push(row.primeiro_nome)
+        mapa.set(row.professor_id, arr)
+      }
+      return mapa
     },
   })
 }

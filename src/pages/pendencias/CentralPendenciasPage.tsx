@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import {
   Copy, Check, Search, CheckCircle2, ArrowUpDown, AlertTriangle,
-  RefreshCw, Unlock, Lock, ClipboardList, ShieldAlert, History,
+  RefreshCw, Unlock, Lock, ClipboardList, ShieldAlert, History, MessageCircle,
 } from 'lucide-react'
 import {
   usePendenciasFila, useRegistrarMensagem, useLiberarAgenda,
@@ -25,9 +25,10 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
-import { cn } from '@/lib/utils'
+import { cn, whatsappLink } from '@/lib/utils'
 
 type Aba = 'todos' | EstagioNum
+type Vista = 'fila' | 'bloqueadas'
 type Ordem = 'dias' | 'pendencias' | 'alunos' | 'nome'
 
 const TODOS = 'todos'
@@ -64,6 +65,7 @@ export function CentralPendenciasPage() {
   const { data: fila = [], isLoading, isFetching, refetch } = usePendenciasFila()
   const { data: grupos = [] } = useGrupos()
 
+  const [vista, setVista]                         = useState<Vista>('fila')
   const [aba, setAba]                             = useState<Aba>(TODOS)
   const [busca, setBusca]                         = useState('')
   const [grupoFiltro, setGrupoFiltro]             = useState<string>(TODOS)
@@ -141,6 +143,27 @@ export function CentralPendenciasPage() {
         </button>
       </header>
 
+      {/* ── Alternância: fila operacional × board de agendas bloqueadas ── */}
+      <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
+        {([['fila', 'Fila'], ['bloqueadas', 'Agendas bloqueadas']] as const).map(([v, label]) => (
+          <button
+            key={v}
+            onClick={() => setVista(v)}
+            className={cn(
+              'btn-press inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
+              vista === v ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+            )}
+          >
+            {label}
+            {v === 'bloqueadas' && kpis.bloqueados > 0 && (
+              <span className="tabular-nums text-[11px] rounded-full bg-urg-highBg text-urg-highFg px-1.5 py-px">{kpis.bloqueados}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {vista === 'fila' ? (
+      <>
       {/* ── Controles: abas (estágios) + filtros ── */}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
@@ -277,8 +300,138 @@ export function CentralPendenciasPage() {
         use <em>Atualizar</em> para recarregar. Liberar a agenda registra a decisão, mas se houver bloqueio por outro
         motivo (ex.: desligamento) ele permanece.
       </p>
+      </>
+      ) : (
+        <BloqueadasBoard fila={baseGrupo} podeAgir={podeAgir} />
+      )}
 
       {sel && <DetalheDialog ep={sel} onClose={() => setSel(null)} />}
+    </div>
+  )
+}
+
+// ─── Board de agendas bloqueadas (mesma fila, visão de fluxo) ─────────────────
+// Migrado da antiga Central: um Kanban leve das agendas bloqueadas por estado de
+// contato. Reusa os dados já carregados (usePendenciasFila via `fila`) e as mesmas
+// ações da tabela (registrar mensagem / liberar agenda).
+
+const COLS_BLOQ: { id: string; titulo: string; emoji: string; match: (p: PendenciaFila) => boolean }[] = [
+  { id: 'contato',     titulo: 'Pendente de contato',    emoji: '📥', match: p => p.ultimaMensagemEm == null },
+  { id: 'enviada',     titulo: 'Mensagem enviada',       emoji: '📨', match: p => p.ultimaMensagemEm != null && !p.regularizado },
+  { id: 'desbloqueio', titulo: 'Aguardando desbloqueio', emoji: '⏳', match: p => p.regularizado },
+]
+
+function BloqueadasBoard({ fila, podeAgir }: { fila: PendenciaFila[]; podeAgir: boolean }) {
+  const bloqueadas = fila.filter(p => p.agendaBloqueada)
+  return (
+    <>
+      {bloqueadas.length === 0 ? (
+        <div className="card-surface p-12 text-center space-y-2">
+          <CheckCircle2 className="mx-auto h-7 w-7 text-urg-lowFg" />
+          <p className="text-[13px] text-ink-secondary font-medium">Nenhuma agenda bloqueada.</p>
+          <p className="text-[12px] text-ink-muted">Quando o motor do King bloquear uma agenda, ela aparece aqui.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto pb-2">
+          <div className="grid grid-cols-3 gap-3 min-w-[720px]">
+            {COLS_BLOQ.map(col => {
+              const cards = bloqueadas.filter(col.match)
+              return (
+                <div key={col.id} className="space-y-2.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[12.5px] font-medium text-ink-secondary">{col.emoji} {col.titulo}</span>
+                    <span className="tabular-nums text-[11px] text-ink-muted bg-surface-subtle rounded-full px-1.5 py-px">{cards.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {cards.map(p => <BloqueadaCard key={p.id_Professor} p={p} podeAgir={podeAgir} />)}
+                    {cards.length === 0 && <div className="rounded-lg border border-dashed border-line-soft py-6 text-center text-[11.5px] text-ink-subtle">vazio</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-ink-subtle mt-3">
+        Ao liberar (estágio 3), o professor sai da fila — a coluna "Desbloqueada" fica implícita. O motor roda ~1×/dia.
+      </p>
+    </>
+  )
+}
+
+function BloqueadaCard({ p, podeAgir }: { p: PendenciaFila; podeAgir: boolean }) {
+  const registrar = useRegistrarMensagem()
+  const liberar   = useLiberarAgenda()
+  const [confirmLib, setConfirmLib] = useState(false)
+  const contatado = p.ultimaMensagemEstagio === p.estagio && p.ultimaMensagemEm != null
+  const zap = whatsappLink(p.professor_telefone)
+
+  async function handleRegistrar() {
+    try {
+      const texto = mensagemDoEstagio(p.estagio, p.nome, p.aulasPendentes)
+      await navigator.clipboard.writeText(texto).catch(() => {})
+      await registrar.mutateAsync({ id_Professor: p.id_Professor, estagio: p.estagio, texto })
+      toast.success('Mensagem registrada (texto copiado).')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao registrar.')
+    }
+  }
+  async function handleLiberar() {
+    if (!confirmLib) { setConfirmLib(true); setTimeout(() => setConfirmLib(false), 4000); return }
+    setConfirmLib(false)
+    try {
+      await liberar.mutateAsync({ id_Professor: p.id_Professor })
+      toast.success('Agenda liberada.', { description: 'Registrado. Bloqueio por outro motivo permanece.' })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao liberar.')
+    }
+  }
+
+  return (
+    <div className="card-surface p-3 space-y-2.5">
+      <div className="min-w-0">
+        {p.professor_uuid ? (
+          <Link to={`/professores/${p.professor_uuid}`} className="text-[13px] font-medium text-ink hover:text-accentBlue hover:underline block truncate">{p.nome}</Link>
+        ) : (
+          <span className="text-[13px] font-medium text-ink block truncate">{p.nome}</span>
+        )}
+        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+          <span className={cn('inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[10px] font-medium', ESTAGIO[p.estagio].chip)}>
+            <Lock className="h-2.5 w-2.5" /> {ESTAGIO[p.estagio].titulo}
+          </span>
+          <span className="text-[10.5px] text-ink-muted tabular-nums">{p.dias}d parado</span>
+        </div>
+      </div>
+
+      <p className="text-[10.5px] text-ink-subtle">
+        {p.grupo_nome && <>{p.grupo_nome} · </>}
+        {p.ultimaMensagemEm ? `última msg ${fmtData(p.ultimaMensagemEm)}` : 'sem mensagem'}
+        {p.regularizado && <span className="text-urg-lowFg"> · regularizou</span>}
+      </p>
+
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {podeAgir && !contatado && (
+          <button onClick={handleRegistrar} disabled={registrar.isPending} className="btn-press inline-flex items-center gap-1.5 rounded-md bg-surface-subtle px-2.5 py-1.5 text-[11.5px] font-medium text-ink-secondary hover:text-ink disabled:opacity-50">
+            <Copy className="h-3.5 w-3.5" /> Registrar mensagem
+          </button>
+        )}
+        {podeAgir && p.estagio === 3 && (
+          <button onClick={handleLiberar} disabled={liberar.isPending} className={cn('btn-press inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11.5px] font-medium disabled:opacity-50', confirmLib ? 'bg-urg-highBg text-urg-highFg' : 'bg-surface-subtle text-ink-secondary hover:text-ink')}>
+            <Unlock className="h-3.5 w-3.5" /> {confirmLib ? 'Confirmar?' : 'Liberar'}
+          </button>
+        )}
+        {zap && (
+          <a
+            href={zap}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir WhatsApp"
+            className="btn-press inline-flex items-center gap-1.5 rounded-md bg-[#25D366]/12 px-2.5 py-1.5 text-[11.5px] font-medium text-[#128C4B] hover:bg-[#25D366]/20 transition-colors"
+          >
+            <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+          </a>
+        )}
+      </div>
     </div>
   )
 }

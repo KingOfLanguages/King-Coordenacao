@@ -2,12 +2,25 @@ export interface ProfessorPerfil {
   id: string
   nome: string
   email: string | null
+  telefone: string | null
   status: string
   data_inicio: string | null
   data_ultima_reuniao: string | null
   monitoramento: boolean
   grupo: { id: string; nome: string } | null
   coordenador_nome: string | null
+}
+
+/** Estado do professor no motor de Pendências de Lançamento do King (só quando
+ *  ele está numa pendência aberta na fila). Base do desbloqueio direto no Meet. */
+export interface PendenciaResumo {
+  estagio: 1 | 2 | 3
+  agendaBloqueada: boolean
+  aulasPendentes: number
+  dias: number
+  qtdAlunos: number | null
+  regularizado: boolean
+  liberacaoManualExigida: boolean
 }
 
 export interface AvaliacaoAlunos {
@@ -118,6 +131,12 @@ export interface ProfessorEncontrado {
   observacoesAbertasTotal: number
   nexus: NexusResumo
   mesAnalise: MesAnaliseResumo | null
+  /** Pendência de lançamento aberta na fila do King, se houver (habilita o desbloqueio). */
+  pendencia: PendenciaResumo | null
+  /** Total de alunos vinculados (roster KMS). */
+  alunosTotal: number
+  /** id do professor no King (kms_id) — necessário pra ação de liberar agenda. */
+  kmsId: number | null
   motivo: 'email' | 'nome'
   /** Confiança do match automático por nome (0..1). null quando identificado por e-mail ou escolhido à mão. */
   confianca: number | null
@@ -148,6 +167,7 @@ export type MensagemParaBackground =
   | { tipo: 'RESOLVER_OBSERVACAO'; professorId: string; id: string; resolvido: boolean }
   | { tipo: 'CRIAR_OBSERVACAO'; professorId: string; tipoObs: string; texto: string }
   | { tipo: 'ABRIR_INCIDENTE'; professorId: string; problemType: string; urgency: string; description: string }
+  | { tipo: 'LIBERAR_AGENDA'; professorId: string; idProfessor: number }
 
 export type RespostaBuscarProfessor   = { ok: true; resultado: ProfessorEncontrado | null; sugestoes?: SugestaoProfessor[] }
 export type RespostaSessao            = { ok: true; sessao: SessaoArmazenada | null }

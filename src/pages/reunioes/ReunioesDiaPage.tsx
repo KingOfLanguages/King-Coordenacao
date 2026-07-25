@@ -21,7 +21,6 @@ import {
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
-import { MensagensDoDia } from '@/components/reunioes/MensagensDoDia'
 import { NovaReuniaoDialog } from '@/components/reunioes/NovaReuniaoDialog'
 import { AnotacaoInternaButton } from '@/components/reunioes/AnotacaoInternaButton'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
@@ -170,9 +169,6 @@ export function ReunioesDiaPage() {
   const [dataRef, setDataRef] = useState(() => new Date())
   const [eventoAberto, setEventoAberto] = useState<EventoGrade | null>(null)
   const coordId = canSeeAll ? (sel || coordenadores[0]?.id || '') : (profile?.id ?? '')
-  const coordNome = canSeeAll
-    ? (coordenadores.find(c => c.id === coordId)?.nome ?? '—')
-    : (profile?.nome ?? '—')
 
   const [novaAberta, setNovaAberta] = useState(false)
   const podeCriar = !!coordId && (
@@ -180,14 +176,6 @@ export function ReunioesDiaPage() {
     profile?.role === 'suporte_aluno' || profile?.role === 'admin' ||
     profile?.is_admin === true || profile?.is_lider === true
   )
-
-  // "Mensagens do dia": lista de contatos diários do coordenador. A RPC/RLS só
-  // libera a própria lista (ou admin de verdade) — por isso só mostramos quando
-  // é a agenda do próprio usuário ou ele é admin, evitando erro pra líderes que
-  // navegam a agenda de outro coordenador.
-  const isRealAdmin = profile?.role === 'admin' || profile?.is_admin === true
-  const podeVerContatos = profile?.role === 'admin' || profile?.role === 'coordenacao'
-  const podeVerMinhaLista = coordId === profile?.id || isRealAdmin
 
   const intervalo = useMemo(() => computarIntervalo(modo, dataRef), [modo, dataRef])
 
@@ -303,28 +291,13 @@ export function ReunioesDiaPage() {
       </div>
 
       {modo === 'dia' && (
-        podeVerContatos && podeVerMinhaLista && veHoje ? (
-          <div className="grid gap-6 items-start lg:grid-cols-[minmax(0,1fr)_340px]">
-            <DiaView
-              dia={dataRef}
-              carregando={carregando}
-              lista={lista}
-              listaAgenda={listaAgenda}
-              dados={dados}
-            />
-            <div className="lg:sticky lg:top-20">
-              <MensagensDoDia coordId={coordId || null} coordNome={coordNome} />
-            </div>
-          </div>
-        ) : (
-          <DiaView
-            dia={dataRef}
-            carregando={carregando}
-            lista={lista}
-            listaAgenda={listaAgenda}
-            dados={dados}
-          />
-        )
+        <DiaView
+          dia={dataRef}
+          carregando={carregando}
+          lista={lista}
+          listaAgenda={listaAgenda}
+          dados={dados}
+        />
       )}
 
       {modo === 'semana' && (
