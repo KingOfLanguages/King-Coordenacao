@@ -17,6 +17,9 @@ export function montarMensagemContato(
   /** Nome do coordenador que assina (já resolvido pelo chamador). */
   coordNome: string,
   linkAgendamento: string | null,
+  /** Canal de envio — muda só o fechamento (WhatsApp responde ali; e-mail
+   *  direciona pro WhatsApp da coordenação). Padrão: WhatsApp. */
+  canal: 'whatsapp' | 'email' = 'whatsapp',
 ): string {
   const nome = c.professor?.nome ?? 'professor(a)'
 
@@ -39,5 +42,16 @@ export function montarMensagemContato(
     linkAgendamento,
     avisoBloqueio: c.estagio === 2,
     aulasPendentes: c.aulas_pendentes,
+    canal,
   })
+}
+
+/**
+ * Assunto do e-mail de convite (usado só na versão por e-mail da mensagem do dia).
+ * Mais direto no estágio 3 (reunião obrigatória); convite leve nos demais.
+ */
+export function montarAssuntoContato(c: ContatoDia): string {
+  return c.estagio === 3
+    ? 'Reunião de acompanhamento — King'
+    : 'Vamos agendar nossa próxima conversa? — King'
 }

@@ -108,3 +108,30 @@ export function useMarcarContato() {
     },
   })
 }
+
+/**
+ * Envia por e-mail o mesmo texto do contato do dia (Edge Function
+ * `enviar-convite-email`). O destino é resolvido no servidor a partir do
+ * contato; em caso de sucesso o contato já volta marcado como enviado.
+ */
+export function useEnviarConvite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (
+      params: { contato_id: string; corpo: string; assunto: string; remetente_nome: string },
+    ): Promise<{ para: string }> => {
+      const { data, error } = await supabase.functions.invoke('enviar-convite-email', { body: params })
+      // Erros HTTP (4xx/5xx) da function chegam em error.context como Response.
+      if (error) {
+        let msg = error.message
+        try { msg = (await (error as { context?: Response }).context?.json())?.error ?? msg } catch { /* mantém msg */ }
+        throw new Error(msg)
+      }
+      if (data?.error) throw new Error(data.error)
+      return { para: data?.para ?? '' }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contatos-dia'] })
+    },
+  })
+}

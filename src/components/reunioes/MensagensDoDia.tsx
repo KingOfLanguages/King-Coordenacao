@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MessageCircle, Check, Undo2, User, Copy, Lock } from 'lucide-react'
+import { MessageCircle, Check, Undo2, User, Copy, Lock, Mail, Loader2 } from 'lucide-react'
 import {
-  useContatosHoje, useMarcarContato, coordenadorResponsavelDe,
+  useContatosHoje, useMarcarContato, useEnviarConvite, coordenadorResponsavelDe,
   type ContatoDia,
 } from '@/hooks/useContatosDia'
 import { useNomesPorPerfilId } from '@/hooks/usePerfisPublicos'
-import { montarMensagemContato } from '@/lib/mensagemContato'
+import { montarMensagemContato, montarAssuntoContato } from '@/lib/mensagemContato'
 import { ESTAGIO } from '@/lib/centralPendencias'
 import { linkAgendamentoPublico } from '@/lib/portal'
 import { cn } from '@/lib/utils'
@@ -21,8 +21,10 @@ import { toast } from 'sonner'
 export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null; coordNome: string }) {
   const { data: contatos = [], isLoading } = useContatosHoje(coordId)
   const marcar = useMarcarContato()
+  const enviarConvite = useEnviarConvite()
   const navigate = useNavigate()
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
+  const [enviandoId, setEnviandoId] = useState<string | null>(null)
   // Quem assina a mensagem é o coordenador do grupo do professor, não
   // necessariamente quem está com a lista aberta (admin/líder navegam agenda dos
   // outros). Nome resolvido pela view perfis_publicos.
@@ -44,11 +46,14 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
     )
   }
 
-  function montarMensagem(c: ContatoDia): string {
+  // Coordenador que assina — o do grupo do professor; cai pro da lista aberta se sem grupo.
+  function coordDe(c: ContatoDia): string {
     const respId = coordenadorResponsavelDe(c)
-    // Cai pro coordenador da lista aberta se o professor estiver sem grupo.
-    const coord = (respId && nomesPorId.get(respId)) || coordNome
-    return montarMensagemContato(c, coord, linkAgendamento)
+    return (respId && nomesPorId.get(respId)) || coordNome
+  }
+
+  function montarMensagem(c: ContatoDia): string {
+    return montarMensagemContato(c, coordDe(c), linkAgendamento)
   }
 
   async function copiarMensagem(c: ContatoDia) {
@@ -56,6 +61,25 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
     setCopiadoId(c.id)
     toast.success('Mensagem copiada.')
     setTimeout(() => setCopiadoId(prev => (prev === c.id ? null : prev)), 1800)
+  }
+
+  // Envia por e-mail o mesmo texto (idêntico ao do WhatsApp), formatado no servidor.
+  async function enviarEmail(c: ContatoDia) {
+    const coord = coordDe(c)
+    setEnviandoId(c.id)
+    try {
+      const { para } = await enviarConvite.mutateAsync({
+        contato_id:     c.id,
+        corpo:          montarMensagemContato(c, coord, linkAgendamento, 'email'),
+        assunto:        montarAssuntoContato(c),
+        remetente_nome: coord,
+      })
+      toast.success(`E-mail enviado para ${para || c.professor?.nome || 'o professor'}.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar e-mail.')
+    } finally {
+      setEnviandoId(null)
+    }
   }
 
   return (
@@ -135,6 +159,20 @@ export function MensagensDoDia({ coordId, coordNome }: { coordId: string | null;
                 >
                   {copiadoId === c.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                   {copiadoId === c.id ? 'Copiado' : 'Copiar'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!c.professor?.email || enviandoId === c.id}
+                  onClick={() => enviarEmail(c)}
+                  title={c.professor?.email
+                    ? `Enviar por e-mail para ${c.professor.email}`
+                    : 'Professor sem e-mail cadastrado'}
+                  className="btn-press h-7 w-7 p-0 flex-shrink-0 border-line text-ink-secondary disabled:opacity-40"
+                >
+                  {enviandoId === c.id
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Mail className="h-3 w-3" />}
                 </Button>
                 <Button
                   size="sm"

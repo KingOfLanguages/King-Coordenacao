@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MessageCircle, Check, Undo2, Copy, Lock, User } from 'lucide-react'
+import { MessageCircle, Check, Undo2, Copy, Lock, User, Mail, Loader2 } from 'lucide-react'
 import {
-  useContatosHoje, useMarcarContato, coordenadorResponsavelDe, type ContatoDia,
+  useContatosHoje, useMarcarContato, useEnviarConvite, coordenadorResponsavelDe, type ContatoDia,
 } from '@/hooks/useContatosDia'
 import { useNomesPorPerfilId } from '@/hooks/usePerfisPublicos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
-import { montarMensagemContato } from '@/lib/mensagemContato'
+import { montarMensagemContato, montarAssuntoContato } from '@/lib/mensagemContato'
 import { linkAgendamentoPublico } from '@/lib/portal'
 import { ESTAGIO } from '@/lib/centralPendencias'
 import { useAuth } from '@/contexts/AuthContext'
@@ -45,7 +45,9 @@ export function MensagensDoDiaBoard() {
     podeVerContatos && podeVerMinhaLista ? (coordId || null) : null,
   )
   const marcar = useMarcarContato()
+  const enviarConvite = useEnviarConvite()
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
+  const [enviandoId, setEnviandoId] = useState<string | null>(null)
 
   const enviados   = contatos.filter(c => c.enviado).length
   const total      = contatos.length
@@ -56,13 +58,36 @@ export function MensagensDoDiaBoard() {
   function toggle(c: ContatoDia) {
     marcar.mutate({ id: c.id, enviado: !c.enviado }, { onError: () => toast.error('Erro ao atualizar contato.') })
   }
-  async function copiar(c: ContatoDia) {
+  // Coordenador que assina — o do grupo do professor; cai pro selecionado se sem grupo.
+  function coordDe(c: ContatoDia): string {
     const respId = coordenadorResponsavelDe(c)
-    const coord = (respId && nomesPorId.get(respId)) || coordNome
-    await navigator.clipboard.writeText(montarMensagemContato(c, coord, linkAgendamento))
+    return (respId && nomesPorId.get(respId)) || coordNome
+  }
+
+  async function copiar(c: ContatoDia) {
+    await navigator.clipboard.writeText(montarMensagemContato(c, coordDe(c), linkAgendamento))
     setCopiadoId(c.id)
     toast.success('Mensagem copiada.')
     setTimeout(() => setCopiadoId(prev => (prev === c.id ? null : prev)), 1800)
+  }
+
+  // Envia por e-mail o mesmo texto (idêntico ao do WhatsApp), formatado no servidor.
+  async function enviarEmail(c: ContatoDia) {
+    const coord = coordDe(c)
+    setEnviandoId(c.id)
+    try {
+      const { para } = await enviarConvite.mutateAsync({
+        contato_id:     c.id,
+        corpo:          montarMensagemContato(c, coord, linkAgendamento, 'email'),
+        assunto:        montarAssuntoContato(c),
+        remetente_nome: coord,
+      })
+      toast.success(`E-mail enviado para ${para || c.professor?.nome || 'o professor'}.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar e-mail.')
+    } finally {
+      setEnviandoId(null)
+    }
   }
 
   if (!podeVerContatos) {
@@ -149,6 +174,18 @@ export function MensagensDoDiaBoard() {
                 >
                   {copiadoId === c.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                   {copiadoId === c.id ? 'Copiado' : 'Copiar mensagem'}
+                </button>
+                <button
+                  onClick={() => enviarEmail(c)}
+                  disabled={!c.professor?.email || enviandoId === c.id}
+                  title={c.professor?.email
+                    ? `Enviar por e-mail para ${c.professor.email}`
+                    : 'Professor sem e-mail cadastrado'}
+                  className="btn-press flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-line text-ink-secondary hover:text-ink disabled:opacity-40"
+                >
+                  {enviandoId === c.id
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Mail className="h-3.5 w-3.5" />}
                 </button>
                 <button
                   onClick={() => toggle(c)}

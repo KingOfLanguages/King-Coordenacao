@@ -17,6 +17,9 @@ export type MessageVars = {
   // prazo"): adiciona uma linha lembrando de regularizar os lançamentos.
   avisoBloqueio?: boolean
   aulasPendentes?: number | null    // usado só no aviso de bloqueio, quando conhecido
+  // Canal de envio: muda só o fechamento. No WhatsApp o professor responde ali
+  // mesmo ("me chamar por aqui"); no e-mail direcionamos pro WhatsApp da coordenação.
+  canal?: 'whatsapp' | 'email'
 }
 
 export type MessageTemplate = {
@@ -33,7 +36,7 @@ export const MESSAGE_TEMPLATES: MessageTemplate[] = [
   {
     id: 'checkin-padrao',
     label: 'Check-in padrão',
-    build: ({ professorNome, coordenadorNome, dataUltimaReuniao, linkAgendamento, avisoBloqueio, aulasPendentes }) => {
+    build: ({ professorNome, coordenadorNome, dataUltimaReuniao, linkAgendamento, avisoBloqueio, aulasPendentes, canal }) => {
       const referenciaReuniao = dataUltimaReuniao
         ? `Nossa última conversa foi em ${dataUltimaReuniao}.`
         : 'Ainda não tivemos nossa primeira conversa.'
@@ -61,7 +64,12 @@ export const MESSAGE_TEMPLATES: MessageTemplate[] = [
           `🔗 ${linkAgendamento}`,
         )
       }
-      linhas.push('', 'Qualquer coisa, é só me chamar por aqui. Até já! 🙌')
+      linhas.push(
+        '',
+        canal === 'email'
+          ? 'Qualquer coisa, é só nos chamar pelo Whatsapp da coordenação. Até já! 🙌'
+          : 'Qualquer coisa, é só me chamar por aqui. Até já! 🙌',
+      )
 
       return linhas.join('\n')
     },
