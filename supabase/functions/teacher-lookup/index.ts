@@ -59,6 +59,16 @@ function diasDeCasa(dataIso: string | null): number | null {
   return Math.round((agoraUTC - dUTC) / 86400000)
 }
 
+/** Garante o esquema https://. Links legados (nível agenda/recorrência) às vezes
+ *  vêm como "meet.google.com/xxx" sem esquema — o que vira URL relativa (link
+ *  quebrado) no portal e no e-mail. */
+function comHttps(link: string | null): string | null {
+  if (!link) return link
+  const l = link.trim()
+  if (!l) return null
+  return /^https?:\/\//i.test(l) ? l : `https://${l}`
+}
+
 /** Ocorrências em que `diaSemana` (0=dom…6=sáb) cai no horário `hora` (HH:MM:SS),
  *  de hoje até `dias` à frente. Numa janela de 7 dias há no máximo uma por regra. */
 function proximasOcorrencias(diaSemana: number, hora: string, dias: number): string[] {
@@ -192,6 +202,10 @@ serve(async (req) => {
     .map(a => {
       const horariosExistentes = (a.horarios as HorarioRow[]).filter(h => h.ativo)
       const materializadosPorRecorrencia = new Map<string, Set<string>>() // recorrencia_id -> set de data_hora já materializadas
+      // Link canônico por recorrência: fonte única da verdade do link da reunião.
+      const linkPorRecorrencia = new Map<string, string | null>(
+        (a.recorrencias as { id: string; meet_link: string | null }[]).map(r => [r.id, r.meet_link]),
+      )
 
       const horarios: HorarioSaida[] = []
 
@@ -199,14 +213,22 @@ serve(async (req) => {
       for (const h of horariosExistentes) {
         if (new Date(h.data_hora) <= agora) continue
         if (new Date(h.data_hora) > limiteAgendamento) continue // fora da janela de 7 dias
-        const vagas = h.capacidade - (contagemPorHorario.get(h.id) ?? 0)
+        const inscritos = contagemPorHorario.get(h.id) ?? 0
+        const vagas = h.capacidade - inscritos
         const jaInscrito = inscritoPorHorario.has(h.id)
         if (vagas <= 0 && !jaInscrito) continue
+        const recLink = h.recorrencia_id ? linkPorRecorrencia.get(h.recorrencia_id) ?? null : null
+        // Sem inscrito → link canônico da recorrência (ignora resíduo obsoleto de
+        // linhas pré-materializadas). Já com inscrito → mantém o link que essas
+        // pessoas receberam, pra não dividir a sala.
+        const link = inscritos > 0
+          ? (h.meet_link ?? recLink ?? a.meet_link)
+          : (recLink ?? h.meet_link ?? a.meet_link)
         horarios.push({
           id: h.id,
           data_hora: h.data_hora,
           capacidade: h.capacidade,
-          meet_link: h.meet_link ?? a.meet_link,
+          meet_link: comHttps(link),
           vagas,
           ja_inscrito: jaInscrito,
         })
@@ -229,7 +251,7 @@ serve(async (req) => {
             id: `v|${r.id}|${iso}`,
             data_hora: iso,
             capacidade: r.capacidade,
-            meet_link: r.meet_link ?? a.meet_link,
+            meet_link: comHttps(r.meet_link ?? a.meet_link),
             vagas: r.capacidade,
             ja_inscrito: false,
           })
@@ -242,7 +264,7 @@ serve(async (req) => {
         id:          a.id,
         titulo:      a.titulo,
         descricao:   a.descricao,
-        meet_link:   a.meet_link,
+        meet_link:   comHttps(a.meet_link),
         coordenador: a.coordenador,
         horarios,
       }

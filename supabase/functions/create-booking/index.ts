@@ -70,6 +70,15 @@ function diasDeCasa(dataIso: string | null): number | null {
   return Math.round((agoraUTC - dUTC) / 86400000)
 }
 
+/** Garante o esquema https://. Links legados às vezes vêm como "meet.google.com/xxx"
+ *  sem esquema — o que vira URL relativa (link quebrado) no e-mail/portal. */
+function comHttps(link: string | null): string | null {
+  if (!link) return link
+  const l = link.trim()
+  if (!l) return null
+  return /^https?:\/\//i.test(l) ? l : `https://${l}`
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -236,6 +245,8 @@ serve(async (req) => {
   }
   let horario: { id: string; data_hora: string; capacidade: number; meet_link: string | null; ativo: boolean }
   let agenda: AgendaInfo
+  // Link fixo da recorrência = fonte única da verdade (informado pelo coordenador).
+  let recorrenciaMeetLink: string | null = null
 
   // Teto da janela de agendamento: professor só reserva até 7 dias à frente
   // (espelha o teacher-lookup, que só lista essa janela). Gate autoritativo.
@@ -262,6 +273,7 @@ serve(async (req) => {
     if (!recorrencia || !recorrencia.ativo) return json({ error: 'Horário não encontrado.' }, 404)
     agenda = recorrencia.agenda as unknown as AgendaInfo
     if (!agenda || !agenda.ativo) return json({ error: 'Esta agenda não está mais disponível.' }, 409)
+    recorrenciaMeetLink = recorrencia.meet_link
 
     // Tenta achar uma materialização já existente (ex.: outro professor reservou primeiro).
     const { data: existente } = await admin
@@ -316,6 +328,7 @@ serve(async (req) => {
       .from('agenda_horarios')
       .select(`
         id, data_hora, capacidade, meet_link, ativo,
+        recorrencia:agenda_recorrencias (meet_link),
         agenda:agenda_reunioes (
           id, titulo, meet_link, ativo, coordenador_id,
           coordenador:profiles!coordenador_id (id, nome)
@@ -331,6 +344,7 @@ serve(async (req) => {
     agenda = horarioRow.agenda as unknown as AgendaInfo
     if (!agenda || !agenda.ativo) return json({ error: 'Esta agenda não está mais disponível.' }, 409)
 
+    recorrenciaMeetLink = (horarioRow.recorrencia as unknown as { meet_link: string | null } | null)?.meet_link ?? null
     horario = horarioRow
   }
 
@@ -434,7 +448,18 @@ serve(async (req) => {
     timeZone: 'America/Sao_Paulo',
   })
   const coordNome = agenda.coordenador?.nome ?? 'Coordenação'
-  const meetLink  = horario.meet_link ?? agenda.meet_link
+  // Link canônico = o da recorrência (fonte única). Se JÁ havia inscritos antes
+  // deste professor (passo 4, `count`), mantém o link da ocorrência — foi o que
+  // eles receberam, não dá pra dividir a sala. Se este é o 1º inscrito, adota o
+  // canônico e cura a linha (nenhum aviso foi enviado ainda com o link antigo).
+  const canonicalLink = comHttps(recorrenciaMeetLink)
+  const jaHaviaInscritos = (count ?? 0) > 0
+  const meetLink = jaHaviaInscritos
+    ? comHttps(horario.meet_link ?? recorrenciaMeetLink ?? agenda.meet_link)
+    : (canonicalLink ?? comHttps(horario.meet_link ?? agenda.meet_link))
+  if (!jaHaviaInscritos && canonicalLink && horario.meet_link !== canonicalLink) {
+    await admin.from('agenda_horarios').update({ meet_link: canonicalLink }).eq('id', horario.id)
+  }
   const calendarUrl = googleCalendarUrl(agenda.titulo, horario.data_hora, meetLink)
 
   if (brevoKey && emailReal) {
