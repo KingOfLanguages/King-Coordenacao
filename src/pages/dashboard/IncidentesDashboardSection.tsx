@@ -63,8 +63,7 @@ export function IncidentesDashboardSection({ grupoId, professorGrupo, dataInicia
 
   return (
     <section className="card-surface p-5 space-y-7">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[14px] font-semibold tracking-tight text-ink">Incidentes &amp; Informes</h2>
+      <div className="flex justify-end">
         <span className="text-[11px] text-ink-subtle">
           {grupoId ? 'coordenação selecionada' : 'todas as coordenações'} · {recorteLabel}
         </span>
