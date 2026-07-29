@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronRight, Search, CalendarRange } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -236,16 +236,16 @@ export function DashboardGeralPage() {
   )
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="px-6 py-6 space-y-8 max-w-[1400px] mx-auto">
       <header className="space-y-0.5">
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Dashboard Geral</h1>
         <p className="text-[13px] text-ink-muted">Visão consolidada de todas as coordenações.</p>
       </header>
 
-      {/* ── 7. Filtros ── */}
-      <section className="card-surface p-4 flex flex-wrap items-center gap-2">
+      {/* ── Filtros ── */}
+      <section className="flex flex-wrap items-center gap-2 rounded-xl border border-line-soft bg-surface-canvas px-3 py-2.5">
         <Select value={coordenacaoFiltro} onValueChange={setCoordenacaoFiltro}>
-          <SelectTrigger className="h-9 w-[160px] text-[12px] bg-surface-canvas border-line text-ink">
+          <SelectTrigger className="h-9 w-[170px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
             <SelectValue placeholder="Coordenação" />
           </SelectTrigger>
           <SelectContent className="bg-surface-canvas border-line text-ink">
@@ -262,12 +262,12 @@ export function DashboardGeralPage() {
             placeholder="Buscar professor…"
             value={professorFiltro}
             onChange={e => setProfessorFiltro(e.target.value)}
-            className="pl-9 h-9 bg-surface-canvas border-line"
+            className="pl-9 h-9 bg-surface-subtle/60 border-transparent"
           />
         </div>
 
         <Select value={faixaFiltro} onValueChange={setFaixaFiltro}>
-          <SelectTrigger className="h-9 w-[150px] text-[12px] bg-surface-canvas border-line text-ink">
+          <SelectTrigger className="h-9 w-[150px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
             <SelectValue placeholder="Faixa de score" />
           </SelectTrigger>
           <SelectContent className="bg-surface-canvas border-line text-ink">
@@ -278,25 +278,25 @@ export function DashboardGeralPage() {
           </SelectContent>
         </Select>
 
-        <div className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+        <div className="ml-auto flex items-center gap-1.5 text-[12px] text-ink-muted" title="O período afeta os gráficos de score, reuniões, movimento e incidentes.">
+          <CalendarRange className="h-3.5 w-3.5 text-ink-subtle" />
           <input type="date" value={dataInicial} onChange={e => setDataInicial(e.target.value)}
-            className="h-9 rounded-md border border-line bg-surface-canvas px-2 text-[12px] text-ink" />
-          <span>até</span>
+            className="h-9 rounded-md border border-line-soft bg-surface-subtle/60 px-2 text-[12px] text-ink" />
+          <span className="text-ink-subtle">até</span>
           <input type="date" value={dataFinal} onChange={e => setDataFinal(e.target.value)}
-            className="h-9 rounded-md border border-line bg-surface-canvas px-2 text-[12px] text-ink" />
+            className="h-9 rounded-md border border-line-soft bg-surface-subtle/60 px-2 text-[12px] text-ink" />
         </div>
-        <span className="text-[11px] text-ink-subtle">(as datas afetam os gráficos de score, reuniões e movimento)</span>
       </section>
 
-      {/* ── 1. Resumo geral ── */}
-      <section className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="Coordenadores ativos" value={resumo.coordenadoresAtivos} />
-        <StatCard label="Professores ativos" value={resumo.professoresAtivos} />
-        <StatCard label="Score médio da escola" value={resumo.scoreMedio != null ? Math.round(resumo.scoreMedio) : '—'} />
-        <StatCard label="Grupos de coordenação" value={resumo.totalGrupos} />
-        <StatCard label="Sem reunião registrada" value={resumo.semReuniaoRegistrada} tone={resumo.semReuniaoRegistrada > 0 ? 'warn' : undefined} />
-        <StatCard label="Sem próxima agendada" value={resumo.semProximaAgendada} tone={resumo.semProximaAgendada > 0 ? 'warn' : undefined} />
-      </section>
+      {/* ── Resumo geral ── */}
+      <Metrics items={[
+        { label: 'Coordenadores ativos', value: resumo.coordenadoresAtivos },
+        { label: 'Professores ativos', value: resumo.professoresAtivos },
+        { label: 'Score médio da escola', value: resumo.scoreMedio != null ? Math.round(resumo.scoreMedio) : '—' },
+        { label: 'Grupos de coordenação', value: resumo.totalGrupos },
+        { label: 'Sem reunião registrada', value: resumo.semReuniaoRegistrada, tone: resumo.semReuniaoRegistrada > 0 ? 'warn' : undefined },
+        { label: 'Sem próxima agendada', value: resumo.semProximaAgendada, tone: resumo.semProximaAgendada > 0 ? 'warn' : undefined },
+      ]} />
 
       {/* ── Incidentes & Informes ── */}
       <IncidentesDashboardSection
@@ -306,11 +306,9 @@ export function DashboardGeralPage() {
         dataFinal={dataFinal}
       />
 
-      {/* ── 2. Distribuição por coordenação ── */}
-      <section className="card-surface p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="label-micro">Distribuição por coordenação</h2>
-        </div>
+      {/* ── Distribuição por coordenação ── */}
+      <section className="card-surface p-5 space-y-4">
+        <SectionHead title="Distribuição por coordenação" hint="Clique numa linha para ver os professores do grupo." />
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-line text-[11px] text-ink-muted uppercase tracking-wide">
@@ -366,9 +364,9 @@ export function DashboardGeralPage() {
         </table>
       </section>
 
-      {/* ── 3. Distribuição por score ── */}
+      {/* ── Distribuição por score ── */}
       <section className="card-surface p-5 space-y-4">
-        <h2 className="label-micro">Distribuição por score</h2>
+        <SectionHead title="Distribuição por score" />
         <div className="grid gap-4 lg:grid-cols-2">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={distribuicaoScore}>
@@ -415,17 +413,17 @@ export function DashboardGeralPage() {
         </table>
       </section>
 
-      {/* ── 4. Indicadores de score ── */}
+      {/* ── Indicadores de score ── */}
       <section className="card-surface p-5 space-y-4">
-        <h2 className="label-micro">Indicadores de score</h2>
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Maior score" value={indicadores.max ?? '—'} />
-          <StatCard label="Menor score" value={indicadores.min ?? '—'} />
-          <StatCard label="Score médio" value={indicadores.media != null ? Math.round(indicadores.media) : '—'} />
-          <StatCard label="Mediana" value={indicadores.mediana != null ? Math.round(indicadores.mediana) : '—'} />
-          <StatCard label="Acima de 1200" value={indicadores.acima1200} />
-          <StatCard label="Abaixo de 600" value={indicadores.abaixo600} />
-        </div>
+        <SectionHead title="Indicadores de score" />
+        <Metrics items={[
+          { label: 'Maior score', value: indicadores.max ?? '—' },
+          { label: 'Menor score', value: indicadores.min ?? '—' },
+          { label: 'Score médio', value: indicadores.media != null ? Math.round(indicadores.media) : '—' },
+          { label: 'Mediana', value: indicadores.mediana != null ? Math.round(indicadores.mediana) : '—' },
+          { label: 'Acima de 1200', value: indicadores.acima1200 },
+          { label: 'Abaixo de 600', value: indicadores.abaixo600 },
+        ]} />
         <div>
           <p className="text-[11px] text-ink-muted mb-2">Evolução do score médio — escola e por coordenação</p>
           <ResponsiveContainer width="100%" height={260}>
@@ -444,9 +442,9 @@ export function DashboardGeralPage() {
         </div>
       </section>
 
-      {/* ── 5. Ranking das coordenações ── */}
-      <section className="card-surface p-5 space-y-3">
-        <h2 className="label-micro">Ranking das coordenações</h2>
+      {/* ── Ranking das coordenações ── */}
+      <section className="card-surface p-5 space-y-4">
+        <SectionHead title="Ranking das coordenações" />
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-line text-[11px] text-ink-muted uppercase tracking-wide">
@@ -471,17 +469,19 @@ export function DashboardGeralPage() {
         </table>
       </section>
 
-      {/* ── 6. Reuniões do mês vigente vs meta ── */}
+      {/* ── Reuniões do mês vigente vs meta ── */}
       <section className="card-surface p-5 space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="label-micro">Reuniões da coordenação — mês vigente vs meta</h2>
-          <span className="text-[15px] tabular-nums">
-            <span className={cn('text-2xl font-semibold', reunioesMesVsMeta.atingiu ? 'text-urg-lowFg' : 'text-ink')}>
-              {reunioesMesVsMeta.realizadas}
+        <SectionHead
+          title="Reuniões da coordenação — mês vigente vs meta"
+          right={
+            <span className="text-[15px] tabular-nums">
+              <span className={cn('text-2xl font-semibold', reunioesMesVsMeta.atingiu ? 'text-urg-lowFg' : 'text-ink')}>
+                {reunioesMesVsMeta.realizadas}
+              </span>
+              <span className="text-ink-muted"> / {reunioesMesVsMeta.meta} esperadas</span>
             </span>
-            <span className="text-ink-muted"> / {reunioesMesVsMeta.meta} esperadas</span>
-          </span>
-        </div>
+          }
+        />
         <div className="h-2.5 rounded-full bg-surface-muted overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-500"
@@ -498,14 +498,16 @@ export function DashboardGeralPage() {
         </div>
       </section>
 
-      {/* ── 7. Reuniões por coordenação ── */}
-      <section className="card-surface p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="label-micro">Reuniões realizadas por coordenação</h2>
-          <span className="text-[12px] text-ink-muted">
-            Total: <span className="font-semibold text-ink tabular-nums">{reunioesPorCoord.total}</span>
-          </span>
-        </div>
+      {/* ── Reuniões por coordenação ── */}
+      <section className="card-surface p-5 space-y-4">
+        <SectionHead
+          title="Reuniões realizadas por coordenação"
+          right={
+            <span className="text-[12px] text-ink-muted">
+              Total: <span className="font-semibold text-ink tabular-nums">{reunioesPorCoord.total}</span>
+            </span>
+          }
+        />
         {reunioesPorCoord.linhas.length === 0 ? (
           <p className="text-[13px] text-ink-muted">Nenhuma reunião realizada no período selecionado.</p>
         ) : (
@@ -543,26 +545,28 @@ export function DashboardGeralPage() {
         )}
       </section>
 
-      {/* ── 7. Movimento de professores (entradas / saídas) ── */}
+      {/* ── Movimento de professores (entradas / saídas) ── */}
       <section className="card-surface p-5 space-y-4">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="label-micro">Movimento de professores</h2>
-          <Select value={granMovimento} onValueChange={v => setGranMovimento(v as Granularidade)}>
-            <SelectTrigger className="h-8 w-[130px] text-[12px] bg-surface-canvas border-line text-ink">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-surface-canvas border-line text-ink">
-              {(['semana', 'mes', 'trimestre', 'ano'] as Granularidade[]).map(g => (
-                <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <StatCard label="Entradas no período" value={movimentoResumo.entradas} />
-          <StatCard label="Saídas no período" value={movimentoResumo.saidas} tone={movimentoResumo.saidas > 0 ? 'warn' : undefined} />
-          <StatCard label="Saldo" value={movimentoResumo.saldo > 0 ? `+${movimentoResumo.saldo}` : String(movimentoResumo.saldo)} />
-        </div>
+        <SectionHead
+          title="Movimento de professores"
+          right={
+            <Select value={granMovimento} onValueChange={v => setGranMovimento(v as Granularidade)}>
+              <SelectTrigger className="h-8 w-[130px] text-[12px] bg-surface-canvas border-line text-ink">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-surface-canvas border-line text-ink">
+                {(['semana', 'mes', 'trimestre', 'ano'] as Granularidade[]).map(g => (
+                  <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
+        <Metrics cols={3} items={[
+          { label: 'Entradas no período', value: movimentoResumo.entradas },
+          { label: 'Saídas no período', value: movimentoResumo.saidas, tone: movimentoResumo.saidas > 0 ? 'warn' : undefined },
+          { label: 'Saldo', value: movimentoResumo.saldo > 0 ? `+${movimentoResumo.saldo}` : String(movimentoResumo.saldo) },
+        ]} />
         {movimentoPontos.length === 0 ? (
           <p className="text-[13px] text-ink-muted">Sem entradas ou saídas no período selecionado.</p>
         ) : (
@@ -583,9 +587,9 @@ export function DashboardGeralPage() {
         </p>
       </section>
 
-      {/* ── 8. Alertas inteligentes ── */}
-      <section className="card-surface p-5 space-y-3">
-        <h2 className="label-micro">Alertas inteligentes ({alertas.length})</h2>
+      {/* ── Alertas inteligentes ── */}
+      <section className="card-surface p-5 space-y-4">
+        <SectionHead title={`Alertas inteligentes (${alertas.length})`} />
         {coordenacoesAbaixoMedia.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {coordenacoesAbaixoMedia.map(c => (
@@ -614,13 +618,38 @@ export function DashboardGeralPage() {
   )
 }
 
-// ─── Stat card ──────────────────────────────────────────────────────────────
+// ─── Cabeçalho de seção ──────────────────────────────────────────────────────
 
-function StatCard({ label, value, tone }: { label: string; value: number | string; tone?: 'warn' }) {
+function SectionHead({ title, hint, right }: { title: string; hint?: string; right?: ReactNode }) {
   return (
-    <div className="card-surface p-4 space-y-1">
-      <p className="text-[11px] text-ink-muted">{label}</p>
-      <p className={cn('text-xl font-semibold tabular-nums', tone === 'warn' ? 'text-urg-highFg' : 'text-ink')}>{value}</p>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <div className="space-y-0.5">
+        <h2 className="text-[14px] font-semibold tracking-tight text-ink">{title}</h2>
+        {hint && <p className="text-[11.5px] text-ink-muted">{hint}</p>}
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
+    </div>
+  )
+}
+
+// ─── Faixa de métricas (sem card-in-card) ────────────────────────────────────
+// Divisórias de 1px via gap-px + fundo — robusto em grade multi-linha, sem caixas
+// aninhadas nem sombras empilhadas.
+
+interface Metric { label: string; value: ReactNode; tone?: 'warn' }
+
+function Metrics({ items, cols = 6 }: { items: Metric[]; cols?: 3 | 6 }) {
+  return (
+    <div className={cn(
+      'grid grid-cols-2 sm:grid-cols-3 gap-px rounded-xl bg-line-soft ring-1 ring-line-soft overflow-hidden',
+      cols === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-6',
+    )}>
+      {items.map((m, i) => (
+        <div key={i} className="bg-surface-canvas px-4 py-3.5 space-y-1.5">
+          <p className="text-[11px] text-ink-muted truncate" title={m.label}>{m.label}</p>
+          <p className={cn('text-[22px] font-semibold tabular-nums leading-none', m.tone === 'warn' ? 'text-urg-highFg' : 'text-ink')}>{m.value}</p>
+        </div>
+      ))}
     </div>
   )
 }
