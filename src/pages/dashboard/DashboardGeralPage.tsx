@@ -16,6 +16,7 @@ import {
   agruparMovimento, metaReunioesMensal, LABEL_ALERTA, LABEL_GRANULARIDADE,
   type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta, type Granularidade,
 } from '@/hooks/useDashboardGeral'
+import { IncidentesDashboardSection } from './IncidentesDashboardSection'
 import { cn } from '@/lib/utils'
 
 const CORES_FAIXA = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#16a34a']
@@ -86,6 +87,14 @@ export function DashboardGeralPage() {
     (professorFiltro.trim() === '' || r.nome.toLowerCase().includes(professorFiltro.trim().toLowerCase())) &&
     (faixaFiltro === TODAS || (r.score_atual != null && bucketFor(r.score_atual)?.label === faixaFiltro))
   ), [rows, coordenacaoFiltro, professorFiltro, faixaFiltro])
+
+  // professor_id → grupo_id de todos os professores ativos — usado para recortar
+  // os incidentes por coordenação (a tabela de incidentes não guarda o grupo).
+  const professorGrupo = useMemo(() => {
+    const m = new Map<string, string | null>()
+    for (const r of rows) m.set(r.professor_id, r.grupo_id)
+    return m
+  }, [rows])
 
   const trendFiltrado = useMemo(() => {
     const from = dataInicial ? Number(dataInicial.slice(0, 7).replace('-', '')) : null
@@ -288,6 +297,14 @@ export function DashboardGeralPage() {
         <StatCard label="Sem reunião registrada" value={resumo.semReuniaoRegistrada} tone={resumo.semReuniaoRegistrada > 0 ? 'warn' : undefined} />
         <StatCard label="Sem próxima agendada" value={resumo.semProximaAgendada} tone={resumo.semProximaAgendada > 0 ? 'warn' : undefined} />
       </section>
+
+      {/* ── Incidentes & Informes ── */}
+      <IncidentesDashboardSection
+        grupoId={coordenacaoFiltro === TODAS ? null : coordenacaoFiltro}
+        professorGrupo={professorGrupo}
+        dataInicial={dataInicial}
+        dataFinal={dataFinal}
+      />
 
       {/* ── 2. Distribuição por coordenação ── */}
       <section className="card-surface p-5 space-y-3">
