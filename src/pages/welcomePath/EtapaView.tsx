@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Info, NotebookPen, Clock3 } from 'lucide-react'
+import {
+  ArrowLeft, CheckCircle2, Info, NotebookPen, Clock3, CalendarClock, Repeat2, LifeBuoy,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import { dataBR, fmtDuracao } from '@/lib/formato'
+import { BotaoWhatsApp } from '@/components/portal/PortalUI'
 import {
   useEtapa, useIniciarEtapa, useRegistrarTempo, useResponderEtapa, useSalvarObservacao,
   type RespostaEnviada, type ResultadoEnvio, type QuestaoEtapa, type MinhaResposta,
@@ -12,8 +15,10 @@ import { QuestaoView, PainelResultado, BotoesQuiz } from './Quiz'
 import { useQuizEtapa } from './useQuizEtapa'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Uma etapa da trilha: conteúdo em blocos, atividades (intercaladas quando a
-// questão está ancorada a um bloco) e a anotação pessoal do professor.
+// Uma etapa da trilha, na linguagem editorial/control-room dos painéis do KTM:
+// faixa-herói no topo (ordinal grande, progresso da trilha), e abaixo duas
+// colunas — o conteúdo em zonas (filete + overline, sem card-in-card) e um trilho
+// fixo com as anotações do professor sempre à mão enquanto ele lê.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** De quanto em quanto tempo o tempo de estudo é reportado ao servidor. Bater
@@ -43,11 +48,93 @@ function useBatidaDeTempo(token: string, etapaId: string) {
   }, [mutate, token, etapaId])
 }
 
-function Cartao({ children, className }: { children: React.ReactNode; className?: string }) {
+/** Barra fina de progresso de leitura, colada no topo da viewport. Cresce
+ *  conforme a rolagem da página — via `transform: scaleX` (GPU), sem tocar o
+ *  layout — dando ao professor uma noção do quanto falta da etapa. */
+function BarraLeitura() {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    let raf = 0
+    function medir() {
+      const el = document.documentElement
+      const max = el.scrollHeight - el.clientHeight
+      const p = max > 0 ? Math.min(1, el.scrollTop / max) : 0
+      if (ref.current) ref.current.style.transform = `scaleX(${p})`
+    }
+    function agendar() {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(medir)
+    }
+    medir()
+    window.addEventListener('scroll', agendar, { passive: true })
+    window.addEventListener('resize', agendar, { passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', agendar)
+      window.removeEventListener('resize', agendar)
+    }
+  }, [])
   return (
-    <div className={cn('rounded-2xl border border-line-soft bg-surface-canvas px-5 py-5', className)}>
-      {children}
+    <div aria-hidden className="fixed inset-x-0 top-0 z-30 h-0.5">
+      <div ref={ref} className="h-full origin-left bg-brand" style={{ transform: 'scaleX(0)' }} />
     </div>
+  )
+}
+
+/** Anel de progresso da trilha inteira, para orientar o professor de dentro de
+ *  uma etapa. Desenha uma vez ao montar (raro, então cabe o carinho). */
+function AnelTrilha({ pct }: { pct: number }) {
+  const size = 60
+  const stroke = 6
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const [montado, setMontado] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setMontado(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border-soft)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="var(--accent-blue)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={montado ? c * (1 - pct / 100) : c}
+          className="[transition:stroke-dashoffset_700ms_cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold tabular-nums text-ink">
+        {pct}%
+      </span>
+    </div>
+  )
+}
+
+/** Seção temática: overline + filete, agrupando o conteúdo sem empilhar caixas. */
+function Zona({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-5">
+      <div className="flex items-center gap-3">
+        <h2 className="label-micro whitespace-nowrap text-ink-secondary">{rotulo}</h2>
+        <span aria-hidden className="h-px flex-1 bg-line-soft" />
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function MetaChip({ icone: Icone, children }: { icone: LucideIcon; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-subtle px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary">
+      <Icone className="h-3.5 w-3.5 text-ink-muted" /> {children}
+    </span>
   )
 }
 
@@ -77,19 +164,19 @@ function ObservacaoPessoal({
   }
 
   return (
-    <Cartao>
+    <div className="rounded-2xl border border-line-soft bg-surface-canvas px-5 py-5">
       <div className="mb-3 flex items-center gap-2">
         <NotebookPen className="h-4 w-4 text-ink-muted" />
         <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-ink">Suas anotações</h2>
       </div>
-      <p className="mb-2.5 text-[12.5px] text-ink-muted">
-        Só você e a coordenação veem. Use para dúvidas que quer levar para a próxima reunião.
+      <p className="mb-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+        Só você e a coordenação veem. Anote dúvidas para levar à próxima reunião.
       </p>
       <textarea
         value={texto}
         onChange={e => setTexto(e.target.value)}
         onBlur={gravar}
-        rows={3}
+        rows={4}
         placeholder="Escreva aqui…"
         className="w-full resize-y rounded-xl border border-line-soft bg-surface-subtle px-3 py-2
                    text-[13px] text-ink placeholder:text-ink-subtle transition-colors
@@ -97,19 +184,21 @@ function ObservacaoPessoal({
       />
       {texto !== salvo && (
         <p className="mt-1.5 text-[11.5px] text-ink-muted">
-          {salvar.isPending ? 'Salvando…' : 'Suas mudanças são salvas ao sair do campo.'}
+          {salvar.isPending ? 'Salvando…' : 'Salvo ao sair do campo.'}
         </p>
       )}
-    </Cartao>
+    </div>
   )
 }
 
 export function EtapaView({
-  token, etapaId, onVoltar,
+  token, etapaId, onVoltar, totalEtapas, etapasConcluidas,
 }: {
   token: string
   etapaId: string
   onVoltar: () => void
+  totalEtapas: number
+  etapasConcluidas: number
 }) {
   const { data, isLoading, error } = useEtapa(token, etapaId)
   const iniciar  = useIniciarEtapa()
@@ -169,6 +258,8 @@ export function EtapaView({
 
   const { etapa, blocos, questoes, progresso } = data
   const concluida = !!progresso.concluidaEm
+  const pctTrilha = totalEtapas > 0 ? Math.round((etapasConcluidas / totalEtapas) * 100) : 0
+  const vazia = blocos.length === 0 && questoes.length === 0
 
   // Questões ancoradas a um bloco aparecem logo depois dele; as soltas, no fim.
   // A numeração segue a ordem global, para o professor não ver "1, 1, 2".
@@ -198,7 +289,9 @@ export function EtapaView({
   }
 
   return (
-    <div className="w-full max-w-2xl space-y-6 animate-fade-up">
+    <div className="w-full max-w-5xl animate-fade-up">
+      <BarraLeitura />
+
       <button
         type="button"
         onClick={onVoltar}
@@ -207,93 +300,151 @@ export function EtapaView({
         <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a trilha
       </button>
 
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="label-micro text-accentBlue">Etapa {etapa.ordem}</span>
-          {concluida && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg px-2 py-0.5 text-[10.5px] font-medium text-urg-lowFg">
-              <CheckCircle2 className="h-3 w-3" /> Concluída
+      {/* Faixa-herói: ordinal grande + contexto + progresso da trilha */}
+      <header className="relative mt-4 overflow-hidden rounded-3xl border border-line-soft bg-surface-canvas px-5 py-5 shadow-card sm:px-7 sm:py-6">
+        <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(120% 120% at 0% 0%, var(--brand-red-soft), transparent 42%)' }}
+        />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex gap-4 sm:gap-5">
+            <span className="font-mono text-[2.5rem] font-medium leading-none tracking-tight tabular-nums text-brand/85 sm:text-[3rem]">
+              {String(etapa.ordem).padStart(2, '0')}
             </span>
-          )}
-          {progresso.revisaoPendente && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-urg-medBg px-2 py-0.5 text-[10.5px] font-medium text-urg-medFg">
-              <Clock3 className="h-3 w-3" /> Em revisão
-            </span>
-          )}
-        </div>
-        <h1 className="text-[1.6rem] font-bold leading-tight tracking-[-0.03em] text-ink">
-          {etapa.titulo}
-        </h1>
-        {etapa.descricao && (
-          <p className="text-[14px] leading-relaxed text-ink-muted">{etapa.descricao}</p>
-        )}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11.5px] text-ink-muted">
-          {etapa.prazoEm && <span>Prazo sugerido: {dataBR(etapa.prazoEm)}</span>}
-          {progresso.tempoSegundos > 0 && <span>Tempo nesta etapa: {fmtDuracao(progresso.tempoSegundos)}</span>}
-          {progresso.tentativas > 0 && (
-            <span>{progresso.tentativas === 1 ? '1 tentativa' : `${progresso.tentativas} tentativas`}</span>
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="label-micro flex items-center gap-1.5 text-accentBlue">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
+                  Welcome Path · Etapa {etapa.ordem} de {totalEtapas}
+                </span>
+                {concluida && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg px-2 py-0.5 text-[10.5px] font-medium text-urg-lowFg">
+                    <CheckCircle2 className="h-3 w-3" /> Concluída
+                  </span>
+                )}
+                {progresso.revisaoPendente && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-urg-medBg px-2 py-0.5 text-[10.5px] font-medium text-urg-medFg">
+                    <Clock3 className="h-3 w-3" /> Em revisão
+                  </span>
+                )}
+              </div>
+              <h1 className="text-[1.5rem] font-bold leading-tight tracking-[-0.03em] text-ink sm:text-[1.75rem]">
+                {etapa.titulo}
+              </h1>
+              {etapa.descricao && (
+                <p className="max-w-prose text-[14px] leading-relaxed text-ink-muted">{etapa.descricao}</p>
+              )}
+              {(etapa.prazoEm || progresso.tempoSegundos > 0 || progresso.tentativas > 0) && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {etapa.prazoEm && <MetaChip icone={CalendarClock}>Prazo {dataBR(etapa.prazoEm)}</MetaChip>}
+                  {progresso.tempoSegundos > 0 && (
+                    <MetaChip icone={Clock3}>{fmtDuracao(progresso.tempoSegundos)} nesta etapa</MetaChip>
+                  )}
+                  {progresso.tentativas > 0 && (
+                    <MetaChip icone={Repeat2}>
+                      {progresso.tentativas === 1 ? '1 tentativa' : `${progresso.tentativas} tentativas`}
+                    </MetaChip>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {totalEtapas > 0 && (
+            <div className="flex items-center gap-3.5 self-start rounded-2xl border border-line-soft bg-surface-subtle/60 px-4 py-3 lg:self-center">
+              <AnelTrilha pct={pctTrilha} />
+              <div className="space-y-0.5">
+                <p className="text-[13px] font-semibold text-ink">{etapasConcluidas} de {totalEtapas} etapas</p>
+                <p className="text-[11.5px] text-ink-muted">concluídas na trilha</p>
+              </div>
+            </div>
           )}
         </div>
       </header>
 
-      {etapa.notasCoordenacao && (
-        <div className="flex gap-2.5 rounded-2xl border border-accentBlue/20 bg-accentBlue-soft/50 px-4 py-3.5">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-accentBlue" />
-          <div className="min-w-0">
-            <p className="text-[10.5px] font-semibold uppercase tracking-label text-accentBlue">
-              Recado da coordenação
-            </p>
-            <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-secondary">
-              {etapa.notasCoordenacao}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {blocos.length === 0 && questoes.length === 0 ? (
-        <Cartao className="text-center">
-          <p className="text-[13px] text-ink-muted">
-            Esta etapa ainda não tem conteúdo publicado. A coordenação está preparando — volte em breve.
-          </p>
-        </Cartao>
-      ) : (
-        <Cartao className="space-y-6">
-          {blocos.map(bloco => (
-            <div key={bloco.id} className="space-y-4">
-              <BlocoView bloco={bloco} />
-              {(porBloco.get(bloco.id) ?? []).map(renderQuestao)}
-            </div>
-          ))}
-
-          {soltas.length > 0 && (
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
-                  Atividade da etapa
-                </h2>
-                <p className="text-[12.5px] text-ink-muted">
-                  {concluida
-                    ? 'Você já concluiu esta etapa. Suas respostas ficam aqui para consulta.'
-                    : `Acerte ao menos ${etapa.notaMinima}% para liberar a próxima etapa.`}
+      {/* Conteúdo (amplo) + trilho fixo com anotações */}
+      <div className="mt-6 grid items-start gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-8">
+        <main className="space-y-8">
+          {etapa.notasCoordenacao && (
+            <div className="flex gap-2.5 rounded-2xl border border-accentBlue/20 bg-accentBlue-soft/50 px-4 py-3.5">
+              <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-accentBlue" />
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-semibold uppercase tracking-label text-accentBlue">
+                  Recado da coordenação
+                </p>
+                <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-secondary">
+                  {etapa.notasCoordenacao}
                 </p>
               </div>
-              {soltas.map(renderQuestao)}
             </div>
           )}
 
-          {quiz.envio && <PainelResultado envio={quiz.envio} />}
-
-          {erroEnvio && (
-            <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5 text-[12.5px] font-medium text-brand-strong">
-              {erroEnvio}
+          {vazia ? (
+            <div className="rounded-2xl border border-dashed border-line px-6 py-12 text-center">
+              <p className="text-[13px] leading-relaxed text-ink-muted">
+                Esta etapa ainda não tem conteúdo publicado. A coordenação está preparando — volte em breve.
+              </p>
             </div>
+          ) : (
+            <>
+              <Zona rotulo="Conteúdo da etapa">
+                <div className="space-y-7">
+                  {blocos.map(bloco => (
+                    <div key={bloco.id} className="space-y-4">
+                      <BlocoView bloco={bloco} />
+                      {(porBloco.get(bloco.id) ?? []).map(renderQuestao)}
+                    </div>
+                  ))}
+                  {blocos.length === 0 && (
+                    <p className="text-[13px] text-ink-muted">Esta etapa é só de atividade — responda abaixo.</p>
+                  )}
+                </div>
+              </Zona>
+
+              {questoes.length > 0 && (
+                <Zona rotulo="Atividade da etapa">
+                  <div className="space-y-4">
+                    <p className="-mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+                      {concluida
+                        ? 'Você já concluiu esta etapa. Suas respostas ficam aqui para consulta.'
+                        : `Acerte ao menos ${etapa.notaMinima}% para liberar a próxima etapa.`}
+                    </p>
+
+                    {soltas.map(renderQuestao)}
+
+                    {quiz.envio && <PainelResultado envio={quiz.envio} />}
+
+                    {erroEnvio && (
+                      <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5 text-[12.5px] font-medium text-brand-strong">
+                        {erroEnvio}
+                      </div>
+                    )}
+
+                    <BotoesQuiz quiz={quiz} enviando={responder.isPending} />
+                  </div>
+                </Zona>
+              )}
+            </>
           )}
+        </main>
 
-          {questoes.length > 0 && <BotoesQuiz quiz={quiz} enviando={responder.isPending} />}
-        </Cartao>
-      )}
+        <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          <ObservacaoPessoal token={token} etapaId={etapaId} inicial={progresso.observacao} />
 
-      <ObservacaoPessoal token={token} etapaId={etapaId} inicial={progresso.observacao} />
+          <div className="space-y-3 rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4">
+            <div className="flex items-center gap-2">
+              <LifeBuoy className="h-4 w-4 text-ink-muted" />
+              <h2 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">Precisa de ajuda?</h2>
+            </div>
+            <p className="text-[12px] leading-relaxed text-ink-muted">
+              Travou em algo ou tem uma dúvida? A coordenação responde rápido.
+            </p>
+            <BotaoWhatsApp>Falar com a coordenação</BotaoWhatsApp>
+          </div>
+        </aside>
+      </div>
     </div>
   )
 }

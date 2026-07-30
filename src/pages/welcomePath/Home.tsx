@@ -183,7 +183,13 @@ export function Home() {
         {carregando ? (
           <p className="py-16 text-center text-[13px] text-ink-muted">Carregando sua trilha…</p>
         ) : etapaAberta ? (
-          <EtapaView token={token} etapaId={etapaAberta} onVoltar={() => setEtapaAberta(null)} />
+          <EtapaView
+            token={token}
+            etapaId={etapaAberta}
+            onVoltar={() => setEtapaAberta(null)}
+            totalEtapas={trilha.data?.etapas.length ?? 0}
+            etapasConcluidas={trilha.data?.etapas.filter(e => e.estado === 'concluida').length ?? 0}
+          />
         ) : trilha.data ? (
           <TrilhaView
             nome={trilha.data.professor.nome}
