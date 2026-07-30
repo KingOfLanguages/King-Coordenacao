@@ -205,6 +205,21 @@ function norm(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+// Remove o sufixo de "inicio/data" que a plataforma as vezes gruda no nome do
+// professor por falha no procedimento de cadastro da escola - ex.: "Fulano de
+// Tal - inicio 18/09". No cadastro polui o nome; no Google Calendar o evento
+// traz o nome limpo. Sem tirar o residuo, o nome nunca bate exato (tier 1) com
+// o evento e a reuniao fica sem vinculo. Conservador: so corta com o marcador
+// "inicio" ou uma data solta no fim - nunca mexe num nome comum (inclusive
+// "Inacio"/"Vinicius", sem a sequencia "inici-o"). Regex em \uXXXX igual ao norm().
+function semSufixoInicio(nome: string): string {
+  return nome
+    .replace(/[\s\-\u2013\u2014(|,:;]+in[\u00edi]cio.*$/i, '')
+    .replace(/[\s\-\u2013\u2014(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function extrairNomeDeTitulo(title: string): string[] {
   const candidates: string[] = []
   const parens = title.match(/\(([^)]+)\)/)
@@ -233,7 +248,7 @@ function precomputeProfessores<T extends { id: string; nome: string }>(
   professores: T[],
 ): (T & ComNomeNormalizado)[] {
   return professores.map(p => {
-    const nomeNorm = norm(p.nome)
+    const nomeNorm = norm(semSufixoInicio(p.nome))
     return {
       ...p,
       nomeNorm,

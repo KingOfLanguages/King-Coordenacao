@@ -114,12 +114,28 @@ function norm(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
+ *  professor por uma falha no procedimento de cadastro da escola — ex.:
+ *  "Fulano de Tal - inicio 18/09", "Fulano (início: 18/09/2025)". Sem tirar
+ *  isso, o casamento por nome exato barraria o professor (que digita só o nome).
+ *  Conservador: só corta quando vê o marcador "início" ou uma data solta no fim
+ *  — nunca mexe num nome comum (inclusive "Inácio"/"Vinícius", que não têm a
+ *  sequência "iníci-o"). */
+function semSufixoInicio(nome: string): string {
+  return nome
+    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
+    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** Match EXATO do nome completo: o texto informado precisa ser idêntico ao nome
- *  cadastrado letra por letra — só caixa (maiúscula/minúscula) e acentuação NÃO
- *  precisam bater. Nada de nome parcial: evita casar "João" com vários "João …". */
+ *  cadastrado letra por letra — só caixa (maiúscula/minúscula), acentuação e o
+ *  sufixo de "início/data" (ver semSufixoInicio) NÃO precisam bater. Nada de
+ *  nome parcial: evita casar "João" com vários "João …". */
 function nomeExato(informado: string, real: string): boolean {
-  const a = norm(informado)
-  return a.length > 0 && a === norm(real)
+  const a = norm(semSufixoInicio(informado))
+  return a.length > 0 && a === norm(semSufixoInicio(real))
 }
 
 /** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
@@ -260,8 +276,13 @@ serve(async (req) => {
 
   if (!professor) return json(respostaVazia(false))
 
+  // Nome limpo pra exibição: o professor vê o próprio nome sem o resíduo de
+  // "início/data" do cadastro (senão "Você é Fulano - inicio 18/09?" confunde e
+  // ele desiste — barrado na prática). O id é o que segue nos próximos passos.
+  const nomeExibicao = semSufixoInicio(professor.nome)
+
   if (!professor.coordenador_id) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 3. Coordenador responsável e seus links ──────────────────────────────────
@@ -272,7 +293,7 @@ serve(async (req) => {
     .maybeSingle()
 
   if (!coordenador) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 4. Já teve reunião realizada? ────────────────────────────────────────────
@@ -361,7 +382,7 @@ serve(async (req) => {
   }
 
   return json({
-    professor: { id: professor.id, nome: professor.nome },
+    professor: { id: professor.id, nome: nomeExibicao },
     coordenador: { id: coordenador.id, nome: coordenador.nome },
     ambiguo: false,
     sugestoes: [],

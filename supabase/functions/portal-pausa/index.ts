@@ -52,11 +52,27 @@ function norm(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
-/** Match EXATO do nome completo — só caixa e acentuação são ignoradas. Nada de
- *  nome parcial: evita casar "João" com vários "João …". */
+/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
+ *  professor por uma falha no procedimento de cadastro da escola — ex.:
+ *  "Fulano de Tal - inicio 18/09", "Fulano (início: 18/09/2025)". Sem tirar
+ *  isso, o casamento por nome exato barraria o professor (que digita só o nome).
+ *  Conservador: só corta quando vê o marcador "início" ou uma data solta no fim
+ *  — nunca mexe num nome comum (inclusive "Inácio"/"Vinícius", que não têm a
+ *  sequência "iníci-o"). */
+function semSufixoInicio(nome: string): string {
+  return nome
+    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
+    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Match EXATO do nome completo — só caixa, acentuação e o sufixo de
+ *  "início/data" (ver semSufixoInicio) são ignorados. Nada de nome parcial:
+ *  evita casar "João" com vários "João …". */
 function nomeExato(informado: string, real: string): boolean {
-  const a = norm(informado)
-  return a.length > 0 && a === norm(real)
+  const a = norm(semSufixoInicio(informado))
+  return a.length > 0 && a === norm(semSufixoInicio(real))
 }
 
 /** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
@@ -256,6 +272,9 @@ serve(async (req) => {
 
   if (!professor) return json(respostaVazia(false))
 
+  // Nome sem o resíduo de "início/data" do cadastro — o professor vê o próprio nome.
+  const nomeExibicao = semSufixoInicio(professor.nome)
+
   // Avisos que o front usa pra não deixar o professor preencher à toa.
   const { data: aberta } = await admin
     .from('pausas')
@@ -266,7 +285,7 @@ serve(async (req) => {
     .maybeSingle()
 
   return json({
-    professor:   { id: professor.id, nome: professor.nome },
+    professor:   { id: professor.id, nome: nomeExibicao },
     ambiguo:     false,
     pausaAberta: !!aberta,
     jaPausado:   professor.status === 'pausa',

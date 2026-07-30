@@ -69,6 +69,19 @@ function comHttps(link: string | null): string | null {
   return /^https?:\/\//i.test(l) ? l : `https://${l}`
 }
 
+/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
+ *  professor por uma falha no procedimento de cadastro da escola — ex.:
+ *  "Fulano de Tal - inicio 18/09". Aqui é só exibição (o professor já foi
+ *  identificado por e-mail/id): mostra o nome limpo no cabeçalho das agendas.
+ *  Conservador: só corta com o marcador "início" ou uma data solta no fim. */
+function semSufixoInicio(nome: string): string {
+  return nome
+    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
+    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** Ocorrências em que `diaSemana` (0=dom…6=sáb) cai no horário `hora` (HH:MM:SS),
  *  de hoje até `dias` à frente. Numa janela de 7 dias há no máximo uma por regra. */
 function proximasOcorrencias(diaSemana: number, hora: string, dias: number): string[] {
@@ -140,12 +153,15 @@ serve(async (req) => {
     return json({ professor: null, agendas: [] })
   }
 
+  // Nome sem o resíduo de "início/data" do cadastro, só pra exibição.
+  const nomeExibicao = semSufixoInicio(professor.nome)
+
   // Trava dos 2 meses: reunião em grupo só para quem já tem >= 60 dias de casa.
   // Defesa em profundidade — o portal já esconde a opção (portal-agendamento-lookup),
   // mas se alguém chamar direto aqui, não listamos horário nenhum.
   const dias = diasDeCasa(professor.data_inicio)
   if (dias == null || dias < DIAS_MIN_GRUPO) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, agendas: [] })
+    return json({ professor: { id: professor.id, nome: nomeExibicao }, agendas: [] })
   }
 
   // ── 2. Agendas ativas de todos os coordenadores ──────────────────────────────
@@ -170,7 +186,7 @@ serve(async (req) => {
   const agendasAutorizadas = agendas ?? []
 
   if (agendasAutorizadas.length === 0) {
-    return json({ professor: { id: professor.id, nome: professor.nome }, agendas: [] })
+    return json({ professor: { id: professor.id, nome: nomeExibicao }, agendas: [] })
   }
 
   // ── 3. Ocorrências já materializadas (para vagas reais e "já inscrito") ──────
@@ -271,5 +287,5 @@ serve(async (req) => {
     })
     .filter(a => a.horarios.length > 0)
 
-  return json({ professor: { id: professor.id, nome: professor.nome }, agendas: resultado })
+  return json({ professor: { id: professor.id, nome: nomeExibicao }, agendas: resultado })
 })

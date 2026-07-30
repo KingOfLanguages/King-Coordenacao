@@ -66,10 +66,26 @@ function norm(s: string): string {
   return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
-/** Match EXATO do nome completo — só caixa e acentuação são ignoradas. */
+/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
+ *  professor por uma falha no procedimento de cadastro da escola — ex.:
+ *  "Fulano de Tal - inicio 18/09", "Fulano (início: 18/09/2025)". Sem tirar
+ *  isso, o casamento por nome exato barraria o professor (que digita só o nome).
+ *  Conservador: só corta quando vê o marcador "início" ou uma data solta no fim
+ *  — nunca mexe num nome comum (inclusive "Inácio"/"Vinícius", que não têm a
+ *  sequência "iníci-o"). */
+function semSufixoInicio(nome: string): string {
+  return nome
+    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
+    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Match EXATO do nome completo — só caixa, acentuação e o sufixo de
+ *  "início/data" (ver semSufixoInicio) são ignorados. */
 function nomeExato(informado: string, real: string): boolean {
-  const a = norm(informado)
-  return a.length > 0 && a === norm(real)
+  const a = norm(semSufixoInicio(informado))
+  return a.length > 0 && a === norm(semSufixoInicio(real))
 }
 
 /** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
@@ -372,7 +388,7 @@ serve(async (req) => {
 
     const { token, expiraEm } = await criarSessao(admin, professor.id)
     return json({
-      professor: { id: professor.id, nome: professor.nome },
+      professor: { id: professor.id, nome: semSufixoInicio(professor.nome) },
       ambiguo: false,
       token,
       expiraEm,
@@ -384,12 +400,12 @@ serve(async (req) => {
   if (!prof) return json({ error: 'Sessão expirada. Identifique-se novamente.' }, 401)
 
   if (acao === 'sessao') {
-    return json({ professor: { id: prof.id, nome: prof.nome } })
+    return json({ professor: { id: prof.id, nome: semSufixoInicio(prof.nome) } })
   }
 
   if (acao === 'trilha') {
     return json({
-      professor: { id: prof.id, nome: prof.nome, dataInicio: prof.data_inicio },
+      professor: { id: prof.id, nome: semSufixoInicio(prof.nome), dataInicio: prof.data_inicio },
       etapas: await carregarTrilha(admin, prof),
     })
   }
