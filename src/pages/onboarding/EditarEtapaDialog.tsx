@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Popover as PopoverPrimitive } from 'radix-ui'
 import {
   Plus, Trash2, ChevronUp, ChevronDown, Type, Video, Image as ImageIcon,
   AlertTriangle, ListChecks, Eye, Heading1, Heading2, Code2, PanelLeft,
+  List, MousePointerClick, Quote, Minus, Copy, Upload, ImagePlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -12,9 +14,10 @@ import { cn } from '@/lib/utils'
 import { videoEmbed } from '@/lib/videoEmbed'
 import { BlocoView } from '@/pages/welcomePath/Blocos'
 import { CALLOUT_VARIANTES, varianteDoCallout } from '@/pages/welcomePath/callout'
+import { linkExterno, botaoEstilo, divisorEstilo } from '@/pages/welcomePath/blocoExtras'
 import {
-  useBlocosAdmin, useQuestoesAdmin, useSalvarBloco, useExcluirBloco,
-  useSalvarQuestao, useExcluirQuestao,
+  useBlocosAdmin, useQuestoesAdmin, useSalvarBloco, useExcluirBloco, useInserirBloco,
+  useSalvarQuestao, useExcluirQuestao, uploadImagemWelcomePath,
   type EtapaAdmin, type BlocoAdmin, type QuestaoAdmin,
   type TipoBlocoAdmin, type TipoQuestaoAdmin,
 } from '@/hooks/useWelcomePathAdmin'
@@ -38,13 +41,17 @@ import {
 const TIPOS_ELEMENTO: {
   id: TipoBlocoAdmin; label: string; icone: typeof Type; dica: string
 }[] = [
-  { id: 'h1',      label: 'Título',    icone: Heading1,      dica: 'Título de uma seção do conteúdo.' },
-  { id: 'h2',      label: 'Subtítulo', icone: Heading2,      dica: 'Divisão dentro de uma seção.' },
-  { id: 'text',    label: 'Parágrafo', icone: Type,          dica: 'Texto corrido. Quebras de linha são respeitadas.' },
-  { id: 'video',   label: 'Vídeo',     icone: Video,         dica: 'YouTube, Vimeo ou arquivo .mp4.' },
-  { id: 'imagem',  label: 'Imagem',    icone: ImageIcon,     dica: 'Print de tela ou foto, por URL.' },
-  { id: 'callout', label: 'Destaque',  icone: AlertTriangle, dica: 'Caixa colorida — informação, atenção ou alerta.' },
-  { id: 'html',    label: 'HTML',      icone: Code2,         dica: 'Escotilha de fuga: só para conteúdo já pronto em HTML.' },
+  { id: 'h1',      label: 'Título',    icone: Heading1,          dica: 'Título de uma seção do conteúdo.' },
+  { id: 'h2',      label: 'Subtítulo', icone: Heading2,          dica: 'Divisão dentro de uma seção.' },
+  { id: 'text',    label: 'Parágrafo', icone: Type,              dica: 'Texto corrido. Quebras de linha são respeitadas.' },
+  { id: 'lista',   label: 'Lista',     icone: List,              dica: 'Lista com marcadores ou numerada — um item por linha.' },
+  { id: 'citacao', label: 'Citação',   icone: Quote,             dica: 'Destaca uma frase ou depoimento.' },
+  { id: 'video',   label: 'Vídeo',     icone: Video,             dica: 'YouTube, Vimeo ou arquivo .mp4.' },
+  { id: 'imagem',  label: 'Imagem',    icone: ImageIcon,         dica: 'Print de tela ou foto — envie o arquivo ou cole uma URL.' },
+  { id: 'callout', label: 'Destaque',  icone: AlertTriangle,     dica: 'Caixa colorida — informação, atenção ou alerta.' },
+  { id: 'botao',   label: 'Botão',     icone: MousePointerClick, dica: 'Botão que leva a um link — planilha, formulário, material.' },
+  { id: 'divisor', label: 'Divisor',   icone: Minus,             dica: 'Linha, pontos ou espaço para separar seções.' },
+  { id: 'html',    label: 'HTML',      icone: Code2,             dica: 'Escotilha de fuga: só para conteúdo já pronto em HTML.' },
 ]
 
 const TIPO_POR_ID = Object.fromEntries(TIPOS_ELEMENTO.map(t => [t.id, t]))
@@ -101,16 +108,166 @@ function CampoTexto({
     : <input {...comum} />
 }
 
+// ─── Imagem: upload ou URL ────────────────────────────────────────────────────
+// Antes o bloco de imagem só aceitava colar uma URL — o que obriga a hospedar o
+// print em outro lugar primeiro. Aqui dá para enviar o arquivo direto (bucket
+// welcome-path) OU colar a URL, o que for mais prático. Componente à parte por
+// causa do estado próprio de upload (arraste, "enviando…").
+
+function EditorImagem({
+  bloco, patch,
+}: {
+  bloco: BlocoAdmin
+  patch: (campos: Partial<BlocoAdmin>) => void
+}) {
+  const [enviando, setEnviando] = useState(false)
+  const [arrastando, setArrastando] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  async function enviar(file: File | null | undefined) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast.error('Selecione um arquivo de imagem.'); return }
+    setEnviando(true)
+    try {
+      patch({ url: await uploadImagemWelcomePath(file) })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível enviar a imagem.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {bloco.url ? (
+        <div className="flex items-start gap-3">
+          <img src={bloco.url} alt="" className="h-20 w-20 flex-shrink-0 rounded-lg border border-line object-cover" />
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button" disabled={enviando} onClick={() => inputRef.current?.click()}
+              className="btn-press inline-flex items-center gap-1 rounded-lg border border-line bg-surface-canvas px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary hover:text-ink disabled:opacity-50"
+            >
+              <Upload className="h-3 w-3" /> {enviando ? 'Enviando…' : 'Trocar'}
+            </button>
+            <button
+              type="button" onClick={() => patch({ url: null })}
+              className="btn-press inline-flex items-center gap-1 rounded-lg border border-line bg-surface-canvas px-2.5 py-1 text-[11.5px] font-medium text-ink-muted hover:text-urg-highFg"
+            >
+              <Trash2 className="h-3 w-3" /> Remover
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={enviando}
+          onClick={() => inputRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setArrastando(true) }}
+          onDragLeave={() => setArrastando(false)}
+          onDrop={e => { e.preventDefault(); setArrastando(false); enviar(e.dataTransfer.files?.[0]) }}
+          className={cn(
+            'flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center transition-colors',
+            arrastando ? 'border-accentBlue bg-accentBlue-soft' : 'border-line hover:border-ink-muted',
+          )}
+        >
+          {enviando ? (
+            <span className="text-[12px] text-ink-muted">Enviando…</span>
+          ) : (
+            <>
+              <ImagePlus className="h-5 w-5 text-ink-muted" />
+              <span className="text-[12px] font-medium text-ink-secondary">Enviar imagem</span>
+              <span className="text-[10.5px] text-ink-subtle">arraste aqui ou clique · PNG, JPG, WEBP, GIF</span>
+            </>
+          )}
+        </button>
+      )}
+
+      <input
+        ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden
+        onChange={e => { enviar(e.target.files?.[0]); e.target.value = '' }}
+      />
+
+      <CampoTexto
+        valor={bloco.url ?? ''}
+        onSalvar={v => patch({ url: v.trim() || null })}
+        placeholder="ou cole a URL de uma imagem (https://…)"
+      />
+      <CampoTexto
+        valor={bloco.conteudo ?? ''}
+        onSalvar={v => patch({ conteudo: v || null })}
+        placeholder="Legenda (opcional)"
+      />
+    </div>
+  )
+}
+
+// ─── Inserir elemento em qualquer posição ──────────────────────────────────────
+// O editor antigo só sabia acrescentar no fim e subir de um em um. Este é um
+// alvo fino entre os blocos: passa o mouse, aparece um "+", escolhe o tipo e o
+// elemento nasce ali (via wp_inserir_bloco, que abre espaço no `ordem`).
+
+function InseridorBloco({ onInserir }: { onInserir: (tipo: TipoBlocoAdmin) => void }) {
+  const [aberto, setAberto] = useState(false)
+  const hairline = cn(
+    'h-px flex-1 bg-line transition-opacity',
+    aberto ? 'opacity-100' : 'opacity-0 group-hover/ins:opacity-100',
+  )
+  return (
+    <div className="group/ins relative -my-1 flex h-4 items-center">
+      <div className={hairline} />
+      <PopoverPrimitive.Root open={aberto} onOpenChange={setAberto}>
+        <PopoverPrimitive.Trigger asChild>
+          <button
+            type="button"
+            title="Inserir elemento aqui"
+            className={cn(
+              'btn-press mx-2 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-line bg-surface-canvas text-ink-muted transition-opacity hover:border-ink/25 hover:text-ink',
+              aberto ? 'opacity-100' : 'opacity-0 group-hover/ins:opacity-100',
+            )}
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        </PopoverPrimitive.Trigger>
+        <PopoverPrimitive.Portal>
+          <PopoverPrimitive.Content
+            align="center" sideOffset={6} collisionPadding={12}
+            className="z-[60] w-52 rounded-xl bg-popover p-1 text-popover-foreground shadow-popover ring-1 ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95"
+          >
+            <p className="px-2 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+              Inserir aqui
+            </p>
+            <div className="max-h-[50vh] overflow-y-auto">
+              {TIPOS_ELEMENTO.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  title={t.dica}
+                  onClick={() => { onInserir(t.id); setAberto(false) }}
+                  className="btn-press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-ink-secondary hover:bg-surface-subtle hover:text-ink"
+                >
+                  <t.icone className="h-3.5 w-3.5 flex-shrink-0 text-ink-muted" /> {t.label}
+                </button>
+              ))}
+            </div>
+          </PopoverPrimitive.Content>
+        </PopoverPrimitive.Portal>
+      </PopoverPrimitive.Root>
+      <div className={hairline} />
+    </div>
+  )
+}
+
 // ─── Elemento de conteúdo ─────────────────────────────────────────────────────
 
 function EditorElemento({
-  bloco, primeiro, ultimo, numero, onMover,
+  bloco, primeiro, ultimo, numero, onMover, onDuplicar,
 }: {
   bloco: BlocoAdmin
   primeiro: boolean
   ultimo: boolean
   numero: number
   onMover: (direcao: -1 | 1) => void
+  onDuplicar: () => void
 }) {
   const salvar = useSalvarBloco()
   const excluir = useExcluirBloco()
@@ -179,6 +336,10 @@ function EditorElemento({
           <button type="button" disabled={ultimo} onClick={() => onMover(1)}
             className="btn-press rounded p-1 text-ink-muted hover:bg-surface-canvas hover:text-ink disabled:opacity-30" title="Descer">
             <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" onClick={onDuplicar}
+            className="btn-press rounded p-1 text-ink-muted hover:bg-surface-canvas hover:text-ink" title="Duplicar">
+            <Copy className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
@@ -251,19 +412,82 @@ function EditorElemento({
           </>
         )}
 
-        {bloco.tipo === 'imagem' && (
+        {bloco.tipo === 'imagem' && <EditorImagem bloco={bloco} patch={patch} />}
+
+        {bloco.tipo === 'lista' && (
           <>
-            <CampoTexto
-              valor={bloco.url ?? ''}
-              onSalvar={v => patch({ url: v.trim() || null })}
-              placeholder="https://… (URL da imagem)"
-            />
+            <label className="flex items-center gap-2 text-[12px] text-ink-secondary">
+              <input
+                type="checkbox"
+                checked={bloco.meta?.ordered === true}
+                onChange={e => patch({ meta: { ...bloco.meta, ordered: e.target.checked } })}
+                className="h-3.5 w-3.5 accent-current"
+              />
+              Lista numerada (1, 2, 3…)
+            </label>
             <CampoTexto
               valor={bloco.conteudo ?? ''}
               onSalvar={v => patch({ conteudo: v || null })}
-              placeholder="Legenda (opcional)"
+              placeholder={'Um item por linha:\nPrimeiro item\nSegundo item'}
+              multilinha
+              linhas={4}
             />
           </>
+        )}
+
+        {bloco.tipo === 'citacao' && (
+          <>
+            <CampoTexto
+              valor={bloco.conteudo ?? ''}
+              onSalvar={v => patch({ conteudo: v || null })}
+              placeholder="A frase ou depoimento…"
+              multilinha
+              linhas={3}
+            />
+            <CampoTexto
+              valor={bloco.titulo ?? ''}
+              onSalvar={v => patch({ titulo: v || null })}
+              placeholder="Autor / fonte (opcional)"
+            />
+          </>
+        )}
+
+        {bloco.tipo === 'botao' && (
+          <>
+            <CampoTexto
+              valor={bloco.titulo ?? ''}
+              onSalvar={v => patch({ titulo: v || null })}
+              placeholder="Texto do botão (ex.: Acessar a planilha)"
+            />
+            <CampoTexto
+              valor={bloco.url ?? ''}
+              onSalvar={v => patch({ url: v.trim() || null })}
+              placeholder="https://… (para onde o botão leva)"
+            />
+            {bloco.url && !linkExterno(bloco.url) && (
+              <p className="text-[11.5px] text-urg-highFg">Link inválido — o endereço precisa começar com https://</p>
+            )}
+            <select
+              value={botaoEstilo(bloco.meta)}
+              onChange={e => patch({ meta: { ...bloco.meta, estilo: e.target.value } })}
+              className="h-7 rounded-lg border border-line bg-surface-canvas px-2 text-[12px] text-ink focus:border-accentBlue focus:outline-none"
+            >
+              <option value="primario">Botão preenchido</option>
+              <option value="secundario">Botão contornado</option>
+            </select>
+          </>
+        )}
+
+        {bloco.tipo === 'divisor' && (
+          <select
+            value={divisorEstilo(bloco.meta)}
+            onChange={e => patch({ meta: { ...bloco.meta, estilo: e.target.value } })}
+            className="h-7 rounded-lg border border-line bg-surface-canvas px-2 text-[12px] text-ink focus:border-accentBlue focus:outline-none"
+          >
+            <option value="linha">Linha</option>
+            <option value="pontos">Pontos</option>
+            <option value="espaco">Espaço em branco</option>
+          </select>
         )}
 
         {bloco.tipo === 'html' && (
@@ -563,19 +787,45 @@ export function EditarEtapaDialog({
   const { data: blocos = [] } = useBlocosAdmin(etapa.id)
   const { data: questoes = [] } = useQuestoesAdmin(etapa.id)
   const salvarBloco = useSalvarBloco()
+  const inserirBloco = useInserirBloco()
   const salvarQuestao = useSalvarQuestao()
   // Abaixo de lg não cabem duas colunas — vira um par de abas.
   const [painel, setPainel] = useState<'editar' | 'preview'>('editar')
 
-  function novoElemento(tipo: TipoBlocoAdmin) {
-    salvarBloco.mutate(
+  /** Estado inicial de `meta` por tipo. */
+  function metaInicial(tipo: TipoBlocoAdmin): Record<string, unknown> {
+    if (tipo === 'callout') return { calloutVariant: 'info' }
+    if (tipo === 'lista')   return { ordered: false }
+    return {}
+  }
+
+  /** Insere um elemento. `posicao` é o valor de `ordem` que ele vai ocupar (a RPC
+   *  empurra o resto pra frente); sem posicao, cai no fim. */
+  function inserirElemento(tipo: TipoBlocoAdmin, posicao?: number) {
+    inserirBloco.mutate(
       {
         etapa_id: etapa.id,
+        posicao: posicao ?? (blocos.at(-1)?.ordem ?? -1) + 1,
         tipo,
-        ordem: (blocos.at(-1)?.ordem ?? -1) + 1,
-        meta: tipo === 'callout' ? { calloutVariant: 'info' } : {},
+        meta: metaInicial(tipo),
       },
       { onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível adicionar.') },
+    )
+  }
+
+  /** Duplica um elemento logo abaixo dele, com o mesmo conteúdo. */
+  function duplicarElemento(bloco: BlocoAdmin) {
+    inserirBloco.mutate(
+      {
+        etapa_id: etapa.id,
+        posicao: bloco.ordem + 1,
+        tipo: bloco.tipo,
+        titulo: bloco.titulo,
+        conteudo: bloco.conteudo,
+        url: bloco.url,
+        meta: bloco.meta,
+      },
+      { onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível duplicar.') },
     )
   }
 
@@ -650,28 +900,32 @@ export function EditarEtapaDialog({
               ) : (
                 <div className="space-y-2.5">
                   {blocos.map((b, i) => (
-                    <EditorElemento
-                      key={b.id}
-                      bloco={b}
-                      numero={i + 1}
-                      primeiro={i === 0}
-                      ultimo={i === blocos.length - 1}
-                      onMover={d => moverElemento(i, d)}
-                    />
+                    <div key={b.id} className="space-y-2.5">
+                      {/* Alvo de inserção acima deste bloco (o de cima cobre o topo). */}
+                      <InseridorBloco onInserir={tipo => inserirElemento(tipo, b.ordem)} />
+                      <EditorElemento
+                        bloco={b}
+                        numero={i + 1}
+                        primeiro={i === 0}
+                        ultimo={i === blocos.length - 1}
+                        onMover={d => moverElemento(i, d)}
+                        onDuplicar={() => duplicarElemento(b)}
+                      />
+                    </div>
                   ))}
                 </div>
               )}
 
               <div className="flex flex-wrap gap-1.5 rounded-xl border border-dashed border-line px-3 py-2.5">
                 <span className="w-full pb-0.5 text-[10.5px] font-medium uppercase tracking-wide text-ink-muted">
-                  Adicionar elemento
+                  Adicionar elemento{blocos.length > 0 && ' no fim'}
                 </span>
                 {TIPOS_ELEMENTO.map(t => (
                   <button
                     key={t.id}
                     type="button"
                     title={t.dica}
-                    onClick={() => novoElemento(t.id)}
+                    onClick={() => inserirElemento(t.id)}
                     className="btn-press flex items-center gap-1 rounded-full border border-line bg-surface-canvas px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary hover:border-ink/20 hover:text-ink"
                   >
                     <t.icone className="h-3 w-3" /> {t.label}

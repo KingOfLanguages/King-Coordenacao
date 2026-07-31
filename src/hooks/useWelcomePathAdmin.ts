@@ -10,9 +10,12 @@ import { supabase } from '@/lib/supabase'
 // tabelas de progresso/respostas não têm policy de INSERT/UPDATE nenhuma.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Mesmas chaves da área de materiais da King (KMS) + `imagem` e `html`,
- *  extensões nossas. Ver a migration 20260740. */
-export type TipoBlocoAdmin = 'h1' | 'h2' | 'text' | 'video' | 'imagem' | 'callout' | 'html'
+/** Mesmas chaves da área de materiais da King (KMS) + extensões nossas
+ *  (imagem, html, lista, divisor, botao, citacao). Ver as migrations 20260740
+ *  e 20260749. */
+export type TipoBlocoAdmin =
+  | 'h1' | 'h2' | 'text' | 'video' | 'imagem' | 'callout' | 'html'
+  | 'lista' | 'divisor' | 'botao' | 'citacao'
 export type TipoQuestaoAdmin =
   | 'multipla_escolha' | 'multipla_selecao' | 'verdadeiro_falso' | 'dissertativa'
 
@@ -82,6 +85,23 @@ export type RespostaAdmin = {
     id: string; etapa_id: string; ordem: number; tipo: TipoQuestaoAdmin
     enunciado: string; opcoes: string[]; corretas: number[]
   } | null
+}
+
+// ─── Upload de imagem ─────────────────────────────────────────────────────────
+
+const BUCKET_WELCOME_PATH = 'welcome-path'
+
+/** Envia uma imagem pro bucket do Welcome Path e devolve a URL pública.
+ *  Nome aleatório (uuid) evita colisão; o bucket é público pra renderização
+ *  direta no portal do professor. Mesma mecânica de uploadImagemIncidente. */
+export async function uploadImagemWelcomePath(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'
+  const caminho = `${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage
+    .from(BUCKET_WELCOME_PATH)
+    .upload(caminho, file, { cacheControl: '3600', contentType: file.type || undefined, upsert: false })
+  if (error) throw error
+  return supabase.storage.from(BUCKET_WELCOME_PATH).getPublicUrl(caminho).data.publicUrl
 }
 
 // ─── Conteúdo ─────────────────────────────────────────────────────────────────
@@ -202,6 +222,38 @@ export function useSalvarBloco() {
         ? await supabase.from('welcome_path_blocos').update(campos).eq('id', id)
         : await supabase.from('welcome_path_blocos').insert(campos)
       if (error) throw new Error(error.message)
+    },
+    onSuccess: invalidar,
+  })
+}
+
+/** Insere um bloco numa posição arbitrária (não só no fim). `posicao` é o valor
+ *  de `ordem` que o bloco novo vai ocupar — a RPC empurra o resto pra frente.
+ *  Serve tanto o "adicionar aqui" quanto o "duplicar" (é só mandar os campos
+ *  copiados do original). Devolve o id do bloco criado. */
+export function useInserirBloco() {
+  const invalidar = useInvalidarConteudo()
+  return useMutation({
+    mutationFn: async (input: {
+      etapa_id: string
+      posicao: number
+      tipo: TipoBlocoAdmin
+      titulo?: string | null
+      conteudo?: string | null
+      url?: string | null
+      meta?: Record<string, unknown>
+    }): Promise<string> => {
+      const { data, error } = await supabase.rpc('wp_inserir_bloco', {
+        p_etapa_id: input.etapa_id,
+        p_posicao:  input.posicao,
+        p_tipo:     input.tipo,
+        p_titulo:   input.titulo ?? null,
+        p_conteudo: input.conteudo ?? null,
+        p_url:      input.url ?? null,
+        p_meta:     input.meta ?? {},
+      })
+      if (error) throw new Error(error.message)
+      return data as string
     },
     onSuccess: invalidar,
   })

@@ -1,8 +1,9 @@
-import { ImageOff, VideoOff } from 'lucide-react'
+import { ImageOff, VideoOff, Link2Off, ArrowUpRight, Quote } from 'lucide-react'
 import { videoEmbed } from '@/lib/videoEmbed'
 import { cn } from '@/lib/utils'
 import type { BlocoEtapa } from '@/hooks/useWelcomePath'
 import { CALLOUT_VARIANTES, varianteDoCallout } from './callout'
+import { itensDaLista, listaOrdenada, linkExterno, botaoEstilo, divisorEstilo } from './blocoExtras'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Renderização dos elementos de conteúdo de uma etapa.
@@ -92,6 +93,74 @@ function BlocoCallout({ bloco }: { bloco: BlocoEtapa }) {
   )
 }
 
+function BlocoLista({ bloco }: { bloco: BlocoEtapa }) {
+  const itens = itensDaLista(bloco.conteudo)
+  if (!itens.length) return null
+  const Tag = listaOrdenada(bloco.meta) ? 'ol' : 'ul'
+  return (
+    <Tag className={cn(
+      'space-y-1.5 pl-5 text-[14.5px] leading-relaxed text-ink-secondary marker:text-ink-muted',
+      listaOrdenada(bloco.meta) ? 'list-decimal' : 'list-disc',
+    )}>
+      {itens.map((item, i) => <li key={i} className="pl-1">{item}</li>)}
+    </Tag>
+  )
+}
+
+function BlocoBotao({ bloco }: { bloco: BlocoEtapa }) {
+  const href = linkExterno(bloco.url)
+  if (!href) return <BlocoVazio icone={Link2Off} texto="Botão sem link válido. Avise a coordenação." />
+
+  const rotulo = bloco.titulo?.trim() || 'Abrir link'
+  const secundario = botaoEstilo(bloco.meta) === 'secundario'
+  return (
+    <div>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(
+          'btn-press inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-semibold transition-colors',
+          secundario
+            ? 'border border-line text-ink hover:bg-surface-subtle'
+            : 'bg-ink text-ink-inverse hover:opacity-90',
+        )}
+      >
+        {rotulo}
+        <ArrowUpRight className="h-4 w-4 flex-shrink-0" />
+      </a>
+    </div>
+  )
+}
+
+function BlocoCitacao({ bloco }: { bloco: BlocoEtapa }) {
+  if (!bloco.conteudo?.trim()) return null
+  return (
+    <figure className="border-l-[3px] border-line pl-4">
+      <Quote className="h-4 w-4 text-ink-subtle" />
+      <blockquote className="mt-1.5 whitespace-pre-wrap text-[15px] italic leading-relaxed text-ink-secondary">
+        {bloco.conteudo}
+      </blockquote>
+      {bloco.titulo?.trim() && (
+        <figcaption className="mt-2 text-[12.5px] font-medium text-ink-muted">— {bloco.titulo}</figcaption>
+      )}
+    </figure>
+  )
+}
+
+function BlocoDivisor({ bloco }: { bloco: BlocoEtapa }) {
+  const estilo = divisorEstilo(bloco.meta)
+  if (estilo === 'espaco') return <div className="h-6" aria-hidden />
+  if (estilo === 'pontos') {
+    return (
+      <div className="flex justify-center gap-2 py-1.5 text-ink-subtle" aria-hidden>
+        {[0, 1, 2].map(i => <span key={i} className="h-1 w-1 rounded-full bg-current" />)}
+      </div>
+    )
+  }
+  return <hr className="border-line-soft" />
+}
+
 export function BlocoView({ bloco }: { bloco: BlocoEtapa }) {
   switch (bloco.tipo) {
     case 'h1':
@@ -130,6 +199,18 @@ export function BlocoView({ bloco }: { bloco: BlocoEtapa }) {
 
     case 'imagem':
       return <BlocoImagem bloco={bloco} />
+
+    case 'lista':
+      return <BlocoLista bloco={bloco} />
+
+    case 'botao':
+      return <BlocoBotao bloco={bloco} />
+
+    case 'citacao':
+      return <BlocoCitacao bloco={bloco} />
+
+    case 'divisor':
+      return <BlocoDivisor bloco={bloco} />
 
     case 'html':
       return bloco.conteudo

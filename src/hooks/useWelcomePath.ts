@@ -65,8 +65,11 @@ export type EtapaTrilha = {
 }
 
 /** Espelha a área de materiais da King: h1/h2/text/video/callout são as mesmas
- *  chaves do KMS. `imagem` e `html` são extensões nossas. */
-export type TipoBloco = 'h1' | 'h2' | 'text' | 'video' | 'imagem' | 'callout' | 'html'
+ *  chaves do KMS. `imagem`, `html`, `lista`, `divisor`, `botao` e `citacao` são
+ *  extensões nossas. */
+export type TipoBloco =
+  | 'h1' | 'h2' | 'text' | 'video' | 'imagem' | 'callout' | 'html'
+  | 'lista' | 'divisor' | 'botao' | 'citacao'
 
 export type BlocoEtapa = {
   id: string
