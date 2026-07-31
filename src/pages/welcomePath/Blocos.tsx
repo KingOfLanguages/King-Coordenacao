@@ -3,7 +3,10 @@ import { videoEmbed } from '@/lib/videoEmbed'
 import { cn } from '@/lib/utils'
 import type { BlocoEtapa } from '@/hooks/useWelcomePath'
 import { CALLOUT_VARIANTES, varianteDoCallout } from './callout'
-import { itensDaLista, listaOrdenada, linkExterno, botaoEstilo, divisorEstilo } from './blocoExtras'
+import {
+  itensDaLista, listaOrdenada, linkExterno, botaoEstilo, divisorEstilo,
+  imagensDaGaleria, galeriaColunas,
+} from './blocoExtras'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Renderização dos elementos de conteúdo de uma etapa.
@@ -148,6 +151,27 @@ function BlocoCitacao({ bloco }: { bloco: BlocoEtapa }) {
   )
 }
 
+function BlocoGaleria({ bloco }: { bloco: BlocoEtapa }) {
+  const imagens = imagensDaGaleria(bloco.meta)
+  if (!imagens.length) return <BlocoVazio icone={ImageOff} texto="Galeria sem imagens." />
+  const tresColunas = galeriaColunas(bloco.meta) === 3
+  return (
+    <div className={cn('grid gap-3', tresColunas ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2')}>
+      {imagens.map((im, i) => (
+        <figure key={i} className="space-y-1.5">
+          <img
+            src={im.url}
+            alt={im.legenda ?? ''}
+            loading="lazy"
+            className="aspect-[4/3] w-full rounded-xl border border-line-soft object-cover"
+          />
+          {im.legenda && <figcaption className="text-[11.5px] text-ink-muted">{im.legenda}</figcaption>}
+        </figure>
+      ))}
+    </div>
+  )
+}
+
 function BlocoDivisor({ bloco }: { bloco: BlocoEtapa }) {
   const estilo = divisorEstilo(bloco.meta)
   if (estilo === 'espaco') return <div className="h-6" aria-hidden />
@@ -199,6 +223,9 @@ export function BlocoView({ bloco }: { bloco: BlocoEtapa }) {
 
     case 'imagem':
       return <BlocoImagem bloco={bloco} />
+
+    case 'galeria':
+      return <BlocoGaleria bloco={bloco} />
 
     case 'lista':
       return <BlocoLista bloco={bloco} />

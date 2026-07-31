@@ -4,6 +4,7 @@ import {
   Plus, Trash2, ChevronUp, ChevronDown, Type, Video, Image as ImageIcon,
   AlertTriangle, ListChecks, Eye, Heading1, Heading2, Code2, PanelLeft,
   List, MousePointerClick, Quote, Minus, Copy, Upload, ImagePlus,
+  GripVertical, Images, Film,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -14,10 +15,14 @@ import { cn } from '@/lib/utils'
 import { videoEmbed } from '@/lib/videoEmbed'
 import { BlocoView } from '@/pages/welcomePath/Blocos'
 import { CALLOUT_VARIANTES, varianteDoCallout } from '@/pages/welcomePath/callout'
-import { linkExterno, botaoEstilo, divisorEstilo } from '@/pages/welcomePath/blocoExtras'
+import {
+  linkExterno, botaoEstilo, divisorEstilo, imagensDaGaleria, galeriaColunas,
+  type GaleriaImagem,
+} from '@/pages/welcomePath/blocoExtras'
 import {
   useBlocosAdmin, useQuestoesAdmin, useSalvarBloco, useExcluirBloco, useInserirBloco,
-  useSalvarQuestao, useExcluirQuestao, uploadImagemWelcomePath,
+  useReordenarBlocos, useSalvarQuestao, useExcluirQuestao,
+  uploadImagemWelcomePath, uploadVideoWelcomePath,
   type EtapaAdmin, type BlocoAdmin, type QuestaoAdmin,
   type TipoBlocoAdmin, type TipoQuestaoAdmin,
 } from '@/hooks/useWelcomePathAdmin'
@@ -48,6 +53,7 @@ const TIPOS_ELEMENTO: {
   { id: 'citacao', label: 'Citação',   icone: Quote,             dica: 'Destaca uma frase ou depoimento.' },
   { id: 'video',   label: 'Vídeo',     icone: Video,             dica: 'YouTube, Vimeo ou arquivo .mp4.' },
   { id: 'imagem',  label: 'Imagem',    icone: ImageIcon,         dica: 'Print de tela ou foto — envie o arquivo ou cole uma URL.' },
+  { id: 'galeria', label: 'Galeria',   icone: Images,            dica: 'Várias imagens lado a lado, em 2 ou 3 colunas.' },
   { id: 'callout', label: 'Destaque',  icone: AlertTriangle,     dica: 'Caixa colorida — informação, atenção ou alerta.' },
   { id: 'botao',   label: 'Botão',     icone: MousePointerClick, dica: 'Botão que leva a um link — planilha, formulário, material.' },
   { id: 'divisor', label: 'Divisor',   icone: Minus,             dica: 'Linha, pontos ou espaço para separar seções.' },
@@ -201,6 +207,217 @@ function EditorImagem({
   )
 }
 
+// ─── Área de upload compartilhada ───────────────────────────────────────────────
+// Arraste-ou-clique reusado pelo vídeo e pela galeria. O upload em si mora no
+// hook; aqui é só o gesto e o estado visual de "enviando".
+
+function Dropzone({
+  accept, multiple, enviando, onArquivos, icone: Icone, titulo, hint,
+}: {
+  accept: string
+  multiple?: boolean
+  enviando: boolean
+  onArquivos: (files: FileList | null) => void
+  icone: typeof ImagePlus
+  titulo: string
+  hint: string
+}) {
+  const [arrastando, setArrastando] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  return (
+    <>
+      <button
+        type="button"
+        disabled={enviando}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setArrastando(true) }}
+        onDragLeave={() => setArrastando(false)}
+        onDrop={e => { e.preventDefault(); setArrastando(false); onArquivos(e.dataTransfer.files) }}
+        className={cn(
+          'flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center transition-colors',
+          arrastando ? 'border-accentBlue bg-accentBlue-soft' : 'border-line hover:border-ink-muted',
+        )}
+      >
+        {enviando ? (
+          <span className="text-[12px] text-ink-muted">Enviando…</span>
+        ) : (
+          <>
+            <Icone className="h-5 w-5 text-ink-muted" />
+            <span className="text-[12px] font-medium text-ink-secondary">{titulo}</span>
+            <span className="text-[10.5px] text-ink-subtle">{hint}</span>
+          </>
+        )}
+      </button>
+      <input
+        ref={inputRef} type="file" accept={accept} multiple={multiple} hidden
+        onChange={e => { onArquivos(e.target.files); e.target.value = '' }}
+      />
+    </>
+  )
+}
+
+// ─── Vídeo: upload ou link ──────────────────────────────────────────────────────
+// Continua aceitando link (YouTube/Vimeo/.mp4); agora também envia o arquivo pro
+// bucket welcome-path-video. O videoEmbed reconhece a URL .mp4 e o portal toca
+// num <video> nativo — mesmo caminho de um link de arquivo colado.
+
+function EditorVideo({
+  bloco, patch,
+}: {
+  bloco: BlocoAdmin
+  patch: (campos: Partial<BlocoAdmin>) => void
+}) {
+  const [enviando, setEnviando] = useState(false)
+  const embed = videoEmbed(bloco.url)
+  const arquivoProprio = embed?.provedor === 'arquivo'
+
+  async function enviar(files: FileList | null) {
+    const file = files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('video/')) { toast.error('Selecione um arquivo de vídeo.'); return }
+    setEnviando(true)
+    try {
+      patch({ url: await uploadVideoWelcomePath(file) })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível enviar o vídeo.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <CampoTexto
+        valor={bloco.titulo ?? ''}
+        onSalvar={v => patch({ titulo: v || null })}
+        placeholder="Título do vídeo (opcional)"
+      />
+
+      {arquivoProprio ? (
+        <div className="flex items-start gap-3">
+          <video src={embed!.src} muted className="h-20 w-32 flex-shrink-0 rounded-lg border border-line bg-black object-cover" />
+          <button
+            type="button" onClick={() => patch({ url: null })}
+            className="btn-press inline-flex items-center gap-1 rounded-lg border border-line bg-surface-canvas px-2.5 py-1 text-[11.5px] font-medium text-ink-muted hover:text-urg-highFg"
+          >
+            <Trash2 className="h-3 w-3" /> Remover vídeo
+          </button>
+        </div>
+      ) : !embed ? (
+        <Dropzone
+          accept="video/mp4,video/webm,video/ogg" enviando={enviando} onArquivos={enviar}
+          icone={Film} titulo="Enviar vídeo" hint="arraste aqui ou clique · MP4, WEBM · até 50 MB"
+        />
+      ) : null}
+
+      <CampoTexto
+        valor={bloco.url ?? ''}
+        onSalvar={v => patch({ url: v.trim() || null })}
+        placeholder="ou cole o link do YouTube, Vimeo ou .mp4"
+      />
+      {bloco.url && !embed && (
+        <p className="text-[11.5px] text-urg-highFg">
+          Não reconhecemos esse link como vídeo. Cole a URL da página do vídeo no YouTube.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ─── Galeria: várias imagens em grade ───────────────────────────────────────────
+// As imagens ficam em meta.imagens [{url, legenda?}]; a coluna `url` do bloco não
+// é usada. Upload em lote (várias de uma vez), reordenar e legenda por imagem.
+
+function EditorGaleria({
+  bloco, patch,
+}: {
+  bloco: BlocoAdmin
+  patch: (campos: Partial<BlocoAdmin>) => void
+}) {
+  const [enviando, setEnviando] = useState(false)
+  const imagens = imagensDaGaleria(bloco.meta)
+
+  function gravar(next: GaleriaImagem[]) {
+    patch({ meta: { ...bloco.meta, imagens: next } })
+  }
+
+  async function enviar(files: FileList | null) {
+    const lista = Array.from(files ?? []).filter(f => f.type.startsWith('image/'))
+    if (!lista.length) return
+    setEnviando(true)
+    try {
+      const urls = await Promise.all(lista.map(uploadImagemWelcomePath))
+      gravar([...imagens, ...urls.map(url => ({ url }))])
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível enviar as imagens.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  function mover(i: number, dir: -1 | 1) {
+    const j = i + dir
+    if (j < 0 || j >= imagens.length) return
+    const next = [...imagens]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    gravar(next)
+  }
+
+  return (
+    <div className="space-y-2">
+      {imagens.length > 0 && (
+        <div className="space-y-1.5">
+          {imagens.map((im, i) => (
+            <div key={i} className="flex items-center gap-2 rounded-lg border border-line-soft bg-surface-canvas p-1.5">
+              <img src={im.url} alt="" className="h-12 w-12 flex-shrink-0 rounded-md border border-line object-cover" />
+              <div className="min-w-0 flex-1">
+                <CampoTexto
+                  valor={im.legenda ?? ''}
+                  onSalvar={v => gravar(imagens.map((x, j) => (j === i ? { ...x, legenda: v || undefined } : x)))}
+                  placeholder="Legenda (opcional)"
+                />
+              </div>
+              <div className="flex flex-shrink-0">
+                <button type="button" disabled={i === 0} onClick={() => mover(i, -1)}
+                  className="btn-press rounded p-1 text-ink-muted hover:text-ink disabled:opacity-30" title="Subir">
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" disabled={i === imagens.length - 1} onClick={() => mover(i, 1)}
+                  className="btn-press rounded p-1 text-ink-muted hover:text-ink disabled:opacity-30" title="Descer">
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => gravar(imagens.filter((_, j) => j !== i))}
+                  className="btn-press rounded p-1 text-ink-muted hover:text-urg-highFg" title="Remover">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dropzone
+        accept="image/png,image/jpeg,image/webp,image/gif" multiple enviando={enviando} onArquivos={enviar}
+        icone={ImagePlus}
+        titulo={imagens.length ? 'Adicionar mais imagens' : 'Enviar imagens'}
+        hint="arraste aqui ou clique · várias de uma vez"
+      />
+
+      <label className="flex items-center gap-2 text-[12px] text-ink-secondary">
+        Colunas
+        <select
+          value={galeriaColunas(bloco.meta)}
+          onChange={e => patch({ meta: { ...bloco.meta, colunas: Number(e.target.value) } })}
+          className="h-7 rounded-lg border border-line bg-surface-canvas px-2 text-[12px] text-ink focus:border-accentBlue focus:outline-none"
+        >
+          <option value={2}>2 colunas</option>
+          <option value={3}>3 colunas</option>
+        </select>
+      </label>
+    </div>
+  )
+}
+
 // ─── Inserir elemento em qualquer posição ──────────────────────────────────────
 // O editor antigo só sabia acrescentar no fim e subir de um em um. Este é um
 // alvo fino entre os blocos: passa o mouse, aparece um "+", escolhe o tipo e o
@@ -260,7 +477,7 @@ function InseridorBloco({ onInserir }: { onInserir: (tipo: TipoBlocoAdmin) => vo
 // ─── Elemento de conteúdo ─────────────────────────────────────────────────────
 
 function EditorElemento({
-  bloco, primeiro, ultimo, numero, onMover, onDuplicar,
+  bloco, primeiro, ultimo, numero, onMover, onDuplicar, dnd,
 }: {
   bloco: BlocoAdmin
   primeiro: boolean
@@ -268,9 +485,18 @@ function EditorElemento({
   numero: number
   onMover: (direcao: -1 | 1) => void
   onDuplicar: () => void
+  dnd: {
+    onDragStart: () => void
+    onDragEnter: () => void
+    onDragEnd: () => void
+    onDrop: () => void
+    arrastando: boolean
+    alvo: boolean
+  }
 }) {
   const salvar = useSalvarBloco()
   const excluir = useExcluirBloco()
+  const rowRef = useRef<HTMLDivElement>(null)
 
   function patch(campos: Partial<BlocoAdmin>) {
     salvar.mutate({ id: bloco.id, etapa_id: bloco.etapa_id, ...campos }, {
@@ -292,11 +518,35 @@ function EditorElemento({
 
   const cfg = TIPO_POR_ID[bloco.tipo] ?? TIPO_POR_ID.text
   const Icone = cfg.icone
-  const embed = bloco.tipo === 'video' ? videoEmbed(bloco.url) : null
 
   return (
-    <div className="rounded-xl border border-line-soft bg-surface-subtle/40 p-3">
+    <div
+      ref={rowRef}
+      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+      onDragEnter={dnd.onDragEnter}
+      onDrop={e => { e.preventDefault(); dnd.onDrop() }}
+      className={cn(
+        'rounded-xl border border-line-soft bg-surface-subtle/40 p-3 transition-shadow',
+        dnd.arrastando && 'opacity-40',
+        dnd.alvo && 'ring-2 ring-accentBlue ring-offset-2 ring-offset-surface-app',
+      )}
+    >
       <div className="mb-2 flex items-center gap-2">
+        <button
+          type="button"
+          draggable
+          onDragStart={e => {
+            e.dataTransfer.effectAllowed = 'move'
+            if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 20, 20)
+            dnd.onDragStart()
+          }}
+          onDragEnd={dnd.onDragEnd}
+          title="Arraste para reordenar"
+          className="btn-press flex-shrink-0 cursor-grab rounded p-0.5 text-ink-subtle hover:text-ink active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+
         <span className="w-5 flex-shrink-0 text-[11px] font-semibold tabular-nums text-ink-subtle">
           {numero}
         </span>
@@ -392,27 +642,11 @@ function EditorElemento({
           </>
         )}
 
-        {bloco.tipo === 'video' && (
-          <>
-            <CampoTexto
-              valor={bloco.titulo ?? ''}
-              onSalvar={v => patch({ titulo: v || null })}
-              placeholder="Título do vídeo (opcional)"
-            />
-            <CampoTexto
-              valor={bloco.url ?? ''}
-              onSalvar={v => patch({ url: v.trim() || null })}
-              placeholder="https://www.youtube.com/watch?v=…"
-            />
-            {bloco.url && !embed && (
-              <p className="text-[11.5px] text-urg-highFg">
-                Não reconhecemos esse link como vídeo. Cole a URL da página do vídeo no YouTube.
-              </p>
-            )}
-          </>
-        )}
+        {bloco.tipo === 'video' && <EditorVideo bloco={bloco} patch={patch} />}
 
         {bloco.tipo === 'imagem' && <EditorImagem bloco={bloco} patch={patch} />}
+
+        {bloco.tipo === 'galeria' && <EditorGaleria bloco={bloco} patch={patch} />}
 
         {bloco.tipo === 'lista' && (
           <>
@@ -788,15 +1022,32 @@ export function EditarEtapaDialog({
   const { data: questoes = [] } = useQuestoesAdmin(etapa.id)
   const salvarBloco = useSalvarBloco()
   const inserirBloco = useInserirBloco()
+  const reordenarBlocos = useReordenarBlocos()
   const salvarQuestao = useSalvarQuestao()
   // Abaixo de lg não cabem duas colunas — vira um par de abas.
   const [painel, setPainel] = useState<'editar' | 'preview'>('editar')
+  // Arrastar-e-soltar: qual índice está sendo arrastado e sobre qual passa.
+  const [arrastadoIdx, setArrastadoIdx] = useState<number | null>(null)
+  const [sobreIdx, setSobreIdx] = useState<number | null>(null)
 
   /** Estado inicial de `meta` por tipo. */
   function metaInicial(tipo: TipoBlocoAdmin): Record<string, unknown> {
     if (tipo === 'callout') return { calloutVariant: 'info' }
     if (tipo === 'lista')   return { ordered: false }
+    if (tipo === 'galeria') return { imagens: [], colunas: 2 }
     return {}
+  }
+
+  /** Solta o bloco arrastado no índice de destino e grava a ordem toda. */
+  function soltarNoIndice(destino: number) {
+    const origem = arrastadoIdx
+    setSobreIdx(null)
+    setArrastadoIdx(null)
+    if (origem == null || origem === destino) return
+    const nova = [...blocos]
+    const [item] = nova.splice(origem, 1)
+    nova.splice(destino, 0, item)
+    reordenarBlocos.mutate({ etapa_id: etapa.id, ids: nova.map(b => b.id) })
   }
 
   /** Insere um elemento. `posicao` é o valor de `ordem` que ele vai ocupar (a RPC
@@ -910,6 +1161,14 @@ export function EditarEtapaDialog({
                         ultimo={i === blocos.length - 1}
                         onMover={d => moverElemento(i, d)}
                         onDuplicar={() => duplicarElemento(b)}
+                        dnd={{
+                          onDragStart: () => setArrastadoIdx(i),
+                          onDragEnter: () => setSobreIdx(prev => (arrastadoIdx == null ? prev : i)),
+                          onDragEnd: () => { setArrastadoIdx(null); setSobreIdx(null) },
+                          onDrop: () => soltarNoIndice(i),
+                          arrastando: arrastadoIdx === i,
+                          alvo: sobreIdx === i && arrastadoIdx != null && arrastadoIdx !== i,
+                        }}
                       />
                     </div>
                   ))}

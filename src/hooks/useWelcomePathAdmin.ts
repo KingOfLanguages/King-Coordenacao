@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ import { supabase } from '@/lib/supabase'
  *  e 20260749. */
 export type TipoBlocoAdmin =
   | 'h1' | 'h2' | 'text' | 'video' | 'imagem' | 'callout' | 'html'
-  | 'lista' | 'divisor' | 'botao' | 'citacao'
+  | 'lista' | 'divisor' | 'botao' | 'citacao' | 'galeria'
 export type TipoQuestaoAdmin =
   | 'multipla_escolha' | 'multipla_selecao' | 'verdadeiro_falso' | 'dissertativa'
 
@@ -87,21 +88,30 @@ export type RespostaAdmin = {
   } | null
 }
 
-// ─── Upload de imagem ─────────────────────────────────────────────────────────
+// ─── Upload de mídia ──────────────────────────────────────────────────────────
 
-const BUCKET_WELCOME_PATH = 'welcome-path'
+const BUCKET_WELCOME_PATH       = 'welcome-path'
+const BUCKET_WELCOME_PATH_VIDEO = 'welcome-path-video'
 
-/** Envia uma imagem pro bucket do Welcome Path e devolve a URL pública.
- *  Nome aleatório (uuid) evita colisão; o bucket é público pra renderização
- *  direta no portal do professor. Mesma mecânica de uploadImagemIncidente. */
-export async function uploadImagemWelcomePath(file: File): Promise<string> {
-  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'
+/** Envia um arquivo pro bucket e devolve a URL pública. Nome aleatório (uuid)
+ *  evita colisão; os buckets são públicos pra renderização direta no portal do
+ *  professor. Mesma mecânica de uploadImagemIncidente. */
+async function uploadArquivo(bucket: string, file: File, extPadrao: string): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || extPadrao
   const caminho = `${crypto.randomUUID()}.${ext}`
   const { error } = await supabase.storage
-    .from(BUCKET_WELCOME_PATH)
+    .from(bucket)
     .upload(caminho, file, { cacheControl: '3600', contentType: file.type || undefined, upsert: false })
   if (error) throw error
-  return supabase.storage.from(BUCKET_WELCOME_PATH).getPublicUrl(caminho).data.publicUrl
+  return supabase.storage.from(bucket).getPublicUrl(caminho).data.publicUrl
+}
+
+export function uploadImagemWelcomePath(file: File): Promise<string> {
+  return uploadArquivo(BUCKET_WELCOME_PATH, file, 'png')
+}
+
+export function uploadVideoWelcomePath(file: File): Promise<string> {
+  return uploadArquivo(BUCKET_WELCOME_PATH_VIDEO, file, 'mp4')
 }
 
 // ─── Conteúdo ─────────────────────────────────────────────────────────────────
@@ -267,6 +277,40 @@ export function useExcluirBloco() {
       if (error) throw new Error(error.message)
     },
     onSuccess: invalidar,
+  })
+}
+
+/** Grava a ordem inteira dos blocos de uma etapa de uma vez — é o que sustenta o
+ *  arrastar-e-soltar. Optimistic: reordena o cache na hora pra lista não piscar
+ *  enquanto a RPC vai e volta; desfaz se der erro. */
+export function useReordenarBlocos() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ etapa_id, ids }: { etapa_id: string; ids: string[] }) => {
+      const { error } = await supabase.rpc('wp_reordenar_blocos', { p_etapa_id: etapa_id, p_ids: ids })
+      if (error) throw new Error(error.message)
+    },
+    onMutate: async ({ etapa_id, ids }) => {
+      const key = ['wp-admin', 'blocos', etapa_id]
+      await qc.cancelQueries({ queryKey: key })
+      const anterior = qc.getQueryData<BlocoAdmin[]>(key)
+      if (anterior) {
+        const porId = new Map(anterior.map(b => [b.id, b]))
+        const nova = ids
+          .map((id, i) => { const b = porId.get(id); return b ? { ...b, ordem: i } : null })
+          .filter((b): b is BlocoAdmin => b != null)
+        qc.setQueryData(key, nova)
+      }
+      return { key, anterior }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.anterior) qc.setQueryData(ctx.key, ctx.anterior)
+      toast.error('Não foi possível reordenar.')
+    },
+    onSettled: (_d, _e, { etapa_id }) => {
+      qc.invalidateQueries({ queryKey: ['wp-admin', 'blocos', etapa_id] })
+      qc.invalidateQueries({ queryKey: ['wp'] })
+    },
   })
 }
 
