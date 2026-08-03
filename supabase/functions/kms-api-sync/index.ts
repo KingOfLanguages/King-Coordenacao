@@ -12,7 +12,11 @@
 //      professor_acompanhamento + professor_score_historico +
 //      professor_alunos_kms
 //
-// Importante: a API não retorna e-mail do professor. NÃO seta
+// Importante: o bloco `perfil` (email/telefone/cidade/estado/nível +
+// dados_atualizados) passou a ser consumido — contato/localização por COALESCE
+// (só preenche onde está vazio, não atropela a curadoria manual/planilha);
+// dados_atualizados e nivel_recomendado_alunos_raw são espelho da API. O roster
+// é filtrado por tipo_vinculo (turma fica de fora da carteira). NÃO seta
 // coordenador_id/grupo_id a partir do campo `coordenador` da API — a
 // distribuição continua sendo feita pelo nosso algoritmo
 // (atribuir_grupo_professor / distribuir_professores_inicial).
@@ -31,6 +35,34 @@ interface AlunoKms {
   primeiro_nome: string
   data_adicao: string | null
   status_vinculo: string | null
+  status_vinculo_codigo?: string | null
+  status_aluno?: string | null
+  tipo_vinculo?: string | null
+  data_matricula_escola?: string | null
+}
+
+interface PerfilKms {
+  email: string | null
+  telefone: string | null
+  cidade: string | null
+  estado: string | null
+  nivel_recomendado_alunos: string | null
+  dados_atualizados: boolean
+}
+
+interface MotivoBloqueioKms {
+  motivo: string
+  quantidade: number
+}
+
+interface CicloVidaKms {
+  aluno_id: number
+  primeiro_nome: string | null
+  data_saida: string | null
+  motivo_saida: string | null
+  saiu_da_escola: boolean | null
+  data_matricula_escola: string | null
+  data_inicio_aulas: string | null
 }
 
 interface ScoreKms {
@@ -68,7 +100,11 @@ interface ProfessorKms {
   data_entrada: string | null
   status: string
   coordenador?: string | null
+  perfil?: PerfilKms
+  agenda_bloqueada?: boolean
+  motivos_bloqueio?: MotivoBloqueioKms[]
   alunos?: AlunoKms[]
+  ciclo_vida_alunos?: CicloVidaKms[]
   turnover?: TurnoverKms
   score?: ScoreKms
   reuniao_monitoramento?: ReuniaoMonitoramentoKms
@@ -86,6 +122,15 @@ function mapStatus(status: string): 'ativo' | 'pausa' | 'desligado' {
   if (s === 'desligado') return 'desligado'
   if (s === 'pausado' || s === 'pausa') return 'pausa'
   return 'ativo'
+}
+
+// Primeiro valor não-vazio (para COALESCE de contato: valor do banco vence,
+// depois o da API; '' conta como vazio).
+function firstNonEmpty(...vals: (string | null | undefined)[]): string | null {
+  for (const v of vals) {
+    if (v != null && String(v).trim() !== '') return v
+  }
+  return null
 }
 
 async function login(baseUrl: string, email: string, password: string): Promise<string> {
@@ -153,18 +198,38 @@ serve(async (req) => {
         // Quais já existem (pra contabilizar criados vs atualizados).
         const { data: existentes, error: existErr } = await admin
           .from('professores')
-          .select('kms_id')
+          .select('kms_id, telefone, email, cidade, estado')
           .in('kms_id', kmsIds)
         if (existErr) throw new Error(existErr.message)
         const jaExistiam = new Set((existentes ?? []).map(e => e.kms_id))
+        const perfilExistente = new Map(
+          (existentes ?? []).map(e => [
+            e.kms_id as string,
+            e as { telefone: string | null; email: string | null; cidade: string | null; estado: string | null },
+          ]),
+        )
 
         // 1 — Upsert em lote de identidade.
-        const professoresPayload = pagina.data.map(p => ({
-          kms_id: String(p.professor_id),
-          nome: p.nome,
-          data_inicio: p.data_entrada,
-          status: mapStatus(p.status),
-        }))
+        const professoresPayload = pagina.data.map(p => {
+          const kmsId = String(p.professor_id)
+          const atual = perfilExistente.get(kmsId)
+          const perfil = p.perfil
+          return {
+            kms_id: kmsId,
+            nome: p.nome,
+            data_inicio: p.data_entrada,
+            status: mapStatus(p.status),
+            // Contato/localização: COALESCE — só preenche onde está vazio, nunca
+            // sobrescreve a curadoria manual/planilha.
+            telefone: firstNonEmpty(atual?.telefone, perfil?.telefone),
+            email:    firstNonEmpty(atual?.email,    perfil?.email),
+            cidade:   firstNonEmpty(atual?.cidade,   perfil?.cidade),
+            estado:   firstNonEmpty(atual?.estado,   perfil?.estado),
+            // Espelho da API (sobrescreve). O nivel curado NÃO é tocado.
+            dados_atualizados:            perfil?.dados_atualizados ?? null,
+            nivel_recomendado_alunos_raw: perfil?.nivel_recomendado_alunos ?? null,
+          }
+        })
         const { data: upserted, error: upsertErr } = await admin
           .from('professores')
           .upsert(professoresPayload, { onConflict: 'kms_id' })
@@ -197,6 +262,8 @@ serve(async (req) => {
               faltas_professor: alertas.faltas_professor ?? null,
               no_show_primeira_aula: alertas.no_show_primeira_aula ?? null,
               agendas_bloqueadas: alertas.agendas_bloqueadas ?? null,
+              agenda_bloqueada: p.agenda_bloqueada ?? null,
+              motivos_bloqueio: p.motivos_bloqueio ?? null,
               trocas_professor: alertas.trocas_professor ?? null,
               turnover_entrou_no_periodo: p.turnover?.entrou_no_periodo ?? null,
               turnover_saida: p.turnover?.saida ?? null,
@@ -241,17 +308,26 @@ serve(async (req) => {
         const alunosPorChave = new Map<string, {
           professor_id: string; aluno_id: number
           primeiro_nome: string | null; data_adicao: string | null; status_vinculo: string | null
+          status_vinculo_codigo: string | null; status_aluno: string | null
+          tipo_vinculo: string | null; data_matricula_escola: string | null
         }>()
         for (const p of pagina.data) {
           const professorId = idByKmsId.get(String(p.professor_id))
           if (!professorId) continue
           for (const a of p.alunos ?? []) {
+            // O roster mistura alunos e turmas — turma vem com tipo_vinculo="turma"
+            // e aluno_id 0. Fica de fora da carteira (senão infla a contagem).
+            if (a.tipo_vinculo === 'turma' || a.aluno_id === 0) continue
             alunosPorChave.set(`${professorId}:${a.aluno_id}`, {
               professor_id: professorId,
               aluno_id: a.aluno_id,
               primeiro_nome: a.primeiro_nome,
               data_adicao: a.data_adicao,
               status_vinculo: a.status_vinculo,
+              status_vinculo_codigo: a.status_vinculo_codigo ?? null,
+              status_aluno: a.status_aluno ?? null,
+              tipo_vinculo: a.tipo_vinculo ?? null,
+              data_matricula_escola: a.data_matricula_escola ?? null,
             })
           }
         }
@@ -260,6 +336,40 @@ serve(async (req) => {
           const { error } = await admin
             .from('professor_alunos_kms')
             .upsert(alunosPayload, { onConflict: 'professor_id,aluno_id' })
+          if (error) throw new Error(error.message)
+        }
+
+        // 5 — Ciclo de vida do aluno (saídas). APPEND idempotente por
+        // (professor_id, aluno_id, data_saida) — NUNCA delete: é histórico de
+        // retenção/turnover. Sem data_saida não dá pra chavear (ignora);
+        // turma (aluno_id 0) não entra.
+        const cicloPorChave = new Map<string, {
+          professor_id: string; aluno_id: number; data_saida: string
+          primeiro_nome: string | null; motivo_saida: string | null; saiu_da_escola: boolean | null
+          data_matricula_escola: string | null; data_inicio_aulas: string | null
+        }>()
+        for (const p of pagina.data) {
+          const professorId = idByKmsId.get(String(p.professor_id))
+          if (!professorId) continue
+          for (const c of p.ciclo_vida_alunos ?? []) {
+            if (!c.data_saida || c.aluno_id === 0) continue
+            cicloPorChave.set(`${professorId}:${c.aluno_id}:${c.data_saida}`, {
+              professor_id: professorId,
+              aluno_id: c.aluno_id,
+              data_saida: c.data_saida,
+              primeiro_nome: c.primeiro_nome,
+              motivo_saida: c.motivo_saida,
+              saiu_da_escola: c.saiu_da_escola,
+              data_matricula_escola: c.data_matricula_escola,
+              data_inicio_aulas: c.data_inicio_aulas,
+            })
+          }
+        }
+        const cicloPayload = [...cicloPorChave.values()]
+        if (cicloPayload.length) {
+          const { error } = await admin
+            .from('professor_ciclo_vida_alunos')
+            .upsert(cicloPayload, { onConflict: 'professor_id,aluno_id,data_saida' })
           if (error) throw new Error(error.message)
         }
 

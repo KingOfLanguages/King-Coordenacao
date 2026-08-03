@@ -22,15 +22,14 @@ type NavNode =
   | { kind: 'group'; label: string; pageKeys: string[] }
 
 const NAV: NavNode[] = [
-  // "Professores" ficou enxuto (só cadastro + onboarding). Pendências, Mês de
+  // "Professores" agrupa cadastro, Onboarding e Buscar Reuniões. Pendências, Mês de
   // Análise e Pausas foram pro grupo "Acompanhamento"; Incidentes e Reclamações
   // por Aluno pro grupo "Incidentes". Tarefas (ex-Central) segue como link de topo.
   { kind: 'group', label: 'Reuniões',       pageKeys: ['reunioes-dia', 'agendas'] },
-  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'onboarding'] },
+  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'onboarding', 'suporte-reunioes'] },
   { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'pendencias', 'mes-analise', 'retorno-pausa'] },
   { kind: 'group', label: 'Incidentes',     pageKeys: ['incidentes', 'alunos'] },
-  { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral'] },
-  { kind: 'link', pageKey: 'suporte-reunioes' },
+  { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral', 'retencao'] },
   { kind: 'link', pageKey: 'minha-area' },
   { kind: 'link', pageKey: 'convocacoes' },
 ]

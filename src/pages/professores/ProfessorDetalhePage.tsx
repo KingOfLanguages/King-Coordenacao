@@ -13,7 +13,7 @@ import {
 import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useConcluirAcompanhamentoPausa } from '@/hooks/useProfessores'
 import { useEncerrarPausa } from '@/hooks/usePausas'
 import { usePendenciaHistorico, usePendenciaLogs } from '@/hooks/usePendencias'
-import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms } from '@/hooks/useProfessorAcompanhamento'
+import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms, type ProfessorCicloVidaRow } from '@/hooks/useProfessorAcompanhamento'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
 import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
 import { useResolverObservacao, type ObservacaoSnapshot } from '@/hooks/useObservacoes'
@@ -33,6 +33,7 @@ import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { toast } from 'sonner'
 import { cn, tempoDeCasaLabel, whatsappLink } from '@/lib/utils'
+import { motivoSaidaLabel } from '@/lib/cicloVida'
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
 import type { StatusProfessor } from '@/types'
@@ -395,6 +396,11 @@ export function ProfessorDetalhePage() {
       {/* ── Alunos vinculados (KMS) ── */}
       {acompanhamentoData?.alunos && acompanhamentoData.alunos.length > 0 && (
         <AlunosKmsSection alunos={acompanhamentoData.alunos} />
+      )}
+
+      {/* ── Ciclo de vida do aluno (saídas — retenção/turnover) ── */}
+      {acompanhamentoData?.ciclo && acompanhamentoData.ciclo.length > 0 && (
+        <CicloVidaSection ciclo={acompanhamentoData.ciclo} />
       )}
 
       {/* ── Silêncio (aulas não lançadas) ── */}
@@ -834,12 +840,26 @@ function TrocasProfessorList({
 
 // ─── Alunos vinculados (KMS) ───────────────────────────────────────────────────
 
+const STATUS_ALUNO_LABEL: Record<string, string> = {
+  ativo: 'ativo',
+  pausado: 'pausado',
+  saiu: 'saiu',
+  desconhecido: '—',
+}
+
+// status_aluno (ativo/pausado) distingue melhor que o status_vinculo cru; cai
+// pro status_vinculo antigo enquanto o sync novo não repovoou o roster.
+function rotuloStatusAluno(a: ProfessorAlunoKms): string {
+  if (a.status_aluno) return STATUS_ALUNO_LABEL[a.status_aluno] ?? a.status_aluno
+  return a.status_vinculo_codigo ?? a.status_vinculo ?? 'Outro'
+}
+
 function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
   const [expandido, setExpandido] = useState(false)
 
   const porStatus = new Map<string, number>()
   for (const a of alunos) {
-    const chave = a.status_vinculo ?? 'Outro'
+    const chave = rotuloStatusAluno(a)
     porStatus.set(chave, (porStatus.get(chave) ?? 0) + 1)
   }
   const ordenados = [...alunos].sort((a, b) => (a.primeiro_nome ?? '').localeCompare(b.primeiro_nome ?? ''))
@@ -858,10 +878,15 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
           <span
             key={a.aluno_id}
             title={[
-              a.status_vinculo,
+              rotuloStatusAluno(a),
               a.data_adicao ? `adicionado em ${new Date(a.data_adicao).toLocaleDateString('pt-BR')}` : null,
             ].filter(Boolean).join(' · ') || undefined}
-            className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-2 py-0.5 text-[11px] cursor-help"
+            className={cn(
+              'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] cursor-help',
+              a.status_aluno === 'pausado'
+                ? 'bg-urg-medBg text-urg-medFg'
+                : 'bg-surface-subtle text-ink-secondary',
+            )}
           >
             {a.primeiro_nome ?? `Aluno #${a.aluno_id}`}
           </span>
@@ -873,6 +898,58 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
           className="btn-press text-[12px] text-accentBlue font-medium"
         >
           {expandido ? 'Ver menos' : `+ ${ordenados.length - 16} mais`}
+        </button>
+      )}
+    </section>
+  )
+}
+
+// ─── Ciclo de vida do aluno (saídas — retenção/turnover) ─────────────────────
+
+function CicloVidaSection({ ciclo }: { ciclo: ProfessorCicloVidaRow[] }) {
+  const [expandido, setExpandido] = useState(false)
+
+  const churn    = ciclo.filter(c => c.saiu_da_escola === true).length
+  const turnover = ciclo.filter(c => c.saiu_da_escola === false).length
+  const visiveis = expandido ? ciclo : ciclo.slice(0, 12)
+
+  return (
+    <section className="card-surface p-5 space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-1">
+        <h2 className="label-micro">Ciclo de vida do aluno · saídas ({ciclo.length})</h2>
+        <p className="text-[11px] text-ink-muted">
+          {churn} saíram da escola · {turnover} trocaram de professor
+        </p>
+      </div>
+      <ul className="divide-y divide-line-soft/60">
+        {visiveis.map(c => (
+          <li key={`${c.aluno_id}-${c.data_saida}`} className="flex items-center justify-between gap-2 py-1.5 text-[12px] flex-wrap">
+            <span className="text-ink-secondary inline-flex items-center gap-1.5 flex-wrap">
+              {c.primeiro_nome ?? `Aluno #${c.aluno_id}`}
+              <span className="text-ink-muted">· {motivoSaidaLabel(c.motivo_saida)}</span>
+              <span className={cn(
+                'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                c.saiu_da_escola === true  ? 'bg-urg-highBg text-urg-highFg'
+                : c.saiu_da_escola === false ? 'bg-urg-lowBg text-urg-lowFg'
+                : 'bg-surface-subtle text-ink-muted',
+              )}>
+                {c.saiu_da_escola === true ? 'Saiu da escola'
+                  : c.saiu_da_escola === false ? 'Trocou de professor'
+                  : '—'}
+              </span>
+            </span>
+            <span className="text-ink-subtle tabular-nums flex-shrink-0">
+              {new Date(c.data_saida).toLocaleDateString('pt-BR')}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {ciclo.length > 12 && (
+        <button
+          onClick={() => setExpandido(v => !v)}
+          className="btn-press text-[12px] text-accentBlue font-medium"
+        >
+          {expandido ? 'Ver menos' : `+ ${ciclo.length - 12} mais`}
         </button>
       )}
     </section>

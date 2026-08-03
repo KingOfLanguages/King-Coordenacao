@@ -33,6 +33,8 @@ export interface ProfessorAcompanhamento {
     quantidade_alunos_realocados: number | null
     saiu_no_periodo: boolean | null
   } | null
+  agenda_bloqueada: boolean | null
+  motivos_bloqueio: { motivo: string; quantidade: number }[] | null
   api_atualizado_em: string | null
 }
 
@@ -52,26 +54,43 @@ export interface ProfessorAlunoKms {
   primeiro_nome: string | null
   data_adicao: string | null
   status_vinculo: string | null
+  status_vinculo_codigo: string | null
+  status_aluno: string | null
+  tipo_vinculo: string | null
+  data_matricula_escola: string | null
+}
+
+export interface ProfessorCicloVidaRow {
+  aluno_id: number
+  primeiro_nome: string | null
+  data_saida: string
+  motivo_saida: string | null
+  saiu_da_escola: boolean | null
+  data_matricula_escola: string | null
+  data_inicio_aulas: string | null
 }
 
 export function useProfessorAcompanhamento(professorId?: string) {
   return useQuery({
     queryKey: ['professor-acompanhamento', professorId],
     queryFn: async () => {
-      const [{ data: acompanhamento, error: e1 }, { data: historico, error: e2 }, { data: alunos, error: e3 }] =
+      const [{ data: acompanhamento, error: e1 }, { data: historico, error: e2 }, { data: alunos, error: e3 }, { data: ciclo, error: e4 }] =
         await Promise.all([
           supabase.from('professor_acompanhamento').select('*').eq('professor_id', professorId!).maybeSingle(),
           supabase.from('professor_score_historico').select('ano_mes, score').eq('professor_id', professorId!).order('ano_mes'),
-          supabase.from('professor_alunos_kms').select('aluno_id, primeiro_nome, data_adicao, status_vinculo').eq('professor_id', professorId!),
+          supabase.from('professor_alunos_kms').select('aluno_id, primeiro_nome, data_adicao, status_vinculo, status_vinculo_codigo, status_aluno, tipo_vinculo, data_matricula_escola').eq('professor_id', professorId!),
+          supabase.from('professor_ciclo_vida_alunos').select('aluno_id, primeiro_nome, data_saida, motivo_saida, saiu_da_escola, data_matricula_escola, data_inicio_aulas').eq('professor_id', professorId!).order('data_saida', { ascending: false }),
         ])
       if (e1) throw e1
       if (e2) throw e2
       if (e3) throw e3
+      if (e4) throw e4
 
       return {
         acompanhamento: acompanhamento as ProfessorAcompanhamento | null,
         historico: (historico ?? []) as ProfessorScoreHistoricoRow[],
         alunos: (alunos ?? []) as ProfessorAlunoKms[],
+        ciclo: (ciclo ?? []) as ProfessorCicloVidaRow[],
       }
     },
     enabled: !!professorId,

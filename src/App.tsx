@@ -28,6 +28,7 @@ import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
 import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
+import { RetencaoPage } from '@/pages/retencao/RetencaoPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
@@ -110,6 +111,11 @@ export default function App() {
               <Route path="/dashboard/geral" element={
                 <ProtectedRoute page="dashboard-geral">
                   <DashboardGeralPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/retencao" element={
+                <ProtectedRoute page="retencao">
+                  <RetencaoPage />
                 </ProtectedRoute>
               } />
 
