@@ -22,6 +22,7 @@ import type { SilencioStatus } from '@/hooks/useSilencio'
 export interface PainelProfessor {
   professor_id: string
   nome: string
+  email: string | null
   grupo_id: string | null
   grupo_nome: string | null
   coordenador_nome: string | null
@@ -30,6 +31,11 @@ export interface PainelProfessor {
   score_faixa: string | null
   elegivel_alocacao: boolean | null   // false ⇒ bloqueado p/ receber novos alunos
   reuniao_status: string | null
+
+  // Última reunião realizada (professores.data_ultima_reuniao, com fallback para
+  // professor_acompanhamento.reuniao_ultima da API King) e o intervalo em dias.
+  data_ultima_reuniao: string | null
+  dias_sem_reuniao: number | null     // null ⇒ nunca teve reunião registrada
 
   aulas_pendentes_qtd: number
   dias_pendente: number               // 0 quando não há pendência
@@ -88,6 +94,16 @@ function diasDesde(dataISO: string | null | undefined): number {
   return Math.max(0, Math.floor(ms / 86_400_000))
 }
 
+/** Dias corridos desde uma data/timestamp ISO qualquer. null quando ausente ou
+ *  inválida — usado para "tempo sem reunião", que aceita tanto date quanto
+ *  timestamptz (data_ultima_reuniao é timestamptz; reuniao_ultima é date). */
+function diasDesdeISO(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return null
+  return Math.max(0, Math.floor((Date.now() - t) / 86_400_000))
+}
+
 /** Informes de um professor na janela, agrupados por categoria. */
 interface InformeAgg {
   total: number
@@ -109,12 +125,12 @@ export function usePainelProfessores() {
         supabase
           .from('professores')
           .select(`
-            id, nome,
+            id, nome, email, data_ultima_reuniao,
             grupo:grupos!grupo_id (id, nome),
             coordenador:profiles!coordenador_id (nome),
             status,
             professor_acompanhamento (
-              score_atual, score_faixa, elegivel_alocacao, reuniao_status,
+              score_atual, score_faixa, elegivel_alocacao, reuniao_status, reuniao_ultima,
               aulas_pendentes_qtd, aulas_pendentes_data_mais_antiga
             ),
             pausas (data_fim, ativada_em, encerrada_em)
@@ -197,6 +213,15 @@ export function usePainelProfessores() {
         const dias = diasDesde(acomp?.aulas_pendentes_data_mais_antiga as string | null | undefined)
         const score = acomp?.score_atual ?? null
 
+        // "Tempo sem reunião": prioriza a data que a plataforma atualiza ao
+        // confirmar uma reunião (professores.data_ultima_reuniao); cai pro dado da
+        // API King (reuniao_ultima) quando o professor nunca foi confirmado aqui.
+        const ultimaReuniao =
+          (p as { data_ultima_reuniao?: string | null }).data_ultima_reuniao
+          ?? (acomp as { reuniao_ultima?: string | null } | null | undefined)?.reuniao_ultima
+          ?? null
+        const diasSemReuniao = diasDesdeISO(ultimaReuniao)
+
         const inf = informesPor.get(p.id)
         const informesRecentes = inf?.total ?? 0
         const informeReincidente = inf ? ehReincidente(inf) : false
@@ -208,6 +233,7 @@ export function usePainelProfessores() {
         return [{
           professor_id: p.id,
           nome: p.nome,
+          email: (p as { email?: string | null }).email ?? null,
           grupo_id: grupo?.id ?? null,
           grupo_nome: grupo?.nome ?? null,
           coordenador_nome: coord?.nome ?? null,
@@ -215,6 +241,8 @@ export function usePainelProfessores() {
           score_faixa: acomp?.score_faixa ?? null,
           elegivel_alocacao: acomp?.elegivel_alocacao ?? null,
           reuniao_status: acomp?.reuniao_status ?? null,
+          data_ultima_reuniao: ultimaReuniao,
+          dias_sem_reuniao: diasSemReuniao,
           aulas_pendentes_qtd: qtd,
           dias_pendente: dias,
           silencio_status: sil?.status ?? null,

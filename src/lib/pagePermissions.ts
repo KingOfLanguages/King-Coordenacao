@@ -46,6 +46,7 @@ export const PAGES: PageDef[] = [
   // ── Reuniões ──
   { key: 'reunioes-dia',    path: '/reunioes-dia',   label: 'Reuniões do Dia',      section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao'] },
   { key: 'agendas',         path: '/admin/agendas',  label: 'Agendas',              section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao'] },
+  { key: 'emails',          path: '/emails',         label: 'Disparo de E-mails',   section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao', 'lider'] },
 
   // ── Dashboard ──
   { key: 'dashboard',       path: '/dashboard',      label: 'Dashboard da Coordenação', section: 'Dashboard', nav: true, exact: true, defaultRoles: ['coordenacao', 'lider'] },

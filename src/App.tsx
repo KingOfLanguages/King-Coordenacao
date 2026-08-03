@@ -30,6 +30,7 @@ import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
 import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
 import { RetencaoPage } from '@/pages/retencao/RetencaoPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
+import { DisparoEmailsPage } from '@/pages/emails/DisparoEmailsPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
 import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
@@ -137,6 +138,11 @@ export default function App() {
               <Route path="/reunioes-dia" element={
                 <ProtectedRoute page="reunioes-dia">
                   <ReunioesDiaPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/emails" element={
+                <ProtectedRoute page="emails">
+                  <DisparoEmailsPage />
                 </ProtectedRoute>
               } />
               <Route path="/acompanhamento" element={
