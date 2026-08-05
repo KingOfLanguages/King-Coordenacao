@@ -55,7 +55,7 @@ export function isPendenteLancamento(r: ReuniaoCard, agora: Date = new Date()): 
   return parts.some(p => p.status === 'pendente')
 }
 
-export type ProfVinculo = { id: string; nome: string; data_inicio: string | null }
+export type ProfVinculo = { id: string; nome: string; data_inicio: string | null; email: string | null }
 
 export type CandidatoVinculo = {
   professor: { id: string; nome: string }
@@ -82,7 +82,10 @@ function emailLocal(email?: string | null): string {
 
 /**
  * Sugere professores para um evento sem vínculo.
- *  1. Match exato por e-mail (em professor_emails) → 100% de confiança.
+ *  1. Match exato por e-mail → 100% de confiança. Duas fontes, só entre ativos
+ *     (profs já vem filtrado por status='ativo'):
+ *       a. professores.email  — e-mail canônico do cadastro/KMS (fonte primária)
+ *       b. professor_emails    — e-mails adicionais aprendidos no vínculo manual
  *  2. Proximidade de nome (título + parte local do e-mail) → até 90%.
  */
 export function sugerirVinculos(
@@ -92,6 +95,10 @@ export function sugerirVinculos(
 ): CandidatoVinculo[] {
   const email = reuniao.professor_email?.toLowerCase().trim()
   if (email) {
+    // 1a. E-mail canônico do professor ativo (professores.email).
+    const porCadastro = profs.find(p => p.email?.toLowerCase().trim() === email)
+    if (porCadastro) return [{ professor: { id: porCadastro.id, nome: porCadastro.nome }, confianca: 100, motivo: 'email' }]
+    // 1b. E-mail adicional aprendido (professor_emails), restrito aos ativos.
     const hit = emails.find(e => e.email.toLowerCase().trim() === email)
     if (hit) {
       const prof = profs.find(p => p.id === hit.professor_id)
@@ -233,7 +240,7 @@ export function useDadosVinculo() {
     queryKey: ['dados-vinculo'],
     queryFn: async () => {
       const [profsRes, emailsRes] = await Promise.all([
-        supabase.from('professores').select('id, nome, data_inicio').eq('status', 'ativo').order('nome'),
+        supabase.from('professores').select('id, nome, data_inicio, email').eq('status', 'ativo').order('nome'),
         supabase.from('professor_emails').select('professor_id, email'),
       ])
       if (profsRes.error)  throw profsRes.error

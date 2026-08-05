@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { extrairCandidatos } from './scrape'
+import { extrairCandidatos, extrairEmailsParticipantes } from './scrape'
 import { GrupoParticipantes } from './GrupoParticipantes'
 import type { MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada, AvaliacaoAlunos, SugestaoProfessor } from '../shared/types'
 
@@ -162,12 +162,15 @@ export function Panel() {
 
     async function checar() {
       const candidatos = extrairCandidatos()
-      const chave = candidatos.join('|')
-      if (!candidatos.length || chave === ultimosCandidatos.current) return
+      const emails = extrairEmailsParticipantes()
+      // E-mail primeiro (identificação inequívoca), nome como fallback — a chave
+      // do dedupe inclui os dois pra reavaliar quando qualquer um deles mudar.
+      const chave = `${candidatos.join('|')}#${emails.join('|')}`
+      if ((!candidatos.length && !emails.length) || chave === ultimosCandidatos.current) return
       ultimosCandidatos.current = chave
 
       setBuscando(true)
-      const r = await enviar({ tipo: 'BUSCAR_PROFESSOR', nomes: candidatos, emails: [] })
+      const r = await enviar({ tipo: 'BUSCAR_PROFESSOR', nomes: candidatos, emails })
       setBuscando(false)
       if (r.ok && 'resultado' in r && r.resultado) setResultado(r.resultado)
     }

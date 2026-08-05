@@ -379,21 +379,34 @@ serve(async (req) => {
   const coordEmails = new Set(Object.keys(emailToUserId))
   console.log('[daily-import] Mapa de coordenadores:', [...coordEmails])
 
-  // Professores ativos (matching por nome) + e-mails conhecidos (matching por e-mail)
+  // Professores ativos: base tanto do match por nome quanto do match por e-mail.
+  // (status='ativo' ⇔ saiu=false AND pausa=false — mantidos em sincronia por trigger.)
   const { data: professoresRaw } = await admin
     .from('professores')
-    .select('id, nome')
+    .select('id, nome, email')
     .eq('saiu',  false)
     .eq('pausa', false)
   const professores = precomputeProfessores(professoresRaw ?? [])
+  const ativosIds = new Set((professoresRaw ?? []).map(p => p.id))
 
   const { data: emailRows } = await admin
     .from('professor_emails')
     .select('professor_id, email')
 
+  // Índice e-mail → professor_id (lower/trim), SÓ para professores ativos — o
+  // match por e-mail resolve para quem está ativo, igual ao match por nome.
+  // Duas fontes:
+  //   1. professor_emails  — e-mails adicionais aprendidos no vínculo (origem='calendar')
+  //   2. professores.email — e-mail canônico do cadastro/KMS (mantido pelo kms-api-sync);
+  //                          fonte primária, então entra por último e vence em conflito.
   const emailToProfessorId: Record<string, string> = {}
   for (const r of emailRows ?? []) {
-    if (r.email) emailToProfessorId[r.email.toLowerCase()] = r.professor_id
+    const e = r.email?.toLowerCase().trim()
+    if (e && ativosIds.has(r.professor_id)) emailToProfessorId[e] = r.professor_id
+  }
+  for (const p of (professoresRaw ?? []) as { id: string; email?: string | null }[]) {
+    const e = p.email?.toLowerCase().trim()
+    if (e) emailToProfessorId[e] = p.id
   }
 
   const today = new Date()
@@ -470,7 +483,7 @@ serve(async (req) => {
         const profEmail = extractProfessorEmail(ev, coordEmails)
 
         // Match por e-mail exato (mais confiável) > match por nome no título (fallback)
-        const emailMatchId = profEmail ? emailToProfessorId[profEmail.toLowerCase()] : undefined
+        const emailMatchId = profEmail ? emailToProfessorId[profEmail.toLowerCase().trim()] : undefined
         const profByName   = matchProfessor(ev, professores)
         const resolvedProfId = emailMatchId ?? profByName?.id ?? null
 

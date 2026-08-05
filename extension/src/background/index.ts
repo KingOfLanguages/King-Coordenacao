@@ -331,12 +331,28 @@ async function handleBuscarProfessor(nomes: string[], emails: string[]): Promise
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { ok: false, erro: 'Não autenticado.' }
 
-  // 1 — Match por e-mail (mais confiável)
+  // Professores ATIVOS (com e-mail canônico) — base do match por e-mail E por nome.
+  const { data: ativosRaw } = await supabase
+    .from('professores')
+    .select('id, nome, email')
+    .eq('status', 'ativo')
+  const professores = ativosRaw ?? []
+
+  // 1 — Match por e-mail (mais confiável), só entre ativos. Duas fontes:
+  //   a. professores.email  — e-mail canônico do cadastro/KMS (fonte primária)
+  //   b. professor_emails    — e-mails adicionais aprendidos no vínculo, restritos aos ativos
   if (emails.length) {
-    const { data: emailRows } = await supabase
+    const ativosIds = new Set(professores.map(p => p.id))
+    const { data: extras } = await supabase
       .from('professor_emails')
       .select('professor_id, email')
-    const profId = matchProfessorPorEmail(emails, emailRows ?? [])
+    const emailRows = [
+      ...(extras ?? []).filter(r => ativosIds.has(r.professor_id)),
+      ...professores
+        .filter((p): p is { id: string; nome: string; email: string } => !!p.email)
+        .map(p => ({ professor_id: p.id, email: p.email })),
+    ]
+    const profId = matchProfessorPorEmail(emails, emailRows)
     if (profId) {
       const resultado = await montarResultado(profId, 'email')
       if (resultado) return { ok: true, resultado }
@@ -345,11 +361,7 @@ async function handleBuscarProfessor(nomes: string[], emails: string[]): Promise
 
   // 2 — Fallback: match por nome, SÓ entre professores ativos.
   if (nomes.length) {
-    const { data: professores } = await supabase
-      .from('professores')
-      .select('id, nome')
-      .eq('status', 'ativo')
-    const match = matchProfessorPorNome(nomes, professores ?? [])
+    const match = matchProfessorPorNome(nomes, professores)
     if (match) {
       const resultado = await montarResultado(match.id, 'nome', confiancaMatch(nomes, match.nome))
       if (resultado) return { ok: true, resultado }
