@@ -43,6 +43,18 @@ export function isReuniaoGrupo(r: ReuniaoCard): boolean {
   return r.participantes.length > 1
 }
 
+/** Fonte única de "pendente de lançamento": a reunião já passou da data e ainda
+ *  não foi lançada — interna não concluída/cancelada, ou 1:1/grupo com algum
+ *  participante ainda `pendente` (inclui reunião sem vínculo, que também precisa
+ *  de tratamento). É o mesmo critério do status visual "atrasada". */
+export function isPendenteLancamento(r: ReuniaoCard, agora: Date = new Date()): boolean {
+  if (new Date(r.data) >= agora) return false
+  if (r.tipo_reuniao === 'interna') return r.status !== 'concluida' && r.status !== 'cancelada'
+  const parts = r.participantes
+  if (parts.length === 0) return r.status !== 'concluida'
+  return parts.some(p => p.status === 'pendente')
+}
+
 export type ProfVinculo = { id: string; nome: string; data_inicio: string | null }
 
 export type CandidatoVinculo = {
@@ -192,6 +204,25 @@ export function useReunioesPeriodo(coordId: string | null, inicio: Date, fim: Da
     queryKey: ['reunioes-periodo', coordId, chave],
     enabled: !!coordId,
     queryFn: () => fetchReunioes(coordId!, inicio.toISOString(), fim.toISOString()),
+    staleTime: 60 * 1000,
+  })
+}
+
+/** Reuniões que já passaram e ainda não foram lançadas (aba "Pendentes de
+ *  lançamento"). Busca uma janela para trás — `lookbackDias` é só um teto de
+ *  segurança para não varrer a tabela inteira; a filtragem real é por
+ *  isPendenteLancamento. */
+export function useReunioesPendentes(coordId: string | null, lookbackDias = 180) {
+  return useQuery({
+    queryKey: ['reunioes-pendentes', coordId, lookbackDias],
+    enabled: !!coordId,
+    queryFn: async () => {
+      const agora = new Date()
+      const inicio = new Date(agora)
+      inicio.setDate(inicio.getDate() - lookbackDias)
+      const janela = await fetchReunioes(coordId!, inicio.toISOString(), agora.toISOString())
+      return janela.filter(r => isPendenteLancamento(r, agora))
+    },
     staleTime: 60 * 1000,
   })
 }

@@ -14,9 +14,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import {
-  useReunioesPeriodo, useDadosVinculo, useVincularProfessor, useConfirmarParticipacao,
-  useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna, usePerfisPorEmail,
-  useDesvincularProfessor, useConfirmarReuniaoGrupo, sugerirVinculos, isReuniaoGrupo,
+  useReunioesPeriodo, useReunioesPendentes, useDadosVinculo, useVincularProfessor,
+  useConfirmarParticipacao, useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna,
+  usePerfisPorEmail, useDesvincularProfessor, useConfirmarReuniaoGrupo, sugerirVinculos,
+  isReuniaoGrupo, isPendenteLancamento,
   type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
@@ -29,6 +30,7 @@ import { toast } from 'sonner'
 
 type DadosVinculo = ReturnType<typeof useDadosVinculo>['data']
 type Modo = 'dia' | 'semana' | 'mes'
+type Subaba = 'agenda' | 'pendentes'
 
 // ─── Datas ────────────────────────────────────────────────────────────────────
 
@@ -100,22 +102,22 @@ const STATUS_VISUAL: Record<EventoStatus, {
 
 /** Status de uma reunião a partir dos participantes (professor) ou de reunioes.status (interna) + data. */
 function statusReuniao(r: ReuniaoCard): EventoStatus {
-  const passou = new Date(r.data) < new Date()
+  // "Atrasada" (= pendente de lançamento) tem uma fonte única de verdade, para
+  // a aba de pendências e o status visual nunca divergirem.
+  if (isPendenteLancamento(r)) return 'atrasada'
 
   if (r.tipo_reuniao === 'interna') {
-    if (r.status === 'concluida') return 'realizada'
     if (r.status === 'cancelada') return 'cancelada'
-    return passou ? 'atrasada' : 'a_fazer'
+    return r.status === 'concluida' ? 'realizada' : 'a_fazer'
   }
 
   const parts = r.participantes
   if (parts.length > 0) {
-    if (parts.some(p => p.status === 'pendente'))  return passou ? 'atrasada' : 'a_fazer'
+    if (parts.some(p => p.status === 'pendente'))  return 'a_fazer' // futura (se passasse, seria atrasada)
     if (parts.some(p => p.status === 'realizada')) return 'realizada'
     return 'cancelada' // todos cancelados
   }
-  if (r.status === 'concluida') return 'realizada'
-  return passou ? 'atrasada' : 'a_fazer'
+  return r.status === 'concluida' ? 'realizada' : 'a_fazer'
 }
 
 /** Status de uma ocorrência de agenda (feedback coletivo): baseada só na data —
@@ -168,6 +170,7 @@ export function ReunioesDiaPage() {
   const [modo, setModo] = useState<Modo>('dia')
   const [dataRef, setDataRef] = useState(() => new Date())
   const [eventoAberto, setEventoAberto] = useState<EventoGrade | null>(null)
+  const [subaba, setSubaba] = useState<Subaba>('agenda')
   const coordId = canSeeAll ? (sel || coordenadores[0]?.id || '') : (profile?.id ?? '')
 
   const [novaAberta, setNovaAberta] = useState(false)
@@ -182,6 +185,8 @@ export function ReunioesDiaPage() {
   const { data: reunioes, isLoading } = useReunioesPeriodo(coordId || null, intervalo.inicio, intervalo.fim)
   const { data: dados } = useDadosVinculo()
   const { data: agendaOcorrencias, isLoading: isLoadingAgenda } = useAgendaReunioesPeriodo(coordId || null, intervalo.inicio, intervalo.fim)
+  const { data: reunioesPendentes, isLoading: isLoadingPendentes } = useReunioesPendentes(coordId || null)
+  const pendentes = reunioesPendentes ?? []
 
   const lista       = reunioes ?? []
   // Deduplica: um horário que já virou reunião de grupo aparece pelo card de grupo
@@ -226,38 +231,42 @@ export function ReunioesDiaPage() {
         <div className="space-y-1.5">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Reuniões</h1>
 
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost" size="icon"
-              onClick={() => navegar(-1)}
-              className="btn-press h-7 w-7 text-ink-secondary hover:text-ink hover:bg-surface-subtle"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost" size="icon"
-              onClick={() => navegar(1)}
-              className="btn-press h-7 w-7 text-ink-secondary hover:text-ink hover:bg-surface-subtle"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-
-            <p className="text-[13px] text-ink-muted capitalize">{rotulo}</p>
-
-            {!veHoje && (
+          {subaba === 'agenda' ? (
+            <div className="flex items-center gap-1.5">
               <Button
-                variant="ghost" size="sm"
-                onClick={() => setDataRef(new Date())}
-                className="btn-press h-6 gap-1 px-2 text-[11px] text-accentBlue hover:bg-accentBlue-soft"
+                variant="ghost" size="icon"
+                onClick={() => navegar(-1)}
+                className="btn-press h-7 w-7 text-ink-secondary hover:text-ink hover:bg-surface-subtle"
               >
-                <CalendarDays className="h-3 w-3" />Hoje
+                <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
-            )}
-          </div>
+              <Button
+                variant="ghost" size="icon"
+                onClick={() => navegar(1)}
+                className="btn-press h-7 w-7 text-ink-secondary hover:text-ink hover:bg-surface-subtle"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+
+              <p className="text-[13px] text-ink-muted capitalize">{rotulo}</p>
+
+              {!veHoje && (
+                <Button
+                  variant="ghost" size="sm"
+                  onClick={() => setDataRef(new Date())}
+                  className="btn-press h-6 gap-1 px-2 text-[11px] text-accentBlue hover:bg-accentBlue-soft"
+                >
+                  <CalendarDays className="h-3 w-3" />Hoje
+                </Button>
+              )}
+            </div>
+          ) : (
+            <p className="text-[13px] text-ink-muted">Reuniões que já passaram e ainda não foram lançadas.</p>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          <ModoToggle modo={modo} onChange={setModo} />
+          {subaba === 'agenda' && <ModoToggle modo={modo} onChange={setModo} />}
 
           {canSeeAll && coordenadores.length > 0 && (
             <Select value={coordId} onValueChange={setSel}>
@@ -274,61 +283,69 @@ export function ReunioesDiaPage() {
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <LegendaStatus />
-        <div className="flex items-center gap-2">
-          {podeCriar && (
-            <Button
-              size="sm"
-              onClick={() => setNovaAberta(true)}
-              className="btn-press h-7 text-[11px] gap-1.5 bg-accentBlue hover:bg-accentBlue-hov text-white"
-            >
-              <Plus className="h-3 w-3" /> Nova reunião
-            </Button>
+      <SubabaToggle subaba={subaba} onChange={setSubaba} pendentes={pendentes.length} />
+
+      {subaba === 'agenda' ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <LegendaStatus />
+            <div className="flex items-center gap-2">
+              {podeCriar && (
+                <Button
+                  size="sm"
+                  onClick={() => setNovaAberta(true)}
+                  className="btn-press h-7 text-[11px] gap-1.5 bg-accentBlue hover:bg-accentBlue-hov text-white"
+                >
+                  <Plus className="h-3 w-3" /> Nova reunião
+                </Button>
+              )}
+              <Toolbar />
+            </div>
+          </div>
+
+          {modo === 'dia' && (
+            <DiaView
+              dia={dataRef}
+              carregando={carregando}
+              lista={lista}
+              listaAgenda={listaAgenda}
+              dados={dados}
+            />
           )}
-          <Toolbar />
-        </div>
-      </div>
 
-      {modo === 'dia' && (
-        <DiaView
-          dia={dataRef}
-          carregando={carregando}
-          lista={lista}
-          listaAgenda={listaAgenda}
-          dados={dados}
-        />
-      )}
+          {modo === 'semana' && (
+            <SemanaView
+              inicioSemana={intervalo.inicio}
+              carregando={carregando}
+              lista={lista}
+              listaAgenda={listaAgenda}
+              onSelecionarDia={irParaODia}
+              onAbrirEvento={setEventoAberto}
+            />
+          )}
 
-      {modo === 'semana' && (
-        <SemanaView
-          inicioSemana={intervalo.inicio}
-          carregando={carregando}
-          lista={lista}
-          listaAgenda={listaAgenda}
-          onSelecionarDia={irParaODia}
-          onAbrirEvento={setEventoAberto}
-        />
-      )}
+          {modo === 'mes' && (
+            <MesView
+              mesRef={dataRef}
+              inicioGrade={intervalo.inicio}
+              carregando={carregando}
+              lista={lista}
+              listaAgenda={listaAgenda}
+              onSelecionarDia={irParaODia}
+              onAbrirEvento={setEventoAberto}
+            />
+          )}
 
-      {modo === 'mes' && (
-        <MesView
-          mesRef={dataRef}
-          inicioGrade={intervalo.inicio}
-          carregando={carregando}
-          lista={lista}
-          listaAgenda={listaAgenda}
-          onSelecionarDia={irParaODia}
-          onAbrirEvento={setEventoAberto}
-        />
-      )}
-
-      {eventoAberto && (
-        <EventoPopover
-          evento={eventoAberto}
-          onClose={() => setEventoAberto(null)}
-          onVerDia={() => { irParaODia(eventoAberto.hora); setEventoAberto(null) }}
-        />
+          {eventoAberto && (
+            <EventoPopover
+              evento={eventoAberto}
+              onClose={() => setEventoAberto(null)}
+              onVerDia={() => { irParaODia(eventoAberto.hora); setEventoAberto(null) }}
+            />
+          )}
+        </>
+      ) : (
+        <PendentesView lista={pendentes} carregando={isLoadingPendentes} dados={dados} />
       )}
 
       {novaAberta && coordId && (
@@ -366,6 +383,44 @@ function ModoToggle({ modo, onChange }: { modo: Modo; onChange: (m: Modo) => voi
           {o.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+// ─── Sub-abas (Agenda / Pendentes de lançamento) ──────────────────────────────
+
+function SubabaToggle({ subaba, onChange, pendentes }: {
+  subaba: Subaba; onChange: (s: Subaba) => void; pendentes: number
+}) {
+  const opcoes: { id: Subaba; label: string; badge?: number }[] = [
+    { id: 'agenda',    label: 'Agenda' },
+    { id: 'pendentes', label: 'Pendentes de lançamento', badge: pendentes },
+  ]
+  return (
+    <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
+      {opcoes.map(o => {
+        const ativa = subaba === o.id
+        return (
+          <button
+            key={o.id}
+            onClick={() => onChange(o.id)}
+            className={cn(
+              'btn-press inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
+              ativa ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+            )}
+          >
+            {o.label}
+            {o.badge != null && o.badge > 0 && (
+              <span className={cn(
+                'inline-flex items-center justify-center rounded-full px-1.5 h-[18px] min-w-[18px] text-[10.5px] font-semibold tabular-nums',
+                'bg-urg-medBg text-urg-medFg',
+              )}>
+                {o.badge}
+              </span>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -461,6 +516,97 @@ function DiaView({ dia, carregando, lista, listaAgenda, dados }: {
           </div>
         </section>
       )}
+    </div>
+  )
+}
+
+// ─── Visão Pendentes de lançamento — reuniões passadas ainda não lançadas ─────
+// Reaproveita os mesmos cards da Agenda (que já trazem os botões de lançar),
+// agrupando por dia (mais recente primeiro) e mostrando o atraso.
+
+function diasDeAtraso(dia: Date): number {
+  const hoje = inicioDoDia(new Date()).getTime()
+  const d = inicioDoDia(dia).getTime()
+  return Math.round((hoje - d) / 86_400_000)
+}
+
+function rotuloAtraso(dias: number): string {
+  if (dias <= 0) return 'hoje'
+  if (dias === 1) return 'ontem'
+  return `há ${dias} dias`
+}
+
+function agruparPendentesPorDia(lista: ReuniaoCard[]): { chave: string; dia: Date; itens: ReuniaoCard[] }[] {
+  const mapa = new Map<string, ReuniaoCard[]>()
+  for (const r of lista) {
+    const k = chaveDia(r.data)
+    const arr = mapa.get(k) ?? []
+    arr.push(r)
+    mapa.set(k, arr)
+  }
+  return [...mapa.values()]
+    .map(itens => ({
+      chave: chaveDia(itens[0].data),
+      dia:   new Date(itens[0].data),
+      itens: [...itens].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()),
+    }))
+    .sort((a, b) => b.dia.getTime() - a.dia.getTime())
+}
+
+function PendentesView({ lista, carregando, dados }: {
+  lista: ReuniaoCard[]
+  carregando: boolean
+  dados: DadosVinculo
+}) {
+  const grupos = useMemo(() => agruparPendentesPorDia(lista), [lista])
+
+  if (carregando) {
+    return (
+      <div className="space-y-3 max-w-[640px]">
+        {[1, 2, 3].map(i => <div key={i} className="card-surface h-28 animate-pulse" />)}
+      </div>
+    )
+  }
+
+  if (lista.length === 0) {
+    return (
+      <div className="card-surface p-10 text-center max-w-[640px]">
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-urg-lowBg text-urg-lowFg">
+          <Check className="h-5 w-5" />
+        </div>
+        <p className="text-[14px] font-medium text-ink">Tudo em dia</p>
+        <p className="text-[13px] text-ink-muted mt-1">Nenhuma reunião passada aguardando lançamento.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6 max-w-[640px]">
+      <p className="text-[13px] text-ink-secondary">
+        <span className="font-semibold text-ink tabular-nums">{lista.length}</span>{' '}
+        {lista.length === 1 ? 'reunião aguardando' : 'reuniões aguardando'} lançamento.
+      </p>
+
+      {grupos.map(g => (
+        <section key={g.chave} className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <p className="label-micro capitalize">
+              {g.dia.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+            </p>
+            <span className="rounded-full bg-urg-medBg px-2 py-0.5 text-[10px] font-medium text-urg-medFg">
+              {rotuloAtraso(diasDeAtraso(g.dia))}
+            </span>
+            <span className="text-[11px] text-ink-muted tabular-nums">
+              {g.itens.length} {g.itens.length === 1 ? 'reunião' : 'reuniões'}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {g.itens.map(r => isReuniaoGrupo(r)
+              ? <ReuniaoGrupoCardView key={r.id} reuniao={r} />
+              : <ReuniaoCardView key={r.id} reuniao={r} dados={dados} />)}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }
