@@ -72,6 +72,26 @@ export function useDashboardGeralReunioes() {
   })
 }
 
+// Reuniões realizadas por dia (grão fino) — base da meta multi-período. O RPC
+// mensal acima não permite a visão semanal; este devolve por dia e o cliente
+// agrupa por semana/mês/trimestre/ano.
+export interface ReuniaoDatadaRow {
+  grupo_id   : string | null
+  data       : string   // 'AAAA-MM-DD'
+  realizadas : number
+}
+
+export function useDashboardGeralReunioesDatadas() {
+  return useQuery({
+    queryKey: ['dashboard-geral', 'reunioes-datadas'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('dashboard_geral_reunioes_datadas')
+      if (error) throw error
+      return (data ?? []) as ReuniaoDatadaRow[]
+    },
+  })
+}
+
 export function useDashboardGeralMovimento() {
   return useQuery({
     queryKey: ['dashboard-geral', 'movimento'],
@@ -108,28 +128,58 @@ export function useDashboardGeralMetaProfessores() {
 
 export interface MetaReunioes {
   meta: number
-  admissoesMes: number
-  profs2a3: number
-  profs4: number
+  admissoes: number   // admissões dentro do período vigente
+  profs2a3: number    // snapshot atual (independe do período)
+  profs4: number      // snapshot atual (independe do período)
+}
+
+/** Quantos "meses de cadência" cabem no período — fator de escala da meta. */
+const MESES_NO_PERIODO: Record<Granularidade, number> = {
+  semana:    7 / 30.44, // ~0,23 mês
+  mes:       1,
+  trimestre: 3,
+  ano:       12,
+}
+
+/** Início do período vigente (semana começa na segunda), à meia-noite local. */
+export function inicioDoPeriodo(periodo: Granularidade, ref: Date = new Date()): Date {
+  const y = ref.getFullYear(), m = ref.getMonth(), d = ref.getDate()
+  switch (periodo) {
+    case 'ano':       return new Date(y, 0, 1)
+    case 'trimestre': return new Date(y, Math.floor(m / 3) * 3, 1)
+    case 'mes':       return new Date(y, m, 1)
+    case 'semana':    return new Date(y, m, d - ((ref.getDay() + 6) % 7)) // segunda=0
+  }
 }
 
 /**
- * Quantas reuniões a coordenação deve realizar no mês vigente para um conjunto de
- * professores ativos, pela régua de tempo de casa (idêntica ao Dashboard da Coordenação):
- *   admissões do mês (1x cada) + professores de 2–3 meses (1x cada) + 33,3% dos +4 meses.
+ * Quantas reuniões a coordenação deve realizar NO PERÍODO vigente para um conjunto
+ * de professores ativos, pela régua de tempo de casa (mesma do Dashboard da
+ * Coordenação): admissões do período (1x cada) + professores de 2–3 meses
+ * (cadência mensal) + 4+ meses (cadência trimestral).
+ *
+ * A cadência é escalada em regime permanente: o snapshot atual de professores por
+ * faixa é multiplicado pelo nº de meses/trimestres que cabem no período. Com
+ * `periodo='mes'` reduz exatamente à fórmula mensal original
+ *   (admissões do mês + profs 2–3 + 33,3% dos +4).
  */
-export function metaReunioesMensal(profs: { data_inicio: string | null }[]): MetaReunioes {
-  const now = new Date()
-  const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-  let admissoesMes = 0, profs2a3 = 0, profs4 = 0
+export function metaReunioesPeriodo(
+  profs: { data_inicio: string | null }[],
+  periodo: Granularidade = 'mes',
+  ref: Date = new Date(),
+): MetaReunioes {
+  const inicio = inicioDoPeriodo(periodo, ref).getTime()
+  const mesesP = MESES_NO_PERIODO[periodo]
+  let admissoes = 0, profs2a3 = 0, profs4 = 0
   for (const p of profs) {
-    if (p.data_inicio && new Date(p.data_inicio).getTime() >= startMonth) admissoesMes++
+    if (p.data_inicio && new Date(p.data_inicio).getTime() >= inicio) admissoes++
     const t = mesesDeCasa(p.data_inicio)
     if (t !== null && t >= 2 && t <= 3) profs2a3++
     if (t !== null && t > 4) profs4++
   }
-  const meta = admissoesMes + profs2a3 + Math.round(0.333 * profs4)
-  return { meta, admissoesMes, profs2a3, profs4 }
+  // 2–3 meses = mensal (×mesesP); 4+ meses = trimestral (×mesesP/3).
+  const meta = admissoes + Math.round(profs2a3 * mesesP) + Math.round(profs4 * mesesP / 3)
+  return { meta, admissoes, profs2a3, profs4 }
 }
 
 // ─── Agrupamento por período (semana / mês / trimestre / ano) ────────────────

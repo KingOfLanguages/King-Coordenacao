@@ -11,9 +11,10 @@ import {
 import { useGrupos } from '@/hooks/useGrupos'
 import {
   useDashboardGeralProfessores, useDashboardGeralScoreTrend,
-  useDashboardGeralReunioes, useDashboardGeralMovimento, useDashboardGeralMetaProfessores,
+  useDashboardGeralReunioes, useDashboardGeralReunioesDatadas, useDashboardGeralMovimento,
+  useDashboardGeralMetaProfessores,
   SCORE_BUCKETS, bucketFor, media, mediana, motivosAlerta, agregarPorCoordenacao,
-  agruparMovimento, metaReunioesMensal, LABEL_ALERTA, LABEL_GRANULARIDADE,
+  agruparMovimento, metaReunioesPeriodo, inicioDoPeriodo, LABEL_ALERTA, LABEL_GRANULARIDADE,
   type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta, type Granularidade,
 } from '@/hooks/useDashboardGeral'
 import { IncidentesDashboardSection } from './IncidentesDashboardSection'
@@ -32,6 +33,25 @@ const ALERTA_CHIP: Record<MotivoAlerta, string> = {
 }
 
 const pct1 = (n: number) => n.toFixed(1).replace('.', ',')
+
+/** Data local → 'AAAA-MM-DD' (sem passar por UTC, pra bater com o período local). */
+const ymdLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// Rótulos da meta multi-período.
+const TITULO_META: Record<Granularidade, string> = {
+  semana: 'Meta da semana', mes: 'Meta do mês', trimestre: 'Meta do trimestre', ano: 'Meta do ano',
+}
+const ADMISSOES_LABEL: Record<Granularidade, string> = {
+  semana: 'Admissões na semana', mes: 'Admissões do mês', trimestre: 'Admissões no trimestre', ano: 'Admissões no ano',
+}
+const ZONA_META: Record<Granularidade, string> = {
+  semana: 'semana vigente', mes: 'mês vigente', trimestre: 'trimestre vigente', ano: 'ano vigente',
+}
+// Fator visível da faixa 4+ meses (cadência trimestral) na janela escolhida.
+const NOTA_MULT_4: Record<Granularidade, string> = {
+  semana: '~1/13', mes: '33,3%', trimestre: '100%', ano: '4×',
+}
 
 // ─── Ordenação genérica ─────────────────────────────────────────────────────
 
@@ -81,6 +101,7 @@ export function DashboardGeralPage() {
   const { data: rows = [], isLoading } = useDashboardGeralProfessores()
   const { data: trend = [] } = useDashboardGeralScoreTrend()
   const { data: reunioesPeriodo = [] } = useDashboardGeralReunioes()
+  const { data: reunioesDatadas = [] } = useDashboardGeralReunioesDatadas()
   const { data: movimento = [] } = useDashboardGeralMovimento()
   const { data: metaProfs = [] } = useDashboardGeralMetaProfessores()
   const { data: grupos = [] } = useGrupos()
@@ -91,6 +112,7 @@ export function DashboardGeralPage() {
   const [dataInicial, setDataInicial] = useState('')
   const [dataFinal, setDataFinal] = useState('')
   const [granMovimento, setGranMovimento] = useState<Granularidade>('mes')
+  const [granMeta, setGranMeta] = useState<Granularidade>('mes')
   const [expandido, setExpandido] = useState<Set<string>>(new Set())
 
   const filteredRows = useMemo(() => rows.filter(r =>
@@ -145,24 +167,26 @@ export function DashboardGeralPage() {
     return { linhas, total }
   }, [reunioesPeriodo, dataInicial, dataFinal, coordenacaoFiltro, grupos])
 
-  // Reuniões do mês vigente vs meta esperada (régua de tempo de casa).
-  // Sempre o mês corrente (ignora o intervalo de datas); respeita o filtro de coordenação.
-  const reunioesMesVsMeta = useMemo(() => {
+  // Reuniões do período vigente (semana/mês/trimestre/ano) vs meta esperada
+  // (régua de tempo de casa). Sempre o período CORRENTE até hoje (ignora o
+  // intervalo de datas dos filtros); respeita o filtro de coordenação.
+  const reunioesPeriodoVsMeta = useMemo(() => {
     const now = new Date()
-    const anoMesAtual = now.getFullYear() * 100 + (now.getMonth() + 1)
+    const inicioStr = ymdLocal(inicioDoPeriodo(granMeta, now))
+    const hojeStr = ymdLocal(now)
     let realizadas = 0
-    for (const r of reunioesPeriodo) {
-      if (r.ano_mes !== anoMesAtual) continue
+    for (const r of reunioesDatadas) {
+      if (r.data < inicioStr || r.data > hojeStr) continue
       if (coordenacaoFiltro !== TODAS && r.grupo_id !== coordenacaoFiltro) continue
       realizadas += r.realizadas
     }
     const profsDoFiltro = coordenacaoFiltro === TODAS
       ? metaProfs
       : metaProfs.filter(p => p.grupo_id === coordenacaoFiltro)
-    const { meta, admissoesMes, profs2a3, profs4 } = metaReunioesMensal(profsDoFiltro)
+    const { meta, admissoes, profs2a3, profs4 } = metaReunioesPeriodo(profsDoFiltro, granMeta, now)
     const pct = meta > 0 ? Math.min(100, Math.round((realizadas / meta) * 100)) : 0
-    return { realizadas, meta, admissoesMes, profs2a3, profs4, pct, atingiu: meta > 0 && realizadas >= meta }
-  }, [reunioesPeriodo, coordenacaoFiltro, metaProfs])
+    return { realizadas, meta, admissoes, profs2a3, profs4, pct, atingiu: meta > 0 && realizadas >= meta }
+  }, [reunioesDatadas, granMeta, coordenacaoFiltro, metaProfs])
 
   // Movimento de professores (entradas/saídas) — respeita filtro de coordenação + datas
   const movimentoFiltrado = useMemo(() => movimento.filter(m =>
@@ -490,22 +514,38 @@ export function DashboardGeralPage() {
 
       {/* ══ ZONA: REUNIÕES ══ */}
       <section className="mb-11 space-y-4">
-        <Zone label="Reuniões" meta="mês vigente" />
+        <Zone label="Reuniões" meta={ZONA_META[granMeta]} />
         <div className="grid gap-4 lg:grid-cols-3">
-          {/* Meta do mês */}
+          {/* Meta do período (semana / mês / trimestre / ano) */}
           <div className="card-surface p-5 space-y-4">
-            <SectionHead title="Meta do mês" />
+            <SectionHead
+              title={TITULO_META[granMeta]}
+              right={
+                <Select value={granMeta} onValueChange={v => setGranMeta(v as Granularidade)}>
+                  <SelectTrigger className="h-8 w-[120px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-surface-canvas border-line text-ink">
+                    {(['semana', 'mes', 'trimestre', 'ano'] as Granularidade[]).map(g => (
+                      <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+            />
             <div className="flex items-center gap-5">
-              <Ring pct={reunioesMesVsMeta.pct} color={reunioesMesVsMeta.atingiu ? 'var(--urg-low-fg)' : 'var(--accent-blue)'} />
+              <Ring pct={reunioesPeriodoVsMeta.pct} color={reunioesPeriodoVsMeta.atingiu ? 'var(--urg-low-fg)' : 'var(--accent-blue)'} />
               <div className="flex-1 text-[12px] text-ink-secondary space-y-2">
-                <MetaLinha label="Realizadas" value={reunioesMesVsMeta.realizadas} strong={reunioesMesVsMeta.atingiu} />
-                <MetaLinha label="Meta esperada" value={reunioesMesVsMeta.meta} />
-                <MetaLinha label="Admissões do mês" value={reunioesMesVsMeta.admissoesMes} />
-                <MetaLinha label="Professores 2–3 meses" value={reunioesMesVsMeta.profs2a3} last />
+                <MetaLinha label="Realizadas" value={reunioesPeriodoVsMeta.realizadas} strong={reunioesPeriodoVsMeta.atingiu} />
+                <MetaLinha label="Meta esperada" value={reunioesPeriodoVsMeta.meta} />
+                <MetaLinha label={ADMISSOES_LABEL[granMeta]} value={reunioesPeriodoVsMeta.admissoes} />
+                <MetaLinha label="Professores 2–3 meses" value={reunioesPeriodoVsMeta.profs2a3} />
+                <MetaLinha label="Professores 4+ meses" value={reunioesPeriodoVsMeta.profs4} last />
               </div>
             </div>
             <p className="text-[10.5px] text-ink-subtle leading-relaxed">
-              Meta = admissões do mês + professores de 2–3 meses + 33,3% dos de 4+ meses
+              Meta = {ADMISSOES_LABEL[granMeta].toLowerCase()} + professores de 2–3 meses (cadência mensal)
+              + {NOTA_MULT_4[granMeta]} dos de 4+ meses (cadência trimestral), no {ZONA_META[granMeta]}
               {coordenacaoFiltro === TODAS ? ', somando todas as coordenações.' : ', na coordenação selecionada.'}
             </p>
           </div>
