@@ -18,6 +18,7 @@ import {
   type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta, type Granularidade,
 } from '@/hooks/useDashboardGeral'
 import { IncidentesDashboardSection } from './IncidentesDashboardSection'
+import { TurnoverDashboardSection } from './TurnoverDashboardSection'
 import { cn } from '@/lib/utils'
 
 const CORES_FAIXA = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#16a34a']
@@ -591,6 +592,16 @@ export function DashboardGeralPage() {
         />
       </section>
 
+      {/* ══ ZONA: TURNOVER ══ */}
+      <section className="mb-11 space-y-4">
+        <Zone label="Turnover" meta="professor e aluno, por coordenação" />
+        <TurnoverDashboardSection
+          grupoId={coordenacaoFiltro === TODAS ? null : coordenacaoFiltro}
+          dataInicial={dataInicial}
+          dataFinal={dataFinal}
+        />
+      </section>
+
       {/* ══ ZONA: MOVIMENTO & ALERTAS ══ */}
       <section className="space-y-4">
         <Zone label="Movimento & alertas" />
@@ -633,7 +644,8 @@ export function DashboardGeralPage() {
               </ResponsiveContainer>
             )}
             <p className="text-[10.5px] text-ink-subtle">
-              Saídas passaram a ser datadas em 2026-07-10; desligamentos anteriores não aparecem na série temporal.
+              Entradas e saídas com as datas reais da King, cobrindo todo o histórico — as mesmas
+              que alimentam o turnover acima.
             </p>
           </div>
 

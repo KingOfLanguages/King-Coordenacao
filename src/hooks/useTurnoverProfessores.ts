@@ -79,6 +79,38 @@ export function useTurnoverProfessores(desde: string, ate: string) {
   })
 }
 
+// Turnover de ALUNO — mesma fórmula do de professor (migration 20260758), sobre
+// a matrícula na escola e a saída da escola. Troca de professor NÃO é saída.
+//
+// Cuidado ao ler períodos antigos: a API devolve as saídas de aluno dos últimos
+// ~12 meses, então antes disso a base de ativos fica inflada. A tabela é
+// append-only, então a janela confiável cresce sozinha.
+export function useTurnoverAlunos(desde: string, ate: string) {
+  return useQuery({
+    queryKey: ['turnover-alunos', desde, ate],
+    queryFn: async () => {
+      const args = { p_desde: desde, p_ate: ate }
+      const [resumo, porGrupo] = await Promise.all([
+        supabase.rpc('turnover_alunos_resumo', args),
+        supabase.rpc('turnover_alunos_por_grupo', args),
+      ])
+      if (resumo.error) throw resumo.error
+      if (porGrupo.error) throw porGrupo.error
+
+      const linha = (resumo.data as Record<string, unknown>[] | null)?.[0]
+      return {
+        resumo: linha ? resumoDe(linha) : RESUMO_VAZIO,
+        porGrupo: ((porGrupo.data ?? []) as Record<string, unknown>[]).map((r): TurnoverGrupo => ({
+          grupo_id: (r.grupo_id as string | null) ?? null,
+          grupo_nome: String(r.grupo_nome),
+          ...resumoDe(r),
+        })),
+      }
+    },
+    enabled: !!desde && !!ate,
+  })
+}
+
 // "Nao informado" (sem til) é como a categoria default chega da King. Os motivos
 // livres vêm com prefixo "Outro: " e texto inteiro do professor — a lista mostra
 // o texto cru, mas o rótulo curto serve pra agrupar/legendar.
