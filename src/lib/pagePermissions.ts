@@ -51,7 +51,7 @@ export const PAGES: PageDef[] = [
   // ── Dashboard ──
   { key: 'dashboard',       path: '/dashboard',      label: 'Dashboard da Coordenação', section: 'Dashboard', nav: true, exact: true, defaultRoles: ['coordenacao', 'lider'] },
   { key: 'dashboard-geral', path: '/dashboard/geral', label: 'Dashboard Geral',     section: 'Dashboard',   nav: true,  defaultRoles: ['coordenacao', 'lider'] },
-  { key: 'retencao',        path: '/retencao',       label: 'Retenção & Turnover',  section: 'Dashboard',   nav: true,  defaultRoles: ['coordenacao', 'lider'] },
+  { key: 'retencao',        path: '/retencao',       label: 'Turnover & Retenção',  section: 'Dashboard',   nav: true,  defaultRoles: ['coordenacao', 'lider'] },
 
   // ── Professores ──
   { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

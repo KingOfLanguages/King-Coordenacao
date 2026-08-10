@@ -1,39 +1,62 @@
 import { useState } from 'react'
-import { useRetencao } from '@/hooks/useRetencao'
-import { motivoSaidaLabel } from '@/lib/cicloVida'
+import { useSearchParams } from 'react-router-dom'
+import { TurnoverProfessorTab } from './TurnoverProfessorTab'
+import { RetencaoAlunoTab } from './RetencaoAlunoTab'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-// Retenção/turnover de aluno por grupo (Fase 2 da API de Acompanhamento).
-// churn = saiu da escola; turnover = trocou de professor, segue matriculado.
+// Duas medidas que a coordenação confundia porque dividiam a mesma página:
+//
+//   Professor — entrada/saída do PROFESSOR. É o que a plataforma do King chama
+//               de turnover e o número que se compara com eles. Espelho fiel:
+//               mesma fórmula, mesmos motivos, mesmas faixas (migration 20260757).
+//   Aluno     — saída de ALUNO (churn da escola × troca de professor). Era o
+//               conteúdo original desta página; nunca teve como bater com a King,
+//               porque mede outra coisa.
+
+type Aba = 'professor' | 'aluno'
+
+// toISOString() converte pra UTC e, em fuso negativo, joga uma data construída à
+// meia-noite local pro dia anterior. Formata direto dos campos locais.
+const fmt = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 const hoje = new Date()
-const fmt = (d: Date) => d.toISOString().slice(0, 10)
-const PADRAO_DESDE = fmt(new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1))
-const PADRAO_ATE   = fmt(hoje)
+// Padrão = mês corrente, igual ao filtro que abre na página da King.
+const PADRAO_DESDE = fmt(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
+const PADRAO_ATE   = fmt(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0))
+
+const ATALHOS: [string, () => [string, string]][] = [
+  ['Mês atual', () => [
+    fmt(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),
+    fmt(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)),
+  ]],
+  ['Mês passado', () => [
+    fmt(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)),
+    fmt(new Date(hoje.getFullYear(), hoje.getMonth(), 0)),
+  ]],
+  ['Últimos 6 meses', () => [
+    fmt(new Date(hoje.getFullYear(), hoje.getMonth() - 5, 1)),
+    fmt(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)),
+  ]],
+  ['Ano', () => [fmt(new Date(hoje.getFullYear(), 0, 1)), fmt(new Date(hoje.getFullYear(), 11, 31))]],
+]
 
 export function RetencaoPage() {
+  const [params] = useSearchParams()
+  const [aba, setAba] = useState<Aba>(params.get('aba') === 'aluno' ? 'aluno' : 'professor')
   const [desde, setDesde] = useState(PADRAO_DESDE)
   const [ate, setAte]     = useState(PADRAO_ATE)
-  const { data, isLoading } = useRetencao(desde, ate)
-
-  const porGrupo  = data?.porGrupo ?? []
-  const porMotivo = data?.porMotivo ?? []
-
-  const totalSaidas   = porGrupo.reduce((s, r) => s + r.total_saidas, 0)
-  const totalChurn    = porGrupo.reduce((s, r) => s + r.churn, 0)
-  const totalTurnover = porGrupo.reduce((s, r) => s + r.turnover, 0)
-  const semFlag       = totalSaidas - totalChurn - totalTurnover
-  const pct = (n: number) => (totalSaidas ? Math.round((n / totalSaidas) * 100) : 0)
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-5">
-      {/* Hero */}
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-[19px] font-semibold text-ink tracking-[-0.01em]">Retenção &amp; Turnover</h1>
+          <h1 className="text-[19px] font-semibold text-ink tracking-[-0.01em]">Turnover &amp; Retenção</h1>
           <p className="text-[12.5px] text-ink-muted mt-0.5">
-            Saídas de aluno no período, separando churn da escola de troca de professor.
+            {aba === 'professor'
+              ? 'Entrada e saída de professor no período — mesma metodologia da plataforma do King.'
+              : 'Saídas de aluno no período, separando churn da escola de troca de professor.'}
           </p>
         </div>
         <div className="flex items-end gap-2">
@@ -48,94 +71,46 @@ export function RetencaoPage() {
         </div>
       </header>
 
-      {/* Métricas em faixas (gap-px, sem card-in-card) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px rounded-2xl overflow-hidden bg-line-soft ring-1 ring-line-soft">
-        <Tile valor={totalSaidas}   rotulo="Saídas no período" />
-        <Tile valor={totalChurn}    rotulo="Saíram da escola"      sub={`${pct(totalChurn)}% · churn`} destaque />
-        <Tile valor={totalTurnover} rotulo="Trocaram de professor" sub={`${pct(totalTurnover)}% · turnover`} />
-        <Tile valor={semFlag}       rotulo="Sem classificação"     sub="saída sem flag" />
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
+          {([['professor', 'Professor'], ['aluno', 'Aluno']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setAba(id)}
+              className={cn(
+                'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
+                aba === id ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {ATALHOS.map(([label, calc]) => {
+            const [d, a] = calc()
+            const ativo = d === desde && a === ate
+            return (
+              <button
+                key={label}
+                onClick={() => { setDesde(d); setAte(a) }}
+                className={cn(
+                  'btn-press px-2.5 py-1 rounded-full text-[11.5px] transition-colors',
+                  ativo
+                    ? 'bg-accentBlue-soft text-accentBlue font-medium'
+                    : 'text-ink-muted hover:text-ink hover:bg-surface-subtle',
+                )}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      <p className="text-[11px] text-ink-subtle leading-relaxed">
-        Taxa de retenção (%) precisa de uma base de comparação por período — <strong className="font-medium">a definir com o Lucas</strong>.
-        Aqui os números são contagens absolutas de saídas. “Não informado” em motivo é categoria válida
-        (a maioria das saídas automáticas), não dado faltante. O grupo é o atual do professor.
-      </p>
-
-      {/* Por grupo */}
-      <section className="card-surface p-5 space-y-3">
-        <h2 className="label-micro">Por coordenação / grupo</h2>
-        {isLoading ? (
-          <p className="text-[12px] text-ink-muted">Carregando…</p>
-        ) : porGrupo.length === 0 ? (
-          <p className="text-[12px] text-ink-muted">Nenhuma saída no período.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
-              <thead>
-                <tr className="text-[10.5px] uppercase tracking-[0.06em] text-ink-muted">
-                  <th className="text-left font-semibold py-2">Grupo</th>
-                  <th className="text-right font-semibold py-2">Saídas</th>
-                  <th className="text-right font-semibold py-2">Escola (churn)</th>
-                  <th className="text-right font-semibold py-2">Professor (turnover)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line-soft/60">
-                {porGrupo.map(g => (
-                  <tr key={g.grupo_id ?? 'sem'}>
-                    <td className="py-2 text-ink">{g.grupo_nome}</td>
-                    <td className="py-2 text-right tabular-nums text-ink-secondary">{g.total_saidas}</td>
-                    <td className="py-2 text-right tabular-nums text-brand font-medium">{g.churn}</td>
-                    <td className="py-2 text-right tabular-nums text-ink-secondary">{g.turnover}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Por motivo */}
-      <section className="card-surface p-5 space-y-3">
-        <h2 className="label-micro">Por motivo de saída</h2>
-        {porMotivo.length === 0 ? (
-          <p className="text-[12px] text-ink-muted">Sem dados no período.</p>
-        ) : (
-          <ul className="space-y-2.5">
-            {porMotivo.map(m => {
-              const largura = totalSaidas ? Math.max(2, Math.round((m.total / totalSaidas) * 100)) : 0
-              return (
-                <li key={m.motivo} className="space-y-1">
-                  <div className="flex items-center justify-between gap-2 text-[12px]">
-                    <span className="text-ink-secondary">{motivoSaidaLabel(m.motivo)}</span>
-                    <span className="tabular-nums text-ink-muted">
-                      {m.total} <span className="text-ink-subtle">({m.churn} escola · {m.turnover} prof.)</span>
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-surface-subtle overflow-hidden">
-                    <div className="h-full rounded-full bg-accentBlue/60" style={{ width: `${largura}%` }} />
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
-    </div>
-  )
-}
-
-function Tile({ valor, rotulo, sub, destaque }: { valor: number; rotulo: string; sub?: string; destaque?: boolean }) {
-  return (
-    <div className="bg-surface-canvas p-4">
-      <p className={cn(
-        'text-[26px] font-semibold tabular-nums tracking-[-0.02em]',
-        destaque ? 'text-brand' : 'text-ink',
-      )}>
-        {valor}
-      </p>
-      <p className="text-[11.5px] text-ink-secondary mt-0.5">{rotulo}</p>
-      {sub && <p className="text-[10.5px] text-ink-subtle mt-0.5">{sub}</p>}
+      {aba === 'professor'
+        ? <TurnoverProfessorTab desde={desde} ate={ate} />
+        : <RetencaoAlunoTab     desde={desde} ate={ate} />}
     </div>
   )
 }

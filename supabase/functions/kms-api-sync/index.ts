@@ -88,10 +88,17 @@ interface AlertasKms {
   trocas_professor?: unknown[]
 }
 
+interface TurnoverSaidaKms {
+  data: string | null
+  motivo: string | null
+  quantidade_alunos_realocados: number | null
+  saiu_no_periodo: boolean | null
+}
+
 interface TurnoverKms {
   data_entrada: string | null
   entrou_no_periodo: boolean | null
-  saida: unknown
+  saida: TurnoverSaidaKms | null
 }
 
 interface ProfessorKms {
@@ -122,6 +129,17 @@ function mapStatus(status: string): 'ativo' | 'pausa' | 'desligado' {
   if (s === 'desligado') return 'desligado'
   if (s === 'pausado' || s === 'pausa') return 'pausa'
   return 'ativo'
+}
+
+// A base do King tem data corrompida em quantidade não-trivial: '0001-01-01'
+// (sentinela de "vazio"), além de 1979, 1994, 2060… Datas assim envenenam
+// qualquer contagem por período, então viram NULL — que o cálculo de ativos
+// trata como "já estava lá" (ver migration 20260757).
+function dataSana(d: string | null | undefined): string | null {
+  if (!d) return null
+  const s = String(d).slice(0, 10)
+  const ano = Number(s.slice(0, 4))
+  return ano >= 2015 && ano <= 2030 ? s : null
 }
 
 // Primeiro valor não-vazio (para COALESCE de contato: valor do banco vence,
@@ -370,6 +388,30 @@ serve(async (req) => {
           const { error } = await admin
             .from('professor_ciclo_vida_alunos')
             .upsert(cicloPayload, { onConflict: 'professor_id,aluno_id,data_saida' })
+          if (error) throw new Error(error.message)
+        }
+
+        // 6 — Turnover do PROFESSOR (entrada/saída dele, não do aluno). O mesmo
+        // bloco já ia pro snapshot professor_acompanhamento, que é sobrescrito a
+        // cada rodada; aqui ele vira tabela própria pra sustentar a agregação
+        // por período. Ver migration 20260757.
+        const turnoverPayload = pagina.data.flatMap(p => {
+          const professorId = idByKmsId.get(String(p.professor_id))
+          if (!professorId) return []
+          const s = p.turnover?.saida ?? null
+          return [{
+            professor_id: professorId,
+            data_entrada: dataSana(p.turnover?.data_entrada ?? p.data_entrada),
+            data_saida: dataSana(s?.data),
+            motivo_saida: s?.motivo ?? null,
+            alunos_realocados: s?.quantidade_alunos_realocados ?? null,
+            atualizado_em: new Date().toISOString(),
+          }]
+        })
+        if (turnoverPayload.length) {
+          const { error } = await admin
+            .from('professor_turnover')
+            .upsert(turnoverPayload, { onConflict: 'professor_id' })
           if (error) throw new Error(error.message)
         }
 
