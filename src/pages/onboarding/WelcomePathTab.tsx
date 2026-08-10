@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { dataBR, fmtDuracao, diasAte } from '@/lib/formato'
+import { somarDiasUteis } from '@/lib/diasUteis'
 import { LinkTrilha } from './LinkTrilha'
 import { useProfessores } from '@/hooks/useProfessores'
 import { useOnboarding } from '@/hooks/useOnboarding'
@@ -58,16 +59,16 @@ function estadoCelula(p: ProgressoAdmin | undefined, etapa: EtapaAdmin, dataInic
   if (p?.revisao_pendente) return 'revisao'
   if (p?.concluida_em) return 'concluida'
   const vencida = etapa.prazo_dias != null && dataInicio != null
-    && diasAte(dataBRparaISO(dataInicio, etapa.prazo_dias)) < 0
+    && diasAte(prazoISO(dataInicio, etapa.prazo_dias)) < 0
   if (vencida) return 'atrasada'
   if (p?.iniciada_em || (p?.tentativas ?? 0) > 0) return 'andamento'
   return 'vazia'
 }
 
-/** data_inicio + (prazo_dias - 1) em ISO — o dia limite da etapa. */
-function dataBRparaISO(dataInicio: string, prazoDias: number): string {
-  const [a, m, d] = dataInicio.slice(0, 10).split('-').map(Number)
-  return new Date(Date.UTC(a, m - 1, d + prazoDias - 1)).toISOString().slice(0, 10)
+/** Dia limite da etapa: o N-ésimo dia ÚTIL a partir do início (fim de semana não
+ *  conta — mesma régua do contador de dias da aba Mensagens). */
+function prazoISO(dataInicio: string, prazoDias: number): string {
+  return somarDiasUteis(dataInicio, prazoDias)
 }
 
 function ChipSituacao({ linha }: { linha: LinhaTrilha }) {
@@ -138,7 +139,7 @@ export function WelcomePathTab() {
         ? ativas.find(e =>
             e.prazo_dias != null
             && !porEtapa.get(e.id)?.concluida_em
-            && diasAte(dataBRparaISO(prof.data_inicio!, e.prazo_dias)) < 0) ?? null
+            && diasAte(prazoISO(prof.data_inicio!, e.prazo_dias)) < 0) ?? null
         : null
 
       return [{
@@ -283,10 +284,10 @@ export function WelcomePathTab() {
         </div>
       ) : (
         <div className="card-surface overflow-hidden">
-          <div className="relative w-full overflow-x-auto">
+          <div className="relative max-h-[calc(100vh-330px)] min-h-[260px] w-full overflow-auto overscroll-contain">
             <table className="w-full caption-bottom">
-              <thead>
-                <tr className="border-b border-line-soft">
+              <thead className="sticky top-0 z-10 bg-surface-canvas shadow-[0_1px_0_0_var(--border-soft)]">
+                <tr>
                   <th className="h-10 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Professor</th>
                   <th className="h-10 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Início</th>
                   {ativas.map(e => (

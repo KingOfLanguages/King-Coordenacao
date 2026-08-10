@@ -4,11 +4,14 @@
 //
 // Era a página /onboarding inteira até o Welcome Path entrar; virou aba quando
 // o mesmo professor recém-chegado passou a ter dois acompanhamentos (mensagens
-// enviadas E trilha percorrida). A lógica não mudou.
+// enviadas E trilha percorrida).
+//
+// Os 7 dias são dias ÚTEIS (ver lib/diasUteis) — quem começa numa sexta está no
+// Dia 2 na segunda, e ninguém aparece atrasado por causa do fim de semana.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useMemo, useState } from 'react'
-import { Search, UserPlus, Trash2, Check } from 'lucide-react'
+import { Search, UserPlus, Trash2, Check, Tag as TagIcon, StickyNote, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -16,35 +19,20 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { diaUtilDeOnboarding, parseISODate } from '@/lib/diasUteis'
+import { TAG_CORES, TAG_COR_PADRAO, corDaTag, type TagCorId } from '@/lib/tagsOnboarding'
 import { useProfessores } from '@/hooks/useProfessores'
 import {
   useOnboarding, useAtualizarDiasOnboarding, useDefinirTelefone,
-  useAdicionarOnboarding, useRemoverOnboarding,
+  useAdicionarOnboarding, useRemoverOnboarding, useAtualizarTagOnboarding,
+  useConfirmarMudancaInicio,
   type OnboardingRow, type StatusDia,
 } from '@/hooks/useOnboarding'
 
-const DIA_MS = 864e5
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── Helpers de data (tudo em data local, sem fuso) ───────────────────────────
-
-function parseISODate(iso: string | null): Date | null {
-  if (!iso) return null
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
-  if (!y || !m || !d) return null
-  return new Date(y, m - 1, d)
-}
-
-function hojeLocal(): Date {
-  const n = new Date()
-  return new Date(n.getFullYear(), n.getMonth(), n.getDate())
-}
-
-/** Nº do dia de onboarding (Dia 1 = primeiro dia de casa). null se sem data. */
-function diaOnboarding(iso: string | null): number | null {
-  const inicio = parseISODate(iso)
-  if (!inicio) return null
-  return Math.round((hojeLocal().getTime() - inicio.getTime()) / DIA_MS) + 1
-}
+/** Nº do dia de onboarding em dias úteis (Dia 1 = primeiro dia útil de casa). */
+const diaOnboarding = diaUtilDeOnboarding
 
 function fmtData(iso: string | null): string {
   const d = parseISODate(iso)
@@ -52,7 +40,7 @@ function fmtData(iso: string | null): string {
 }
 
 function norm(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
 }
 
 // ─── Estado do acompanhamento (baseado no que foi enviado) ────────────────────
@@ -66,7 +54,7 @@ function concluido(dias: StatusDia[]): boolean {
   return dias.length === 7 && dias.every(d => d === 2)
 }
 
-/** Tem algum dia já vencido (anterior a hoje) que não foi enviado. */
+/** Tem algum dia útil já vencido (anterior a hoje) que não foi enviado. */
 function temAtraso(dias: StatusDia[], dataInicio: string | null): boolean {
   const n = diaOnboarding(dataInicio)
   if (n == null || n < 2) return false
@@ -100,6 +88,204 @@ function SituacaoChip({ dias, dataInicio }: { dias: StatusDia[]; dataInicio: str
   )
 }
 
+// ─── Tag por registro (rótulo + cor + observação) ─────────────────────────────
+
+type Sugestao = { texto: string; cor: string | null }
+
+function TagChip({ texto, cor, className }: { texto: string; cor: string | null; className?: string }) {
+  const c = corDaTag(cor)
+  return (
+    <span
+      className={cn('inline-flex max-w-[150px] items-center rounded-full px-2 py-0.5 text-[10.5px] font-medium', className)}
+      style={{ backgroundColor: c.bg, color: c.fg }}
+      title={texto}
+    >
+      <span className="truncate">{texto}</span>
+    </span>
+  )
+}
+
+/** Botão-tag ao lado do nome: mostra a tag atual (ou "tag") e abre o editor. */
+function TagDoRegistro({ row, sugestoes }: { row: OnboardingRow; sugestoes: Sugestao[] }) {
+  const salvar = useAtualizarTagOnboarding()
+  const [open, setOpen] = useState(false)
+
+  const [texto, setTexto] = useState(row.tag_texto ?? '')
+  const [cor, setCor] = useState<TagCorId>((corDaTag(row.tag_cor).id))
+  const [obs, setObs] = useState(row.observacao ?? '')
+
+  // Reabrir sempre parte do que está no servidor (outra pessoa pode ter mudado).
+  function abrir(v: boolean) {
+    if (v) {
+      setTexto(row.tag_texto ?? '')
+      setCor(row.tag_cor ? corDaTag(row.tag_cor).id : TAG_COR_PADRAO)
+      setObs(row.observacao ?? '')
+    }
+    setOpen(v)
+  }
+
+  function commit(tag: { tag_texto: string | null; tag_cor: string | null; observacao: string | null }) {
+    salvar.mutate({ id: row.id, tag }, {
+      onSuccess: () => setOpen(false),
+      onError:   () => toast.error('Não foi possível salvar a tag.'),
+    })
+  }
+
+  const temTag = !!row.tag_texto?.trim()
+  const temObs = !!row.observacao?.trim()
+
+  return (
+    <Dialog open={open} onOpenChange={abrir}>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          title={temTag ? 'Editar tag' : 'Adicionar tag'}
+          className="btn-press inline-flex max-w-[170px] items-center gap-1 rounded-full align-middle transition-opacity hover:opacity-80"
+        >
+          {temTag ? (
+            <TagChip texto={row.tag_texto!.trim()} cor={row.tag_cor} />
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-2 py-0.5 text-[10.5px] font-medium text-ink-subtle hover:text-ink-secondary">
+              <TagIcon className="h-3 w-3" /> tag
+            </span>
+          )}
+          {temObs && <StickyNote className="h-3 w-3 flex-shrink-0 text-ink-muted" />}
+        </button>
+      </DialogTrigger>
+
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-[15px]">
+            Tag de {row.professor?.nome ?? 'professor'}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Rótulo */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Tag</label>
+            <Input
+              autoFocus
+              value={texto}
+              maxLength={28}
+              onChange={e => setTexto(e.target.value)}
+              placeholder="Ex.: aguardando contrato"
+              className="h-9 border-line bg-surface-canvas text-[13px]"
+            />
+          </div>
+
+          {/* Cor */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Cor</label>
+            <div className="flex flex-wrap gap-1.5">
+              {TAG_CORES.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  title={c.label}
+                  onClick={() => setCor(c.id)}
+                  className={cn(
+                    'btn-press h-7 w-7 rounded-full border transition-all',
+                    cor === c.id ? 'border-ink ring-2 ring-accentBlue/40' : 'border-line',
+                  )}
+                  style={{ backgroundColor: c.bg }}
+                >
+                  {cor === c.id && <Check className="mx-auto h-3.5 w-3.5" style={{ color: c.fg }} />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Observação */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Observação</label>
+            <textarea
+              value={obs}
+              onChange={e => setObs(e.target.value)}
+              rows={3}
+              placeholder="Anotação livre sobre este professor…"
+              className="w-full resize-y rounded-lg border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-subtle focus-visible:border-accentBlue"
+            />
+          </div>
+
+          {/* Prévia + reaproveitar tags já usadas */}
+          {texto.trim() && (
+            <div className="flex items-center gap-2 text-[11.5px] text-ink-muted">
+              Prévia: <TagChip texto={texto.trim()} cor={cor} />
+            </div>
+          )}
+          {sugestoes.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Tags já usadas</p>
+              <div className="flex flex-wrap gap-1.5">
+                {sugestoes.map(s => (
+                  <button
+                    key={s.texto}
+                    type="button"
+                    className="btn-press"
+                    onClick={() => { setTexto(s.texto); setCor(corDaTag(s.cor).id) }}
+                  >
+                    <TagChip texto={s.texto} cor={s.cor} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-ink-muted hover:text-urg-highFg"
+            disabled={!temTag && !temObs}
+            onClick={() => commit({ tag_texto: null, tag_cor: null, observacao: null })}
+          >
+            Limpar
+          </Button>
+          <Button
+            size="sm"
+            className="btn-press"
+            disabled={salvar.isPending}
+            onClick={() => commit({
+              tag_texto: texto.trim() || null,
+              tag_cor: texto.trim() ? cor : null,
+              observacao: obs.trim() || null,
+            })}
+          >
+            Salvar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Aviso de data de início alterada no King ─────────────────────────────────
+// A escola corrige a data de entrada e o kms-api-sync propaga (gatilho da
+// migration 20260756). O checklist inteiro desliza junto — quem já marcou
+// mensagens precisa saber que o calendário mudou debaixo do trabalho dele.
+
+function AvisoInicioMudou({ row }: { row: OnboardingRow }) {
+  const confirmar = useConfirmarMudancaInicio()
+  const de = fmtData(row.data_inicio_anterior)
+  const para = fmtData(row.professor?.data_inicio ?? row.data_inicio)
+
+  return (
+    <button
+      type="button"
+      onClick={() => confirmar.mutate(row.id, {
+        onError: () => toast.error('Não foi possível dar ciência.'),
+      })}
+      title={`A data de início mudou no King: era ${de}, agora é ${para}. Os dias do checklist deslizaram junto — confira o que já foi marcado. Clique para dar ciência e esconder este aviso.`}
+      className="btn-press inline-flex items-center gap-1 rounded-full bg-urg-medBg px-2 py-0.5 text-[10px] font-medium text-urg-medFg transition-opacity hover:opacity-80"
+    >
+      <CalendarClock className="h-3 w-3 flex-shrink-0" />
+      <span className="tabular-nums">{de} → {para}</span>
+    </button>
+  )
+}
+
 // ─── Célula de um dia (vazio → Agendado → Enviado) ────────────────────────────
 
 const DIA_CFG: Record<StatusDia, { label: string; cls: string }> = {
@@ -116,7 +302,7 @@ function DiaCell({ status, atual, onCycle }: { status: StatusDia; atual: boolean
       onClick={onCycle}
       title="Clique para alternar: vazio → Agendado → Enviado"
       className={cn(
-        'btn-press h-7 w-[76px] rounded-md border text-[11px] font-medium transition-colors',
+        'btn-press h-7 w-full min-w-[62px] rounded-md border text-[10.5px] font-medium transition-colors',
         cfg.cls,
         atual && 'ring-2 ring-accentBlue/50',
       )}
@@ -128,7 +314,7 @@ function DiaCell({ status, atual, onCycle }: { status: StatusDia; atual: boolean
 
 // ─── Linha ────────────────────────────────────────────────────────────────────
 
-function OnboardingRowView({ row }: { row: OnboardingRow }) {
+function OnboardingRowView({ row, sugestoes }: { row: OnboardingRow; sugestoes: Sugestao[] }) {
   const prof = row.professor
   const atualizarDias  = useAtualizarDiasOnboarding()
   const definirTelefone = useDefinirTelefone()
@@ -181,9 +367,24 @@ function OnboardingRowView({ row }: { row: OnboardingRow }) {
             ? 'border-l-2 border-l-accentBlue/50 bg-accentBlue-soft/15 hover:bg-accentBlue-soft/25'
             : 'hover:bg-surface-subtle/40',
     )}>
-      {/* Nome */}
+      {/* Nome + tag */}
       <td className="p-2 align-middle">
-        <p className="text-[13px] font-medium text-ink whitespace-nowrap">{prof?.nome ?? 'Professor removido'}</p>
+        <div className="flex items-center gap-2">
+          <p
+            className="min-w-0 max-w-[230px] truncate text-[13px] font-medium text-ink"
+            title={prof?.nome ?? undefined}
+          >
+            {prof?.nome ?? 'Professor removido'}
+          </p>
+          <span className="flex-shrink-0">
+            <TagDoRegistro row={row} sugestoes={sugestoes} />
+          </span>
+        </div>
+        {row.observacao?.trim() && (
+          <p className="mt-0.5 max-w-[380px] truncate text-[11px] text-ink-muted" title={row.observacao}>
+            {row.observacao}
+          </p>
+        )}
       </td>
 
       {/* Telefone */}
@@ -194,27 +395,28 @@ function OnboardingRowView({ row }: { row: OnboardingRow }) {
           onBlur={salvarTel}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
           placeholder="(00) 00000-0000"
-          className="h-8 w-[150px] text-[12px] bg-surface-canvas border-line"
+          className="h-8 w-[140px] border-line bg-surface-canvas text-[12px]"
         />
       </td>
 
       {/* Início + situação */}
       <td className="p-2 align-middle">
-        <div className="flex flex-col gap-1 min-w-[130px]">
-          <span className="text-[12px] text-ink-secondary tabular-nums">{fmtData(dataInicio)}</span>
+        <div className="flex min-w-[124px] flex-col gap-1">
+          <span className="text-[12px] tabular-nums text-ink-secondary">{fmtData(dataInicio)}</span>
           <SituacaoChip dias={dias} dataInicio={dataInicio} />
+          {row.data_inicio_alterada_em && <AvisoInicioMudou row={row} />}
         </div>
       </td>
 
       {/* Dia 1..7 */}
       {dias.map((s, i) => (
-        <td key={i} className="p-2 align-middle text-center">
+        <td key={i} className="px-1 py-2 text-center align-middle">
           <DiaCell status={s} atual={i === idxAtual} onCycle={() => cycle(i)} />
         </td>
       ))}
 
       {/* Ações */}
-      <td className="p-2 align-middle text-right">
+      <td className="p-2 text-right align-middle">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -323,8 +525,19 @@ export function MensagensTab() {
   const { data: rows = [], isLoading } = useOnboarding()
   const [filtro, setFiltro] = useState<Filtro>('andamento')
   const [busca, setBusca] = useState('')
+  const [tagFiltro, setTagFiltro] = useState<string | null>(null)
 
   const idsExistentes = useMemo(() => new Set(rows.map(r => r.professor_id)), [rows])
+
+  // Tags já em uso — servem de atalho no editor e de filtro rápido na lista.
+  const sugestoes = useMemo<Sugestao[]>(() => {
+    const m = new Map<string, Sugestao>()
+    for (const r of rows) {
+      const t = r.tag_texto?.trim()
+      if (t && !m.has(norm(t))) m.set(norm(t), { texto: t, cor: r.tag_cor })
+    }
+    return [...m.values()].sort((a, b) => a.texto.localeCompare(b.texto))
+  }, [rows])
 
   // Um professor só sai de "Em andamento" quando os 7 dias estão enviados.
   function bucketDe(r: OnboardingRow): Exclude<Filtro, 'todos'> {
@@ -344,7 +557,10 @@ export function MensagensTab() {
     const q = norm(busca)
     return rows
       .filter(r => filtro === 'todos' || bucketDe(r) === filtro)
-      .filter(r => q.length === 0 || norm(r.professor?.nome ?? '').includes(q))
+      .filter(r => tagFiltro == null || norm(r.tag_texto ?? '') === tagFiltro)
+      .filter(r => q.length === 0 || [
+        r.professor?.nome ?? '', r.tag_texto ?? '', r.observacao ?? '',
+      ].some(v => norm(v).includes(q)))
       .sort((a, b) => {
         const oa = ordem(a), ob = ordem(b)
         if (oa !== ob) return oa - ob
@@ -352,7 +568,7 @@ export function MensagensTab() {
         const db = b.professor?.data_inicio ?? b.data_inicio ?? ''
         return da.localeCompare(db) // começo mais antigo primeiro
       })
-  }, [rows, filtro, busca])
+  }, [rows, filtro, busca, tagFiltro])
 
   const chips: { id: Filtro; label: string; count: number }[] = [
     { id: 'andamento',  label: 'Em andamento', count: contagem.andamento },
@@ -361,9 +577,10 @@ export function MensagensTab() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <p className="text-[13px] text-ink-muted">
-        Acompanhamento das mensagens de boas-vindas nos 7 primeiros dias de cada professor que entra.
+        Acompanhamento das mensagens de boas-vindas nos 7 primeiros <strong className="font-medium text-ink-secondary">dias úteis</strong> de
+        cada professor que entra — sábado e domingo não contam.
       </p>
 
       {/* Controles */}
@@ -396,15 +613,45 @@ export function MensagensTab() {
             <Input
               value={busca}
               onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar professor…"
-              className="h-9 w-[240px] pl-9 text-[13px] bg-surface-canvas border-line rounded-xl"
+              placeholder="Buscar professor, tag ou observação…"
+              className="h-9 w-[260px] pl-9 text-[13px] bg-surface-canvas border-line rounded-xl"
             />
           </div>
           <AdicionarProfessorDialog idsExistentes={idsExistentes} />
         </div>
       </div>
 
-      {/* Tabela */}
+      {/* Filtro por tag (só aparece quando existe alguma) */}
+      {sugestoes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Tags</span>
+          {sugestoes.map(s => {
+            const ativo = tagFiltro === norm(s.texto)
+            return (
+              <button
+                key={s.texto}
+                type="button"
+                onClick={() => setTagFiltro(ativo ? null : norm(s.texto))}
+                className={cn('btn-press rounded-full transition-all', ativo ? 'ring-2 ring-ink/60' : 'opacity-75 hover:opacity-100')}
+              >
+                <TagChip texto={s.texto} cor={s.cor} />
+              </button>
+            )
+          })}
+          {tagFiltro && (
+            <button
+              type="button"
+              onClick={() => setTagFiltro(null)}
+              className="btn-press text-[11.5px] text-ink-muted underline-offset-2 hover:underline"
+            >
+              limpar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Tabela — altura presa à viewport: o cabeçalho fica fixo no topo e a
+          barra de rolagem acompanha a tela em vez de fugir para o fim da lista. */}
       {isLoading ? (
         <div className="card-surface p-10 text-center text-[13px] text-ink-muted">Carregando…</div>
       ) : visiveis.length === 0 ? (
@@ -417,21 +664,21 @@ export function MensagensTab() {
         </div>
       ) : (
         <div className="card-surface overflow-hidden">
-          <div className="relative w-full overflow-x-auto">
+          <div className="relative max-h-[calc(100vh-330px)] min-h-[260px] w-full overflow-auto overscroll-contain">
             <table className="w-full caption-bottom">
-              <thead>
-                <tr className="border-b border-line-soft">
+              <thead className="sticky top-0 z-10 bg-surface-canvas shadow-[0_1px_0_0_var(--border-soft)]">
+                <tr>
                   <th className="h-10 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Professor</th>
                   <th className="h-10 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Telefone</th>
                   <th className="h-10 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Início</th>
                   {[1, 2, 3, 4, 5, 6, 7].map(d => (
-                    <th key={d} className="h-10 px-2 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Dia {d}</th>
+                    <th key={d} title={`${d}º dia útil`} className="h-10 px-1 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Dia {d}</th>
                   ))}
                   <th className="h-10 px-2" />
                 </tr>
               </thead>
               <tbody>
-                {visiveis.map(r => <OnboardingRowView key={r.id} row={r} />)}
+                {visiveis.map(r => <OnboardingRowView key={r.id} row={r} sugestoes={sugestoes} />)}
               </tbody>
             </table>
           </div>
@@ -457,6 +704,12 @@ export function MensagensTab() {
           <span className="inline-block h-3 w-1 rounded-full bg-urg-highFg/70" /> Dia atrasado
         </span>
         <span className="text-line-soft">·</span>
+        <span className="flex items-center gap-1.5">
+          <TagIcon className="h-3 w-3" /> Clique na tag ao lado do nome para rotular e anotar
+        </span>
+        <span className="flex items-center gap-1.5">
+          <CalendarClock className="h-3 w-3" /> Data de início mudou no King — confira o checklist e clique para dar ciência
+        </span>
         <span className="flex items-center gap-1.5">
           <Check className="h-3 w-3" /> Clique numa célula pra alternar; sai da lista só quando os 7 dias forem enviados
         </span>

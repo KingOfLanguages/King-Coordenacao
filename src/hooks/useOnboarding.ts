@@ -10,6 +10,11 @@ export type OnboardingRow = {
   data_inicio: string | null
   dias: StatusDia[]
   observacao: string | null
+  tag_texto: string | null
+  tag_cor: string | null
+  // Mudança de data vinda do King, pendente de ciência (ver migration 20260756).
+  data_inicio_anterior: string | null
+  data_inicio_alterada_em: string | null
   professor: {
     id: string
     nome: string
@@ -34,7 +39,8 @@ export function useOnboarding() {
       const { data, error } = await supabase
         .from('onboarding_professores')
         .select(
-          'id, professor_id, data_inicio, dias, observacao, ' +
+          'id, professor_id, data_inicio, dias, observacao, tag_texto, tag_cor, ' +
+          'data_inicio_anterior, data_inicio_alterada_em, ' +
           'professor:professores(id, nome, telefone, data_inicio, status)',
         )
       if (error) throw error
@@ -79,6 +85,41 @@ export function useAtualizarDiasOnboarding() {
   })
 }
 
+/** Tag do registro: rótulo livre + cor + observação. Tudo opcional. */
+export type TagOnboarding = {
+  tag_texto: string | null
+  tag_cor: string | null
+  observacao: string | null
+}
+
+/** Salva (ou limpa) a tag e a observação de uma linha do acompanhamento. Otimista. */
+export function useAtualizarTagOnboarding() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, tag }: { id: string; tag: TagOnboarding }) => {
+      const { error } = await supabase
+        .from('onboarding_professores')
+        .update(tag)
+        .eq('id', id)
+      if (error) throw error
+    },
+    onMutate: async ({ id, tag }) => {
+      await queryClient.cancelQueries({ queryKey: ['onboarding'] })
+      const anterior = queryClient.getQueryData<OnboardingRow[]>(['onboarding'])
+      queryClient.setQueryData<OnboardingRow[]>(['onboarding'], (old) =>
+        (old ?? []).map(r => (r.id === id ? { ...r, ...tag } : r)),
+      )
+      return { anterior }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.anterior) queryClient.setQueryData(['onboarding'], ctx.anterior)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+    },
+  })
+}
+
 /** Grava o telefone no cadastro do professor (via RPC — suporte também pode). */
 export function useDefinirTelefone() {
   const queryClient = useQueryClient()
@@ -93,6 +134,36 @@ export function useDefinirTelefone() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onboarding'] })
       queryClient.invalidateQueries({ queryKey: ['professores'] })
+    },
+  })
+}
+
+/**
+ * Dá ciência de que a data de início mudou no King: some com o aviso da linha,
+ * sem mexer na data nem no checklist. Otimista.
+ */
+export function useConfirmarMudancaInicio() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('confirmar_mudanca_inicio_onboarding', { p_id: id })
+      if (error) throw error
+    },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['onboarding'] })
+      const anterior = queryClient.getQueryData<OnboardingRow[]>(['onboarding'])
+      queryClient.setQueryData<OnboardingRow[]>(['onboarding'], (old) =>
+        (old ?? []).map(r => (r.id === id
+          ? { ...r, data_inicio_anterior: null, data_inicio_alterada_em: null }
+          : r)),
+      )
+      return { anterior }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.anterior) queryClient.setQueryData(['onboarding'], ctx.anterior)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['onboarding'] })
     },
   })
 }

@@ -34,8 +34,10 @@ export function OnboardingPage() {
       : []),
   ]
 
+  // Largura folgada de propósito: a aba Mensagens tem 11 colunas (nome+tag,
+  // telefone, início e os 7 dias) e precisam caber todas sem rolagem lateral.
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 px-6 py-6">
+    <div className="mx-auto max-w-[1560px] space-y-5 px-6 py-6">
       <header className="space-y-0.5">
         <div className="flex items-center gap-2">
           <GraduationCap className="h-5 w-5 text-ink-secondary" />
