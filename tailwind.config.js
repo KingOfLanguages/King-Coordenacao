@@ -50,6 +50,15 @@ export default {
           soft:    'var(--accent-blue-soft)',
           hov:     'var(--accent-blue-hov)',
         },
+        /* Faixas de aviso — únicas cores de destaque com par claro/escuro real.
+           Sempre sólidas: modificador de opacidade (ex.: bg-aviso-infoBg/20) NÃO
+           funciona com cores var() sem <alpha-value> — o Tailwind 3 emite cor
+           inválida e o elemento fica transparente, sem erro nenhum. */
+        aviso: {
+          infoBg: 'var(--aviso-info-bg)', infoFg: 'var(--aviso-info-fg)', infoBd: 'var(--aviso-info-bd)',
+          okBg:   'var(--aviso-ok-bg)',   okFg:   'var(--aviso-ok-fg)',   okBd:   'var(--aviso-ok-bd)',
+          warnBg: 'var(--aviso-warn-bg)', warnFg: 'var(--aviso-warn-fg)', warnBd: 'var(--aviso-warn-bd)',
+        },
         urg: {
           lowFg:  'var(--urg-low-fg)',  lowBg:  'var(--urg-low-bg)',
           medFg:  'var(--urg-med-fg)',  medBg:  'var(--urg-med-bg)',

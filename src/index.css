@@ -46,6 +46,22 @@
     --urg-crit-fg: #6b1a8f;
     --urg-crit-bg: #ecd6f7;
 
+    /* Avisos — faixas de destaque.
+       Existem como par próprio (e não reaproveitando urgency) porque urgency e
+       accent NÃO mudam no tema escuro: `bg-urg-*-bg` continua pastel claro no
+       preto, e combinado com texto que vira cinza claro fica ilegível.
+       Trocar urgency por completo não era opção — `bg-urg-*Fg` é fundo sólido
+       com texto branco em ~57 lugares. Estes tokens são só das faixas de aviso. */
+    --aviso-info-bg: #dde8ff;
+    --aviso-info-fg: #1c3f9e;
+    --aviso-info-bd: #b9ccff;
+    --aviso-ok-bg:   #d3eedf;
+    --aviso-ok-fg:   #0e6430;
+    --aviso-ok-bd:   #a5d8bd;
+    --aviso-warn-bg: #fad4d8;
+    --aviso-warn-fg: #ae1122;
+    --aviso-warn-bd: #f2aeb6;
+
     /* shadcn */
     --background:           var(--bg-app);
     --foreground:           var(--fg-primary);
@@ -88,6 +104,19 @@
     --border-strong:  #2e3548;
 
     /* Brand same + urgency same */
+
+    /* Avisos: fundo profundo e tintado, texto claro — o inverso do tema claro.
+       É o único bloco de cor de destaque que vira com o tema; ver o comentário
+       em :root para por que urgency/accent ficaram de fora. */
+    --aviso-info-bg: #121f3f;
+    --aviso-info-fg: #a8c1ff;
+    --aviso-info-bd: #26386d;
+    --aviso-ok-bg:   #0f2a1d;
+    --aviso-ok-fg:   #6ed69a;
+    --aviso-ok-bd:   #1e4a34;
+    --aviso-warn-bg: #331419;
+    --aviso-warn-fg: #ff9aa4;
+    --aviso-warn-bd: #5d2630;
   }
 
   html, body, #root {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   UserCog, Phone, CheckCircle2, Search, AlertTriangle, ChevronLeft, Users, Clock,
+  type LucideIcon,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -510,13 +511,10 @@ export function Home() {
               <form onSubmit={handleEnviar} className="space-y-5">
                 {/* O compromisso da operação, dito antes de o professor preencher —
                     é o que torna a régua de prazo justa. */}
-                <div className="flex items-start gap-2.5 rounded-xl border border-accentBlue/20 bg-accentBlue-soft px-3.5 py-3">
-                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-accentBlue" />
-                  <p className="text-[12.5px] leading-relaxed text-ink-secondary">
-                    Alunos serão transferidos em até <strong>{diasUteisLabel(PRAZO_DIAS_UTEIS)}</strong>{' '}
-                    após a data de envio deste formulário.
-                  </p>
-                </div>
+                <Aviso tom="info" icone={Clock} titulo="Prazo de transferência">
+                  Alunos serão transferidos em até <strong className="font-semibold">{diasUteisLabel(PRAZO_DIAS_UTEIS)}</strong>{' '}
+                  após a data de envio deste formulário.
+                </Aviso>
 
                 {/* Motivo */}
                 <div className="space-y-2">
@@ -532,13 +530,15 @@ export function Home() {
                         className={cn(
                           'btn-press w-full rounded-xl border px-3.5 py-2.5 text-left transition-colors',
                           step.motivo === m.value
-                            ? 'border-accentBlue bg-accentBlue-soft'
+                            // aviso-info* em vez de accentBlue-soft: este vira com
+                            // o tema, aquele ficava quase-branco no escuro.
+                            ? 'border-accentBlue bg-aviso-infoBg'
                             : 'border-line-soft bg-surface-subtle hover:border-line',
                         )}
                       >
                         <span className={cn(
                           'block text-[13px] font-medium',
-                          step.motivo === m.value ? 'text-accentBlue' : 'text-ink',
+                          step.motivo === m.value ? 'text-aviso-infoFg' : 'text-ink',
                         )}>
                           {m.label}
                         </span>
@@ -744,7 +744,10 @@ function EscolherAluno({
                         'btn-press w-full rounded-xl border px-3.5 py-2.5 text-left transition-colors',
                         a.pedidoAberto
                           ? 'border-line-soft bg-surface-subtle opacity-60 cursor-not-allowed'
-                          : 'border-line-soft bg-surface-subtle hover:border-accentBlue hover:bg-accentBlue-soft',
+                          // hover em aviso-infoBg (vira com o tema): com
+                          // accentBlue-soft o card ficava quase-branco no escuro
+                          // e o nome do aluno (text-ink, claro) sumia.
+                          : 'border-line-soft bg-surface-subtle hover:border-accentBlue hover:bg-aviso-infoBg',
                       )}
                     >
                       <span className="flex items-center justify-between gap-2">
@@ -854,22 +857,80 @@ function AvisoPrazo({ data }: { data: string }) {
   const dentro = uteis >= PRAZO_DIAS_UTEIS
 
   return (
-    <div className={cn(
-      'flex items-start gap-2 rounded-xl px-3 py-2.5',
-      dentro ? 'bg-urg-lowBg' : 'bg-urg-highBg',
-    )}>
+    <Aviso
+      tom={dentro ? 'ok' : 'alerta'}
+      icone={dentro ? CheckCircle2 : AlertTriangle}
+      titulo={`${dataBR(data)} · ${diasUteisLabel(uteis)} de antecedência`}
+    >
       {dentro
-        ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-urg-lowFg" />
-        : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-urg-highFg" />}
-      <div className={cn('text-[11.5px] leading-relaxed', dentro ? 'text-urg-lowFg' : 'text-urg-highFg')}>
-        <p className="font-semibold">
-          {dataBR(data)} · {diasUteisLabel(uteis)} de antecedência
-        </p>
-        <p className="mt-0.5 font-medium">
-          {dentro
-            ? 'Dentro do prazo de 7 dias úteis.'
-            : 'Abaixo do prazo de 7 dias úteis — este pedido será registrado como informe negativo no seu perfil. Se conseguir uma data mais adiante, ajuste acima.'}
-        </p>
+        ? `Dentro do prazo de ${diasUteisLabel(PRAZO_DIAS_UTEIS)}.`
+        : `Abaixo do prazo de ${diasUteisLabel(PRAZO_DIAS_UTEIS)} — este pedido será registrado como informe negativo no seu perfil. Se conseguir uma data mais adiante, ajuste acima.`}
+    </Aviso>
+  )
+}
+
+// ─── Aviso ────────────────────────────────────────────────────────────────────
+
+/**
+ * Faixa de aviso do portal, legível nos DOIS temas.
+ *
+ * O problema que isto resolve: urgency e accent NÃO têm variante no bloco
+ * `.dark` do index.css ("Brand same + urgency same"). Então `bg-accentBlue-soft`
+ * continua sendo um azul quase branco no tema escuro, enquanto
+ * `text-ink-secondary` vira cinza claro — cinza sobre quase-branco.
+ *
+ * Duas saídas foram descartadas, nesta ordem:
+ *   1. consertar urgency no `.dark` — `bg-urg-*Fg` é fundo sólido com texto
+ *      branco em ~57 lugares; clarear o token quebraria todos;
+ *   2. tingir com opacidade (`dark:bg-accentBlue/12`) — NÃO funciona: as cores
+ *      do tema são `var()` sem `<alpha-value>`, e no Tailwind 3 o modificador
+ *      de opacidade nesse caso gera cor inválida. O elemento fica transparente
+ *      e nada avisa. (Medido: `bg-accentBlue/12` → `rgba(0,0,0,0)`.)
+ *
+ * Por isso os tokens `--aviso-*`, que são o único bloco de cor de destaque com
+ * par claro/escuro de verdade. Tudo sólido, nada de opacidade.
+ *
+ * A bolha do ícone inverte o par (fundo = cor do texto, ícone = cor do fundo),
+ * então ela contrasta nos dois temas sem precisar de mais um token.
+ */
+const AVISO_TONS = {
+  info: {
+    caixa:  'border-aviso-infoBd bg-aviso-infoBg',
+    bolha:  'bg-aviso-infoFg text-aviso-infoBg',
+    titulo: 'text-aviso-infoFg',
+  },
+  ok: {
+    caixa:  'border-aviso-okBd bg-aviso-okBg',
+    bolha:  'bg-aviso-okFg text-aviso-okBg',
+    titulo: 'text-aviso-okFg',
+  },
+  alerta: {
+    caixa:  'border-aviso-warnBd bg-aviso-warnBg',
+    bolha:  'bg-aviso-warnFg text-aviso-warnBg',
+    titulo: 'text-aviso-warnFg',
+  },
+} as const
+
+function Aviso({
+  tom, icone: Icone, titulo, children,
+}: {
+  tom: keyof typeof AVISO_TONS
+  icone: LucideIcon
+  titulo: string
+  children: React.ReactNode
+}) {
+  const t = AVISO_TONS[tom]
+  return (
+    <div className={cn('flex items-start gap-3 rounded-xl border px-3.5 py-3', t.caixa)}>
+      <span className={cn(
+        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-sm',
+        t.bolha,
+      )}>
+        <Icone className="h-3.5 w-3.5" />
+      </span>
+      <div className="min-w-0 space-y-0.5">
+        <p className={cn('text-[12.5px] font-semibold leading-snug', t.titulo)}>{titulo}</p>
+        <p className="text-[12px] leading-relaxed text-ink-secondary">{children}</p>
       </div>
     </div>
   )
