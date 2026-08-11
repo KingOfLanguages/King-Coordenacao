@@ -31,7 +31,11 @@ export interface PageDef {
   path: string
   /** Rótulo exibido no menu e na tela de configurações. */
   label: string
-  /** Seção do menu (agrupa itens em dropdown). '' = link solto. */
+  /** Seção usada para AGRUPAR ESTA TELA DE CONFIGURAÇÕES. '' = link solto.
+   *  NÃO monta o menu de navegação: quem faz isso é a constante NAV em
+   *  AppLayout.tsx, que lista as page keys de cada dropdown à mão. Página nova
+   *  precisa entrar NOS DOIS lugares — só aqui, ela fica acessível pela URL e
+   *  configurável, mas invisível no menu. */
   section: string
   /** Aparece no menu de navegação? */
   nav: boolean

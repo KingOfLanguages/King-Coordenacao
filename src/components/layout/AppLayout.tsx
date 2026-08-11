@@ -27,7 +27,7 @@ const NAV: NavNode[] = [
   // por Aluno pro grupo "Incidentes". Tarefas (ex-Central) segue como link de topo.
   { kind: 'group', label: 'Reuniões',       pageKeys: ['reunioes-dia', 'agendas', 'emails'] },
   { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'onboarding', 'suporte-reunioes'] },
-  { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'pendencias', 'mes-analise', 'retorno-pausa'] },
+  { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'pendencias', 'mes-analise', 'retorno-pausa', 'transferencias'] },
   { kind: 'group', label: 'Incidentes',     pageKeys: ['incidentes', 'alunos'] },
   { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral', 'retencao'] },
   { kind: 'link', pageKey: 'minha-area' },
