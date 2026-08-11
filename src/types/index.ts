@@ -82,6 +82,65 @@ export interface Pausa {
   created_at: string
 }
 
+// ─── Transferência de aluno ───────────────────────────────────────────────────
+
+export type StatusTransferencia = 'pendente' | 'em_atendimento' | 'concluida' | 'recusada'
+export type DesfechoTransferencia = 'transferido' | 'mantido' | 'saiu_da_escola' | 'outro'
+
+/** Foto do aluno + do professor no instante do pedido. Congelada por trigger
+ *  porque o roster (professor_alunos_kms) é reescrito a cada sync e o vínculo
+ *  some exatamente quando a transferência é efetivada. Ver 20260760. */
+export interface TransferenciaSnapshot {
+  capturado_em?: string
+  aluno_encontrado?: boolean
+  aluno_primeiro_nome?: string | null
+  aluno_data_adicao?: string | null
+  aluno_dias_com_professor?: number | null
+  aluno_data_matricula_escola?: string | null
+  aluno_status?: string | null
+  aluno_status_vinculo?: string | null
+  aluno_tipo_vinculo?: string | null
+  aluno_saidas_historicas?: number
+  professor_nome?: string | null
+  professor_status?: string | null
+  professor_data_inicio?: string | null
+  professor_grupo?: string | null
+  professor_coordenador?: string | null
+  professor_score?: number | null
+  professor_score_faixa?: string | null
+  professor_qtd_alunos?: number
+  professor_pedidos_antes?: number
+}
+
+export interface TransferenciaAluno {
+  id: string
+  professor_id: string
+  /** NULL = professor não achou o aluno na lista e digitou o nome. */
+  aluno_id: number | null
+  aluno_nome: string
+  aluno_da_lista: boolean
+  motivo: string
+  detalhe: string
+  urgencia: 'normal' | 'alta'
+  ja_conversou: boolean | null
+  aceita_manter: boolean | null
+  status: StatusTransferencia
+  assumido_por: string | null
+  assumido_em: string | null
+  concluido_por: string | null
+  concluido_em: string | null
+  recusado_por: string | null
+  recusado_em: string | null
+  motivo_recusa: string | null
+  desfecho: DesfechoTransferencia | null
+  desfecho_nota: string | null
+  destino_professor_id: string | null
+  snapshot: TransferenciaSnapshot | null
+  observacao_id: string | null
+  origem: string
+  created_at: string
+}
+
 export interface Reuniao {
   id: string
   professor_id: string | null

@@ -21,6 +21,11 @@ export function linkPausaPublico(): string {
   return `${PORTAL_BASE_URL}/pausa`
 }
 
+/** Link público que os professores usam para pedir a transferência de um aluno. */
+export function linkTransferenciaPublico(): string {
+  return `${PORTAL_BASE_URL}/transferencia`
+}
+
 /** Link público da trilha de onboarding — o Welcome Path (sem login). */
 export function linkWelcomePathPublico(): string {
   return `${PORTAL_BASE_URL}/welcome-path`

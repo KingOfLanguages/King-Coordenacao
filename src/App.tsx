@@ -33,6 +33,8 @@ import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { DisparoEmailsPage } from '@/pages/emails/DisparoEmailsPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
+import { Home as TransferenciaPublicaPage } from '@/pages/transferencias/Home'
+import { TransferenciasPage } from '@/pages/transferencias/TransferenciasPage'
 import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
 import { AgendasPage } from '@/pages/admin/AgendasPage'
 import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
@@ -99,6 +101,7 @@ export default function App() {
             <Route path="/auth/callback"  element={<AuthCallback />} />
             <Route path="/agendar"        element={<AgendamentoPage />} />
             <Route path="/pausa"          element={<PausaPublicaPage />} />
+            <Route path="/transferencia"  element={<TransferenciaPublicaPage />} />
             <Route path="/welcome-path"   element={<WelcomePathPage />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -184,6 +187,11 @@ export default function App() {
               } />
               {/* "Retorno de Pausa" virou "Acompanhamento de Pausas" — links antigos seguem valendo. */}
               <Route path="/retorno-pausa" element={<Navigate to="/pausas" replace />} />
+              <Route path="/transferencias" element={
+                <ProtectedRoute page="transferencias">
+                  <TransferenciasPage />
+                </ProtectedRoute>
+              } />
               <Route path="/suporte/reunioes" element={
                 <ProtectedRoute page="suporte-reunioes">
                   <SuporteReunioesPage />

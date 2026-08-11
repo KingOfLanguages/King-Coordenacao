@@ -66,6 +66,7 @@ export const PAGES: PageDef[] = [
   // A chave continua 'retorno-pausa' de propósito: é ela que indexa os overrides
   // de permissão já salvos no banco — renomear apagaria as configurações atuais.
   { key: 'retorno-pausa',   path: '/pausas',         label: 'Acompanhamento de Pausas', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'transferencias',  path: '/transferencias', label: 'Transferências de Aluno', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
 
   // ── Incidentes ──
   { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Incidentes', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

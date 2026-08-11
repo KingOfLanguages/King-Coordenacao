@@ -25,6 +25,7 @@ import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { ObservacaoSnapshotDetalhe } from '@/components/professores/ObservacaoSnapshotDetalhe'
 import { SilencioProfessorCard } from '@/components/professores/SilencioProfessorCard'
+import { TransferenciasProfessorSection } from '@/components/professores/TransferenciasProfessorSection'
 import { EditarReuniaoProfessorDialog } from '@/components/professores/EditarReuniaoProfessorDialog'
 import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirReuniaoProfessorDialog'
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
@@ -402,6 +403,9 @@ export function ProfessorDetalhePage() {
       {acompanhamentoData?.ciclo && acompanhamentoData.ciclo.length > 0 && (
         <CicloVidaSection ciclo={acompanhamentoData.ciclo} />
       )}
+
+      {/* ── Transferências de aluno pedidas por ele (some quando não há nenhuma) ── */}
+      {id && <TransferenciasProfessorSection professorId={id} />}
 
       {/* ── Silêncio (aulas não lançadas) ── */}
       {id && <SilencioProfessorCard professorId={id} />}
