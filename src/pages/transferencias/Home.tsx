@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  UserCog, Phone, CheckCircle2, Search, AlertTriangle, ChevronLeft, Users,
+  UserCog, Phone, CheckCircle2, Search, AlertTriangle, ChevronLeft, Users, Clock,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,8 +12,12 @@ import {
   FundoPortal, AvatarPortal,
 } from '@/components/portal/PortalUI'
 import {
-  MOTIVOS_TRANSFERENCIA, tempoDeVinculo, type MotivoTransferencia,
+  MOTIVOS_TRANSFERENCIA, tempoDeVinculo, diasUteisLabel,
+  PRAZO_DIAS_UTEIS, ANTECEDENCIA_MIN_DIAS, FUTURO_MAX_DIAS,
+  type MotivoTransferencia,
 } from '@/lib/transferenciaLabels'
+import { diasUteisEntre, hojeLocal, parseISODate } from '@/lib/diasUteis'
+import { dataBR } from '@/lib/formato'
 import {
   useTransferenciaLookup, useSolicitarTransferencia,
   type TransferenciaLookupResult, type AlunoPortal,
@@ -40,6 +44,15 @@ function diasDesde(iso: string | null): number | null {
   return Math.round((hoje - inicio) / 86_400_000)
 }
 
+/** Data ISO de N dias de calendário a partir de hoje — limites do input date. */
+function isoEmDias(n: number): string {
+  const d = hojeLocal()
+  d.setDate(d.getDate() + n)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
 /** Aluno escolhido — da lista (com id) ou digitado à mão (sem id). */
 type AlunoEscolhido = { alunoId: number | null; nome: string; dataAdicao: string | null }
 
@@ -58,12 +71,12 @@ type Step =
       aluno: AlunoEscolhido
       motivo: MotivoTransferencia | ''
       detalhe: string
-      urgencia: 'normal' | 'alta'
+      dataUltimaAula: string
       jaConversou: boolean | null
       aceitaManter: boolean | null
       erro: string
     }
-  | { tipo: 'confirmacao'; nome: string; alunoNome: string }
+  | { tipo: 'confirmacao'; nome: string; alunoNome: string; dataUltimaAula: string }
 
 export function Home() {
   const [step, setStep] = useState<Step>({ tipo: 'identificacao-email', email: '', erro: '' })
@@ -99,7 +112,7 @@ export function Home() {
       nome: step.nome,
       alunos: step.alunos,
       aluno,
-      motivo: '', detalhe: '', urgencia: 'normal',
+      motivo: '', detalhe: '', dataUltimaAula: '',
       jaConversou: null, aceitaManter: null,
       erro: '',
     })
@@ -202,6 +215,14 @@ export function Home() {
       setStep({ ...step, erro: 'Conte com um pouco mais de detalhe o que está acontecendo — é o que orienta quem vai atender.' })
       return
     }
+    if (!step.dataUltimaAula) {
+      setStep({ ...step, erro: 'Informe a data da última aula do aluno.' })
+      return
+    }
+    if (step.dataUltimaAula < isoEmDias(ANTECEDENCIA_MIN_DIAS)) {
+      setStep({ ...step, erro: 'A última aula precisa ser a partir de amanhã. Se a aula já aconteceu, fale com o suporte.' })
+      return
+    }
 
     try {
       await solicitar.mutateAsync({
@@ -210,11 +231,14 @@ export function Home() {
         alunoNome: step.aluno.nome,
         motivo: step.motivo,
         detalhe: step.detalhe.trim(),
-        urgencia: step.urgencia,
+        dataUltimaAula: step.dataUltimaAula,
         jaConversou: step.jaConversou,
         aceitaManter: step.aceitaManter,
       })
-      setStep({ tipo: 'confirmacao', nome: step.nome, alunoNome: step.aluno.nome })
+      setStep({
+        tipo: 'confirmacao', nome: step.nome, alunoNome: step.aluno.nome,
+        dataUltimaAula: step.dataUltimaAula,
+      })
     } catch (err) {
       setStep({ ...step, erro: err instanceof Error ? err.message : 'Não foi possível registrar agora. Tente novamente.' })
     }
@@ -484,6 +508,16 @@ export function Home() {
 
             <CartaoPortal>
               <form onSubmit={handleEnviar} className="space-y-5">
+                {/* O compromisso da operação, dito antes de o professor preencher —
+                    é o que torna a régua de prazo justa. */}
+                <div className="flex items-start gap-2.5 rounded-xl border border-accentBlue/20 bg-accentBlue-soft px-3.5 py-3">
+                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-accentBlue" />
+                  <p className="text-[12.5px] leading-relaxed text-ink-secondary">
+                    Alunos serão transferidos em até <strong>{diasUteisLabel(PRAZO_DIAS_UTEIS)}</strong>{' '}
+                    após a data de envio deste formulário.
+                  </p>
+                </div>
+
                 {/* Motivo */}
                 <div className="space-y-2">
                   <Label className="text-[12px] text-ink-secondary font-medium">
@@ -549,39 +583,25 @@ export function Home() {
                   />
                 </div>
 
-                {/* Urgência */}
+                {/* Última aula — é ela que define a urgência do pedido */}
                 <div className="space-y-1.5">
-                  <Label className="text-[12px] text-ink-secondary font-medium">Urgência</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { v: 'normal', label: 'Normal', ajuda: 'Dá pra aguardar o fluxo.' },
-                      { v: 'alta',   label: 'Urgente', ajuda: 'Precisa de atenção agora.' },
-                    ] as const).map(o => (
-                      <button
-                        key={o.v}
-                        type="button"
-                        onClick={() => setStep({ ...step, urgencia: o.v })}
-                        className={cn(
-                          'btn-press rounded-xl border px-3 py-2 text-left transition-colors',
-                          step.urgencia === o.v
-                            ? (o.v === 'alta'
-                                ? 'border-urg-highFg bg-urg-highBg'
-                                : 'border-accentBlue bg-accentBlue-soft')
-                            : 'border-line-soft bg-surface-subtle hover:border-line',
-                        )}
-                      >
-                        <span className={cn(
-                          'block text-[12.5px] font-medium',
-                          step.urgencia === o.v
-                            ? (o.v === 'alta' ? 'text-urg-highFg' : 'text-accentBlue')
-                            : 'text-ink',
-                        )}>
-                          {o.label}
-                        </span>
-                        <span className="block text-[11px] text-ink-muted mt-0.5">{o.ajuda}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <Label htmlFor="ultima-aula" className="text-[12px] text-ink-secondary font-medium">
+                    Data da última aula
+                  </Label>
+                  <Input
+                    id="ultima-aula"
+                    type="date"
+                    value={step.dataUltimaAula}
+                    min={isoEmDias(ANTECEDENCIA_MIN_DIAS)}
+                    max={isoEmDias(FUTURO_MAX_DIAS)}
+                    onChange={ev => setStep({ ...step, dataUltimaAula: ev.target.value, erro: '' })}
+                    required
+                    className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
+                  />
+                  <p className="text-[11.5px] text-ink-muted">
+                    O <strong>último dia em que o aluno estará presente</strong> para ter aula com você.
+                  </p>
+                  <AvisoPrazo data={step.dataUltimaAula} />
                 </div>
 
                 {step.erro && <AvisoErro>{step.erro}</AvisoErro>}
@@ -625,8 +645,12 @@ export function Home() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4 text-left">
-              <p className="text-[12.5px] text-ink-secondary leading-relaxed">
+            <div className="space-y-3 rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4 text-left">
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="text-ink-muted">Última aula</span>
+                <span className="font-medium text-ink tabular-nums">{dataBR(step.dataUltimaAula)}</span>
+              </div>
+              <p className="text-[12.5px] leading-relaxed text-ink-secondary">
                 Enquanto o pedido é analisado, <strong>continue atendendo o aluno normalmente</strong>.
                 A transferência só vale depois que o suporte confirmar.
               </p>
@@ -806,6 +830,47 @@ function EscolherAluno({
           Não sou eu
         </button>
       </CartaoPortal>
+    </div>
+  )
+}
+
+/**
+ * Retorno ao vivo sobre o prazo, assim que o professor escolhe a data.
+ *
+ * Avisar ANTES de enviar é deliberado: o pedido com menos de 7 dias úteis vira
+ * informe negativo no perfil dele, e marcar alguém por uma regra que ele só
+ * descobre depois seria injusto. Quem precisa mesmo pedir em cima da hora
+ * segue podendo — só não vai ser pego de surpresa.
+ */
+function AvisoPrazo({ data }: { data: string }) {
+  if (!data) return null
+  const alvo = parseISODate(data)
+  if (!alvo) return null
+
+  const hoje = hojeLocal()
+  if (alvo < hoje) return null
+
+  const uteis = diasUteisEntre(hoje, alvo)
+  const dentro = uteis >= PRAZO_DIAS_UTEIS
+
+  return (
+    <div className={cn(
+      'flex items-start gap-2 rounded-xl px-3 py-2.5',
+      dentro ? 'bg-urg-lowBg' : 'bg-urg-highBg',
+    )}>
+      {dentro
+        ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-urg-lowFg" />
+        : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-urg-highFg" />}
+      <div className={cn('text-[11.5px] leading-relaxed', dentro ? 'text-urg-lowFg' : 'text-urg-highFg')}>
+        <p className="font-semibold">
+          {dataBR(data)} · {diasUteisLabel(uteis)} de antecedência
+        </p>
+        <p className="mt-0.5 font-medium">
+          {dentro
+            ? 'Dentro do prazo de 7 dias úteis.'
+            : 'Abaixo do prazo de 7 dias úteis — este pedido será registrado como informe negativo no seu perfil. Se conseguir uma data mais adiante, ajuste acima.'}
+        </p>
+      </div>
     </div>
   )
 }

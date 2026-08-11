@@ -79,7 +79,9 @@ export type SolicitarTransferenciaInput = {
   alunoNome: string
   motivo: MotivoTransferencia
   detalhe: string
-  urgencia: 'normal' | 'alta'
+  /** ISO YYYY-MM-DD — último dia em que o aluno terá aula. Define a urgência
+   *  do pedido; não existe mais urgência declarada. */
+  dataUltimaAula: string
   jaConversou: boolean | null
   aceitaManter: boolean | null
 }

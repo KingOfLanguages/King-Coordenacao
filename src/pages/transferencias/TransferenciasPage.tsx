@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   UserCog, Search, Hand, XCircle, CheckCircle2, Link2, Check, AlertTriangle,
   Clock, User, Plus, FileWarning, ChevronDown, ChevronRight, Phone,
-  MessageCircle, Users, Zap, MessagesSquare, Handshake, Inbox,
+  MessageCircle, Users, Zap, MessagesSquare, Handshake, Inbox, CalendarDays,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -14,12 +14,14 @@ import {
   useTransferenciasFila, useTransferenciasFinalizadas,
   useAssumirTransferencia, useLargarTransferencia,
   useConcluirTransferencia, useRecusarTransferencia,
-  faixaDaTransferencia, diasDesde, FAIXA_TRANSFERENCIA_META,
+  faixaDaTransferencia, diasDesde, diasUteisRestantes, prazoVencido,
+  FAIXA_TRANSFERENCIA_META,
   type TransferenciaComProfessor, type FaixaTransferencia,
 } from '@/hooks/useTransferencias'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
 import {
   motivoTransferenciaLabel, motivoEhRelacional, desfechoMeta, tempoDeVinculo,
+  diasUteisLabel, PRAZO_DIAS_UTEIS,
   STATUS_TRANSFERENCIA_META, DESFECHOS_TRANSFERENCIA,
   type DesfechoTransferencia,
 } from '@/lib/transferenciaLabels'
@@ -32,19 +34,22 @@ import { dataBR } from '@/lib/formato'
 import { cn, whatsappLink } from '@/lib/utils'
 import { toast } from 'sonner'
 
-const ORDEM_FAIXAS: FaixaTransferencia[] = ['parado', 'urgente', 'recente']
+const ORDEM_FAIXAS: FaixaTransferencia[] = ['vencida', 'apertada', 'no_prazo']
 
 const FAIXA_ESTILO: Record<FaixaTransferencia, { tone: string; icon: string }> = {
-  parado:  { tone: 'text-urg-critFg', icon: 'bg-urg-critBg text-urg-critFg' },
-  urgente: { tone: 'text-urg-highFg', icon: 'bg-urg-highBg text-urg-highFg' },
-  recente: { tone: 'text-ink-muted',  icon: 'bg-surface-subtle text-ink-muted' },
+  vencida:  { tone: 'text-urg-critFg', icon: 'bg-urg-critBg text-urg-critFg' },
+  apertada: { tone: 'text-urg-highFg', icon: 'bg-urg-highBg text-urg-highFg' },
+  no_prazo: { tone: 'text-ink-muted',  icon: 'bg-surface-subtle text-ink-muted' },
 }
 
-/** "hoje" / "há 3 dias" — o indicador de espera do card. */
-function esperaLabel(dias: number): string {
-  if (dias <= 0) return 'chegou hoje'
-  if (dias === 1) return 'há 1 dia'
-  return `há ${dias} dias`
+/** "última aula hoje" / "faltam 4 dias úteis" — o indicador de prazo do card. */
+function prazoLabel(dataUltimaAula: string): string {
+  if (prazoVencido(dataUltimaAula)) {
+    return `última aula em ${dataBR(dataUltimaAula)} — já passou`
+  }
+  const uteis = diasUteisRestantes(dataUltimaAula)
+  if (uteis <= 1) return 'última aula é hoje'
+  return `faltam ${diasUteisLabel(uteis - 1)} até a última aula`
 }
 
 function resolverPerfil(ref: { nome: string } | { nome: string }[] | null | undefined): string | null {
@@ -88,8 +93,8 @@ export function TransferenciasPage() {
     return mapa
   }, [filaFiltrada])
 
-  const parados  = porFaixa.get('parado')?.length ?? 0
-  const urgentes = porFaixa.get('urgente')?.length ?? 0
+  const vencidas  = porFaixa.get('vencida')?.length ?? 0
+  const apertadas = porFaixa.get('apertada')?.length ?? 0
 
   return (
     <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
@@ -98,11 +103,11 @@ export function TransferenciasPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Transferências de Aluno</h1>
           <p className="text-[13px] text-ink-muted">
             <span className="tabular-nums text-ink-secondary font-medium">{filaFiltrada.length}</span> na fila
-            {parados > 0 && (
-              <> · <span className="text-urg-critFg font-medium">{parados} parado{parados > 1 ? 's' : ''}</span></>
+            {vencidas > 0 && (
+              <> · <span className="text-urg-critFg font-medium">{vencidas} com a última aula já passada</span></>
             )}
-            {urgentes > 0 && (
-              <> · <span className="text-urg-highFg font-medium">{urgentes} urgente{urgentes > 1 ? 's' : ''}</span></>
+            {apertadas > 0 && (
+              <> · <span className="text-urg-highFg font-medium">{apertadas} fora do prazo</span></>
             )}
           </p>
         </div>
@@ -238,8 +243,8 @@ function SecaoFaixa({
     <section className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={cn('flex h-6 w-6 items-center justify-center rounded-full', estilo.icon)}>
-          {faixa === 'parado' ? <AlertTriangle className="h-3.5 w-3.5" />
-            : faixa === 'urgente' ? <Zap className="h-3.5 w-3.5" />
+          {faixa === 'vencida' ? <AlertTriangle className="h-3.5 w-3.5" />
+            : faixa === 'apertada' ? <Zap className="h-3.5 w-3.5" />
             : <Clock className="h-3.5 w-3.5" />}
         </span>
         <h2 className={cn('label-micro', estilo.tone)}>{meta.label} ({qtd})</h2>
@@ -268,8 +273,12 @@ function CardPedido({
   const [incidenteAberto, setIncidenteAberto] = useState(false)
 
   const faixa = faixaDaTransferencia(pedido)
-  const dias = diasDesde(pedido.created_at)
+  const diasNaFila = diasDesde(pedido.created_at)
   const statusMeta = STATUS_TRANSFERENCIA_META[pedido.status]
+  // Antecedência que o professor DEU (congelada no envio) — não envelhece junto
+  // com o pedido, então é ela que diz se ele cumpriu o combinado.
+  const avisouCom = pedido.snapshot?.prazo_dias_uteis
+  const foraDoPrazo = pedido.snapshot?.dentro_do_prazo === false
   const dono = resolverPerfil(pedido.assumido_por_perfil)
   const souDono = pedido.assumido_por === profile?.id
   const emAtendimento = pedido.status === 'em_atendimento'
@@ -284,17 +293,20 @@ function CardPedido({
   return (
     <div className={cn(
       'card-surface p-4 space-y-3',
-      faixa === 'parado' && 'border-urg-critFg/30',
-      faixa === 'urgente' && 'border-urg-highFg/30',
+      faixa === 'vencida' && 'border-urg-critFg/30',
+      faixa === 'apertada' && 'border-urg-highFg/30',
     )}>
       {/* Cabeçalho: aluno em destaque, professor como contexto */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-[15px] font-semibold leading-tight text-ink">{pedido.aluno_nome}</h3>
-            {pedido.urgencia === 'alta' && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-urg-highBg px-2 py-0.5 text-[10.5px] font-medium text-urg-highFg">
-                <Zap className="h-3 w-3" />urgente
+            {foraDoPrazo && (
+              <span
+                title={`O professor avisou com ${diasUteisLabel(avisouCom ?? 0)}, abaixo do prazo de ${PRAZO_DIAS_UTEIS} dias úteis. Já registrado como informe negativo no perfil dele.`}
+                className="inline-flex items-center gap-1 rounded-full bg-urg-highBg px-2 py-0.5 text-[10.5px] font-medium text-urg-highFg"
+              >
+                <Zap className="h-3 w-3" />fora do prazo
               </span>
             )}
             {!pedido.aluno_da_lista && (
@@ -327,9 +339,17 @@ function CardPedido({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px]">
         <span className={cn(
           'font-semibold tabular-nums',
-          faixa === 'parado' ? 'text-urg-critFg' : 'text-ink-secondary',
+          faixa === 'vencida' ? 'text-urg-critFg'
+            : faixa === 'apertada' ? 'text-urg-highFg' : 'text-ink-secondary',
         )}>
-          {esperaLabel(dias)}
+          {prazoLabel(pedido.data_ultima_aula)}
+        </span>
+        <span className="inline-flex items-center gap-1 text-ink-muted">
+          <CalendarDays className="h-3 w-3" />
+          última aula {dataBR(pedido.data_ultima_aula)}
+        </span>
+        <span className="text-ink-muted" title="Há quanto tempo o pedido está na fila.">
+          na fila {diasNaFila <= 0 ? 'desde hoje' : diasNaFila === 1 ? 'há 1 dia' : `há ${diasNaFila} dias`}
         </span>
         <span className={cn(
           'rounded-full px-2 py-0.5 font-medium',
@@ -530,9 +550,20 @@ function CardPedido({
 /** Os dois sim/não do formulário. Só aparecem quando o professor respondeu —
  *  são opcionais lá, e um "—" aqui não informaria nada. */
 function SinaisDoPedido({ pedido }: { pedido: TransferenciaComProfessor }) {
-  if (pedido.ja_conversou === null && pedido.aceita_manter === null) return null
+  const avisouCom = pedido.snapshot?.prazo_dias_uteis
+  const dentro = pedido.snapshot?.dentro_do_prazo
+  if (pedido.ja_conversou === null && pedido.aceita_manter === null && avisouCom == null) return null
   return (
     <div className="flex flex-wrap gap-1.5">
+      {avisouCom != null && (
+        <span className={cn(
+          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+          dentro === false ? 'bg-urg-highBg text-urg-highFg' : 'bg-surface-subtle text-ink-secondary',
+        )}>
+          <Clock className="h-3 w-3" />
+          avisou com {diasUteisLabel(avisouCom)}
+        </span>
+      )}
       {pedido.ja_conversou !== null && (
         <span className={cn(
           'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
@@ -718,6 +749,7 @@ function HistoricoLista({
             <th className="px-3 py-2 text-left font-medium">Data</th>
             <th className="px-3 py-2 text-left font-medium">Aluno</th>
             <th className="px-3 py-2 text-left font-medium">Professor</th>
+            <th className="px-3 py-2 text-left font-medium">Última aula</th>
             <th className="px-3 py-2 text-left font-medium">Motivo</th>
             <th className="px-3 py-2 text-left font-medium">Desfecho</th>
             <th className="px-3 py-2 text-left font-medium">Destino</th>
@@ -741,6 +773,17 @@ function HistoricoLista({
                       {t.professor.nome}
                     </button>
                   ) : <span className="text-ink-muted">—</span>}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums text-ink-secondary">
+                  {dataBR(t.data_ultima_aula)}
+                  {t.snapshot?.dentro_do_prazo === false && (
+                    <span
+                      title={`Avisou com ${diasUteisLabel(t.snapshot?.prazo_dias_uteis ?? 0)}.`}
+                      className="ml-1.5 rounded-full bg-urg-highBg px-1.5 py-0.5 text-[10px] font-medium text-urg-highFg"
+                    >
+                      fora do prazo
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-ink-secondary">{motivoTransferenciaLabel(t.motivo)}</td>
                 <td className="px-3 py-2">

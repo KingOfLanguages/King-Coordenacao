@@ -21,8 +21,11 @@
 //     → { professor: { id, nome } | null, ambiguo, alunos: [...], jaPausado }
 //
 //   { "acao": "solicitar", "professorId", "alunoId"?, "alunoNome", "motivo",
-//     "detalhe", "urgencia", "jaConversou"?, "aceitaManter"? }
+//     "detalhe", "dataUltimaAula", "jaConversou"?, "aceitaManter"? }
 //     → { ok: true, transferenciaId }  |  { error: "…" } com 400/409
+//
+// Não existe mais urgência declarada: ela é derivada de `dataUltimaAula` contra
+// o prazo de 7 dias úteis. Ver 20260761_transferencia_prazo.sql.
 //
 // Escreve em `transferencias_aluno` com a service_role (a tabela não tem policy
 // de INSERT — toda escrita é por função DEFINER ou por aqui).
@@ -40,6 +43,13 @@ const NOME_MIN_CHARS    = 3
 const DETALHE_MIN_CHARS = 15
 const DETALHE_MAX_CHARS = 2000
 const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const DATARE  = /^\d{4}-\d{2}-\d{2}$/
+
+/** Antecedência mínima: o professor pode pedir até com 1 dia. Menos que isso
+ *  (hoje ou ontem) não é pedido de transferência, é fato consumado. */
+const DIAS_ANTECEDENCIA_MIN = 1
+/** Teto de agendamento — evita erro de digitação virar pedido para 2031. */
+const DIAS_FUTURO_MAX = 180
 
 /** Categorias que o formulário oferece. Espelha MOTIVO_TRANSFERENCIA no front —
  *  validar aqui impede que um cliente adulterado grave categoria inventada, o
@@ -65,6 +75,15 @@ function json(body: unknown, status = 200) {
 
 function norm(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/** Data ISO (YYYY-MM-DD) → dias de calendário até hoje. Negativo = passado. */
+function diasAte(iso: string): number {
+  const [a, m, d] = iso.split('-').map(Number)
+  const alvo  = Date.UTC(a, m - 1, d)
+  const agora = new Date()
+  const hoje  = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())
+  return Math.round((alvo - hoje) / 86400000)
 }
 
 /** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
@@ -133,7 +152,7 @@ serve(async (req) => {
     const alunoNome   = typeof body.alunoNome   === 'string' ? body.alunoNome.trim()   : ''
     const motivo      = typeof body.motivo      === 'string' ? body.motivo.trim()      : ''
     const detalhe     = typeof body.detalhe     === 'string' ? body.detalhe.trim()     : ''
-    const urgencia    = body.urgencia === 'alta' ? 'alta' : 'normal'
+    const dataUltimaAula = typeof body.dataUltimaAula === 'string' ? body.dataUltimaAula.trim() : ''
     const alunoId     = typeof body.alunoId === 'number' && Number.isFinite(body.alunoId)
       ? Math.trunc(body.alunoId)
       : null
@@ -150,6 +169,18 @@ serve(async (req) => {
     }
     if (detalhe.length > DETALHE_MAX_CHARS) {
       return json({ error: 'O relato ficou longo demais. Resuma um pouco.' }, 400)
+    }
+    if (!DATARE.test(dataUltimaAula)) {
+      return json({ error: 'Informe a data da última aula do aluno.' }, 400)
+    }
+    const diasAteUltimaAula = diasAte(dataUltimaAula)
+    if (diasAteUltimaAula < DIAS_ANTECEDENCIA_MIN) {
+      return json({
+        error: 'A última aula precisa ser a partir de amanhã. Se a aula já aconteceu, fale com o suporte.',
+      }, 400)
+    }
+    if (diasAteUltimaAula > DIAS_FUTURO_MAX) {
+      return json({ error: 'Essa data está muito distante. Confira o dia informado.' }, 400)
     }
 
     const { data: prof } = await admin
@@ -199,7 +230,7 @@ serve(async (req) => {
         aluno_da_lista: alunoId !== null,
         motivo,
         detalhe,
-        urgencia,
+        data_ultima_aula: dataUltimaAula,
         ja_conversou:   jaConversou,
         aceita_manter:  aceitaManter,
         status:         'pendente',

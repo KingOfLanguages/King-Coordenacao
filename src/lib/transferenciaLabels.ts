@@ -55,6 +55,45 @@ export function motivoEhRelacional(m: string | null | undefined): boolean {
   return !!m && MOTIVOS_RELACIONAIS.has(m)
 }
 
+// ─── Prazo ───────────────────────────────────────────────────────────────────
+// A urgência não é mais declarada pelo professor: ela sai da data da última aula.
+// O compromisso da operação é transferir em até 7 dias úteis a partir do envio,
+// então avisar com menos que isso é pedir fora do acordado.
+
+/** Dias úteis de antecedência que a operação se compromete a cumprir. */
+export const PRAZO_DIAS_UTEIS = 7
+
+/** Antecedência mínima aceita no formulário (dias de calendário). */
+export const ANTECEDENCIA_MIN_DIAS = 1
+
+/** Teto de agendamento, para erro de digitação não virar pedido para 2031. */
+export const FUTURO_MAX_DIAS = 180
+
+export type SituacaoPrazo = 'vencido' | 'fora_do_prazo' | 'no_prazo'
+
+export const PRAZO_META: Record<SituacaoPrazo, { label: string; cls: string }> = {
+  vencido:       { label: 'Última aula já passou', cls: 'bg-urg-critBg text-urg-critFg' },
+  fora_do_prazo: { label: 'Fora do prazo',         cls: 'bg-urg-highBg text-urg-highFg' },
+  no_prazo:      { label: 'No prazo',              cls: 'bg-urg-lowBg  text-urg-lowFg'  },
+}
+
+/**
+ * Situação do pedido em relação ao prazo, a partir dos dias úteis restantes até
+ * a última aula. `restantes` vindo de `diasUteisEntre(hoje, dataUltimaAula)`.
+ *
+ * 0 = a data já passou (a função de dias úteis devolve 0 para intervalo negativo)
+ * — nesse caso o aluno já parou e ninguém processou, que é o pior cenário.
+ */
+export function situacaoPrazo(restantes: number, dataJaPassou: boolean): SituacaoPrazo {
+  if (dataJaPassou) return 'vencido'
+  return restantes >= PRAZO_DIAS_UTEIS ? 'no_prazo' : 'fora_do_prazo'
+}
+
+/** "7 dias úteis" / "1 dia útil" — concordância no singular. */
+export function diasUteisLabel(n: number): string {
+  return n === 1 ? '1 dia útil' : `${n} dias úteis`
+}
+
 // ─── Status do pedido na fila ────────────────────────────────────────────────
 
 export type StatusTransferencia = 'pendente' | 'em_atendimento' | 'concluida' | 'recusada'

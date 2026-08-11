@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react'
 import { UserCog, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { useTransferenciasDoProfessor, diasDesde } from '@/hooks/useTransferencias'
 import {
-  motivoTransferenciaLabel, desfechoMeta, tempoDeVinculo,
+  motivoTransferenciaLabel, desfechoMeta, tempoDeVinculo, diasUteisLabel,
   STATUS_TRANSFERENCIA_META,
 } from '@/lib/transferenciaLabels'
 import { dataBR } from '@/lib/formato'
@@ -34,7 +34,9 @@ export function TransferenciasProfessorSection({ professorId }: { professorId: s
     const transferidos = pedidos.filter(p => p.desfecho === 'transferido').length
     const mantidos = pedidos.filter(p => p.desfecho === 'mantido').length
     const abertos = pedidos.filter(p => p.status === 'pendente' || p.status === 'em_atendimento').length
-    return { recentes, transferidos, mantidos, abertos }
+    // Pedidos abaixo dos 7 dias úteis — cada um destes já virou informe negativo.
+    const foraDoPrazo = pedidos.filter(p => p.snapshot?.dentro_do_prazo === false).length
+    return { recentes, transferidos, mantidos, abertos, foraDoPrazo }
   }, [pedidos])
 
   // Nada a mostrar: some da tela em vez de ocupar espaço com um vazio.
@@ -70,8 +72,9 @@ export function TransferenciasProfessorSection({ professorId }: { professorId: s
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-line-soft sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-line-soft sm:grid-cols-5">
         <Metrica rotulo={`Últimos ${JANELA_DIAS} d`} valor={resumo.recentes} alerta={padrao} />
+        <Metrica rotulo="Fora do prazo" valor={resumo.foraDoPrazo} alerta={resumo.foraDoPrazo > 0} />
         <Metrica rotulo="Transferidos" valor={resumo.transferidos} />
         <Metrica rotulo="Mantidos" valor={resumo.mantidos} />
         <Metrica rotulo="Total" valor={pedidos.length} />
@@ -113,8 +116,14 @@ export function TransferenciasProfessorSection({ professorId }: { professorId: s
                 <div className="space-y-2 pb-3 pl-[1.4rem] text-[12px]">
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-ink-muted">
                     <span>Motivo: <span className="text-ink-secondary">{motivoTransferenciaLabel(p.motivo)}</span></span>
+                    <span>Última aula: <span className="text-ink-secondary tabular-nums">{dataBR(p.data_ultima_aula)}</span></span>
+                    {p.snapshot?.prazo_dias_uteis != null && (
+                      <span className={cn(p.snapshot.dentro_do_prazo === false && 'font-medium text-urg-highFg')}>
+                        avisou com {diasUteisLabel(p.snapshot.prazo_dias_uteis)}
+                        {p.snapshot.dentro_do_prazo === false && ' — fora do prazo'}
+                      </span>
+                    )}
                     {tempo && <span>Aluno estava com ele {tempo}</span>}
-                    {p.urgencia === 'alta' && <span className="font-medium text-urg-highFg">marcado como urgente</span>}
                     {!p.aluno_da_lista && <span className="font-medium text-urg-medFg">nome digitado</span>}
                   </div>
 

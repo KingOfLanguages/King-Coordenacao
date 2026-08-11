@@ -110,6 +110,11 @@ export interface TransferenciaSnapshot {
   professor_score_faixa?: string | null
   professor_qtd_alunos?: number
   professor_pedidos_antes?: number
+  /** Dias úteis de antecedência no momento do envio — congelado, porque
+   *  "faltam 3 dias" envelhece e "avisou com 3 dias" não. */
+  prazo_dias_uteis?: number
+  prazo_minimo?: number
+  dentro_do_prazo?: boolean
 }
 
 export interface TransferenciaAluno {
@@ -121,7 +126,9 @@ export interface TransferenciaAluno {
   aluno_da_lista: boolean
   motivo: string
   detalhe: string
-  urgencia: 'normal' | 'alta'
+  /** Último dia em que o aluno terá aula com este professor. Define a urgência
+   *  do pedido — não existe mais urgência declarada. */
+  data_ultima_aula: string
   ja_conversou: boolean | null
   aceita_manter: boolean | null
   status: StatusTransferencia

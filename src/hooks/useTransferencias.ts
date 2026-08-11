@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { diasUteisEntre, hojeLocal, parseISODate } from '@/lib/diasUteis'
+import { PRAZO_DIAS_UTEIS } from '@/lib/transferenciaLabels'
 import type { TransferenciaAluno } from '@/types'
 
 // ─── Modelo ───────────────────────────────────────────────────────────────────
@@ -18,13 +20,10 @@ export type TransferenciaComProfessor = TransferenciaAluno & {
   destino?: { id: string; nome: string } | null
 }
 
-/** Urgência de atendimento derivada do pedido — dá a ordem e o destaque da fila.
- *  `urgente` é o que o professor marcou; `parado` é o que envergonha a operação:
- *  pedido aberto há mais de uma semana sem desfecho. */
-export type FaixaTransferencia = 'parado' | 'urgente' | 'recente'
-
-/** A partir de quantos dias um pedido em aberto vira "parado". */
-export const DIAS_PARADO = 7
+/** Faixa de urgência da fila, DERIVADA da data da última aula do aluno — não há
+ *  mais urgência declarada pelo professor. `vencida` é o caso que não pode
+ *  acontecer: o aluno já teve a última aula e ninguém processou a transferência. */
+export type FaixaTransferencia = 'vencida' | 'apertada' | 'no_prazo'
 
 /** Dias inteiros desde um timestamp. Compara só a parte de data, sem hora —
  *  evita o resultado mudar conforme a hora em que a tela é aberta. */
@@ -36,16 +35,31 @@ export function diasDesde(ts: string): number {
   return Math.round((hoje - criado) / 86_400_000)
 }
 
-export function faixaDaTransferencia(t: Pick<TransferenciaAluno, 'created_at' | 'urgencia'>): FaixaTransferencia {
-  if (diasDesde(t.created_at) >= DIAS_PARADO) return 'parado'
-  if (t.urgencia === 'alta') return 'urgente'
-  return 'recente'
+/** Dias úteis que ainda restam até a última aula. 0 quando a data já passou.
+ *  Mesma função que o banco usa em `dias_uteis_entre` — front e trigger não
+ *  podem discordar sobre quem está fora do prazo. */
+export function diasUteisRestantes(dataUltimaAula: string): number {
+  const alvo = parseISODate(dataUltimaAula)
+  if (!alvo) return 0
+  return diasUteisEntre(hojeLocal(), alvo)
+}
+
+/** A última aula já passou? (data estritamente anterior a hoje) */
+export function prazoVencido(dataUltimaAula: string): boolean {
+  const alvo = parseISODate(dataUltimaAula)
+  if (!alvo) return false
+  return alvo < hojeLocal()
+}
+
+export function faixaDaTransferencia(t: Pick<TransferenciaAluno, 'data_ultima_aula'>): FaixaTransferencia {
+  if (prazoVencido(t.data_ultima_aula)) return 'vencida'
+  return diasUteisRestantes(t.data_ultima_aula) >= PRAZO_DIAS_UTEIS ? 'no_prazo' : 'apertada'
 }
 
 export const FAIXA_TRANSFERENCIA_META: Record<FaixaTransferencia, { label: string; descricao: string }> = {
-  parado:  { label: 'Parados',     descricao: `Abertos há ${DIAS_PARADO} dias ou mais, ainda sem desfecho.` },
-  urgente: { label: 'Urgentes',    descricao: 'O professor marcou como urgente.' },
-  recente: { label: 'Na fila',     descricao: 'Dentro do prazo normal de atendimento.' },
+  vencida:  { label: 'Última aula já passou', descricao: 'O aluno já parou com este professor e a transferência não foi processada.' },
+  apertada: { label: 'Fora do prazo',         descricao: `Menos de ${PRAZO_DIAS_UTEIS} dias úteis até a última aula — priorizar.` },
+  no_prazo: { label: 'No prazo',              descricao: `Há ${PRAZO_DIAS_UTEIS} dias úteis ou mais até a última aula.` },
 }
 
 const SELECT_TRANSFERENCIA = `
@@ -61,8 +75,8 @@ const SELECT_TRANSFERENCIA = `
 
 // ─── Consultas ────────────────────────────────────────────────────────────────
 
-/** Fila de trabalho: pendentes e em atendimento, mais antigos primeiro (quem
- *  espera há mais tempo aparece antes). */
+/** Fila de trabalho: pendentes e em atendimento, ordenados pela última aula —
+ *  quem para antes precisa ser resolvido antes, independente de quando pediu. */
 export function useTransferenciasFila() {
   return useQuery({
     queryKey: ['transferencias', 'fila'],
@@ -71,7 +85,7 @@ export function useTransferenciasFila() {
         .from('transferencias_aluno')
         .select(SELECT_TRANSFERENCIA)
         .in('status', ['pendente', 'em_atendimento'])
-        .order('created_at', { ascending: true })
+        .order('data_ultima_aula', { ascending: true })
       if (error) throw error
       return (data ?? []) as unknown as TransferenciaComProfessor[]
     },
