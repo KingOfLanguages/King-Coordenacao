@@ -3,6 +3,7 @@ import { Users, GraduationCap } from 'lucide-react'
 import {
   useTurnoverProfessores, useTurnoverAlunos, type TurnoverGrupo, type TurnoverResumo,
 } from '@/hooks/useTurnoverProfessores'
+import { type Janela } from '@/hooks/useDashboardGeral'
 import { cn } from '@/lib/utils'
 
 // Zona de turnover do Dashboard Geral — professor e aluno lado a lado, com o
@@ -16,22 +17,13 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   grupoId: string | null
-  dataInicial: string
-  dataFinal: string
+  /** Janela do filtro global de período — o turnover é sempre apurado nela. */
+  janela: Janela
 }
 
-// O filtro de data do dashboard começa vazio; sem intervalo o turnover não tem
-// significado, então cai no mês corrente — o mesmo padrão da página /retencao.
-const fmt = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-export function TurnoverDashboardSection({ grupoId, dataInicial, dataFinal }: Props) {
-  const hoje = new Date()
-  const desde = dataInicial || fmt(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-  const ate   = dataFinal   || fmt(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0))
-
-  const professores = useTurnoverProfessores(desde, ate)
-  const alunos      = useTurnoverAlunos(desde, ate)
+export function TurnoverDashboardSection({ grupoId, janela }: Props) {
+  const professores = useTurnoverProfessores(janela.inicio, janela.fim)
+  const alunos      = useTurnoverAlunos(janela.inicio, janela.fim)
 
   // Com uma coordenação selecionada, o consolidado passa a ser o dela — senão o
   // topo do card mostraria a escola inteira ao lado de uma tabela de uma linha.

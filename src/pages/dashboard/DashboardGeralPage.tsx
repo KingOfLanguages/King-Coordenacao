@@ -1,5 +1,8 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Search, CalendarRange, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
+import {
+  ChevronDown, ChevronRight, ChevronLeft, Search, CalendarRange,
+  TrendingUp, TrendingDown, AlertTriangle, X,
+} from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -11,11 +14,13 @@ import {
 import { useGrupos } from '@/hooks/useGrupos'
 import {
   useDashboardGeralProfessores, useDashboardGeralScoreTrend,
-  useDashboardGeralReunioes, useDashboardGeralReunioesDatadas, useDashboardGeralMovimento,
+  useDashboardGeralReunioesDatadas, useDashboardGeralMovimento,
   useDashboardGeralMetaProfessores,
   SCORE_BUCKETS, bucketFor, media, mediana, motivosAlerta, agregarPorCoordenacao,
-  agruparMovimento, metaReunioesPeriodo, inicioDoPeriodo, LABEL_ALERTA, LABEL_GRANULARIDADE,
-  type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta, type Granularidade,
+  agruparMovimento, metaReunioesPeriodo, janelaDoPeriodo, serieAte, bucketsNoIntervalo,
+  bucketPeriodo, ymdLocal, LABEL_ALERTA, LABEL_GRANULARIDADE, GRANULARIDADES,
+  type ProfessorGeralRow, type CoordenacaoStats, type MotivoAlerta,
+  type Granularidade, type Janela,
 } from '@/hooks/useDashboardGeral'
 import { IncidentesDashboardSection } from './IncidentesDashboardSection'
 import { TurnoverDashboardSection } from './TurnoverDashboardSection'
@@ -35,23 +40,27 @@ const ALERTA_CHIP: Record<MotivoAlerta, string> = {
 
 const pct1 = (n: number) => n.toFixed(1).replace('.', ',')
 
-/** Data local → 'AAAA-MM-DD' (sem passar por UTC, pra bater com o período local). */
-const ymdLocal = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+/** 'AAAA-MM-DD' → 'DD/MM/AAAA'. */
+const fmtBr = (iso: string) => {
+  const [a, m, d] = iso.split('-')
+  return d && m && a ? `${d}/${m}/${a}` : iso
+}
 
 // Rótulos da meta multi-período.
 const TITULO_META: Record<Granularidade, string> = {
-  semana: 'Meta da semana', mes: 'Meta do mês', trimestre: 'Meta do trimestre', ano: 'Meta do ano',
+  semana: 'Meta da semana', mes: 'Meta do mês', trimestre: 'Meta do trimestre',
+  semestre: 'Meta do semestre', ano: 'Meta do ano',
 }
 const ADMISSOES_LABEL: Record<Granularidade, string> = {
-  semana: 'Admissões na semana', mes: 'Admissões do mês', trimestre: 'Admissões no trimestre', ano: 'Admissões no ano',
+  semana: 'Admissões na semana', mes: 'Admissões do mês', trimestre: 'Admissões no trimestre',
+  semestre: 'Admissões no semestre', ano: 'Admissões no ano',
 }
-const ZONA_META: Record<Granularidade, string> = {
-  semana: 'semana vigente', mes: 'mês vigente', trimestre: 'trimestre vigente', ano: 'ano vigente',
+const PERIODO_NOME: Record<Granularidade, string> = {
+  semana: 'semana', mes: 'mês', trimestre: 'trimestre', semestre: 'semestre', ano: 'ano',
 }
 // Fator visível da faixa 4+ meses (cadência trimestral) na janela escolhida.
 const NOTA_MULT_4: Record<Granularidade, string> = {
-  semana: '~1/13', mes: '33,3%', trimestre: '100%', ano: '4×',
+  semana: '~1/13', mes: '33,3%', trimestre: '100%', semestre: '2×', ano: '4×',
 }
 
 // ─── Ordenação genérica ─────────────────────────────────────────────────────
@@ -101,7 +110,6 @@ function SortHeader({
 export function DashboardGeralPage() {
   const { data: rows = [], isLoading } = useDashboardGeralProfessores()
   const { data: trend = [] } = useDashboardGeralScoreTrend()
-  const { data: reunioesPeriodo = [] } = useDashboardGeralReunioes()
   const { data: reunioesDatadas = [] } = useDashboardGeralReunioesDatadas()
   const { data: movimento = [] } = useDashboardGeralMovimento()
   const { data: metaProfs = [] } = useDashboardGeralMetaProfessores()
@@ -110,11 +118,42 @@ export function DashboardGeralPage() {
   const [coordenacaoFiltro, setCoordenacaoFiltro] = useState(TODAS)
   const [professorFiltro, setProfessorFiltro] = useState('')
   const [faixaFiltro, setFaixaFiltro] = useState(TODAS)
-  const [dataInicial, setDataInicial] = useState('')
-  const [dataFinal, setDataFinal] = useState('')
-  const [granMovimento, setGranMovimento] = useState<Granularidade>('mes')
-  const [granMeta, setGranMeta] = useState<Granularidade>('mes')
+  // Filtro de período global: granularidade + deslocamento (0 = período vigente).
+  // Um intervalo digitado à mão sobrepõe a grade de períodos.
+  const [gran, setGran] = useState<Granularidade>('mes')
+  const [offset, setOffset] = useState(0)
+  const [customDe, setCustomDe] = useState('')
+  const [customAte, setCustomAte] = useState('')
   const [expandido, setExpandido] = useState<Set<string>>(new Set())
+
+  const janela: Janela = useMemo(() => {
+    if (customDe || customAte) {
+      const inicio = customDe || '2000-01-01'
+      const fim = customAte || ymdLocal(new Date())
+      return { gran, inicio, fim, custom: true, label: `${fmtBr(inicio)} a ${fmtBr(fim)}` }
+    }
+    return janelaDoPeriodo(gran, offset)
+  }, [gran, offset, customDe, customAte])
+
+  // Janela das SÉRIES temporais: os últimos N períodos terminando na janela de
+  // apuração — um gráfico com uma barra só não diria nada. Com intervalo
+  // personalizado, a série é o próprio intervalo.
+  const serie = useMemo(
+    () => (janela.custom ? { inicio: janela.inicio, fim: janela.fim } : serieAte(gran, janela.fim)),
+    [janela, gran],
+  )
+  const serieBuckets = useMemo(
+    () => bucketsNoIntervalo(serie.inicio, serie.fim, gran),
+    [serie, gran],
+  )
+
+  // O score vem da King apurado por MÊS (professor_score_historico), então a
+  // visão semanal cai pro mês — é o grão mais fino que existe pra esse dado.
+  const granScore: Granularidade = gran === 'semana' ? 'mes' : gran
+  const serieScore = useMemo(
+    () => (janela.custom ? { inicio: janela.inicio, fim: janela.fim } : serieAte(granScore, janela.fim)),
+    [janela, granScore],
+  )
 
   const filteredRows = useMemo(() => rows.filter(r =>
     (coordenacaoFiltro === TODAS || r.grupo_id === coordenacaoFiltro) &&
@@ -138,21 +177,13 @@ export function DashboardGeralPage() {
     return i >= 0 ? CORES_GRUPO[i % CORES_GRUPO.length] : 'var(--fg-subtle)'
   }
 
-  const trendFiltrado = useMemo(() => {
-    const from = dataInicial ? Number(dataInicial.slice(0, 7).replace('-', '')) : null
-    const to   = dataFinal   ? Number(dataFinal.slice(0, 7).replace('-', ''))   : null
-    return trend.filter(t => (from == null || t.ano_mes >= from) && (to == null || t.ano_mes <= to))
-  }, [trend, dataInicial, dataFinal])
-
-  // Reuniões realizadas por coordenação (respeita filtro de coordenação + intervalo de datas)
+  // Reuniões realizadas por coordenação NA JANELA (do RPC datado, que permite
+  // qualquer granularidade — inclusive semana). Respeita o filtro de coordenação.
   const reunioesPorCoord = useMemo(() => {
-    const from = dataInicial ? Number(dataInicial.slice(0, 7).replace('-', '')) : null
-    const to   = dataFinal   ? Number(dataFinal.slice(0, 7).replace('-', ''))   : null
     const porGrupo = new Map<string, number>()
     let total = 0
-    for (const r of reunioesPeriodo) {
-      if (from != null && r.ano_mes < from) continue
-      if (to != null && r.ano_mes > to) continue
+    for (const r of reunioesDatadas) {
+      if (r.data < janela.inicio || r.data > janela.fim) continue
       if (coordenacaoFiltro !== TODAS && r.grupo_id !== coordenacaoFiltro) continue
       const key = r.grupo_id ?? '__sem_grupo__'
       porGrupo.set(key, (porGrupo.get(key) ?? 0) + r.realizadas)
@@ -166,46 +197,42 @@ export function DashboardGeralPage() {
       }))
       .sort((a, b) => b.realizadas - a.realizadas)
     return { linhas, total }
-  }, [reunioesPeriodo, dataInicial, dataFinal, coordenacaoFiltro, grupos])
+  }, [reunioesDatadas, janela, coordenacaoFiltro, grupos])
 
-  // Reuniões do período vigente (semana/mês/trimestre/ano) vs meta esperada
-  // (régua de tempo de casa). Sempre o período CORRENTE até hoje (ignora o
-  // intervalo de datas dos filtros); respeita o filtro de coordenação.
+  // Reuniões da janela vs meta esperada (régua de tempo de casa), respeitando o
+  // filtro de coordenação. Com um período passado selecionado, a meta é apurada
+  // com o tempo de casa daquela época.
   const reunioesPeriodoVsMeta = useMemo(() => {
-    const now = new Date()
-    const inicioStr = ymdLocal(inicioDoPeriodo(granMeta, now))
-    const hojeStr = ymdLocal(now)
-    let realizadas = 0
-    for (const r of reunioesDatadas) {
-      if (r.data < inicioStr || r.data > hojeStr) continue
-      if (coordenacaoFiltro !== TODAS && r.grupo_id !== coordenacaoFiltro) continue
-      realizadas += r.realizadas
-    }
+    const realizadas = reunioesPorCoord.total
     const profsDoFiltro = coordenacaoFiltro === TODAS
       ? metaProfs
       : metaProfs.filter(p => p.grupo_id === coordenacaoFiltro)
-    const { meta, admissoes, profs2a3, profs4 } = metaReunioesPeriodo(profsDoFiltro, granMeta, now)
+    const { meta, admissoes, profs2a3, profs4 } = metaReunioesPeriodo(profsDoFiltro, gran, janela)
     const pct = meta > 0 ? Math.min(100, Math.round((realizadas / meta) * 100)) : 0
     return { realizadas, meta, admissoes, profs2a3, profs4, pct, atingiu: meta > 0 && realizadas >= meta }
-  }, [reunioesDatadas, granMeta, coordenacaoFiltro, metaProfs])
+  }, [reunioesPorCoord.total, gran, janela, coordenacaoFiltro, metaProfs])
 
-  // Movimento de professores (entradas/saídas) — respeita filtro de coordenação + datas
-  const movimentoFiltrado = useMemo(() => movimento.filter(m =>
-    (coordenacaoFiltro === TODAS || m.grupo_id === coordenacaoFiltro) &&
-    (!dataInicial || m.data >= dataInicial) &&
-    (!dataFinal || m.data <= dataFinal)
-  ), [movimento, coordenacaoFiltro, dataInicial, dataFinal])
+  // Movimento de professores (entradas/saídas) — recorte por coordenação; os
+  // totais usam a janela, o gráfico usa a série de períodos.
+  const movimentoDoGrupo = useMemo(
+    () => movimento.filter(m => coordenacaoFiltro === TODAS || m.grupo_id === coordenacaoFiltro),
+    [movimento, coordenacaoFiltro],
+  )
 
   const movimentoPontos = useMemo(
-    () => agruparMovimento(movimentoFiltrado, granMovimento),
-    [movimentoFiltrado, granMovimento],
+    () => agruparMovimento(
+      movimentoDoGrupo.filter(m => m.data >= serie.inicio && m.data <= serie.fim),
+      gran, serieBuckets,
+    ),
+    [movimentoDoGrupo, gran, serie, serieBuckets],
   )
 
   const movimentoResumo = useMemo(() => {
-    const entradas = movimentoFiltrado.filter(m => m.tipo === 'entrada').length
-    const saidas   = movimentoFiltrado.filter(m => m.tipo === 'saida').length
+    const naJanela = movimentoDoGrupo.filter(m => m.data >= janela.inicio && m.data <= janela.fim)
+    const entradas = naJanela.filter(m => m.tipo === 'entrada').length
+    const saidas   = naJanela.filter(m => m.tipo === 'saida').length
     return { entradas, saidas, saldo: entradas - saidas }
-  }, [movimentoFiltrado])
+  }, [movimentoDoGrupo, janela])
 
   const scores = useMemo(
     () => filteredRows.map(r => r.score_atual).filter((s): s is number => s != null),
@@ -228,10 +255,46 @@ export function DashboardGeralPage() {
     [filteredRows],
   )
 
-  // Trajetória do score da escola (grupo_id null) para o sparkline + delta do KPI.
+  // Com uma coordenação selecionada, o gráfico de score mostra só ela + a escola.
+  const gruposVisiveis = useMemo(
+    () => (coordenacaoFiltro === TODAS ? grupos : grupos.filter(g => g.id === coordenacaoFiltro)),
+    [grupos, coordenacaoFiltro],
+  )
+
+  // Série do score na granularidade escolhida: o histórico da King é mensal, então
+  // um período maior (tri/semestre/ano) é a média dos meses que ele contém.
+  const scoreSerie = useMemo(() => {
+    const buckets = bucketsNoIntervalo(serieScore.inicio, serieScore.fim, granScore)
+    const acc = new Map<string, Map<string, { soma: number; n: number }>>(
+      buckets.map(b => [b.key, new Map()]),
+    )
+    for (const t of trend) {
+      const dia = `${String(t.ano_mes).slice(0, 4)}-${String(t.ano_mes).slice(4, 6)}-01`
+      if (dia < serieScore.inicio || dia > serieScore.fim) continue
+      const porSerie = acc.get(bucketPeriodo(dia, granScore).key)
+      if (!porSerie) continue
+      const chave = t.grupo_id ?? '__escola__'
+      const cel = porSerie.get(chave) ?? { soma: 0, n: 0 }
+      cel.soma += Number(t.score_medio)
+      cel.n++
+      porSerie.set(chave, cel)
+    }
+    return buckets.map(b => {
+      const porSerie = acc.get(b.key)!
+      const val = (chave: string) => {
+        const cel = porSerie.get(chave)
+        return cel ? cel.soma / cel.n : null
+      }
+      const ponto: Record<string, number | string | null> = { periodo: b.label, escola: val('__escola__') }
+      for (const g of gruposVisiveis) ponto[g.nome] = val(g.id)
+      return ponto
+    })
+  }, [trend, serieScore, granScore, gruposVisiveis])
+
+  // Trajetória do score da escola para o sparkline + delta do KPI.
   const escolaTrend = useMemo(
-    () => trend.filter(t => t.grupo_id === null).sort((a, b) => a.ano_mes - b.ano_mes).map(t => t.score_medio),
-    [trend],
+    () => scoreSerie.map(p => p.escola).filter((v): v is number => v != null),
+    [scoreSerie],
   )
   const scoreDelta = escolaTrend.length >= 2
     ? Math.round(escolaTrend[escolaTrend.length - 1] - escolaTrend[escolaTrend.length - 2])
@@ -279,93 +342,119 @@ export function DashboardGeralPage() {
 
   const maxReal = Math.max(1, ...reunioesPorCoord.linhas.map(l => l.realizadas))
 
-  const trendChartData = useMemo(() => {
-    const mesesSet = new Set(trendFiltrado.map(t => t.ano_mes))
-    const meses = [...mesesSet].sort()
-    return meses.map(ano_mes => {
-      const ponto: Record<string, number | string | null> = { ano_mes: `${String(ano_mes).slice(4)}/${String(ano_mes).slice(2, 4)}` }
-      ponto.escola = trendFiltrado.find(t => t.grupo_id === null && t.ano_mes === ano_mes)?.score_medio ?? null
-      for (const g of grupos) {
-        ponto[g.nome] = trendFiltrado.find(t => t.grupo_id === g.id && t.ano_mes === ano_mes)?.score_medio ?? null
-      }
-      return ponto
-    })
-  }, [trendFiltrado, grupos])
-
   if (isLoading) return (
     <div className="flex h-64 items-center justify-center text-ink-muted text-[13px]">Carregando…</div>
   )
 
   return (
     <div className="px-6 py-7 max-w-[1320px] mx-auto">
-      {/* ── Topbar: título + resumo + filtros ── */}
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 mb-7">
-        <div>
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_0_3px_var(--brand-red-soft)]" />
-            Panorama da escola
-          </div>
-          <h1 className="mt-2 text-[30px] font-bold tracking-tight leading-[1.05] text-ink">Dashboard Geral</h1>
-          <p className="mt-1.5 text-[13px] text-ink-muted">
-            Visão consolidada de <b className="font-semibold text-ink-secondary">{resumo.totalGrupos} {resumo.totalGrupos === 1 ? 'coordenação' : 'coordenações'}</b>
-            {' · '}<b className="font-semibold text-ink-secondary tabular-nums">{resumo.professoresAtivos} professores ativos</b>
-          </p>
+      {/* ── Topbar: título ── */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_0_3px_var(--brand-red-soft)]" />
+          Panorama da escola
+        </div>
+        <h1 className="mt-2 text-[30px] font-bold tracking-tight leading-[1.05] text-ink">Dashboard Geral</h1>
+        <p className="mt-1.5 text-[13px] text-ink-muted">
+          Visão consolidada de <b className="font-semibold text-ink-secondary">{resumo.totalGrupos} {resumo.totalGrupos === 1 ? 'coordenação' : 'coordenações'}</b>
+          {' · '}<b className="font-semibold text-ink-secondary tabular-nums">{resumo.professoresAtivos} professores ativos</b>
+        </p>
+      </div>
+
+      {/* ── Filtro global: período + recortes (vale para a página inteira) ── */}
+      <div className="mb-7 flex flex-wrap items-center gap-x-2 gap-y-2 rounded-xl border border-line-soft bg-surface-canvas px-3 py-2.5 shadow-card">
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-muted">Período</span>
+
+        <Select value={gran} onValueChange={v => { setGran(v as Granularidade); setOffset(0) }}>
+          <SelectTrigger className="h-9 w-[124px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-surface-canvas border-line text-ink">
+            {GRANULARIDADES.map(g => (
+              <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Navegação entre períodos — desligada com intervalo personalizado */}
+        <div className={cn('flex items-center rounded-md bg-surface-subtle/60 h-9', janela.custom && 'opacity-40')}>
+          <NavPeriodo dir="ant" onClick={() => setOffset(o => o - 1)} disabled={janela.custom} />
+          <span className="px-2.5 text-[12px] font-medium text-ink whitespace-nowrap min-w-[150px] text-center">
+            {janela.label}
+          </span>
+          <NavPeriodo dir="prox" onClick={() => setOffset(o => Math.min(0, o + 1))} disabled={janela.custom || offset >= 0} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line-soft bg-surface-canvas px-2.5 py-2 shadow-card">
-          <Select value={coordenacaoFiltro} onValueChange={setCoordenacaoFiltro}>
-            <SelectTrigger className="h-9 w-[168px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
-              <SelectValue placeholder="Coordenação" />
-            </SelectTrigger>
-            <SelectContent className="bg-surface-canvas border-line text-ink">
-              <SelectItem value={TODAS} className="text-[12px]">Todas as coordenações</SelectItem>
-              {grupos.map(g => (
-                <SelectItem key={g.id} value={g.id} className="text-[12px]">{g.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {offset !== 0 && !janela.custom && (
+          <button onClick={() => setOffset(0)}
+            className="h-9 rounded-md px-2.5 text-[12px] font-medium text-accentBlue hover:bg-surface-subtle/60">
+            Período atual
+          </button>
+        )}
 
-          <div className="relative w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
-            <Input
-              placeholder="Buscar professor…"
-              value={professorFiltro}
-              onChange={e => setProfessorFiltro(e.target.value)}
-              className="pl-9 h-9 bg-surface-subtle/60 border-transparent"
-            />
-          </div>
-
-          <Select value={faixaFiltro} onValueChange={setFaixaFiltro}>
-            <SelectTrigger className="h-9 w-[140px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
-              <SelectValue placeholder="Faixa de score" />
-            </SelectTrigger>
-            <SelectContent className="bg-surface-canvas border-line text-ink">
-              <SelectItem value={TODAS} className="text-[12px]">Todas as faixas</SelectItem>
-              {SCORE_BUCKETS.map(b => (
-                <SelectItem key={b.label} value={b.label} className="text-[12px]">{b.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="flex items-center gap-1.5 text-[12px] text-ink-muted" title="O período afeta os gráficos de score, reuniões, movimento e incidentes.">
-            <CalendarRange className="h-3.5 w-3.5 text-ink-subtle" />
-            <input type="date" value={dataInicial} onChange={e => setDataInicial(e.target.value)}
-              className="h-9 rounded-md border border-line-soft bg-surface-subtle/60 px-2 text-[12px] text-ink" />
-            <span className="text-ink-subtle">até</span>
-            <input type="date" value={dataFinal} onChange={e => setDataFinal(e.target.value)}
-              className="h-9 rounded-md border border-line-soft bg-surface-subtle/60 px-2 text-[12px] text-ink" />
-          </div>
+        <div className="flex items-center gap-1.5 text-[12px] text-ink-muted"
+          title="Intervalo personalizado — sobrepõe a grade de períodos e vale para a página inteira.">
+          <CalendarRange className="h-3.5 w-3.5 text-ink-subtle" />
+          <input type="date" value={customDe} onChange={e => setCustomDe(e.target.value)}
+            className="h-9 rounded-md border border-line-soft bg-surface-subtle/60 px-2 text-[12px] text-ink" />
+          <span className="text-ink-subtle">até</span>
+          <input type="date" value={customAte} onChange={e => setCustomAte(e.target.value)}
+            className="h-9 rounded-md border border-line-soft bg-surface-subtle/60 px-2 text-[12px] text-ink" />
+          {janela.custom && (
+            <button onClick={() => { setCustomDe(''); setCustomAte('') }} title="Voltar para a grade de períodos"
+              className="grid h-6 w-6 place-items-center rounded-md text-ink-muted hover:bg-surface-subtle hover:text-ink">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
+
+        <span className="mx-1 hidden h-6 w-px bg-line-soft lg:block" />
+
+        <Select value={coordenacaoFiltro} onValueChange={setCoordenacaoFiltro}>
+          <SelectTrigger className="h-9 w-[168px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
+            <SelectValue placeholder="Coordenação" />
+          </SelectTrigger>
+          <SelectContent className="bg-surface-canvas border-line text-ink">
+            <SelectItem value={TODAS} className="text-[12px]">Todas as coordenações</SelectItem>
+            {grupos.map(g => (
+              <SelectItem key={g.id} value={g.id} className="text-[12px]">{g.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="relative w-44">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
+          <Input
+            placeholder="Buscar professor…"
+            value={professorFiltro}
+            onChange={e => setProfessorFiltro(e.target.value)}
+            className="pl-9 h-9 bg-surface-subtle/60 border-transparent"
+          />
+        </div>
+
+        <Select value={faixaFiltro} onValueChange={setFaixaFiltro}>
+          <SelectTrigger className="h-9 w-[140px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
+            <SelectValue placeholder="Faixa de score" />
+          </SelectTrigger>
+          <SelectContent className="bg-surface-canvas border-line text-ink">
+            <SelectItem value={TODAS} className="text-[12px]">Todas as faixas</SelectItem>
+            {SCORE_BUCKETS.map(b => (
+              <SelectItem key={b.label} value={b.label} className="text-[12px]">{b.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* ── Faixa-herói ── */}
-      <div className="relative rounded-2xl overflow-hidden ring-1 ring-line-soft shadow-card mb-11">
+      <div className="relative rounded-2xl overflow-hidden ring-1 ring-line-soft shadow-card mb-2.5">
         <span className="absolute left-0 top-0 z-10 h-full w-[3px] bg-brand" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-line-soft">
-          <HeroKpi label="Professores ativos" value={resumo.professoresAtivos}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-line-soft">
+          <HeroKpi label="Professores ativos" value={resumo.professoresAtivos} hoje
             sub={`em ${resumo.totalGrupos} ${resumo.totalGrupos === 1 ? 'grupo' : 'grupos'}`} />
           <div className="bg-surface-canvas px-5 py-5 sm:px-6">
-            <p className="text-[11.5px] font-medium text-ink-muted mb-3">Score médio da escola</p>
+            <p className="text-[11.5px] font-medium text-ink-muted mb-3 flex items-center gap-1.5">
+              Score médio da escola <TagHoje />
+            </p>
             <div className="flex items-end gap-2">
               <p className="text-[34px] font-semibold tracking-tight leading-none tabular-nums text-ink">
                 {resumo.scoreMedio != null ? Math.round(resumo.scoreMedio) : '—'}
@@ -380,33 +469,45 @@ export function DashboardGeralPage() {
             </div>
             <Sparkline data={escolaTrend} />
           </div>
-          <HeroKpi label="Coordenadores ativos" value={resumo.coordenadoresAtivos}
+          <HeroKpi label="Reuniões no período" value={reunioesPorCoord.total} sub={janela.label} />
+          <HeroKpi label="Coordenadores ativos" value={resumo.coordenadoresAtivos} hoje
             sub={coordenadoresNomes.slice(0, 3).join(' · ') + (coordenadoresNomes.length > 3 ? ' …' : '')} />
-          <HeroKpi label="Sem reunião registrada" value={resumo.semReuniaoRegistrada}
+          <HeroKpi label="Sem reunião registrada" value={resumo.semReuniaoRegistrada} hoje
             warn={resumo.semReuniaoRegistrada > 0}
             sub={resumo.professoresAtivos ? `${pct1(resumo.semReuniaoRegistrada / resumo.professoresAtivos * 100)}% dos professores` : undefined} />
-          <HeroKpi label="Sem próxima agendada" value={resumo.semProximaAgendada}
+          <HeroKpi label="Sem próxima agendada" value={resumo.semProximaAgendada} hoje
             warn={resumo.semProximaAgendada > 0} sub="exige acompanhamento" />
         </div>
       </div>
 
+      <p className="mb-11 text-[11px] text-ink-subtle">
+        Tudo nesta página respeita o período selecionado. Os cartões marcados com
+        <span className="mx-1 inline-flex items-center rounded-[4px] bg-surface-muted px-1 py-px text-[9.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted">hoje</span>
+        são o retrato do cadastro atual — score, roster e agenda vêm do King sem histórico diário.
+      </p>
+
       {/* ══ ZONA: SCORE & DESEMPENHO ══ */}
       <section className="mb-11 space-y-4">
-        <Zone label="Score & desempenho" meta="evolução e distribuição" />
+        <Zone label="Score & desempenho" meta={`evolução por ${PERIODO_NOME[granScore]} · distribuição de hoje`} />
 
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Evolução */}
           <div className="lg:col-span-2 card-surface p-5 space-y-4">
-            <SectionHead title="Evolução do score médio" hint="escola e por coordenação" />
+            <SectionHead
+              title="Evolução do score médio"
+              hint={gran === 'semana'
+                ? 'escola e por coordenação · o King apura o score por mês, então a visão semanal cai pro mês'
+                : `escola e por coordenação · média por ${PERIODO_NOME[granScore]}`}
+            />
             <ResponsiveContainer width="100%" height={264}>
-              <LineChart data={trendChartData} margin={{ left: -8, right: 8, top: 4 }}>
+              <LineChart data={scoreSerie} margin={{ left: -8, right: 8, top: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" vertical={false} />
-                <XAxis dataKey="ano_mes" tick={{ fontSize: 10, fill: 'var(--fg-muted)' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: 'var(--fg-muted)' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: 'var(--fg-muted)' }} domain={['auto', 'auto']} axisLine={false} tickLine={false} width={44} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Line type="monotone" dataKey="escola" stroke="var(--accent-blue)" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
-                {grupos.map(g => (
+                {gruposVisiveis.map(g => (
                   <Line key={g.id} type="monotone" dataKey={g.nome} stroke={corDoGrupo(g.id)} strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
                 ))}
               </LineChart>
@@ -415,7 +516,7 @@ export function DashboardGeralPage() {
 
           {/* Distribuição por faixa */}
           <div className="card-surface p-5 space-y-4">
-            <SectionHead title="Distribuição por faixa" />
+            <SectionHead title="Distribuição por faixa" hint="score atual dos professores" />
             <div className="flex flex-col gap-2.5 pt-1">
               {[...distribuicaoScore].reverse().map((b) => {
                 const i = SCORE_BUCKETS.findIndex(x => x.label === b.label)
@@ -446,7 +547,7 @@ export function DashboardGeralPage() {
         {/* Tabela de coordenações (distribuição + ranking unificados) */}
         <div className="card-surface overflow-hidden">
           <div className="px-5 pt-4 pb-1">
-            <SectionHead title="Coordenações" hint="Clique numa linha para ver os professores do grupo." />
+            <SectionHead title="Coordenações" hint="Score e faixas de hoje; a última reunião é a mais recente registrada. Clique numa linha para ver os professores do grupo." />
           </div>
           <table className="w-full text-[13px]">
             <thead>
@@ -515,39 +616,29 @@ export function DashboardGeralPage() {
 
       {/* ══ ZONA: REUNIÕES ══ */}
       <section className="mb-11 space-y-4">
-        <Zone label="Reuniões" meta={ZONA_META[granMeta]} />
+        <Zone label="Reuniões" meta={janela.label} />
         <div className="grid gap-4 lg:grid-cols-3">
-          {/* Meta do período (semana / mês / trimestre / ano) */}
+          {/* Meta do período selecionado */}
           <div className="card-surface p-5 space-y-4">
             <SectionHead
-              title={TITULO_META[granMeta]}
-              right={
-                <Select value={granMeta} onValueChange={v => setGranMeta(v as Granularidade)}>
-                  <SelectTrigger className="h-8 w-[120px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-surface-canvas border-line text-ink">
-                    {(['semana', 'mes', 'trimestre', 'ano'] as Granularidade[]).map(g => (
-                      <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              }
+              title={janela.custom ? 'Meta do intervalo' : TITULO_META[gran]}
+              hint={janela.custom ? `${fmtBr(janela.inicio)} a ${fmtBr(janela.fim)}` : janela.label}
             />
             <div className="flex items-center gap-5">
               <Ring pct={reunioesPeriodoVsMeta.pct} color={reunioesPeriodoVsMeta.atingiu ? 'var(--urg-low-fg)' : 'var(--accent-blue)'} />
               <div className="flex-1 text-[12px] text-ink-secondary space-y-2">
                 <MetaLinha label="Realizadas" value={reunioesPeriodoVsMeta.realizadas} strong={reunioesPeriodoVsMeta.atingiu} />
                 <MetaLinha label="Meta esperada" value={reunioesPeriodoVsMeta.meta} />
-                <MetaLinha label={ADMISSOES_LABEL[granMeta]} value={reunioesPeriodoVsMeta.admissoes} />
+                <MetaLinha label={janela.custom ? 'Admissões no intervalo' : ADMISSOES_LABEL[gran]} value={reunioesPeriodoVsMeta.admissoes} />
                 <MetaLinha label="Professores 2–3 meses" value={reunioesPeriodoVsMeta.profs2a3} />
                 <MetaLinha label="Professores 4+ meses" value={reunioesPeriodoVsMeta.profs4} last />
               </div>
             </div>
             <p className="text-[10.5px] text-ink-subtle leading-relaxed">
-              Meta = {ADMISSOES_LABEL[granMeta].toLowerCase()} + professores de 2–3 meses (cadência mensal)
-              + {NOTA_MULT_4[granMeta]} dos de 4+ meses (cadência trimestral), no {ZONA_META[granMeta]}
+              Meta = admissões do período + professores de 2–3 meses (cadência mensal)
+              + {NOTA_MULT_4[gran]} dos de 4+ meses (cadência trimestral)
               {coordenacaoFiltro === TODAS ? ', somando todas as coordenações.' : ', na coordenação selecionada.'}
+              {' '}As faixas de tempo de casa são medidas no fim do período.
             </p>
           </div>
 
@@ -555,6 +646,7 @@ export function DashboardGeralPage() {
           <div className="lg:col-span-2 card-surface p-5 space-y-4">
             <SectionHead
               title="Reuniões realizadas por coordenação"
+              hint={janela.label}
               right={<span className="inline-flex items-center rounded-full bg-surface-subtle px-2.5 py-0.5 text-[11px] font-semibold text-ink-secondary tabular-nums">{reunioesPorCoord.total} no total</span>}
             />
             {reunioesPorCoord.linhas.length === 0 ? (
@@ -583,22 +675,22 @@ export function DashboardGeralPage() {
 
       {/* ══ ZONA: INCIDENTES & INFORMES ══ */}
       <section className="mb-11 space-y-4">
-        <Zone label="Incidentes & informes" />
+        <Zone label="Incidentes & informes" meta={janela.label} />
         <IncidentesDashboardSection
           grupoId={coordenacaoFiltro === TODAS ? null : coordenacaoFiltro}
           professorGrupo={professorGrupo}
-          dataInicial={dataInicial}
-          dataFinal={dataFinal}
+          janela={janela}
+          serie={serie}
+          serieBuckets={serieBuckets}
         />
       </section>
 
       {/* ══ ZONA: TURNOVER ══ */}
       <section className="mb-11 space-y-4">
-        <Zone label="Turnover" meta="professor e aluno, por coordenação" />
+        <Zone label="Turnover" meta={`professor e aluno · ${janela.label}`} />
         <TurnoverDashboardSection
           grupoId={coordenacaoFiltro === TODAS ? null : coordenacaoFiltro}
-          dataInicial={dataInicial}
-          dataFinal={dataFinal}
+          janela={janela}
         />
       </section>
 
@@ -610,25 +702,14 @@ export function DashboardGeralPage() {
           <div className="lg:col-span-2 card-surface p-5 space-y-4">
             <SectionHead
               title="Movimento de professores"
-              right={
-                <Select value={granMovimento} onValueChange={v => setGranMovimento(v as Granularidade)}>
-                  <SelectTrigger className="h-8 w-[130px] text-[12px] bg-surface-subtle/60 border-transparent text-ink">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-surface-canvas border-line text-ink">
-                    {(['semana', 'mes', 'trimestre', 'ano'] as Granularidade[]).map(g => (
-                      <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              }
+              hint={`totais de ${janela.label.toLowerCase()}`}
             />
             <div className="grid grid-cols-3 gap-px rounded-xl bg-line-soft ring-1 ring-line-soft overflow-hidden">
               <MiniStat label="Entradas" value={movimentoResumo.entradas} dot="#22c55e" />
               <MiniStat label="Saídas" value={movimentoResumo.saidas} dot="#ef4444" warn={movimentoResumo.saidas > 0} />
               <MiniStat label="Saldo" value={movimentoResumo.saldo > 0 ? `+${movimentoResumo.saldo}` : String(movimentoResumo.saldo)} />
             </div>
-            {movimentoPontos.length === 0 ? (
+            {movimentoPontos.every(p => p.entradas === 0 && p.saidas === 0) ? (
               <p className="text-[13px] text-ink-muted py-6 text-center">Sem entradas ou saídas no período selecionado.</p>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
@@ -644,8 +725,9 @@ export function DashboardGeralPage() {
               </ResponsiveContainer>
             )}
             <p className="text-[10.5px] text-ink-subtle">
-              Entradas e saídas com as datas reais da King, cobrindo todo o histórico — as mesmas
-              que alimentam o turnover acima.
+              Entradas e saídas com as datas reais da King — as mesmas que alimentam o turnover
+              acima. Os três números são do período selecionado; o gráfico mostra
+              {' '}{movimentoPontos.length} {movimentoPontos.length === 1 ? 'período' : `períodos (por ${PERIODO_NOME[gran]})`} até ele.
             </p>
           </div>
 
@@ -653,6 +735,7 @@ export function DashboardGeralPage() {
           <div className="card-surface p-5 space-y-4">
             <SectionHead
               title="Alertas inteligentes"
+              hint="situação de hoje, independe do período"
               right={<span className="inline-flex items-center rounded-full bg-surface-subtle px-2.5 py-0.5 text-[11px] font-semibold text-ink-secondary tabular-nums">{alertas.length}</span>}
             />
             {coordenacoesAbaixoMedia.length > 0 && (
@@ -685,12 +768,43 @@ export function DashboardGeralPage() {
   )
 }
 
+// ─── Navegação entre períodos ────────────────────────────────────────────────
+
+function NavPeriodo({ dir, onClick, disabled }: { dir: 'ant' | 'prox'; onClick: () => void; disabled?: boolean }) {
+  const Icone = dir === 'ant' ? ChevronLeft : ChevronRight
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={dir === 'ant' ? 'Período anterior' : 'Próximo período'}
+      title={dir === 'ant' ? 'Período anterior' : 'Próximo período'}
+      className="grid h-9 w-8 place-items-center rounded-md text-ink-muted enabled:hover:bg-surface-subtle enabled:hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed"
+    >
+      <Icone className="h-4 w-4" />
+    </button>
+  )
+}
+
 // ─── Faixa-herói: KPI grande ─────────────────────────────────────────────────
 
-function HeroKpi({ label, value, sub, warn }: { label: string; value: ReactNode; sub?: string; warn?: boolean }) {
+/** Marca os números que são retrato do cadastro atual, não do período escolhido. */
+function TagHoje() {
+  return (
+    <span
+      title="Dado de hoje — o King não guarda histórico diário de score, roster e agenda."
+      className="inline-flex items-center rounded-[4px] bg-surface-muted px-1 py-px text-[9.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted"
+    >
+      hoje
+    </span>
+  )
+}
+
+function HeroKpi({ label, value, sub, warn, hoje }: { label: string; value: ReactNode; sub?: string; warn?: boolean; hoje?: boolean }) {
   return (
     <div className="bg-surface-canvas px-5 py-5 sm:px-6">
-      <p className="text-[11.5px] font-medium text-ink-muted mb-3">{label}</p>
+      <p className="text-[11.5px] font-medium text-ink-muted mb-3 flex items-center gap-1.5">
+        <span className="truncate" title={label}>{label}</span>{hoje && <TagHoje />}
+      </p>
       <p className={cn('text-[34px] font-semibold tracking-tight leading-none tabular-nums', warn ? 'text-urg-highFg' : 'text-ink')}>{value}</p>
       {sub && <p className="mt-2.5 text-[11.5px] text-ink-subtle truncate" title={sub}>{sub}</p>}
     </div>

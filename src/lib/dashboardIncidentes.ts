@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { natureza, type Incidente } from '@/hooks/useIncidentes'
-import { bucketPeriodo, type Granularidade } from '@/hooks/useDashboardGeral'
+import { bucketPeriodo, type Bucket, type Granularidade } from '@/hooks/useDashboardGeral'
 
 const DIA_MS = 86_400_000
 
@@ -121,9 +121,17 @@ export interface PontoTemporal {
   informes: number
 }
 
-/** Registros agrupados por período (semana/mês/trimestre/ano), ordenados no tempo. */
-export function porPeriodo(incidentes: Incidente[], gran: Granularidade): PontoTemporal[] {
+/**
+ * Registros agrupados por período, ordenados no tempo. `buckets` (opcional)
+ * semeia os períodos vazios do intervalo, pra que apareçam zerados no gráfico.
+ */
+export function porPeriodo(
+  incidentes: Incidente[], gran: Granularidade, buckets: Bucket[] = [],
+): PontoTemporal[] {
   const mapa = new Map<string, PontoTemporal>()
+  for (const b of buckets) {
+    mapa.set(b.key, { periodo: b.label, ordem: b.ordem, incidentes: 0, informes: 0 })
+  }
   for (const i of incidentes) {
     const { key, label, ordem } = bucketPeriodo(i.created_at.slice(0, 10), gran)
     let p = mapa.get(key)

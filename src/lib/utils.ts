@@ -19,15 +19,18 @@ export function whatsappLink(tel: string | null | undefined): string | null {
 
 // ─── Tempo de casa ─────────────────────────────────────────────────────────────
 
-/** Meses completos desde a data de início (entrada na empresa). */
-export function mesesDeCasa(dataInicio: string | null | undefined): number | null {
+/**
+ * Meses completos desde a data de início (entrada na empresa).
+ * `ref` permite medir o tempo de casa numa data que não hoje — usado ao apurar
+ * metas de períodos passados no Dashboard Geral.
+ */
+export function mesesDeCasa(dataInicio: string | null | undefined, ref: Date = new Date()): number | null {
   if (!dataInicio) return null
   const inicio = new Date(dataInicio)
   if (isNaN(inicio.getTime())) return null
-  const agora = new Date()
-  let meses = (agora.getFullYear() - inicio.getFullYear()) * 12
-            + (agora.getMonth() - inicio.getMonth())
-  if (agora.getDate() < inicio.getDate()) meses -= 1
+  let meses = (ref.getFullYear() - inicio.getFullYear()) * 12
+            + (ref.getMonth() - inicio.getMonth())
+  if (ref.getDate() < inicio.getDate()) meses -= 1
   return Math.max(0, meses)
 }
 

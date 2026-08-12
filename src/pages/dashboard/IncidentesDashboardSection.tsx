@@ -1,13 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   ResponsiveContainer, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { useIncidentes } from '@/hooks/useIncidentes'
-import { LABEL_GRANULARIDADE, type Granularidade } from '@/hooks/useDashboardGeral'
+import { type Bucket, type Janela } from '@/hooks/useDashboardGeral'
 import {
   recortarIncidentes, dentroDosUltimosDias, contarPorNatureza,
   topProfessores, porTipo, porPeriodo, type ProfessorCitacoes,
@@ -21,30 +18,35 @@ interface Props {
   grupoId: string | null
   /** professor_id → grupo_id, montado a partir dos professores ativos do dashboard. */
   professorGrupo: Map<string, string | null>
-  dataInicial: string
-  dataFinal: string
+  /** Janela do filtro global de período — vale para todos os números do bloco. */
+  janela: Janela
+  /** Intervalo da série temporal (os N períodos que o gráfico mostra). */
+  serie: { inicio: string; fim: string }
+  /** Períodos da série (já na granularidade do filtro global), pra zerar os vazios. */
+  serieBuckets: Bucket[]
 }
 
-export function IncidentesDashboardSection({ grupoId, professorGrupo, dataInicial, dataFinal }: Props) {
+export function IncidentesDashboardSection({ grupoId, professorGrupo, janela, serie: serieRange, serieBuckets }: Props) {
   const { data: incidentes = [], isLoading } = useIncidentes()
-  const [gran, setGran] = useState<Granularidade>('mes')
 
-  // Recorte principal: coordenação + intervalo de datas.
+  // Recorte principal: coordenação + janela do período.
   const recorte = useMemo(
-    () => recortarIncidentes(incidentes, grupoId, professorGrupo, dataInicial, dataFinal),
-    [incidentes, grupoId, professorGrupo, dataInicial, dataFinal],
+    () => recortarIncidentes(incidentes, grupoId, professorGrupo, janela.inicio, janela.fim),
+    [incidentes, grupoId, professorGrupo, janela],
   )
 
-  // Top professores usa janelas móveis (7/30 dias) → só recorta por coordenação,
-  // ignorando o intervalo de datas de propósito.
+  // A série cobre mais períodos que a janela, então tem recorte próprio.
+  const recorteSerie = useMemo(
+    () => recortarIncidentes(incidentes, grupoId, professorGrupo, serieRange.inicio, serieRange.fim),
+    [incidentes, grupoId, professorGrupo, serieRange],
+  )
+
   const soCoordenacao = useMemo(
     () => recortarIncidentes(incidentes, grupoId, professorGrupo, '', ''),
     [incidentes, grupoId, professorGrupo],
   )
-  const top7 = useMemo(
-    () => topProfessores(soCoordenacao.filter(i => dentroDosUltimosDias(i.created_at, 7))),
-    [soCoordenacao],
-  )
+  // Ranking do período selecionado + a janela móvel de 30 dias (calor recente).
+  const topPeriodo = useMemo(() => topProfessores(recorte), [recorte])
   const top30 = useMemo(
     () => topProfessores(soCoordenacao.filter(i => dentroDosUltimosDias(i.created_at, 30))),
     [soCoordenacao],
@@ -52,29 +54,32 @@ export function IncidentesDashboardSection({ grupoId, professorGrupo, dataInicia
 
   const contador = useMemo(() => contarPorNatureza(recorte), [recorte])
   const tipos = useMemo(() => porTipo(recorte), [recorte])
-  const serie = useMemo(() => porPeriodo(recorte, gran), [recorte, gran])
+  const serie = useMemo(
+    () => porPeriodo(recorteSerie, janela.gran, serieBuckets),
+    [recorteSerie, janela.gran, serieBuckets],
+  )
 
   const pctInformes = contador.total ? Math.round((contador.informes / contador.total) * 100) : 0
   const pctDesafios = contador.total ? (contador.desafios / contador.total) * 100 : 0
-
-  const recorteLabel = dataInicial || dataFinal
-    ? `${fmtBr(dataInicial) || '…'} até ${fmtBr(dataFinal) || '…'}`
-    : 'todo o histórico'
 
   return (
     <section className="card-surface p-5 space-y-7">
       <div className="flex justify-end">
         <span className="text-[11px] text-ink-subtle">
-          {grupoId ? 'coordenação selecionada' : 'todas as coordenações'} · {recorteLabel}
+          {grupoId ? 'coordenação selecionada' : 'todas as coordenações'} · {fmtBr(janela.inicio)} até {fmtBr(janela.fim)}
         </span>
       </div>
 
       {isLoading ? (
         <div className="flex h-40 items-center justify-center text-ink-muted text-[13px]">Carregando…</div>
-      ) : contador.total === 0 ? (
-        <p className="text-[13px] text-ink-muted">Nenhum incidente ou informe no recorte selecionado.</p>
       ) : (
         <>
+          {contador.total === 0 && (
+            <p className="text-[13px] text-ink-muted">
+              Nenhum incidente ou informe no período selecionado — a evolução abaixo mostra os períodos vizinhos.
+            </p>
+          )}
+          {contador.total > 0 && <>
           {/* ── Proporção incidentes × informes ── */}
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
@@ -92,9 +97,9 @@ export function IncidentesDashboardSection({ grupoId, professorGrupo, dataInicia
             </div>
           </div>
 
-          {/* ── Top professores mais citados (7 × 30 dias) ── */}
+          {/* ── Top professores mais citados: período × janela móvel de 30 dias ── */}
           <div className="grid gap-px overflow-hidden rounded-xl bg-line-soft ring-1 ring-line-soft md:grid-cols-2">
-            <TopProfessores titulo="Mais citados — últimos 7 dias" lista={top7} />
+            <TopProfessores titulo="Mais citados — no período" lista={topPeriodo} />
             <TopProfessores titulo="Mais citados — últimos 30 dias" lista={top30} />
           </div>
 
@@ -117,21 +122,15 @@ export function IncidentesDashboardSection({ grupoId, professorGrupo, dataInicia
               </ResponsiveContainer>
             )}
           </div>
+          </>}
 
-          {/* ── Evolução por período ── */}
+          {/* ── Evolução por período (na granularidade do filtro global) ── */}
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[13px] font-medium text-ink">Evolução por período</h3>
-              <Select value={gran} onValueChange={v => setGran(v as Granularidade)}>
-                <SelectTrigger className="h-8 w-[130px] text-[12px] bg-surface-canvas border-line text-ink">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-surface-canvas border-line text-ink">
-                  {(['semana', 'mes', 'trimestre', 'ano'] as Granularidade[]).map(g => (
-                    <SelectItem key={g} value={g} className="text-[12px]">{LABEL_GRANULARIDADE[g]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <span className="text-[11px] text-ink-subtle">
+                {serie.length} {serie.length === 1 ? 'período' : 'períodos'} até {janela.label.toLowerCase()}
+              </span>
             </div>
             {serie.length === 0 ? (
               <p className="text-[13px] text-ink-muted">Sem registros no recorte.</p>
