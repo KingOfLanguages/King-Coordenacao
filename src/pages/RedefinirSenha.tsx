@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2 } from 'lucide-react'
+import { KingBrand } from '@/components/brand/KingLogo'
 
 const SENHA_MIN = 6
 
@@ -98,12 +99,7 @@ export function RedefinirSenha() {
 
       <div className="relative flex min-h-[100dvh] items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-7">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-white">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M4 19l2-9 4 5 4-8 4 8 4-5 2 9z" /></svg>
-            </span>
-            <span className="text-[13px] font-semibold tracking-[0.24em] text-ink">KING <span className="text-brand">CODEX</span></span>
-          </div>
+          <KingBrand />
 
           <div className="space-y-1.5">
             <h1 className="text-2xl font-semibold tracking-tight text-ink">Redefinir senha</h1>

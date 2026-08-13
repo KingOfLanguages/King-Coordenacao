@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { KingBrand, KingLockup, NOME_PLATAFORMA } from '@/components/brand/KingLogo'
 
 // ─── Feature list ─────────────────────────────────────────────────────────────
 
@@ -109,17 +110,10 @@ export function Login() {
                             border-r border-line-soft overflow-hidden">
 
           {/* Logo */}
-          <div className="flex items-center gap-2.5 animate-[float-up_700ms_cubic-bezier(0.32,0.72,0,1)_both]">
-            <span className="relative flex h-9 w-9 items-center justify-center rounded-full p-[2px] bg-brand/10">
-              <span className="flex h-full w-full items-center justify-center rounded-full bg-brand
-                               shadow-[0_1px_2px_rgba(209,51,58,0.5),inset_0_1px_0_rgba(255,255,255,0.3)]">
-                <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] text-white" fill="currentColor" aria-hidden>
-                  <path d="M12 3L4 21l4-4 4 4 4-4 4 4z" />
-                </svg>
-              </span>
-            </span>
-            <span className="text-[13px] font-semibold tracking-[0.22em] text-ink">
-              KING <span className="text-brand">CODEX</span>
+          <div className="flex flex-col gap-2 animate-[float-up_700ms_cubic-bezier(0.32,0.72,0,1)_both]">
+            <KingLockup className="h-9" />
+            <span className="text-[13px] font-semibold tracking-[-0.01em] text-ink-secondary">
+              {NOME_PLATAFORMA}
             </span>
           </div>
 
@@ -179,19 +173,8 @@ export function Login() {
           <div className="w-full max-w-sm space-y-7">
 
             {/* Mobile logo */}
-            <div className="lg:hidden flex items-center gap-2.5
-                            animate-[float-up_700ms_cubic-bezier(0.32,0.72,0,1)_both]">
-              <span className="relative flex h-8 w-8 items-center justify-center rounded-full p-[2px] bg-brand/10">
-                <span className="flex h-full w-full items-center justify-center rounded-full bg-brand
-                                 shadow-[0_1px_2px_rgba(209,51,58,0.4),inset_0_1px_0_rgba(255,255,255,0.3)]">
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-white" fill="currentColor">
-                    <path d="M12 3L4 21l4-4 4 4 4-4 4 4z" />
-                  </svg>
-                </span>
-              </span>
-              <span className="text-[13px] font-semibold tracking-[0.22em] text-ink">
-                KING <span className="text-brand">CODEX</span>
-              </span>
+            <div className="lg:hidden animate-[float-up_700ms_cubic-bezier(0.32,0.72,0,1)_both]">
+              <KingBrand />
             </div>
 
             {/* Heading */}

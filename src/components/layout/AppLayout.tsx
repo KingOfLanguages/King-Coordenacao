@@ -10,6 +10,7 @@ import { NotificacoesSino } from '@/components/layout/NotificacoesSino'
 import { ExtensaoConteudo } from '@/pages/extensao/ExtensaoConteudo'
 import { useCanView } from '@/hooks/usePagePermissions'
 import { PAGE_BY_KEY } from '@/lib/pagePermissions'
+import { KingBrand, NOME_PLATAFORMA } from '@/components/brand/KingLogo'
 
 type NavLinkEntry  = { type: 'link';  to: string; label: string; exact?: boolean }
 type NavGroupEntry = { type: 'group'; label: string; items: NavDropdownItem[] }
@@ -61,24 +62,13 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <NavLink
       to="/"
-      className="flex items-center gap-2.5 group flex-shrink-0"
+      className="flex items-center group flex-shrink-0"
+      aria-label={NOME_PLATAFORMA}
     >
-      {/* Outer shell */}
-      <span className="relative flex h-8 w-8 items-center justify-center rounded-full p-[2px] bg-brand/10">
-        {/* Inner core */}
-        <span className="flex h-full w-full items-center justify-center rounded-full bg-brand
-                         shadow-[0_1px_2px_rgba(209,51,58,0.5),inset_0_1px_0_rgba(255,255,255,0.3)]
-                         transition-all duration-300 ease-spring group-hover:scale-105">
-          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="currentColor" aria-hidden>
-            <path d="M12 3L4 21l4-4 4 4 4-4 4 4z" />
-          </svg>
-        </span>
-      </span>
-      {!compact && (
-        <span className="text-[12.5px] font-semibold tracking-[0.22em] text-ink transition-opacity duration-200">
-          KING <span className="text-brand">CODEX</span>
-        </span>
-      )}
+      <KingBrand
+        compact={compact}
+        className="transition-transform duration-300 ease-spring group-hover:scale-[1.02]"
+      />
     </NavLink>
   )
 }
@@ -233,7 +223,7 @@ export function AppLayout() {
             <Dialog open={openMenu === 'extensao'} onOpenChange={o => setOpenMenu(o ? 'extensao' : null)}>
               <DialogTrigger asChild>
                 <button
-                  aria-label="Extensão KingCodex"
+                  aria-label={`Extensão ${NOME_PLATAFORMA}`}
                   className="btn-press flex items-center justify-center h-9 w-9 rounded-full hover:bg-surface-subtle/80 flex-shrink-0"
                 >
                   <Puzzle className="h-4 w-4" />
@@ -243,7 +233,7 @@ export function AppLayout() {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-[15px]">
                     <Puzzle className="h-4 w-4 text-brand" />
-                    Extensão KingCodex
+                    Extensão {NOME_PLATAFORMA}
                   </DialogTitle>
                 </DialogHeader>
                 <ExtensaoConteudo />
