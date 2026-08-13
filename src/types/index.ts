@@ -78,6 +78,12 @@ export interface Pausa {
   encerrada_por: string | null
   observacao_id: string | null
   tarefa_fim_id: string | null
+  /** Observação interna do acompanhamento. Só aparece enquanto a pausa vive. */
+  nota: string | null
+  nota_por: string | null
+  nota_em: string | null
+  /** Data de retorno pedida no portal, guardada na primeira edição. */
+  data_fim_original: string | null
   origem: string
   created_at: string
 }

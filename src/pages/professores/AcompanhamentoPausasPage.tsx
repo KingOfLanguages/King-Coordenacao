@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import {
   PauseCircle, PlayCircle, User, Users, CalendarClock, CheckCircle2, Search,
   Hand, XCircle, Plus, FileWarning, Link2, Check, AlertTriangle, Phone, MessageCircle,
+  Pencil, StickyNote, X,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
   usePausasFila, usePausasVigentes, useAssumirPausa, useLargarPausa,
   useConcluirPausa, useRecusarPausa, useEncerrarPausa, useAlunosDePausas,
+  useAtualizarRetornoPausa, useAtualizarNotaPausa,
   faixaDaPausa, diasAte, FAIXA_META, STATUS_PAUSA_META,
   type PausaComProfessor, type FaixaPausa,
 } from '@/hooks/usePausas'
@@ -327,12 +329,7 @@ function CardSolicitacao({
       </p>
 
       <div className="space-y-1 text-[11.5px] text-ink-muted">
-        <p className="inline-flex items-center gap-1.5">
-          <CalendarClock className="h-3 w-3" />
-          <span className="tabular-nums">{dataBR(pausa.data_inicio)}</span>
-          <span className="text-ink-subtle">→</span>
-          <span className="tabular-nums">{dataBR(pausa.data_fim)}</span>
-        </p>
+        <DatasPausa pausa={pausa} />
         {dono && (
           <p className="inline-flex items-center gap-1.5">
             <Users className="h-3 w-3" />
@@ -340,6 +337,8 @@ function CardSolicitacao({
           </p>
         )}
       </div>
+
+      <NotaPausa pausa={pausa} />
 
       <ContatoAlunos telefone={pausa.professor?.telefone} alunos={alunos} />
 
@@ -498,18 +497,15 @@ function CardVigente({
       </p>
 
       <div className="space-y-1 text-[11.5px] text-ink-muted">
-        <p className="inline-flex items-center gap-1.5">
-          <CalendarClock className="h-3 w-3" />
-          <span className="tabular-nums">{dataBR(pausa.data_inicio)}</span>
-          <span className="text-ink-subtle">→</span>
-          <span className="tabular-nums">{dataBR(pausa.data_fim)}</span>
-        </p>
+        <DatasPausa pausa={pausa} />
         {pausa.professor?.coordenador?.nome && (
           <p className="inline-flex items-center gap-1.5">
             <User className="h-3 w-3" />{pausa.professor.coordenador.nome}
           </p>
         )}
       </div>
+
+      <NotaPausa pausa={pausa} />
 
       <ContatoAlunos telefone={pausa.professor?.telefone} alunos={alunos} />
 
@@ -548,6 +544,188 @@ function CardVigente({
             professorFixo={{ id: pausa.professor.id, nome: pausa.professor.nome }}
           />
         </>
+      )}
+    </div>
+  )
+}
+
+// ─── Datas da pausa (com edição da data de retorno) ───────────────────────────
+
+/** Início → retorno. A data de retorno é editável aqui mesmo: quando o professor
+ *  avisa que volta em outro dia, o card precisava ser refeito no portal — agora
+ *  quem trabalha a fila corrige na hora, e a cobrança do fim de pausa reagenda
+ *  junto (ver 20260763_pausa_retorno_e_nota.sql). */
+function DatasPausa({ pausa }: { pausa: PausaComProfessor }) {
+  const atualizar = useAtualizarRetornoPausa()
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(pausa.data_fim)
+
+  function abrir() {
+    setValor(pausa.data_fim)
+    setEditando(true)
+  }
+
+  function salvar() {
+    if (!valor) return
+    atualizar.mutate({ id: pausa.id, dataFim: valor }, {
+      onSuccess: () => {
+        setEditando(false)
+        toast.success(`Retorno remarcado para ${dataBR(valor)}.`)
+      },
+      onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao alterar a data de retorno.'),
+    })
+  }
+
+  if (editando) {
+    return (
+      <div className="space-y-1.5">
+        <p className="label-micro text-ink-muted">Nova data de retorno</p>
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="date"
+            value={valor}
+            min={pausa.data_inicio}
+            autoFocus
+            onChange={e => setValor(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false) }}
+            className="h-8 flex-1 bg-surface-canvas border-line text-[12px] text-ink"
+          />
+          <Button
+            size="sm"
+            disabled={atualizar.isPending || !valor}
+            onClick={salvar}
+            className="btn-press h-8 gap-1 bg-accentBlue hover:bg-accentBlue-hov text-white text-[12px]"
+          >
+            <Check className="h-3.5 w-3.5" />Salvar
+          </Button>
+          <Button
+            variant="ghost" size="sm"
+            disabled={atualizar.isPending}
+            onClick={() => setEditando(false)}
+            className="btn-press h-8 w-8 p-0 text-ink-muted hover:text-ink"
+            title="Cancelar"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <p className="flex flex-wrap items-center gap-1.5">
+      <CalendarClock className="h-3 w-3" />
+      <span className="tabular-nums">{dataBR(pausa.data_inicio)}</span>
+      <span className="text-ink-subtle">→</span>
+      <span className="tabular-nums font-medium text-ink-secondary">{dataBR(pausa.data_fim)}</span>
+      <button
+        onClick={abrir}
+        title="Editar a data de retorno"
+        className="btn-press inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-accentBlue hover:bg-surface-subtle"
+      >
+        <Pencil className="h-3 w-3" />editar
+      </button>
+      {pausa.data_fim_original && pausa.data_fim_original !== pausa.data_fim && (
+        <span className="text-ink-subtle">
+          (pedido: <span className="tabular-nums">{dataBR(pausa.data_fim_original)}</span>)
+        </span>
+      )}
+    </p>
+  )
+}
+
+// ─── Observação da pausa ──────────────────────────────────────────────────────
+
+/** Anotação de acompanhamento da PAUSA — o que já foi combinado com o professor
+ *  enquanto ela corre. Diferente da "Observação" do perfil: esta vive na linha
+ *  da pausa e sai da tela junto com o card quando a pausa encerra. */
+function NotaPausa({ pausa }: { pausa: PausaComProfessor }) {
+  const salvarNota = useAtualizarNotaPausa()
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState(pausa.nota ?? '')
+
+  function abrir() {
+    setTexto(pausa.nota ?? '')
+    setEditando(true)
+  }
+
+  function salvar() {
+    salvarNota.mutate({ id: pausa.id, nota: texto }, {
+      onSuccess: () => {
+        setEditando(false)
+        toast.success(texto.trim() ? 'Observação salva.' : 'Observação removida.')
+      },
+      onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao salvar a observação.'),
+    })
+  }
+
+  if (editando) {
+    return (
+      <div className="space-y-2">
+        <p className="label-micro text-ink-muted">Observação da pausa</p>
+        <textarea
+          value={texto}
+          onChange={e => setTexto(e.target.value)}
+          rows={3}
+          autoFocus
+          placeholder="O que já foi combinado com o professor nesta pausa…"
+          className="w-full resize-none rounded-md border border-line bg-surface-canvas px-3 py-2 text-[12px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue transition-colors"
+        />
+        <div className="flex gap-2">
+          <Button
+            variant="ghost" size="sm"
+            disabled={salvarNota.isPending}
+            onClick={() => setEditando(false)}
+            className="btn-press h-8 flex-1 text-ink-secondary text-[12px]"
+          >
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            disabled={salvarNota.isPending}
+            onClick={salvar}
+            className="btn-press h-8 flex-1 bg-accentBlue hover:bg-accentBlue-hov text-white text-[12px]"
+          >
+            Salvar
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!pausa.nota) {
+    return (
+      <button
+        onClick={abrir}
+        className="btn-press inline-flex items-center gap-1.5 rounded-md px-2 py-1 -ml-2 text-[11.5px] text-ink-muted hover:bg-surface-subtle hover:text-ink"
+      >
+        <StickyNote className="h-3 w-3" />Anotar sobre a pausa
+      </button>
+    )
+  }
+
+  const autor = resolverPerfil(pausa.nota_perfil)
+
+  return (
+    <div className="rounded-lg border border-aviso-infoBd bg-aviso-infoBg px-2.5 py-2 space-y-1">
+      <div className="flex items-start justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-aviso-infoFg">
+          <StickyNote className="h-3 w-3" />Observação da pausa
+        </span>
+        <button
+          onClick={abrir}
+          title="Editar observação"
+          className="btn-press shrink-0 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-aviso-infoFg hover:underline"
+        >
+          <Pencil className="h-3 w-3" />editar
+        </button>
+      </div>
+      <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-aviso-infoFg">{pausa.nota}</p>
+      {(autor || pausa.nota_em) && (
+        <p className="text-[10.5px] text-aviso-infoFg">
+          {autor}{autor && pausa.nota_em ? ' · ' : ''}
+          {pausa.nota_em ? new Date(pausa.nota_em).toLocaleDateString('pt-BR') : ''}
+        </p>
       )}
     </div>
   )

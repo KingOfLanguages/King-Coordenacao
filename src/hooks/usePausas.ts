@@ -14,6 +14,7 @@ export type PausaComProfessor = Pausa & {
     coordenador?: { id: string; nome: string } | null
   } | null
   assumido_por_perfil?: { id: string; nome: string } | null
+  nota_perfil?: { id: string; nome: string } | null
 }
 
 /** Estágio da solicitação na fila, derivado das datas — é o que dá a ordem e o
@@ -64,7 +65,8 @@ const SELECT_PAUSA = `
     grupo:grupos!grupo_id (id, nome),
     coordenador:profiles!coordenador_id (id, nome)
   ),
-  assumido_por_perfil:profiles!assumido_por (id, nome)
+  assumido_por_perfil:profiles!assumido_por (id, nome),
+  nota_perfil:profiles!nota_por (id, nome)
 `
 
 // ─── Consultas ────────────────────────────────────────────────────────────────
@@ -188,6 +190,23 @@ export function useRecusarPausa() {
   return useAcaoPausa<{ id: string; motivo?: string }>(
     'recusar_pausa',
     ({ id, motivo }) => ({ p_id: id, p_motivo: motivo ?? null }),
+  )
+}
+
+/** Muda a data de retorno (o dia do contato da coordenação). Vale para a fila e
+ *  para pausas já vigentes — o professor avisou que volta em outra data. */
+export function useAtualizarRetornoPausa() {
+  return useAcaoPausa<{ id: string; dataFim: string }>(
+    'atualizar_retorno_pausa',
+    ({ id, dataFim }) => ({ p_id: id, p_data_fim: dataFim }),
+  )
+}
+
+/** Grava a observação de acompanhamento da pausa (texto vazio apaga). */
+export function useAtualizarNotaPausa() {
+  return useAcaoPausa<{ id: string; nota: string }>(
+    'atualizar_nota_pausa',
+    ({ id, nota }) => ({ p_id: id, p_nota: nota }),
   )
 }
 
