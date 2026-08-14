@@ -23,9 +23,15 @@ export function canConfig(perfil?: PerfilComoAdmin): boolean {
   return ehAdmin(perfil)
 }
 
-/** Editar informações / registrar reuniões / alterar grupos. */
+/** Editar informações / registrar reuniões / alterar grupos.
+ *  O Suporte (role 'suporte') tem paridade de edição com a coordenação — decisão
+ *  do João (2026-08-07): "dar via de regra todas as permissões de edição que os
+ *  coordenadores têm". Espelhado na RLS em 20260754_suporte_paridade_edicao.sql.
+ *  Fica de fora do suporte só o que é admin/config (excluir cadastro, grupos). */
 export function canEdit(perfil?: PerfilComoAdmin): boolean {
-  return perfil?.role === 'coordenacao' || ehAdmin(perfil)
+  return perfil?.role === 'coordenacao'
+      || perfil?.role === 'suporte'
+      || ehAdmin(perfil)
 }
 
 /** Excluir registros permanentemente. */
