@@ -48,6 +48,16 @@ const STATUS_META: Record<StatusChamado, { label: string; chip: string }> = {
   concluido:    { label: 'Concluído',    chip: 'bg-urg-lowBg text-urg-lowFg' },
 }
 
+/** Ação de destaque da linha — a única cheia de cor, para dizer qual é o passo
+ *  natural daquele chamado. Usa os tokens `aviso.*` porque `urg-*`/`accent-*`
+ *  NÃO viram no tema escuro: continuariam pastel quase branco sobre o preto.
+ *  O hover sobe para o token `*Bd` (um degrau de tinta) em vez de usar
+ *  modificador de opacidade, que em cor `var()` fica transparente sem erro. */
+const ACAO_DESTAQUE: Record<'info' | 'ok', string> = {
+  info: 'bg-aviso-infoBg text-aviso-infoFg border-aviso-infoBd hover:bg-aviso-infoBd hover:text-aviso-infoFg',
+  ok:   'bg-aviso-okBg text-aviso-okFg border-aviso-okBd hover:bg-aviso-okBd hover:text-aviso-okFg',
+}
+
 const FILTROS_STATUS: [FiltroStatus, string][] = [
   ['ativos', 'Ativos'],
   ['aberto', 'Em aberto'],
@@ -347,6 +357,12 @@ export function IncidentesPage() {
             const isInforme = naturezaDe(i) === 'informe'
             const isPlataforma = abaDoIncidente(i) === 'plataforma'
             const urgenciaAlta = i.urgency === 'Alta' || i.urgency === 'Crítico'
+            // Os hooks de mutação são compartilhados pela lista inteira: sem
+            // comparar o id, um clique em "Assumir" desabilitaria a linha toda.
+            const assumindo  = assumir.isPending && assumir.variables?.id === i.id
+            const largando   = largar.isPending && largar.variables?.id === i.id
+            const reabrindo  = reabrir.isPending && reabrir.variables?.id === i.id
+            const mudandoTi  = atualizarTiStatus.isPending && atualizarTiStatus.variables?.id === i.id
             // Informe não tem fluxo de resolução → não mostra prazo.
             const sp = isInforme ? null : statusPrazo(i.prazo_resolucao, i.resolved)
             return (
@@ -466,76 +482,93 @@ export function IncidentesPage() {
                     navegador. Fica vazio (sem layout) para quem não a tem instalada. */}
                 <span data-ktm-chamado-slot="" className="contents" />
                 {podeEditar && (
-                  <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                     {isPlataforma && (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={mudandoTi}
                         onClick={() => atualizarTiStatus.mutate(
                           { id: i.id, ti_status: (i.ti_status === 'em_analise_ti' ? 'chamado_aberto' : 'em_analise_ti') as TiStatus },
                           { onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao atualizar estado do TI.') },
                         )}
-                        className="btn-press flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-accentBlue-soft text-accentBlue hover:opacity-80 transition-opacity"
                         title="Alternar estado junto ao TI"
                       >
-                        <ScanSearch className="h-3.5 w-3.5" />
+                        <ScanSearch />
                         {i.ti_status === 'em_analise_ti' ? 'Em análise' : 'Chamado aberto'}
-                      </button>
+                      </Button>
                     )}
                     {!isInforme && st === 'aberto' && (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={ACAO_DESTAQUE.info}
+                        disabled={assumindo}
                         onClick={() => assumir.mutate(
                           { id: i.id, professor_id: i.professor_id },
                           { onSuccess: () => toast.success('Você assumiu este chamado.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao assumir.') },
                         )}
-                        className="btn-press flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-accentBlue-soft text-accentBlue hover:opacity-80 transition-opacity"
                       >
-                        <Hand className="h-3.5 w-3.5" />Assumir
-                      </button>
+                        <Hand />Assumir
+                      </Button>
                     )}
                     {!isInforme && st === 'em_andamento' && (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={largando}
                         onClick={() => largar.mutate(
                           { id: i.id, professor_id: i.professor_id },
                           { onSuccess: () => toast.success('Chamado devolvido para "em aberto".'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao largar.') },
                         )}
-                        className="btn-press flex items-center gap-1 px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-surface-subtle text-ink-secondary hover:text-ink transition-colors"
                         title="Devolver para em aberto"
                       >
-                        <Undo2 className="h-3.5 w-3.5" />Largar
-                      </button>
+                        <Undo2 />Largar
+                      </Button>
                     )}
                     {!isInforme && (st === 'concluido' ? (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={reabrindo}
                         onClick={() => reabrir.mutate(
                           { id: i.id, professor_id: i.professor_id },
                           { onSuccess: () => toast.success('Chamado reaberto.'), onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao reabrir.') },
                         )}
-                        className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-medBg text-urg-medFg hover:opacity-80 transition-opacity"
                       >
-                        Reabrir
-                      </button>
+                        <Undo2 />Reabrir
+                      </Button>
                     ) : (
-                      <button
+                      // Em aberto o passo natural é assumir, então "Concluir" fica
+                      // discreto; assumido, ele vira a ação de destaque da linha.
+                      <Button
+                        size="sm"
+                        variant={st === 'aberto' ? 'outline' : 'ghost'}
+                        className={st === 'aberto' ? undefined : ACAO_DESTAQUE.ok}
                         onClick={() => setResolverAlvo(i)}
-                        className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-lg bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity"
                       >
-                        Concluir
-                      </button>
+                        <CheckCircle />Concluir
+                      </Button>
                     ))}
-                    <button
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
                       onClick={() => setEditarAlvo(i)}
                       aria-label="Editar chamado"
                       title="Editar"
-                      className="btn-press p-1.5 rounded-lg text-ink-subtle hover:text-ink hover:bg-surface-subtle transition-colors"
                     >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
+                      <Pencil />
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="hover:bg-aviso-warnBg hover:text-aviso-warnFg"
                       onClick={() => setExcluirAlvo(i)}
                       aria-label="Excluir incidente"
-                      className="btn-press p-1.5 rounded-lg text-ink-subtle hover:text-urg-highFg hover:bg-urg-highBg transition-colors"
+                      title="Excluir"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                      <Trash2 />
+                    </Button>
                   </div>
                 )}
               </div>
