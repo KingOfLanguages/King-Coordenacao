@@ -478,11 +478,14 @@ export function IncidentesPage() {
                     {URGENCIA_EXPLICACAO[i.urgency] ?? 'Nível de urgência do chamado.'}
                   </TooltipContent>
                 </Tooltip>
-                {/* Ponto de encaixe do botão "Abrir chamado no TI" da extensão de
-                    navegador. Fica vazio (sem layout) para quem não a tem instalada. */}
-                <span data-ktm-chamado-slot="" className="contents" />
-                {podeEditar && (
-                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                  {/* Ponto de encaixe do botão "Abrir chamado no TI" da extensão.
+                      Fica na MESMA fileira das ações — numa linha própria ele
+                      quebrava o alinhamento do card. Vazio para quem não tem a
+                      extensão, e aí o flex não ocupa espaço nenhum. */}
+                  <span data-ktm-chamado-slot="" className="contents" />
+                  {podeEditar && (
+                    <>
                     {isPlataforma && (
                       <Button
                         size="sm"
@@ -569,8 +572,9 @@ export function IncidentesPage() {
                     >
                       <Trash2 />
                     </Button>
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             )

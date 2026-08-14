@@ -1,46 +1,73 @@
-/* Botão injetado no KTM. Segue a identidade da King (azul #005eb6) e o peso
-   visual dos botões de ação do card — não pode competir com "Concluir". */
+/* Botão injetado no KTM.
+ *
+ * Espelha a variante `outline` do componente Button da plataforma, na medida
+ * do tamanho `sm` (h-7 / px-2.5 / rounded-md / 12px / gap-1), para ficar na
+ * mesma linha de base que "Assumir" e "Concluir". Discreto de propósito: a
+ * ação de destaque da linha é a do fluxo do chamado, não esta.
+ *
+ * As cores saem das variáveis CSS da própria página, então o tema escuro sai
+ * de graça e sempre casado com o resto — nada de hex fixo aqui. Os fallbacks
+ * cobrem o caso de a extensão rodar numa versão do front sem esses tokens.
+ *
+ * CUIDADO: nada de atalho `font:` com `inherit` no meio
+ * (`font: 500 12px/1 inherit`). `inherit` é palavra-chave global e não vale
+ * como componente do atalho — o navegador descarta a declaração INTEIRA sem
+ * erro, e o botão volta ao padrão (16px/400, 34px de altura), gritando ao lado
+ * dos outros. Por isso cada propriedade é declarada separadamente.
+ */
 
 .ktm-ti-botao {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 4px 9px;
-  border: 1px solid rgb(0 94 182 / 0.35);
-  border-radius: 8px;
-  background: rgb(0 94 182 / 0.08);
-  color: #005eb6;
-  font: 500 11.5px/1.2 inherit;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default, #dde0e7);
+  border-radius: 6px;
+  background: var(--bg-canvas, #fff);
+  color: var(--fg-primary, #14181f);
   font-family: inherit;
-  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
-  transition: background-color 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+  transition:
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    background-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.ktm-ti-botao svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .ktm-ti-botao:hover:not(:disabled) {
-  background: rgb(0 94 182 / 0.16);
+  background: var(--bg-subtle, #f4f6f9);
+}
+
+/* Mesmo "press" físico do btn-press da plataforma. */
+.ktm-ti-botao:active:not(:disabled) {
+  transform: translateY(1px) scale(0.986);
+}
+
+.ktm-ti-botao:focus-visible {
+  outline: none;
+  border-color: var(--accent-blue, #2a5cff);
+  box-shadow: 0 0 0 2px var(--accent-blue-soft, #dde8ff);
 }
 
 .ktm-ti-botao:disabled {
-  opacity: 0.65;
+  opacity: 0.5;
   cursor: default;
 }
 
+/* Falha: usa o par de aviso, o único bloco de cor que vira com o tema. */
 .ktm-ti-botao--erro {
-  border-color: rgb(238 27 56 / 0.4);
-  background: rgb(238 27 56 / 0.1);
-  color: #ee1b38;
-}
-
-/* No tema escuro o azul sólido some no fundo preto — clareia o texto. */
-.dark .ktm-ti-botao {
-  border-color: rgb(96 165 250 / 0.35);
-  background: rgb(96 165 250 / 0.12);
-  color: #93c5fd;
-}
-
-.dark .ktm-ti-botao--erro {
-  border-color: rgb(248 113 113 / 0.4);
-  background: rgb(248 113 113 / 0.14);
-  color: #fca5a5;
+  border-color: var(--aviso-warn-bd, #f2aeb6);
+  background: var(--aviso-warn-bg, #fad4d8);
+  color: var(--aviso-warn-fg, #ae1122);
 }
