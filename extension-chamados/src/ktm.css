@@ -1,0 +1,46 @@
+/* Botão injetado no KTM. Segue a identidade da King (azul #005eb6) e o peso
+   visual dos botões de ação do card — não pode competir com "Concluir". */
+
+.ktm-ti-botao {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid rgb(0 94 182 / 0.35);
+  border-radius: 8px;
+  background: rgb(0 94 182 / 0.08);
+  color: #005eb6;
+  font: 500 11.5px/1.2 inherit;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.ktm-ti-botao:hover:not(:disabled) {
+  background: rgb(0 94 182 / 0.16);
+}
+
+.ktm-ti-botao:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.ktm-ti-botao--erro {
+  border-color: rgb(238 27 56 / 0.4);
+  background: rgb(238 27 56 / 0.1);
+  color: #ee1b38;
+}
+
+/* No tema escuro o azul sólido some no fundo preto — clareia o texto. */
+.dark .ktm-ti-botao {
+  border-color: rgb(96 165 250 / 0.35);
+  background: rgb(96 165 250 / 0.12);
+  color: #93c5fd;
+}
+
+.dark .ktm-ti-botao--erro {
+  border-color: rgb(248 113 113 / 0.4);
+  background: rgb(248 113 113 / 0.14);
+  color: #fca5a5;
+}

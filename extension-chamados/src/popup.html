@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>King — Incidente → Chamado T.I.</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      width: 300px;
+      margin: 0;
+      padding: 14px;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 13px;
+      color: #14181f;
+      background: #fff;
+    }
+    h1 { margin: 0 0 2px; font-size: 13.5px; font-weight: 600; }
+    .sub { margin: 0 0 14px; font-size: 11.5px; line-height: 1.45; color: #667085; }
+    .opcao { display: flex; gap: 9px; align-items: flex-start; padding: 9px 0; border-top: 1px solid #eceff3; }
+    .opcao input { margin: 2px 0 0; accent-color: #005eb6; }
+    .opcao strong { display: block; font-size: 12.5px; font-weight: 500; }
+    .opcao span { font-size: 11px; line-height: 1.4; color: #667085; }
+    .ultimo { margin-top: 12px; padding: 9px 10px; border-radius: 8px; background: #f4f6f9; font-size: 11.5px; line-height: 1.5; }
+    .ultimo b { font-weight: 600; }
+    .vazio { color: #667085; }
+    .aviso { color: #b42318; }
+    @media (prefers-color-scheme: dark) {
+      body { color: #e7eaf0; background: #16191f; }
+      .sub, .opcao span, .vazio { color: #99a2b2; }
+      .opcao { border-color: #262b34; }
+      .ultimo { background: #1e232b; }
+      .aviso { color: #fda29b; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Incidente → Chamado T.I.</h1>
+  <p class="sub">
+    Na página de Incidentes, cada chamado ganha o botão <b>Chamado T.I.</b> —
+    ele abre o formulário do T.I. já preenchido.
+  </p>
+
+  <label class="opcao">
+    <input type="checkbox" id="anexos" />
+    <span><strong>Levar os anexos</strong>
+      <span>Reenvia as imagens do incidente como anexos do chamado (até 5).</span>
+    </span>
+  </label>
+
+  <label class="opcao">
+    <input type="checkbox" id="autoEnviar" />
+    <span><strong>Enviar automaticamente</strong>
+      <span>Cria o chamado sem você conferir. Desligado, você revisa e clica em “Criar chamado”.</span>
+    </span>
+  </label>
+
+  <div class="ultimo" id="ultimo"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

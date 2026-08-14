@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "King — Incidente → Chamado T.I.",
+  "version": "1.0.0",
+  "description": "Leva um incidente da Gestão dos Professores para a plataforma de chamados do T.I. já formatado: título, descrição, urgência, tipo e anexos.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://projeto-king-coord.vercel.app/*",
+    "https://chamadostikingoflanguages.lovable.app/*",
+    "https://dajbzpeduxmsxyukmjfm.supabase.co/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "King — Incidente → Chamado T.I."
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://projeto-king-coord.vercel.app/*",
+        "http://localhost/*"
+      ],
+      "js": ["src/ktm.js"],
+      "css": ["src/ktm.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://chamadostikingoflanguages.lovable.app/*"],
+      "js": ["src/chamados.js"],
+      "css": ["src/chamados.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

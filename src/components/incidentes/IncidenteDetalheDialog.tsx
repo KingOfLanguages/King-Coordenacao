@@ -10,6 +10,7 @@ import { urgenciaChip, tiStatusLabel } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { statusChamado, natureza as naturezaDe, abaDoIncidente, type Incidente } from '@/hooks/useIncidentes'
 import { buildMensagemIncidente } from '@/lib/incidenteMensagem'
+import { atributosChamadoTi } from '@/lib/chamadoTi'
 
 const STATUS_DETALHE: Record<string, { label: string; cls: string }> = {
   aberto:       { label: 'Em aberto',    cls: 'bg-urg-medBg text-urg-medFg' },
@@ -56,6 +57,7 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
         <DialogPrimitive.Content
+          {...atributosChamadoTi(incidente)}
           className={cn(
             'fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto',
             'bg-surface-canvas border-l border-line px-5 py-5 text-ink shadow-popover outline-none',
@@ -161,6 +163,8 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
           )}
 
           <div className="flex flex-wrap justify-end gap-2 pt-1">
+            {/* Ponto de encaixe do botão "Abrir chamado no TI" da extensão. */}
+            <span data-ktm-chamado-slot="" className="contents" />
             <Button
               variant="outline"
               size="sm"

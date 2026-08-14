@@ -18,6 +18,7 @@ import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidente
 import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
 import { urgenciaChip, URGENCIA_EXPLICACAO, tiStatusLabel } from '@/lib/nexusLabels'
 import { statusPrazo } from '@/lib/incidentePrazo'
+import { atributosChamadoTi } from '@/lib/chamadoTi'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -353,6 +354,7 @@ export function IncidentesPage() {
               key={i.id}
               role="button"
               tabIndex={0}
+              {...atributosChamadoTi(i)}
               onClick={() => setDetalheClick(i)}
               onKeyDown={e => { if (e.key === 'Enter') setDetalheClick(i) }}
               className={cn(
@@ -460,6 +462,9 @@ export function IncidentesPage() {
                     {URGENCIA_EXPLICACAO[i.urgency] ?? 'Nível de urgência do chamado.'}
                   </TooltipContent>
                 </Tooltip>
+                {/* Ponto de encaixe do botão "Abrir chamado no TI" da extensão de
+                    navegador. Fica vazio (sem layout) para quem não a tem instalada. */}
+                <span data-ktm-chamado-slot="" className="contents" />
                 {podeEditar && (
                   <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                     {isPlataforma && (
