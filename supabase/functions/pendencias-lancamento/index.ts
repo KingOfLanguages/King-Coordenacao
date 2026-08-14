@@ -136,9 +136,12 @@ serve(async (req) => {
   if (!uid) return json({ error: 'Não autorizado.' }, 401)
 
   const { data: caller } = await admin.from('profiles').select('role, is_admin').eq('id', uid).maybeSingle()
+  // podeAgir espelha canEdit() do front (src/lib/permissions.ts): o suporte ao
+  // professor (Bianca, Débora) trabalha a fila e libera agenda igual à coordenação
+  // — decisão do João. suporte_aluno segue só leitura.
   const ehAdmin  = caller?.is_admin === true || caller?.role === 'admin'
   const podeVer  = ehAdmin || caller?.role === 'coordenacao' || caller?.role === 'suporte' || caller?.role === 'suporte_aluno'
-  const podeAgir = ehAdmin || caller?.role === 'coordenacao'
+  const podeAgir = ehAdmin || caller?.role === 'coordenacao' || caller?.role === 'suporte'
   if (!podeVer) return json({ error: 'Sem permissão.' }, 403)
 
   let body: Body

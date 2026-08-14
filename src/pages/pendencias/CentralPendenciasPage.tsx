@@ -44,6 +44,12 @@ const ORDENS: { value: Ordem; label: string }[] = [
 const jaContatado = (ep: PendenciaFila) =>
   ep.ultimaMensagemEm != null && ep.ultimaMensagemEstagio === ep.estagio
 
+/** Dá pra liberar a agenda deste professor? Estágio 3 sempre exige liberação
+ *  manual; nos estágios 1–2 a API avisa pelo `liberacaoManualExigida` (agenda
+ *  que ficou bloqueada e não desbloqueia sozinha). Mesma regra da extensão. */
+const podeLiberar = (ep: PendenciaFila) =>
+  ep.estagio === 3 || ep.liberacaoManualExigida
+
 function fmtData(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString('pt-BR') : '—'
 }
@@ -296,9 +302,9 @@ export function CentralPendenciasPage() {
 
       <p className="text-[11px] text-ink-subtle leading-relaxed">
         Régua oficial do King: <strong>2 dias</strong> = Lembrete · <strong>3–4 dias</strong> = Bloqueio da agenda ·
-        <strong> 5+ dias</strong> = Reunião (risco de encerramento; só a coordenação libera). O motor roda ~1×/dia —
-        use <em>Atualizar</em> para recarregar. Liberar a agenda registra a decisão, mas se houver bloqueio por outro
-        motivo (ex.: desligamento) ele permanece.
+        <strong> 5+ dias</strong> = Reunião (risco de encerramento). A liberação manual é feita pela coordenação ou
+        pelo suporte. O motor roda ~1×/dia — use <em>Atualizar</em> para recarregar. Liberar a agenda registra a
+        decisão, mas se houver bloqueio por outro motivo (ex.: desligamento) ele permanece.
       </p>
       </>
       ) : (
@@ -353,7 +359,8 @@ function BloqueadasBoard({ fila, podeAgir }: { fila: PendenciaFila[]; podeAgir: 
         </div>
       )}
       <p className="text-[11px] text-ink-subtle mt-3">
-        Ao liberar (estágio 3), o professor sai da fila — a coluna "Desbloqueada" fica implícita. O motor roda ~1×/dia.
+        Ao liberar, o professor sai da fila — a coluna "Desbloqueada" fica implícita. O botão aparece em quem exige
+        liberação manual (estágio 3 ou marcado pela API). O motor roda ~1×/dia.
       </p>
     </>
   )
@@ -415,7 +422,7 @@ function BloqueadaCard({ p, podeAgir }: { p: PendenciaFila; podeAgir: boolean })
             <Copy className="h-3.5 w-3.5" /> Registrar mensagem
           </button>
         )}
-        {podeAgir && p.estagio === 3 && (
+        {podeAgir && podeLiberar(p) && (
           <button onClick={handleLiberar} disabled={liberar.isPending} className={cn('btn-press inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11.5px] font-medium disabled:opacity-50', confirmLib ? 'bg-urg-highBg text-urg-highFg' : 'bg-surface-subtle text-ink-secondary hover:text-ink')}>
             <Unlock className="h-3.5 w-3.5" /> {confirmLib ? 'Confirmar?' : 'Liberar'}
           </button>
@@ -578,7 +585,7 @@ function FilaRow({ ep, podeAgir, onDetalhe }: {
             {copiado ? <Check className="h-3.5 w-3.5 text-urg-lowFg" /> : <Copy className="h-3.5 w-3.5" />}
             {copiado ? 'Copiado' : 'Copiar'}
           </button>
-          {podeAgir && ep.estagio === 3 && (
+          {podeAgir && podeLiberar(ep) && (
             <button
               onClick={handleLiberar}
               disabled={liberar.isPending}
