@@ -51,7 +51,11 @@
        accent NÃO mudam no tema escuro: `bg-urg-*-bg` continua pastel claro no
        preto, e combinado com texto que vira cinza claro fica ilegível.
        Trocar urgency por completo não era opção — `bg-urg-*Fg` é fundo sólido
-       com texto branco em ~57 lugares. Estes tokens são só das faixas de aviso. */
+       com texto branco em ~57 lugares.
+       Nasceram para as faixas de aviso, mas hoje valem para QUALQUER destaque
+       que precise virar com o tema — inclusive as ações dos cards de
+       Incidentes. O par `*Bd` serve de cor de hover (um degrau de tinta),
+       porque modificador de opacidade em cor `var()` fica transparente. */
     --aviso-info-bg: #dde8ff;
     --aviso-info-fg: #1c3f9e;
     --aviso-info-bd: #b9ccff;
