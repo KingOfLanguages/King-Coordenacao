@@ -49,14 +49,15 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // ── Autorização: usuário admin/coordenacao autenticado ──────────────────────
+  // ── Autorização: usuário admin/coordenacao/suporte autenticado ──────────────
+  // Suporte tem paridade de edição com a coordenação (ver canEdit + 20260754).
   const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim()
   if (!token) return json({ error: 'Não autorizado.' }, 401)
   const { data: userData } = await admin.auth.getUser(token)
   const uid = userData?.user?.id
   if (!uid) return json({ error: 'Não autorizado.' }, 401)
-  const { data: caller } = await admin.from('profiles').select('role, nome').eq('id', uid).maybeSingle()
-  if (caller?.role !== 'admin' && caller?.role !== 'coordenacao') {
+  const { data: caller } = await admin.from('profiles').select('role, is_admin, nome').eq('id', uid).maybeSingle()
+  if (!caller?.is_admin && caller?.role !== 'admin' && caller?.role !== 'coordenacao' && caller?.role !== 'suporte') {
     return json({ error: 'Sem permissão.' }, 403)
   }
   const callerNome = caller.nome ?? 'KTM'
