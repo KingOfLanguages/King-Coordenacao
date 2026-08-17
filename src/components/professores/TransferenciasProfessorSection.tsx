@@ -18,6 +18,7 @@ import {
   STATUS_TRANSFERENCIA_META,
 } from '@/lib/transferenciaLabels'
 import { dataBR } from '@/lib/formato'
+import { AlunoId } from '@/components/alunos/AlunoId'
 import { cn } from '@/lib/utils'
 
 /** Janela usada para dizer se os pedidos estão concentrados no tempo. */
@@ -100,6 +101,7 @@ export function TransferenciasProfessorSection({ professorId }: { professorId: s
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">
                   {p.aluno_nome}
+                  <AlunoId id={p.aluno_id} className="ml-1.5 text-[10.5px] font-normal" />
                 </span>
                 <span className="hidden truncate text-[11.5px] text-ink-secondary sm:block">
                   {motivoTransferenciaLabel(p.motivo)}

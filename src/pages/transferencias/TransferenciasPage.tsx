@@ -26,6 +26,7 @@ import {
   type DesfechoTransferencia,
 } from '@/lib/transferenciaLabels'
 import { DossieAluno } from '@/components/transferencias/DossieAluno'
+import { AlunoId } from '@/components/alunos/AlunoId'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { useAuth } from '@/contexts/AuthContext'
@@ -70,9 +71,17 @@ export function TransferenciasPage() {
   const filtrar = (lista: TransferenciaComProfessor[]) => {
     const termo = busca.trim().toLowerCase()
     if (!termo) return lista
+
+    // Busca por ID do aluno: é o que o suporte tem em mãos quando vem do sistema
+    // do King, e o único jeito de achar o pedido certo entre homônimos. Aceita
+    // com ou sem "#"; só vale quando o termo é mesmo um número.
+    const termoId = termo.replace(/^#/, '')
+    const buscaPorId = /^\d+$/.test(termoId)
+
     return lista.filter(t =>
       (t.professor?.nome ?? '').toLowerCase().includes(termo) ||
       t.aluno_nome.toLowerCase().includes(termo) ||
+      (buscaPorId && String(t.aluno_id ?? '').includes(termoId)) ||
       (t.professor?.grupo?.nome ?? '').toLowerCase().includes(termo) ||
       (t.professor?.coordenador?.nome ?? '').toLowerCase().includes(termo) ||
       motivoTransferenciaLabel(t.motivo).toLowerCase().includes(termo) ||
@@ -114,7 +123,7 @@ export function TransferenciasPage() {
         <div className="relative w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
           <Input
-            placeholder="Buscar professor, aluno, motivo…"
+            placeholder="Buscar professor, aluno, #ID, motivo…"
             value={busca}
             onChange={e => setBusca(e.target.value)}
             className="pl-9 h-9 bg-surface-canvas border-line"
@@ -301,6 +310,7 @@ function CardPedido({
         <div className="min-w-0 space-y-0.5">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-[15px] font-semibold leading-tight text-ink">{pedido.aluno_nome}</h3>
+            <AlunoId id={pedido.aluno_id} className="text-[12px] font-medium" />
             {foraDoPrazo && (
               <span
                 title={`O professor avisou com ${diasUteisLabel(avisouCom ?? 0)}, abaixo do prazo de ${PRAZO_DIAS_UTEIS} dias úteis. Já registrado como informe negativo no perfil dele.`}
@@ -408,6 +418,7 @@ function CardPedido({
           transferenciaId={pedido.id}
           snapshot={pedido.snapshot}
           alunoDaLista={pedido.aluno_da_lista}
+          alunoId={pedido.aluno_id}
         />
       )}
 
@@ -763,7 +774,12 @@ function HistoricoLista({
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums text-ink-muted">
                   {dataBR(t.created_at)}
                 </td>
-                <td className="px-3 py-2 font-medium text-ink">{t.aluno_nome}</td>
+                <td className="px-3 py-2 font-medium text-ink">
+                  <span className="inline-flex items-baseline gap-1.5">
+                    {t.aluno_nome}
+                    <AlunoId id={t.aluno_id} className="text-[11px] font-normal" />
+                  </span>
+                </td>
                 <td className="px-3 py-2">
                   {t.professor ? (
                     <button

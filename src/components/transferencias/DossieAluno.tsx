@@ -30,11 +30,12 @@ import { cn } from '@/lib/utils'
 import type { TransferenciaSnapshot } from '@/types'
 
 export function DossieAluno({
-  transferenciaId, snapshot, alunoDaLista,
+  transferenciaId, snapshot, alunoDaLista, alunoId,
 }: {
   transferenciaId: string
   snapshot: TransferenciaSnapshot | null
   alunoDaLista: boolean
+  alunoId: number | null
 }) {
   const { data: dossie, isLoading, isError } = useTransferenciaDossie(transferenciaId)
 
@@ -51,7 +52,7 @@ export function DossieAluno({
 
   return (
     <div className="space-y-4 border-t border-line-soft pt-3">
-      <VinculoAtual dossie={dossie} snapshot={snapshot} alunoDaLista={alunoDaLista} />
+      <VinculoAtual dossie={dossie} snapshot={snapshot} alunoDaLista={alunoDaLista} alunoId={alunoId} />
       <HistoricoSaidas dossie={dossie} />
       <PedidosAnteriores dossie={dossie} />
       <Ocorrencias dossie={dossie} />
@@ -63,8 +64,13 @@ export function DossieAluno({
 // ─── Bloco: vínculo atual ────────────────────────────────────────────────────
 
 function VinculoAtual({
-  dossie, snapshot, alunoDaLista,
-}: { dossie: Dossie; snapshot: TransferenciaSnapshot | null; alunoDaLista: boolean }) {
+  dossie, snapshot, alunoDaLista, alunoId,
+}: {
+  dossie: Dossie
+  snapshot: TransferenciaSnapshot | null
+  alunoDaLista: boolean
+  alunoId: number | null
+}) {
   const v = dossie.vinculo
 
   // Quando o vínculo não está mais no roster, o snapshot é a única fonte —
@@ -85,7 +91,16 @@ function VinculoAtual({
             : 'Pedido sem aluno da lista: sem vínculo para consultar.'}
         </p>
       )}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-5">
+        {/* O ID vem primeiro: com só o primeiro nome vindo da API, é ele que
+            identifica o aluno e permite achar o cadastro completo no King. */}
+        <Dado
+          rotulo="ID do aluno"
+          valor={alunoId !== null ? `#${alunoId}` : '—'}
+          dica={alunoId !== null
+            ? 'Identificador no sistema do King — use para localizar o cadastro completo.'
+            : 'O professor digitou o nome à mão: não há vínculo no cadastro para identificar.'}
+        />
         <Dado rotulo="Tempo com o professor" valor={tempoDeVinculo(dias) ?? '—'} destaque />
         <Dado rotulo="Entrou na agenda" valor={entrada ? dataBR(entrada) : '—'} />
         <Dado rotulo="Matrícula na escola" valor={matricula ? dataBR(matricula) : '—'} />
@@ -267,9 +282,11 @@ function Bloco({
   )
 }
 
-function Dado({ rotulo, valor, destaque }: { rotulo: string; valor: string; destaque?: boolean }) {
+function Dado({
+  rotulo, valor, destaque, dica,
+}: { rotulo: string; valor: string; destaque?: boolean; dica?: string }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" title={dica}>
       <p className="text-[10.5px] text-ink-muted">{rotulo}</p>
       <p className={cn(
         'truncate text-[12.5px] font-medium tabular-nums',

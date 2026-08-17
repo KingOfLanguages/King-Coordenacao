@@ -32,6 +32,8 @@ import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesA
 import { ResolverMesAnaliseDialog } from '@/components/mesAnalise/ResolverMesAnaliseDialog'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
+import { AlunoId, nomesDuplicados } from '@/components/alunos/AlunoId'
+import { normalizarNome } from '@/hooks/useAcompanhamentoAlunos'
 import { toast } from 'sonner'
 import { cn, tempoDeCasaLabel, whatsappLink } from '@/lib/utils'
 import { motivoSaidaLabel } from '@/lib/cicloVida'
@@ -399,7 +401,7 @@ export function ProfessorDetalhePage() {
         <AlunosKmsSection alunos={acompanhamentoData.alunos} />
       )}
 
-      {/* ── Ciclo de vida do aluno (saídas — retenção/turnover) ── */}
+      {/* ── Ciclo de vida do aluno (saídas — retenção/churn) ── */}
       {acompanhamentoData?.ciclo && acompanhamentoData.ciclo.length > 0 && (
         <CicloVidaSection ciclo={acompanhamentoData.ciclo} />
       )}
@@ -816,6 +818,7 @@ function TrocasProfessorList({
             <li key={i} className="flex items-center justify-between gap-2 text-[12px] flex-wrap">
               <span className="text-ink-secondary inline-flex items-center gap-1.5 flex-wrap">
                 {aluno?.primeiro_nome ?? `Aluno #${t.aluno_id}`}
+                {aluno?.primeiro_nome && <AlunoId id={t.aluno_id} className="text-[10.5px]" />}
                 {t.motivo && <span className="text-ink-muted">· {t.motivo}</span>}
                 {t.status && (
                   <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium', statusTrocaCls[t.status] ?? 'bg-surface-subtle text-ink-muted')}>
@@ -869,6 +872,11 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
   const ordenados = [...alunos].sort((a, b) => (a.primeiro_nome ?? '').localeCompare(b.primeiro_nome ?? ''))
   const visiveis = expandido ? ordenados : ordenados.slice(0, 16)
 
+  // A API só manda o primeiro nome, então uma agenda com duas "Ana" fica
+  // ambígua. Carimbar o ID em todos os 40 chips polui; aqui ele aparece só
+  // onde há homônimo de verdade — e no tooltip de todos, para quem precisar.
+  const duplicados = nomesDuplicados(ordenados.map(a => a.primeiro_nome))
+
   return (
     <section className="card-surface p-5 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-1">
@@ -882,6 +890,7 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
           <span
             key={a.aluno_id}
             title={[
+              `#${a.aluno_id}`,
               rotuloStatusAluno(a),
               a.data_adicao ? `adicionado em ${new Date(a.data_adicao).toLocaleDateString('pt-BR')}` : null,
             ].filter(Boolean).join(' · ') || undefined}
@@ -893,6 +902,9 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
             )}
           >
             {a.primeiro_nome ?? `Aluno #${a.aluno_id}`}
+            {a.primeiro_nome && duplicados.has(normalizarNome(a.primeiro_nome)) && (
+              <AlunoId id={a.aluno_id} className="ml-1 text-[10px] opacity-80" />
+            )}
           </span>
         ))}
       </div>
@@ -908,13 +920,13 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
   )
 }
 
-// ─── Ciclo de vida do aluno (saídas — retenção/turnover) ─────────────────────
+// ─── Ciclo de vida do aluno (saídas — retenção/churn) ────────────────────────
 
 function CicloVidaSection({ ciclo }: { ciclo: ProfessorCicloVidaRow[] }) {
   const [expandido, setExpandido] = useState(false)
 
   const churn    = ciclo.filter(c => c.saiu_da_escola === true).length
-  const turnover = ciclo.filter(c => c.saiu_da_escola === false).length
+  const trocaram = ciclo.filter(c => c.saiu_da_escola === false).length
   const visiveis = expandido ? ciclo : ciclo.slice(0, 12)
 
   return (
@@ -922,7 +934,7 @@ function CicloVidaSection({ ciclo }: { ciclo: ProfessorCicloVidaRow[] }) {
       <div className="flex items-center justify-between flex-wrap gap-1">
         <h2 className="label-micro">Ciclo de vida do aluno · saídas ({ciclo.length})</h2>
         <p className="text-[11px] text-ink-muted">
-          {churn} saíram da escola · {turnover} trocaram de professor
+          {churn} saíram da escola (churn) · {trocaram} trocaram de professor
         </p>
       </div>
       <ul className="divide-y divide-line-soft/60">
@@ -930,6 +942,7 @@ function CicloVidaSection({ ciclo }: { ciclo: ProfessorCicloVidaRow[] }) {
           <li key={`${c.aluno_id}-${c.data_saida}`} className="flex items-center justify-between gap-2 py-1.5 text-[12px] flex-wrap">
             <span className="text-ink-secondary inline-flex items-center gap-1.5 flex-wrap">
               {c.primeiro_nome ?? `Aluno #${c.aluno_id}`}
+              {c.primeiro_nome && <AlunoId id={c.aluno_id} className="text-[10.5px]" />}
               <span className="text-ink-muted">· {motivoSaidaLabel(c.motivo_saida)}</span>
               <span className={cn(
                 'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
