@@ -24,6 +24,7 @@ import {
   motivoTransferenciaLabel, statusAlunoLabel, tempoDeVinculo, desfechoMeta,
 } from '@/lib/transferenciaLabels'
 import { motivoSaidaLabel } from '@/lib/cicloVida'
+import { AlunoId } from '@/components/alunos/AlunoId'
 import { urgenciaChip } from '@/lib/nexusLabels'
 import { dataBR } from '@/lib/formato'
 import { cn } from '@/lib/utils'
@@ -96,10 +97,10 @@ function VinculoAtual({
             identifica o aluno e permite achar o cadastro completo no King. */}
         <Dado
           rotulo="ID do aluno"
-          valor={alunoId !== null ? `#${alunoId}` : '—'}
-          dica={alunoId !== null
-            ? 'Identificador no sistema do King — use para localizar o cadastro completo.'
-            : 'O professor digitou o nome à mão: não há vínculo no cadastro para identificar.'}
+          valor={alunoId !== null ? <AlunoId id={alunoId} className="text-[12.5px] font-medium" /> : '—'}
+          dica={alunoId === null
+            ? 'O professor digitou o nome à mão: não há vínculo no cadastro para identificar.'
+            : undefined}
         />
         <Dado rotulo="Tempo com o professor" valor={tempoDeVinculo(dias) ?? '—'} destaque />
         <Dado rotulo="Entrou na agenda" valor={entrada ? dataBR(entrada) : '—'} />
@@ -284,7 +285,7 @@ function Bloco({
 
 function Dado({
   rotulo, valor, destaque, dica,
-}: { rotulo: string; valor: string; destaque?: boolean; dica?: string }) {
+}: { rotulo: string; valor: React.ReactNode; destaque?: boolean; dica?: string }) {
   return (
     <div className="min-w-0" title={dica}>
       <p className="text-[10.5px] text-ink-muted">{rotulo}</p>

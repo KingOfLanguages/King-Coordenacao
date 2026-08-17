@@ -87,32 +87,37 @@ export function TransferenciasProfessorSection({ professorId }: { professorId: s
           const statusMeta = STATUS_TRANSFERENCIA_META[p.status]
           const desfecho = desfechoMeta(p.desfecho)
           const tempo = tempoDeVinculo(p.snapshot?.aluno_dias_com_professor)
+          // O ID é um botão (copiar), então NÃO pode ficar dentro do botão que
+          // expande a linha — botão dentro de botão é HTML inválido. Por isso o
+          // toggle cobre data+nome e o ID fica como irmão, logo ao lado.
           return (
             <li key={p.id}>
-              <button
-                onClick={() => toggle(p.id)}
-                className="btn-press flex w-full items-center gap-2 py-2 text-left"
-              >
-                {aberto
-                  ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
-                  : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-muted" />}
-                <span className="w-[4.6rem] shrink-0 tabular-nums text-[11.5px] text-ink-muted">
-                  {dataBR(p.created_at)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">
-                  {p.aluno_nome}
-                  <AlunoId id={p.aluno_id} className="ml-1.5 text-[10.5px] font-normal" />
-                </span>
+              <div className="flex w-full items-center gap-2 py-2">
+                <button
+                  onClick={() => toggle(p.id)}
+                  className="btn-press flex min-w-0 items-center gap-2 text-left"
+                >
+                  {aberto
+                    ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+                    : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-muted" />}
+                  <span className="w-[4.6rem] shrink-0 tabular-nums text-[11.5px] text-ink-muted">
+                    {dataBR(p.created_at)}
+                  </span>
+                  <span className="min-w-0 truncate text-[12.5px] font-medium text-ink">
+                    {p.aluno_nome}
+                  </span>
+                </button>
+                <AlunoId id={p.aluno_id} className="text-[10.5px]" />
                 <span className="hidden truncate text-[11.5px] text-ink-secondary sm:block">
                   {motivoTransferenciaLabel(p.motivo)}
                 </span>
                 <span className={cn(
-                  'shrink-0 rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
+                  'ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
                   desfecho?.cls ?? statusMeta.cls,
                 )}>
                   {desfecho?.label ?? statusMeta.label}
                 </span>
-              </button>
+              </div>
 
               {aberto && (
                 <div className="space-y-2 pb-3 pl-[1.4rem] text-[12px]">
