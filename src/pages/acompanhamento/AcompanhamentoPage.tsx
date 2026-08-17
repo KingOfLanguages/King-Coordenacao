@@ -30,7 +30,13 @@ import { cn } from '@/lib/utils'
 // pendência (copiar / marcar enviada) num só lugar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RECENTE_DIAS = 14   // "acompanhamento recente" = última mensagem nos últimos N dias
+// "Acompanhamento" aqui = reunião com a coordenação marcada como REALIZADA.
+// A janela acompanha a cadência mínima de 30 dias do portal de agendamento.
+const RECENTE_DIAS = 30
+// Cores do "último acomp.": a partir de uma cadência mensal, atrasar meio ciclo
+// já pede atenção; um ciclo inteiro perdido é alerta.
+const SEM_REUNIAO_ATENCAO = 45
+const SEM_REUNIAO_ALERTA  = 60
 const N_COLUNAS = 9
 
 type QuickId = 'todos' | 'critica' | 'score_baixo' | 'pendencias' | 'bloqueados' | 'acompanhamento' | 'informes'
@@ -93,6 +99,14 @@ function dataCurta(iso: string | null): string {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
+/** Cor da data do último acompanhamento conforme o tempo sem reunião. */
+function semReuniaoCls(dias: number | null): string {
+  if (dias == null) return 'text-ink-muted'
+  if (dias >= SEM_REUNIAO_ALERTA)  return 'text-urg-highFg font-medium'
+  if (dias >= SEM_REUNIAO_ATENCAO) return 'text-urg-medFg font-medium'
+  return 'text-ink-muted'
+}
+
 // ─── Filtro + ordenação + agrupamento ─────────────────────────────────────────
 
 function aplicarFiltros(rows: PainelProfessor[], f: Filtros): PainelProfessor[] {
@@ -118,8 +132,8 @@ function aplicarFiltros(rows: PainelProfessor[], f: Filtros): PainelProfessor[] 
     if (f.bloqueado === 'sim' && r.elegivel_alocacao !== false) return false
     if (f.bloqueado === 'nao' && r.elegivel_alocacao === false) return false
     if (f.recente !== 'todos') {
-      const recente = r.ultimo_acompanhamento_em != null &&
-        new Date(r.ultimo_acompanhamento_em).getTime() >= limiteRecente
+      const recente = r.data_ultima_reuniao != null &&
+        new Date(r.data_ultima_reuniao).getTime() >= limiteRecente
       if (f.recente === 'com' && !recente) return false
       if (f.recente === 'sem' && recente) return false
     }
@@ -132,7 +146,9 @@ function valorOrdem(r: PainelProfessor, campo: OrdenarPor): number {
     case 'score':      return r.score_atual ?? -1
     case 'pendencias': return r.aulas_pendentes_qtd
     case 'dias':       return r.dias_pendente
-    case 'ultimo':     return r.ultimo_acompanhamento_em ? new Date(r.ultimo_acompanhamento_em).getTime() : 0
+    // Quem nunca reuniu vale 0 ⇒ em ordem crescente encabeça a lista, junto com
+    // os acompanhamentos mais antigos. É o que se quer ver primeiro.
+    case 'ultimo':     return r.data_ultima_reuniao ? new Date(r.data_ultima_reuniao).getTime() : 0
     default:           return r.prioridade
   }
 }
@@ -270,7 +286,11 @@ export function AcompanhamentoPage() {
           <FiltroSelect
             valor={f.recente}
             onChange={v => setF(s => ({ ...s, recente: v }))}
-            opcoes={[{ value: 'todos', label: 'Acomp.: todos' }, { value: 'com', label: 'Com acomp. recente' }, { value: 'sem', label: 'Sem acomp. recente' }]}
+            opcoes={[
+              { value: 'todos', label: 'Acomp.: todos' },
+              { value: 'com', label: `Reunião ≤ ${RECENTE_DIAS}d` },
+              { value: 'sem', label: `Sem reunião há +${RECENTE_DIAS}d` },
+            ]}
           />
           <FiltroSelect
             valor={f.agrupar}
@@ -337,7 +357,10 @@ export function AcompanhamentoPage() {
               <SortHeader label="Dias"         campo="dias"       f={f} setF={setF} align="center" numeric />
               <SortHeader label="Prioridade"   campo="prioridade" f={f} setF={setF} numeric />
               <th className="px-3 py-2.5 font-medium">Coordenador</th>
-              <SortHeader label="Último acomp." campo="ultimo"    f={f} setF={setF} numeric />
+              <SortHeader
+                label="Último acomp." campo="ultimo" f={f} setF={setF} numeric
+                title="Data da última reunião com a coordenação marcada como realizada."
+              />
               <th className="px-3 py-2.5 font-medium">Status</th>
               <th className="px-3 py-2.5 font-medium text-right">Ações</th>
             </tr>
@@ -542,9 +565,9 @@ function FiltroSelect({ valor, onChange, opcoes, placeholder, prefixo }: {
 
 // ─── Cabeçalho ordenável ──────────────────────────────────────────────────────
 
-function SortHeader({ label, campo, f, setF, align = 'left', numeric = false }: {
+function SortHeader({ label, campo, f, setF, align = 'left', numeric = false, title }: {
   label: string; campo: OrdenarPor; f: Filtros; setF: Dispatch<SetStateAction<Filtros>>
-  align?: 'left' | 'center' | 'right'; numeric?: boolean
+  align?: 'left' | 'center' | 'right'; numeric?: boolean; title?: string
 }) {
   const ativo = f.ordenarPor === campo
   function toggle() {
@@ -555,7 +578,7 @@ function SortHeader({ label, campo, f, setF, align = 'left', numeric = false }: 
     }))
   }
   return (
-    <th className={cn('px-3 py-2.5 font-medium', align === 'center' && 'text-center', align === 'right' && 'text-right')}>
+    <th title={title} className={cn('px-3 py-2.5 font-medium', align === 'center' && 'text-center', align === 'right' && 'text-right')}>
       <button
         onClick={toggle}
         className={cn(
@@ -689,13 +712,23 @@ function PainelRow({ r, podeAgir }: { r: PainelProfessor; podeAgir: boolean }) {
       {/* Coordenador */}
       <td className="px-3 py-2.5 text-ink-muted">{r.coordenador_nome ?? '—'}</td>
 
-      {/* Último acompanhamento */}
-      <td className="px-3 py-2.5 text-ink-muted whitespace-nowrap">
-        {r.ultimo_acompanhamento_em ? (
-          <span title={r.ultimo_acompanhamento_estagio ? ESTAGIOS[r.ultimo_acompanhamento_estagio].titulo : undefined}>
-            {dataCurta(r.ultimo_acompanhamento_em)}
+      {/* Último acompanhamento = última reunião marcada como realizada */}
+      <td className="px-3 py-2.5 whitespace-nowrap">
+        {r.data_ultima_reuniao == null ? (
+          <span title="Nenhuma reunião com a coordenação marcada como realizada." className="text-urg-medFg font-medium">
+            nunca
           </span>
-        ) : '—'}
+        ) : (
+          <span
+            title={
+              `Última reunião realizada em ${new Date(r.data_ultima_reuniao).toLocaleDateString('pt-BR')}` +
+              (r.dias_sem_reuniao != null ? ` — há ${r.dias_sem_reuniao} dia${r.dias_sem_reuniao === 1 ? '' : 's'}.` : '.')
+            }
+            className={cn('tabular-nums', semReuniaoCls(r.dias_sem_reuniao))}
+          >
+            {dataCurta(r.data_ultima_reuniao)}
+          </span>
+        )}
       </td>
 
       {/* Status do acompanhamento + bloqueio */}

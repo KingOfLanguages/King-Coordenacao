@@ -10,7 +10,7 @@ import type { SilencioStatus } from '@/hooks/useSilencio'
 // Painel unificado de Acompanhamento — junta, por professor ATIVO:
 //   • score + pendências + elegibilidade   → professor_acompanhamento
 //   • estágio da régua de pendência         → acompanhamento_silencio
-//   • último contato registrado             → silencio_mensagem_log
+//   • última reunião realizada              → professores.data_ultima_reuniao
 //   • informes recentes (sinal)             → nexus_incidents (natureza='informe')
 // e calcula o Índice de Prioridade (src/lib/prioridade.ts).
 //
@@ -32,7 +32,8 @@ export interface PainelProfessor {
   elegivel_alocacao: boolean | null   // false ⇒ bloqueado p/ receber novos alunos
   reuniao_status: string | null
 
-  // Última reunião realizada (professores.data_ultima_reuniao, com fallback para
+  // Último acompanhamento = última reunião com a coordenação marcada como
+  // REALIZADA (professores.data_ultima_reuniao, com fallback para
   // professor_acompanhamento.reuniao_ultima da API King) e o intervalo em dias.
   data_ultima_reuniao: string | null
   dias_sem_reuniao: number | null     // null ⇒ nunca teve reunião registrada
@@ -45,10 +46,6 @@ export interface PainelProfessor {
   precisa_mes_analise: boolean
   contatado: boolean                  // mensagem do estágio atual já marcada
   qtd_alunos: number | null
-
-  // Último acompanhamento = última mensagem de pendência registrada.
-  ultimo_acompanhamento_em: string | null
-  ultimo_acompanhamento_estagio: SilencioStatus | null
 
   // Informes como sinal (últimos INFORME_JANELA dias).
   informes_recentes: number
@@ -121,7 +118,7 @@ export function usePainelProfessores() {
     queryKey: ['painel-professores'],
     queryFn: async (): Promise<PainelProfessor[]> => {
       const desdeInformes = new Date(Date.now() - INFORME_JANELA * 86_400_000).toISOString()
-      const [profRes, silRes, logRes, infRes] = await Promise.all([
+      const [profRes, silRes, infRes] = await Promise.all([
         supabase
           .from('professores')
           .select(`
@@ -147,10 +144,6 @@ export function usePainelProfessores() {
             msg_resolucao, msg_saida_alunos, reuniao_solicitada
           `),
         supabase
-          .from('silencio_mensagem_log')
-          .select('professor_id, estagio, enviado_em')
-          .order('enviado_em', { ascending: false }),
-        supabase
           .from('nexus_incidents')
           .select('professor_id, problem_type')
           .eq('natureza', 'informe')
@@ -159,19 +152,10 @@ export function usePainelProfessores() {
       ])
       if (profRes.error) throw profRes.error
       if (silRes.error) throw silRes.error
-      if (logRes.error) throw logRes.error
       if (infRes.error) throw infRes.error
 
       const silencioPor = new Map<string, SilencioLinha>()
       for (const s of (silRes.data ?? []) as SilencioLinha[]) silencioPor.set(s.professor_id, s)
-
-      // log já vem desc por enviado_em ⇒ o primeiro visto por professor é o mais recente.
-      const ultimoLog = new Map<string, { estagio: SilencioStatus; enviado_em: string }>()
-      for (const row of logRes.data ?? []) {
-        if (!ultimoLog.has(row.professor_id)) {
-          ultimoLog.set(row.professor_id, { estagio: row.estagio as SilencioStatus, enviado_em: row.enviado_em })
-        }
-      }
 
       const informesPor = new Map<string, InformeAgg>()
       for (const row of (infRes.data ?? []) as { professor_id: string; problem_type: string }[]) {
@@ -207,15 +191,15 @@ export function usePainelProfessores() {
         const coord = Array.isArray(p.coordenador) ? p.coordenador[0] : p.coordenador
 
         const sil = silencioPor.get(p.id)
-        const log = ultimoLog.get(p.id)
 
         const qtd  = acomp?.aulas_pendentes_qtd ?? 0
         const dias = diasDesde(acomp?.aulas_pendentes_data_mais_antiga as string | null | undefined)
         const score = acomp?.score_atual ?? null
 
-        // "Tempo sem reunião": prioriza a data que a plataforma atualiza ao
-        // confirmar uma reunião (professores.data_ultima_reuniao); cai pro dado da
-        // API King (reuniao_ultima) quando o professor nunca foi confirmado aqui.
+        // "Último acompanhamento" / "tempo sem reunião": prioriza a data que a
+        // plataforma grava ao marcar a reunião como REALIZADA (individual, em
+        // grupo ou pela extensão → professores.data_ultima_reuniao); cai pro dado
+        // da API King (reuniao_ultima) quando o professor nunca foi confirmado aqui.
         const ultimaReuniao =
           (p as { data_ultima_reuniao?: string | null }).data_ultima_reuniao
           ?? (acomp as { reuniao_ultima?: string | null } | null | undefined)?.reuniao_ultima
@@ -249,8 +233,6 @@ export function usePainelProfessores() {
           precisa_mes_analise: sil?.precisa_mes_analise ?? false,
           contatado: sil ? contatadoDe(sil) : false,
           qtd_alunos: sil?.qtd_alunos ?? null,
-          ultimo_acompanhamento_em: log?.enviado_em ?? null,
-          ultimo_acompanhamento_estagio: log?.estagio ?? null,
           informes_recentes: informesRecentes,
           informe_reincidente: informeReincidente,
           pausa_vencida_dias: pausaVencida?.dias ?? null,
