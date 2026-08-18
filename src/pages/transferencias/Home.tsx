@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  UserCog, Phone, CheckCircle2, Search, AlertTriangle, ChevronLeft, Users, Clock,
+  UserCog, Phone, CheckCircle2, AlertTriangle, ChevronLeft, Users, Clock,
   type LucideIcon,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import {
   FundoPortal, AvatarPortal,
 } from '@/components/portal/PortalUI'
 import {
-  MOTIVOS_TRANSFERENCIA, tempoDeVinculo, diasUteisLabel,
+  MOTIVOS_TRANSFERENCIA, diasUteisLabel,
   PRAZO_DIAS_UTEIS, ANTECEDENCIA_MIN_DIAS, FUTURO_MAX_DIAS,
   type MotivoTransferencia,
 } from '@/lib/transferenciaLabels'
@@ -35,15 +35,6 @@ const ANOS = Array.from({ length: 9 }, (_, i) => ANO_ATUAL - i)
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const DETALHE_MIN = 15
 
-/** Dias desde uma data ISO — o "há quanto tempo" que aparece em cada aluno. */
-function diasDesde(iso: string | null): number | null {
-  if (!iso) return null
-  const [a, m, d] = iso.split('-').map(Number)
-  const inicio = Date.UTC(a, m - 1, d)
-  const agora = new Date()
-  const hoje = Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())
-  return Math.round((hoje - inicio) / 86_400_000)
-}
 
 /** Data ISO de N dias de calendário a partir de hoje — limites do input date. */
 function isoEmDias(n: number): string {
@@ -54,8 +45,9 @@ function isoEmDias(n: number): string {
   return `${d.getFullYear()}-${mm}-${dd}`
 }
 
-/** Aluno escolhido — da lista (com id) ou digitado à mão (sem id). */
-type AlunoEscolhido = { alunoId: number | null; nome: string; dataAdicao: string | null }
+/** Aluno do pedido — só o nome completo que o professor digitou. O vínculo
+ *  com o cadastro (aluno_id) é deduzido no servidor, não vem daqui. */
+type AlunoEscolhido = { nome: string }
 
 type Step =
   | { tipo: 'identificacao-email'; email: string; erro: string }
@@ -65,8 +57,10 @@ type Step =
   | { tipo: 'cadastro-email'; resultado: TransferenciaLookupResult; email: string; erro: string }
   | { tipo: 'confirmar-identidade'; resultado: TransferenciaLookupResult }
   | { tipo: 'contato-coordenacao' }
-  // Escolha do aluno: a lista vem do cadastro, então o pedido nasce com aluno_id.
-  | { tipo: 'escolher-aluno'; professorId: string; nome: string; alunos: AlunoPortal[]; busca: string; manual: string; erro: string }
+  // Nome do aluno: o professor DIGITA o nome completo. A API do King só nos dá
+  // o primeiro nome, então é aqui que o nome completo entra no sistema. O
+  // vínculo com o cadastro (aluno_id) é deduzido no servidor, pelo primeiro nome.
+  | { tipo: 'nome-aluno'; professorId: string; nome: string; alunos: AlunoPortal[]; digitado: string; erro: string }
   | {
       tipo: 'formulario'; professorId: string; nome: string; alunos: AlunoPortal[]
       aluno: AlunoEscolhido
@@ -93,20 +87,20 @@ export function Home() {
     setStep({ tipo: 'identificacao-email', email: '', erro: '' })
   }
 
-  /** Ponto único de entrada na escolha do aluno. */
+  /** Ponto único de entrada na identificação do aluno. */
   function seguirParaEscolha(resultado: TransferenciaLookupResult) {
     if (!resultado.professor) return
     setStep({
-      tipo: 'escolher-aluno',
+      tipo: 'nome-aluno',
       professorId: resultado.professor.id,
       nome: resultado.professor.nome,
       alunos: resultado.alunos,
-      busca: '', manual: '', erro: '',
+      digitado: '', erro: '',
     })
   }
 
   function escolherAluno(aluno: AlunoEscolhido) {
-    if (step.tipo !== 'escolher-aluno') return
+    if (step.tipo !== 'nome-aluno') return
     setStep({
       tipo: 'formulario',
       professorId: step.professorId,
@@ -228,7 +222,6 @@ export function Home() {
     try {
       await solicitar.mutateAsync({
         professorId: step.professorId,
-        alunoId: step.aluno.alunoId,
         alunoNome: step.aluno.nome,
         motivo: step.motivo,
         detalhe: step.detalhe.trim(),
@@ -480,13 +473,12 @@ export function Home() {
           </div>
         )}
 
-        {step.tipo === 'escolher-aluno' && (
-          <EscolherAluno
+        {step.tipo === 'nome-aluno' && (
+          <NomeDoAluno
             step={step}
-            onBusca={v => setStep({ ...step, busca: v })}
-            onManual={v => setStep({ ...step, manual: v, erro: '' })}
+            onDigitar={v => setStep({ ...step, digitado: v, erro: '' })}
             onErro={v => setStep({ ...step, erro: v })}
-            onEscolher={escolherAluno}
+            onConfirmar={escolherAluno}
             onRecomecar={recomecar}
           />
         )}
@@ -499,11 +491,7 @@ export function Home() {
                 <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
                   Transferir {step.aluno.nome}
                 </h1>
-                <p className="text-[13px] text-ink-muted">
-                  {tempoDeVinculo(diasDesde(step.aluno.dataAdicao))
-                    ? `Na sua agenda ${tempoDeVinculo(diasDesde(step.aluno.dataAdicao))}`
-                    : step.nome}
-                </p>
+                <p className="text-[13px] text-ink-muted">{step.nome}</p>
               </div>
             </div>
 
@@ -613,15 +601,15 @@ export function Home() {
                 <button
                   type="button"
                   onClick={() => setStep({
-                    tipo: 'escolher-aluno',
+                    tipo: 'nome-aluno',
                     professorId: step.professorId,
                     nome: step.nome,
                     alunos: step.alunos,
-                    busca: '', manual: '', erro: '',
+                    digitado: step.aluno.nome, erro: '',
                   })}
                   className="btn-press w-full inline-flex items-center justify-center gap-1 text-[12px] text-ink-muted hover:text-ink-secondary"
                 >
-                  <ChevronLeft className="h-3.5 w-3.5" />Escolher outro aluno
+                  <ChevronLeft className="h-3.5 w-3.5" />Corrigir o nome do aluno
                 </button>
               </form>
             </CartaoPortal>
@@ -666,33 +654,52 @@ export function Home() {
 // A lista vem do cadastro do King, não é digitada. É isso que faz o pedido
 // nascer amarrado ao aluno certo — e é o que dá ao suporte o histórico dele.
 
-function EscolherAluno({
-  step, onBusca, onManual, onErro, onEscolher, onRecomecar,
+/**
+ * Identificação do aluno — o professor DIGITA o nome completo.
+ *
+ * Antes ele escolhia da própria agenda, e o pedido nascia com aluno_id. O
+ * problema: a API do King só nos entrega o PRIMEIRO nome, então a fila do
+ * Suporte ao Aluno via "Ana" e não tinha como saber qual Ana era, nem como
+ * achar o cadastro completo do outro lado.
+ *
+ * Quem sabe o nome completo é o professor. Então é ele quem preenche essa
+ * lacuna, e o vínculo com o cadastro (aluno_id) passou a ser deduzido no
+ * servidor pelo primeiro nome digitado — sem pedir nada a mais dele.
+ *
+ * A agenda continua sendo mostrada, mas só como referência de quem está com
+ * ele: não dá pra clicar, porque o nome completo é justamente o que ela não
+ * tem.
+ */
+function NomeDoAluno({
+  step, onDigitar, onErro, onConfirmar, onRecomecar,
 }: {
-  step: Extract<Step, { tipo: 'escolher-aluno' }>
-  onBusca: (v: string) => void
-  onManual: (v: string) => void
+  step: Extract<Step, { tipo: 'nome-aluno' }>
+  onDigitar: (v: string) => void
   onErro: (v: string) => void
-  onEscolher: (aluno: AlunoEscolhido) => void
+  onConfirmar: (aluno: AlunoEscolhido) => void
   onRecomecar: () => void
 }) {
-  const [modoManual, setModoManual] = useState(false)
+  const digitado = step.digitado.trim()
+  const partes = digitado.split(/\s+/).filter(t => t.length >= 2)
+  const completo = partes.length >= 2
 
-  const filtrados = useMemo(() => {
-    const termo = step.busca.trim().toLowerCase()
-    if (!termo) return step.alunos
-    return step.alunos.filter(a => a.nome.toLowerCase().includes(termo))
-  }, [step.alunos, step.busca])
+  // Primeiros nomes da agenda, só pra lembrar quem ele tem. Não é escolha.
+  const primeirosNomes = useMemo(
+    () => step.alunos.map(a => a.nome).filter(Boolean),
+    [step.alunos],
+  )
 
-  const semAlunos = step.alunos.length === 0
-
-  function confirmarManual() {
-    const nome = step.manual.trim()
-    if (nome.length < 2) {
+  function confirmar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!digitado) {
       onErro('Digite o nome do aluno.')
       return
     }
-    onEscolher({ alunoId: null, nome, dataAdicao: null })
+    if (!completo) {
+      onErro('Escreva o nome completo — nome e sobrenome.')
+      return
+    }
+    onConfirmar({ nome: digitado })
   }
 
   return (
@@ -704,131 +711,59 @@ function EscolherAluno({
             Qual aluno você quer transferir?
           </h1>
           <p className="text-[13px] text-ink-muted">
-            {semAlunos
-              ? 'Não encontramos alunos vinculados ao seu cadastro.'
-              : `${step.alunos.length} aluno${step.alunos.length !== 1 ? 's' : ''} na sua agenda`}
+            Escreva o nome completo, como está na matrícula.
           </p>
         </div>
       </div>
 
       <CartaoPortal>
-        {!modoManual && !semAlunos ? (
-          <div className="space-y-3">
-            {step.alunos.length > 6 && (
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
-                <Input
-                  value={step.busca}
-                  onChange={e => onBusca(e.target.value)}
-                  placeholder="Buscar aluno…"
-                  className="h-10 pl-9 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
-                />
-              </div>
-            )}
-
-            <div className="max-h-[19rem] space-y-1.5 overflow-y-auto pr-0.5">
-              {filtrados.length === 0 ? (
-                <p className="py-6 text-center text-[12.5px] text-ink-muted">
-                  Nenhum aluno com esse nome.
-                </p>
-              ) : (
-                filtrados.map(a => {
-                  const tempo = tempoDeVinculo(diasDesde(a.dataAdicao))
-                  return (
-                    <button
-                      key={a.alunoId}
-                      type="button"
-                      disabled={a.pedidoAberto}
-                      onClick={() => onEscolher({ alunoId: a.alunoId, nome: a.nome, dataAdicao: a.dataAdicao })}
-                      className={cn(
-                        'btn-press w-full rounded-xl border px-3.5 py-2.5 text-left transition-colors',
-                        a.pedidoAberto
-                          ? 'border-line-soft bg-surface-subtle opacity-60 cursor-not-allowed'
-                          // hover em aviso-infoBg (vira com o tema): com
-                          // accentBlue-soft o card ficava quase-branco no escuro
-                          // e o nome do aluno (text-ink, claro) sumia.
-                          : 'border-line-soft bg-surface-subtle hover:border-accentBlue hover:bg-aviso-infoBg',
-                      )}
-                    >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-[13.5px] font-medium text-ink truncate">{a.nome}</span>
-                        {a.pedidoAberto && (
-                          <span className="shrink-0 rounded-full bg-urg-medBg px-2 py-0.5 text-[10.5px] font-medium text-urg-medFg">
-                            já solicitado
-                          </span>
-                        )}
-                      </span>
-                      {(tempo || a.status === 'pausado') && (
-                        <span className="mt-0.5 block text-[11.5px] text-ink-muted">
-                          {tempo}
-                          {a.status === 'pausado' && (tempo ? ' · aluno pausado' : 'aluno pausado')}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => { setModoManual(true); onErro('') }}
-              className="btn-press w-full text-[12px] text-ink-muted hover:text-ink-secondary"
-            >
-              Não encontrei meu aluno na lista
-            </button>
+        <form onSubmit={confirmar} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="aluno-nome" className="text-[12px] text-ink-secondary font-medium">
+              Nome completo do aluno
+            </Label>
+            <Input
+              id="aluno-nome"
+              value={step.digitado}
+              onChange={e => onDigitar(e.target.value)}
+              placeholder="Ex.: Ana Beatriz Silva"
+              autoFocus
+              autoComplete="off"
+              className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
+            />
+            <p className="text-[11.5px] text-ink-muted">
+              O nome completo é o que permite ao suporte achar o cadastro certo —
+              principalmente quando dois alunos têm o mesmo primeiro nome.
+            </p>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {semAlunos && !modoManual && (
-              <div className="flex items-start gap-2 rounded-xl border border-line-soft bg-surface-subtle px-3.5 py-2.5">
-                <Users className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" />
-                <p className="text-[12px] text-ink-secondary leading-relaxed">
-                  Sua agenda pode ter sido atualizada há pouco. Digite o nome do aluno e o
-                  suporte confere no cadastro.
-                </p>
-              </div>
-            )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="aluno-manual" className="text-[12px] text-ink-secondary font-medium">
-                Nome do aluno
-              </Label>
-              <Input
-                id="aluno-manual"
-                value={step.manual}
-                onChange={e => onManual(e.target.value)}
-                placeholder="Nome do aluno, como aparece na plataforma"
-                className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
-              />
-              <p className="flex items-start gap-1.5 text-[11.5px] text-ink-muted">
-                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                Pedidos sem o aluno da lista demoram mais — o suporte precisa localizar o cadastro à mão.
+          {primeirosNomes.length > 0 && (
+            <div className="rounded-xl border border-line-soft bg-surface-subtle px-3.5 py-2.5 space-y-1.5">
+              <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink-secondary">
+                <Users className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+                Alunos na sua agenda
+              </p>
+              <p className="text-[11.5px] text-ink-muted leading-relaxed">
+                {primeirosNomes.join(' · ')}
+              </p>
+              <p className="text-[11px] text-ink-subtle">
+                O cadastro guarda só o primeiro nome — por isso precisamos que você
+                escreva o resto.
               </p>
             </div>
+          )}
 
-            {step.erro && <AvisoErro>{step.erro}</AvisoErro>}
+          {step.erro && <AvisoErro>{step.erro}</AvisoErro>}
 
-            <BotaoPrimario type="button" onClick={confirmarManual}>
-              Continuar
-            </BotaoPrimario>
-
-            {!semAlunos && (
-              <button
-                type="button"
-                onClick={() => { setModoManual(false); onErro('') }}
-                className="btn-press w-full inline-flex items-center justify-center gap-1 text-[12px] text-ink-muted hover:text-ink-secondary"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />Voltar para a lista
-              </button>
-            )}
-          </div>
-        )}
+          <BotaoPrimario type="submit">
+            Continuar
+          </BotaoPrimario>
+        </form>
 
         <button
           type="button"
           onClick={onRecomecar}
-          className="btn-press w-full text-[12px] text-ink-muted hover:text-ink-secondary"
+          className="btn-press mt-3 w-full text-[12px] text-ink-muted hover:text-ink-secondary"
         >
           Não sou eu
         </button>

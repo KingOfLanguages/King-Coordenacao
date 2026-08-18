@@ -27,6 +27,7 @@ import {
 } from '@/lib/transferenciaLabels'
 import { DossieAluno } from '@/components/transferencias/DossieAluno'
 import { AlunoId } from '@/components/alunos/AlunoId'
+import { normalizarNome } from '@/hooks/useAcompanhamentoAlunos'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { useAuth } from '@/contexts/AuthContext'
@@ -321,10 +322,10 @@ function CardPedido({
             )}
             {!pedido.aluno_da_lista && (
               <span
-                title="O professor não achou o aluno na lista e digitou o nome — confira o cadastro antes de agir."
+                title="Não conseguimos casar este nome com nenhum aluno da agenda do professor — pode ser homônimo na carteira dele ou grafia diferente. Localize o cadastro antes de agir."
                 className="inline-flex items-center gap-1 rounded-full bg-urg-medBg px-2 py-0.5 text-[10.5px] font-medium text-urg-medFg"
               >
-                <AlertTriangle className="h-3 w-3" />nome digitado
+                <AlertTriangle className="h-3 w-3" />sem vínculo
               </span>
             )}
           </div>
@@ -644,10 +645,27 @@ function FormConcluir({
   // O destino só faz sentido quando o aluno realmente mudou de professor.
   const pedeDestino = desfecho === 'transferido'
 
+  const [buscaDestino, setBuscaDestino] = useState('')
+
   const destinos = useMemo(
     () => professores.filter(p => p.id !== pedido.professor_id),
     [professores, pedido.professor_id],
   )
+
+  // São ~1900 professores na lista: rolar até achar era inviável. A busca
+  // ignora acento e casa em QUALQUER parte do nome — quem atende costuma
+  // lembrar do sobrenome, não do primeiro nome. Alguns cadastros vêm com lixo
+  // grudado ("... inicio 14/01"), então normalizar também evita que isso
+  // atrapalhe o casamento.
+  const destinosFiltrados = useMemo(() => {
+    const termo = normalizarNome(buscaDestino)
+    if (!termo) return destinos
+    const partes = termo.split(' ').filter(Boolean)
+    return destinos.filter(p => {
+      const alvo = normalizarNome(p.nome)
+      return partes.every(t => alvo.includes(t))
+    })
+  }, [destinos, buscaDestino])
 
   function enviar() {
     if (!desfecho) {
@@ -696,14 +714,50 @@ function FormConcluir({
           <label className="text-[11.5px] font-medium text-ink-secondary">
             Para qual professor? <span className="font-normal text-ink-muted">(opcional)</span>
           </label>
-          <Select value={destinoId || undefined} onValueChange={setDestinoId}>
+          <Select
+            value={destinoId || undefined}
+            onValueChange={setDestinoId}
+            onOpenChange={aberto => { if (!aberto) setBuscaDestino('') }}
+          >
             <SelectTrigger className="h-9 border-line bg-surface-canvas text-[12.5px]">
               <SelectValue placeholder="Selecionar professor…" />
             </SelectTrigger>
             <SelectContent>
-              {destinos.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-              ))}
+              <div className="sticky top-0 z-10 -mx-1 -mt-1 mb-1 border-b border-line-soft bg-surface-canvas px-2 py-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
+                  <Input
+                    autoFocus
+                    value={buscaDestino}
+                    onChange={e => setBuscaDestino(e.target.value)}
+                    placeholder="Buscar professor…"
+                    // O Select do Radix usa as teclas pra "typeahead" e pra
+                    // fechar no Espaço. Sem barrar aqui, digitar dentro do
+                    // campo pula de item e fecha o menu no primeiro espaço.
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') return
+                      e.stopPropagation()
+                    }}
+                    className="h-8 border-line bg-surface-subtle pl-8 text-[12.5px]"
+                  />
+                </div>
+              </div>
+
+              {destinosFiltrados.length === 0 ? (
+                <p className="px-2 py-4 text-center text-[12px] text-ink-muted">
+                  Nenhum professor com esse nome.
+                </p>
+              ) : (
+                destinosFiltrados.slice(0, 50).map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                ))
+              )}
+
+              {destinosFiltrados.length > 50 && (
+                <p className="px-2 py-2 text-center text-[11px] text-ink-muted">
+                  Mostrando 50 de {destinosFiltrados.length} — refine a busca.
+                </p>
+              )}
             </SelectContent>
           </Select>
         </div>

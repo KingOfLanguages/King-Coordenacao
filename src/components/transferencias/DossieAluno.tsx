@@ -89,7 +89,7 @@ function VinculoAtual({
           <Camera className="h-3 w-3" />
           {alunoDaLista
             ? 'O vínculo não está mais no cadastro — dados congelados no momento do pedido.'
-            : 'Pedido sem aluno da lista: sem vínculo para consultar.'}
+            : 'Não casamos o nome com nenhum aluno da agenda — sem vínculo para consultar.'}
         </p>
       )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-5">
@@ -99,7 +99,7 @@ function VinculoAtual({
           rotulo="ID do aluno"
           valor={alunoId !== null ? <AlunoId id={alunoId} className="text-[12.5px] font-medium" /> : '—'}
           dica={alunoId === null
-            ? 'O professor digitou o nome à mão: não há vínculo no cadastro para identificar.'
+            ? 'Não casamos o nome digitado com nenhum aluno da agenda do professor — use o nome completo para achar o cadastro no King.'
             : undefined}
         />
         <Dado rotulo="Tempo com o professor" valor={tempoDeVinculo(dias) ?? '—'} destaque />

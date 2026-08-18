@@ -20,7 +20,7 @@
 //   { "acao": "lookup", "email"?, "nome"?, "mesInicio"?, "anoInicio"?, "professorId"? }
 //     → { professor: { id, nome } | null, ambiguo, alunos: [...], jaPausado }
 //
-//   { "acao": "solicitar", "professorId", "alunoId"?, "alunoNome", "motivo",
+//   { "acao": "solicitar", "professorId", "alunoNome" (COMPLETO), "motivo",
 //     "detalhe", "dataUltimaAula", "jaConversou"?, "aceitaManter"? }
 //     → { ok: true, transferenciaId }  |  { error: "…" } com 400/409
 //
@@ -153,14 +153,21 @@ serve(async (req) => {
     const motivo      = typeof body.motivo      === 'string' ? body.motivo.trim()      : ''
     const detalhe     = typeof body.detalhe     === 'string' ? body.detalhe.trim()     : ''
     const dataUltimaAula = typeof body.dataUltimaAula === 'string' ? body.dataUltimaAula.trim() : ''
-    const alunoId     = typeof body.alunoId === 'number' && Number.isFinite(body.alunoId)
-      ? Math.trunc(body.alunoId)
-      : null
     const jaConversou  = typeof body.jaConversou  === 'boolean' ? body.jaConversou  : null
     const aceitaManter = typeof body.aceitaManter === 'boolean' ? body.aceitaManter : null
 
     if (!professorId) return json({ error: 'Identificação perdida. Recomece o preenchimento.' }, 400)
-    if (!alunoNome)   return json({ error: 'Escolha o aluno que você quer transferir.' }, 400)
+    if (!alunoNome)   return json({ error: 'Escreva o nome do aluno que você quer transferir.' }, 400)
+    // Nome COMPLETO é o ponto da mudança: a API do King só nos manda o
+    // primeiro nome, então é o professor quem fecha essa lacuna. Sem sobrenome
+    // o pedido não identifica ninguém melhor do que o cadastro já identificava.
+    const partesNome = alunoNome.split(/\s+/).filter(t => t.length >= 2)
+    if (partesNome.length < 2) {
+      return json({ error: 'Escreva o nome COMPLETO do aluno (nome e sobrenome).' }, 400)
+    }
+    if (alunoNome.length > 120) {
+      return json({ error: 'Esse nome ficou longo demais. Confira o que foi digitado.' }, 400)
+    }
     if (!MOTIVOS.has(motivo)) {
       return json({ error: 'Escolha o motivo da transferência.' }, 400)
     }
@@ -192,21 +199,31 @@ serve(async (req) => {
     if (!prof)                   return json({ error: 'Cadastro não encontrado.' }, 404)
     if (prof.status !== 'ativo') return json({ error: 'Seu cadastro não está ativo. Fale com a coordenação.' }, 409)
 
-    // Quando veio da lista, o aluno tem que ser REALMENTE da carteira deste
-    // professor — senão um pedido forjado deixaria um professor mexer no aluno
-    // de outro.
-    if (alunoId !== null) {
-      const { data: vinculo } = await admin
+    // O professor digita o nome; o vínculo com o cadastro nós deduzimos aqui.
+    //
+    // Por que continuar tentando achar o aluno_id: ele é o que sustenta o
+    // dossiê do Suporte ao Aluno (vínculo, saídas anteriores, outros pedidos)
+    // e o snapshot congelado no INSERT. Se o pedido nascesse só com texto, a
+    // fila perderia tudo isso. Como a API só guarda o PRIMEIRO nome, casamos
+    // pelo primeiro nome digitado — e só quando ele aponta para UM aluno da
+    // agenda. Dois "Ana" na carteira = ambíguo: fica sem vínculo e o suporte
+    // resolve na mão, com o nome completo em tela. Chutar seria pior.
+    let alunoId: number | null = null
+    {
+      const primeiroDigitado = norm(partesNome[0])
+      const { data: roster } = await admin
         .from('professor_alunos_kms')
-        .select('aluno_id')
+        .select('aluno_id, primeiro_nome')
         .eq('professor_id', professorId)
-        .eq('aluno_id', alunoId)
-        .maybeSingle()
+        .eq('tipo_vinculo', 'aluno')
 
-      if (!vinculo) {
-        return json({ error: 'Esse aluno não está na sua lista. Atualize a página e tente de novo.' }, 409)
-      }
+      const candidatos = ((roster ?? []) as { aluno_id: number; primeiro_nome: string | null }[])
+        .filter(a => a.primeiro_nome && norm(a.primeiro_nome) === primeiroDigitado)
 
+      if (candidatos.length === 1) alunoId = candidatos[0].aluno_id
+    }
+
+    if (alunoId !== null) {
       const { data: aberto } = await admin
         .from('transferencias_aluno')
         .select('id')
@@ -227,6 +244,9 @@ serve(async (req) => {
         professor_id:   professorId,
         aluno_id:       alunoId,
         aluno_nome:     alunoNome,
+        // Passou a significar "conseguimos casar com o cadastro" — ninguém
+        // escolhe de lista nenhuma desde que o nome completo passou a ser
+        // digitado. False = o suporte precisa localizar o aluno à mão.
         aluno_da_lista: alunoId !== null,
         motivo,
         detalhe,

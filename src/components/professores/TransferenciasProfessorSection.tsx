@@ -131,7 +131,7 @@ export function TransferenciasProfessorSection({ professorId }: { professorId: s
                       </span>
                     )}
                     {tempo && <span>Aluno estava com ele {tempo}</span>}
-                    {!p.aluno_da_lista && <span className="font-medium text-urg-medFg">nome digitado</span>}
+                    {!p.aluno_da_lista && <span className="font-medium text-urg-medFg">sem vínculo</span>}
                   </div>
 
                   <p className="rounded-lg bg-surface-subtle/60 px-3 py-2 leading-relaxed text-ink-secondary">
