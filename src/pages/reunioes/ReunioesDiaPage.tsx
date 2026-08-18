@@ -1514,7 +1514,13 @@ function ParticipanteRow({ part }: { part: ParticipanteCard }) {
     confirmar.mutate(
       { participanteId: part.id, professorId: prof.id, aconteceu, observacao: obs },
       {
-        onSuccess: () => toast.success(aconteceu ? 'Reunião confirmada.' : 'Marcada como não realizada.'),
+        // Na 1ª reunião o coordenador que a conduziu assume o professor no seu
+        // grupo — o banco faz a troca, aqui só damos a notícia.
+        onSuccess: res => toast.success(
+          !aconteceu                ? 'Marcada como não realizada.'
+          : res?.assumidoPor        ? `Reunião confirmada — ${prof.nome} agora é da coordenação de ${res.assumidoPor}.`
+          :                           'Reunião confirmada.',
+        ),
         onError:   () => toast.error('Erro ao confirmar.'),
       },
     )

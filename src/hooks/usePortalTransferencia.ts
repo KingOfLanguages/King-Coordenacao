@@ -74,8 +74,8 @@ export function useTransferenciaLookup() {
 
 export type SolicitarTransferenciaInput = {
   professorId: string
-  /** null quando o professor não achou o aluno na lista e digitou o nome. */
-  alunoId: number | null
+  /** O professor digita o nome completo; o vínculo com o cadastro (aluno_id) é
+   *  deduzido no servidor pelo primeiro nome — por isso não vai daqui. */
   alunoNome: string
   motivo: MotivoTransferencia
   detalhe: string

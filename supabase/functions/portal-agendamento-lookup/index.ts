@@ -39,7 +39,7 @@
 //                                 o professor sem nenhuma opção. Aponta para
 //                                 o google_appointment_link do coordenador.
 //   Opção 3 — "Reuniões em grupo": elegível se professor_acompanhamento.
-//                                 score_atual >= 1400. Sem link — o front
+//                                 score_atual >= 1300. Sem link — o front
 //                                 usa o fluxo já existente (teacher-lookup +
 //                                 create-booking) para essa opção.
 //
@@ -93,7 +93,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const SCORE_MINIMO_GRUPO = 1400
+const SCORE_MINIMO_GRUPO = 1300
 const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
 const DIAS_JANELA_PRIMEIRA_REUNIAO = 7
 const DIAS_JANELA_ACOMPANHAMENTO_MENSAL = 90 // ~3 meses de casa — cadência mensal fixa (30 dias)

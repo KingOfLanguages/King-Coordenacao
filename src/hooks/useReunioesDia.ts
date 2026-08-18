@@ -492,7 +492,13 @@ export function useExcluirReuniao() {
   })
 }
 
-/** Confirma a participação (realizada/cancelada), com numeração automática do monitoramento. */
+/** Confirma a participação (realizada/cancelada), com numeração automática do monitoramento.
+ *
+ *  Quando é a 1ª reunião do professor (numero === 1), o trigger
+ *  `trg_assumir_professor_primeira_reuniao` move o professor para o grupo do
+ *  coordenador que conduziu a reunião. Aqui só lemos o resultado (antes/depois)
+ *  para conseguir avisar na tela quem assumiu — a regra em si vive no banco,
+ *  porque a extensão e a confirmação em grupo passam pelo mesmo caminho. */
 export function useConfirmarParticipacao() {
   const queryClient = useQueryClient()
   const { profile } = useAuth()
@@ -511,6 +517,18 @@ export function useConfirmarParticipacao() {
           .eq('professor_id', professorId)
           .eq('status', 'realizada')
         numero = (count ?? 0) + 1
+      }
+
+      // 1ª reunião: guarda de quem era o professor antes, pra saber se mudou de mão.
+      const primeiraReuniao = numero === 1 && !!professorId
+      let coordAntes: string | null = null
+      if (primeiraReuniao) {
+        const { data } = await supabase
+          .from('professores')
+          .select('coordenador_id')
+          .eq('id', professorId!)
+          .maybeSingle()
+        coordAntes = data?.coordenador_id ?? null
       }
 
       const { error } = await supabase
@@ -532,6 +550,30 @@ export function useConfirmarParticipacao() {
           .update({ data_ultima_reuniao: new Date().toISOString() })
           .eq('id', professorId)
       }
+
+      // O trigger já rodou; se o professor trocou de coordenação, devolve o nome
+      // de quem assumiu pra tela poder avisar.
+      let assumidoPor: string | null = null
+      if (primeiraReuniao) {
+        const { data: depois } = await supabase
+          .from('professores')
+          .select('coordenador_id')
+          .eq('id', professorId!)
+          .maybeSingle()
+        const coordDepois = depois?.coordenador_id ?? null
+        if (coordDepois && coordDepois !== coordAntes) {
+          // `perfis_publicos` e não `profiles`: a RLS de profiles só devolve a
+          // própria linha (ver migration 20260742).
+          const { data: perfil } = await supabase
+            .from('perfis_publicos')
+            .select('nome')
+            .eq('id', coordDepois)
+            .maybeSingle()
+          assumidoPor = perfil?.nome ?? null
+        }
+      }
+
+      return { assumidoPor }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
