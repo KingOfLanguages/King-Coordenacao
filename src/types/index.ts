@@ -152,6 +152,9 @@ export interface TransferenciaAluno {
   observacao_id: string | null
   origem: string
   created_at: string
+  /** Quando o atraso deste pedido foi escalado para a liderança do Suporte ao
+   *  Aluno (cron king-transferencia-atraso). NULL = ainda não escalado. */
+  alerta_atraso_em: string | null
 }
 
 export interface Reuniao {

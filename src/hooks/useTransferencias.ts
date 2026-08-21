@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { diasUteisEntre, hojeLocal, parseISODate } from '@/lib/diasUteis'
+import { diasUteisEntre, hojeLocal, parseISODate, somarDiasUteis } from '@/lib/diasUteis'
 import { PRAZO_DIAS_UTEIS } from '@/lib/transferenciaLabels'
 import type { TransferenciaAluno } from '@/types'
 
@@ -20,10 +20,10 @@ export type TransferenciaComProfessor = TransferenciaAluno & {
   destino?: { id: string; nome: string } | null
 }
 
-/** Faixa de urgência da fila, DERIVADA da data da última aula do aluno — não há
- *  mais urgência declarada pelo professor. `vencida` é o caso que não pode
- *  acontecer: o aluno já teve a última aula e ninguém processou a transferência. */
-export type FaixaTransferencia = 'vencida' | 'apertada' | 'no_prazo'
+/** Situação do pedido em relação ao PRAZO DE ATENDIMENTO — o nosso prazo, não o
+ *  do professor. `atrasada` já passou do limite (e já foi escalada para a
+ *  liderança do Suporte ao Aluno); `vence_hoje` termina hoje. */
+export type FaixaTransferencia = 'atrasada' | 'vence_hoje' | 'no_prazo'
 
 /** Dias inteiros desde um timestamp. Compara só a parte de data, sem hora —
  *  evita o resultado mudar conforme a hora em que a tela é aberta. */
@@ -35,15 +35,6 @@ export function diasDesde(ts: string): number {
   return Math.round((hoje - criado) / 86_400_000)
 }
 
-/** Dias úteis que ainda restam até a última aula. 0 quando a data já passou.
- *  Mesma função que o banco usa em `dias_uteis_entre` — front e trigger não
- *  podem discordar sobre quem está fora do prazo. */
-export function diasUteisRestantes(dataUltimaAula: string): number {
-  const alvo = parseISODate(dataUltimaAula)
-  if (!alvo) return 0
-  return diasUteisEntre(hojeLocal(), alvo)
-}
-
 /** A última aula já passou? (data estritamente anterior a hoje) */
 export function prazoVencido(dataUltimaAula: string): boolean {
   const alvo = parseISODate(dataUltimaAula)
@@ -51,15 +42,64 @@ export function prazoVencido(dataUltimaAula: string): boolean {
   return alvo < hojeLocal()
 }
 
-export function faixaDaTransferencia(t: Pick<TransferenciaAluno, 'data_ultima_aula'>): FaixaTransferencia {
-  if (prazoVencido(t.data_ultima_aula)) return 'vencida'
-  return diasUteisRestantes(t.data_ultima_aula) >= PRAZO_DIAS_UTEIS ? 'no_prazo' : 'apertada'
+// ─── Prazo de atendimento (o compromisso do Suporte ao Aluno) ────────────────
+// O professor tem a régua dele (com quanta antecedência avisou, congelada no
+// snapshot). Esta é a NOSSA: até quando o pedido precisa estar resolvido.
+//
+//     limite = MENOR( envio + 7 dias úteis , data da última aula )
+//
+// A última aula entra como teto porque quando o professor avisa em cima da hora
+// o combinado de 7 dias úteis não cabe mais — o que manda é o dia em que o
+// aluno para. Espelha transferencia_prazo_limite() em 20260769.
+
+export interface PrazoAtendimento {
+  /** Data-limite (ISO) para o pedido estar resolvido. */
+  limite: string
+  /** Dias úteis que ainda restam, sem contar hoje. 0 = vence hoje. */
+  restantes: number
+  /** Dias úteis de atraso. 0 enquanto está no prazo. */
+  atraso: number
+  faixa: FaixaTransferencia
+  /** O limite veio da última aula, e não dos 7 dias úteis — ou seja, o professor
+   *  avisou com menos antecedência do que o combinado. */
+  regidoPelaUltimaAula: boolean
+}
+
+export function prazoAtendimento(
+  t: Pick<TransferenciaAluno, 'created_at' | 'data_ultima_aula'>,
+): PrazoAtendimento {
+  const sla    = somarDiasUteis(t.created_at.slice(0, 10), PRAZO_DIAS_UTEIS)
+  const ultima = t.data_ultima_aula.slice(0, 10)
+  const limite = sla <= ultima ? sla : ultima
+  const regidoPelaUltimaAula = ultima < sla
+
+  const hoje = hojeLocal()
+  const alvo = parseISODate(limite) ?? hoje
+
+  if (alvo < hoje) {
+    // dias_uteis_entre conta as duas pontas; o dia do vencimento não é atraso.
+    const atraso = Math.max(1, diasUteisEntre(alvo, hoje) - 1)
+    return { limite, restantes: 0, atraso, faixa: 'atrasada', regidoPelaUltimaAula }
+  }
+
+  const restantes = Math.max(0, diasUteisEntre(hoje, alvo) - 1)
+  return {
+    limite, restantes, atraso: 0,
+    faixa: restantes === 0 ? 'vence_hoje' : 'no_prazo',
+    regidoPelaUltimaAula,
+  }
+}
+
+export function faixaDaTransferencia(
+  t: Pick<TransferenciaAluno, 'created_at' | 'data_ultima_aula'>,
+): FaixaTransferencia {
+  return prazoAtendimento(t).faixa
 }
 
 export const FAIXA_TRANSFERENCIA_META: Record<FaixaTransferencia, { label: string; descricao: string }> = {
-  vencida:  { label: 'Última aula já passou', descricao: 'O aluno já parou com este professor e a transferência não foi processada.' },
-  apertada: { label: 'Fora do prazo',         descricao: `Menos de ${PRAZO_DIAS_UTEIS} dias úteis até a última aula — priorizar.` },
-  no_prazo: { label: 'No prazo',              descricao: `Há ${PRAZO_DIAS_UTEIS} dias úteis ou mais até a última aula.` },
+  atrasada:   { label: 'Atrasadas',  descricao: 'Passaram do prazo de atendimento. A liderança do setor é avisada automaticamente.' },
+  vence_hoje: { label: 'Vencem hoje', descricao: 'O prazo termina hoje — precisam ser resolvidas ainda hoje.' },
+  no_prazo:   { label: 'No prazo',   descricao: `Dentro dos ${PRAZO_DIAS_UTEIS} dias úteis de atendimento.` },
 }
 
 const SELECT_TRANSFERENCIA = `

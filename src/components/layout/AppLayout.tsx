@@ -51,7 +51,7 @@ function roleLabel(role?: string, isLider?: boolean) {
     case 'admin':         return 'Admin'
     case 'coordenacao':   return isLider ? 'Coordenação · Líder' : 'Coordenação'
     case 'suporte':       return 'Suporte'
-    case 'suporte_aluno': return 'Suporte · Aluno'
+    case 'suporte_aluno': return isLider ? 'Suporte · Aluno · Líder' : 'Suporte · Aluno'
     default:              return '—'
   }
 }

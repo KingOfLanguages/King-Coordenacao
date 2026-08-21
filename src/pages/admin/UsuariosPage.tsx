@@ -20,6 +20,15 @@ const ROLES: { value: RoleUsuario; label: string }[] = [
   { value: 'suporte_aluno', label: 'Suporte · Aluno' },
 ]
 
+/**
+ * Cargos que têm liderança própria — os únicos em que o flag `is_lider` faz
+ * sentido. Ele nasceu só para a coordenação (20260704, "enxerga todos os
+ * grupos") e passou a valer como "líder do próprio setor" quando o Suporte ao
+ * Aluno ganhou escalonamento de transferência atrasada (20260769): sem poder
+ * marcar a líder do setor aqui, o aviso não teria destinatário.
+ */
+const CARGOS_COM_LIDERANCA = new Set<RoleUsuario>(['coordenacao', 'suporte_aluno'])
+
 function roleLabel(role: RoleUsuario) {
   return ROLES.find(r => r.value === role)?.label ?? role
 }
@@ -52,7 +61,7 @@ export function UsuariosPage() {
   async function handleFlag(usuario: UsuarioAdmin, flag: 'is_lider' | 'is_admin', valor: boolean) {
     try {
       await atualizar.mutateAsync({ id: usuario.id, [flag]: valor })
-      const label = flag === 'is_lider' ? 'Líder de coordenação' : 'Acesso admin'
+      const label = flag === 'is_lider' ? 'Líder do setor' : 'Acesso admin'
       toast.success(`${label} ${valor ? 'ativado' : 'desativado'} para ${usuario.nome}.`)
     } catch {
       toast.error('Erro ao atualizar permissão.')
@@ -268,11 +277,14 @@ function UsuarioRow({
           </SelectContent>
         </Select>
         <div className="flex gap-1">
-          {usuario.role === 'coordenacao' && (
+          {CARGOS_COM_LIDERANCA.has(usuario.role) && (
             <button
               type="button"
               disabled={isPending}
               onClick={() => onFlag('is_lider', !usuario.is_lider)}
+              title={usuario.role === 'suporte_aluno'
+                ? 'Líder do Suporte ao Aluno: recebe o escalonamento das transferências que passam do prazo.'
+                : 'Líder da coordenação: enxerga o acompanhamento de todos os grupos.'}
               className={cn(
                 'btn-press rounded-full px-2 py-0.5 text-[10.5px] font-medium border',
                 usuario.is_lider

@@ -23,6 +23,7 @@ import {
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
 import { NovaReuniaoDialog } from '@/components/reunioes/NovaReuniaoDialog'
+import { MetaDoDiaCard } from '@/components/reunioes/MetaDoDiaCard'
 import { AnotacaoInternaButton } from '@/components/reunioes/AnotacaoInternaButton'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { scoreVisual } from '@/lib/score'
@@ -306,6 +307,7 @@ export function ReunioesDiaPage() {
           {modo === 'dia' && (
             <DiaView
               dia={dataRef}
+              coordenadorId={coordId}
               carregando={carregando}
               lista={lista}
               listaAgenda={listaAgenda}
@@ -463,8 +465,9 @@ function Toolbar() {
 
 // ─── Visão Dia ──────────────────────────────────────────────────────────────
 
-function DiaView({ dia, carregando, lista, listaAgenda, dados }: {
+function DiaView({ dia, coordenadorId, carregando, lista, listaAgenda, dados }: {
   dia: Date
+  coordenadorId: string
   carregando: boolean
   lista: ReuniaoCard[]
   listaAgenda: AgendaOcorrenciaCard[]
@@ -472,6 +475,17 @@ function DiaView({ dia, carregando, lista, listaAgenda, dados }: {
 }) {
   const total = lista.length + listaAgenda.length
   const hoje  = isMesmoDia(dia, new Date())
+
+  // Placar do dia contra a meta. Reunião interna não conta: a meta é de contato
+  // com professor. Reunião de grupo conta como UMA — é um horário da agenda,
+  // por mais professores que caibam nele.
+  const comProfessor = lista.filter(r => r.tipo_reuniao !== 'interna')
+  const agendadas    = comProfessor.filter(r => statusReuniao(r) !== 'cancelada').length + listaAgenda.length
+  const realizadas   = comProfessor.filter(r => statusReuniao(r) === 'realizada').length
+                     + listaAgenda.filter(o => statusOcorrencia(o) === 'realizada').length
+  const idsDoDia = new Set(
+    comProfessor.flatMap(r => r.participantes.map(p => p.professor?.id).filter((id): id is string => !!id)),
+  )
 
   if (carregando) {
     return (
@@ -481,13 +495,26 @@ function DiaView({ dia, carregando, lista, listaAgenda, dados }: {
     )
   }
 
+  const placar = (
+    <MetaDoDiaCard
+      dia={dia}
+      coordenadorId={coordenadorId}
+      agendadas={agendadas}
+      realizadas={realizadas}
+      idsDoDia={idsDoDia}
+    />
+  )
+
   if (total === 0) {
     return (
-      <div className="card-surface p-10 text-center">
-        <p className="text-[14px] font-medium text-ink">
-          {hoje ? 'Nenhuma reunião hoje' : 'Nenhuma reunião nesse dia'}
-        </p>
-        <p className="text-[13px] text-ink-muted mt-1">A agenda deste coordenador está livre.</p>
+      <div className="space-y-5 max-w-[640px]">
+        {placar}
+        <div className="card-surface p-10 text-center">
+          <p className="text-[14px] font-medium text-ink">
+            {hoje ? 'Nenhuma reunião hoje' : 'Nenhuma reunião nesse dia'}
+          </p>
+          <p className="text-[13px] text-ink-muted mt-1">A agenda deste coordenador está livre.</p>
+        </div>
       </div>
     )
   }
@@ -498,6 +525,7 @@ function DiaView({ dia, carregando, lista, listaAgenda, dados }: {
 
   return (
     <div className="space-y-5 max-w-[640px]">
+      {placar}
       {temGrupo && (
         <section className="space-y-2.5">
           <p className="label-micro">Reuniões em grupo</p>

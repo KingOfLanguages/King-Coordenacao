@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Bell, AlertTriangle, Hand, CheckCircle2, FileText } from 'lucide-react'
+import { Bell, AlertTriangle, Hand, CheckCircle2, FileText, UserCog } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   useNotificacoes, useMarcarNotificacaoLida, useMarcarTodasLidas,
@@ -17,6 +17,7 @@ const ICONE: Record<string, typeof Bell> = {
   incidente_critico:   AlertTriangle,
   incidente_assumido:  Hand,
   incidente_concluido: CheckCircle2,
+  transferencia_atrasada: UserCog,
 }
 
 const COR: Record<string, string> = {
@@ -24,6 +25,7 @@ const COR: Record<string, string> = {
   incidente_critico:   'text-urg-critFg',
   incidente_assumido:  'text-accentBlue',
   incidente_concluido: 'text-urg-lowFg',
+  transferencia_atrasada: 'text-urg-critFg',
 }
 
 function tempoRelativo(iso: string): string {
@@ -47,7 +49,10 @@ export function NotificacoesSino({ isOpen, onToggle, registerRef }: Props) {
   function abrir(n: Notificacao) {
     if (!n.lida) marcarLida.mutate(n.id)
     onToggle()
-    if (n.incidente_id) navigate(`/incidentes?incidente=${n.incidente_id}`)
+    // `link` é o destino genérico (avisos que não são chamado); incidente_id
+    // continua valendo para os antigos, que foram gravados sem link.
+    if (n.link) navigate(n.link)
+    else if (n.incidente_id) navigate(`/incidentes?incidente=${n.incidente_id}`)
   }
 
   return (

@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   UserCog, Search, Hand, XCircle, CheckCircle2, Link2, Check, AlertTriangle,
   Clock, User, Plus, FileWarning, ChevronDown, ChevronRight, Phone,
   MessageCircle, Users, Zap, MessagesSquare, Handshake, Inbox, CalendarDays,
+  Timer, BellRing, ShieldAlert,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -14,9 +15,9 @@ import {
   useTransferenciasFila, useTransferenciasFinalizadas,
   useAssumirTransferencia, useLargarTransferencia,
   useConcluirTransferencia, useRecusarTransferencia,
-  faixaDaTransferencia, diasDesde, diasUteisRestantes, prazoVencido,
+  prazoAtendimento, diasDesde, prazoVencido,
   FAIXA_TRANSFERENCIA_META,
-  type TransferenciaComProfessor, type FaixaTransferencia,
+  type TransferenciaComProfessor, type FaixaTransferencia, type PrazoAtendimento,
 } from '@/hooks/useTransferencias'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
 import {
@@ -36,22 +37,20 @@ import { dataBR } from '@/lib/formato'
 import { cn, whatsappLink } from '@/lib/utils'
 import { toast } from 'sonner'
 
-const ORDEM_FAIXAS: FaixaTransferencia[] = ['vencida', 'apertada', 'no_prazo']
+const ORDEM_FAIXAS: FaixaTransferencia[] = ['atrasada', 'vence_hoje', 'no_prazo']
 
 const FAIXA_ESTILO: Record<FaixaTransferencia, { tone: string; icon: string }> = {
-  vencida:  { tone: 'text-urg-critFg', icon: 'bg-urg-critBg text-urg-critFg' },
-  apertada: { tone: 'text-urg-highFg', icon: 'bg-urg-highBg text-urg-highFg' },
-  no_prazo: { tone: 'text-ink-muted',  icon: 'bg-surface-subtle text-ink-muted' },
+  atrasada:   { tone: 'text-urg-critFg', icon: 'bg-urg-critBg text-urg-critFg' },
+  vence_hoje: { tone: 'text-urg-highFg', icon: 'bg-urg-highBg text-urg-highFg' },
+  no_prazo:   { tone: 'text-ink-muted',  icon: 'bg-surface-subtle text-ink-muted' },
 }
 
-/** "última aula hoje" / "faltam 4 dias úteis" — o indicador de prazo do card. */
-function prazoLabel(dataUltimaAula: string): string {
-  if (prazoVencido(dataUltimaAula)) {
-    return `última aula em ${dataBR(dataUltimaAula)} — já passou`
-  }
-  const uteis = diasUteisRestantes(dataUltimaAula)
-  if (uteis <= 1) return 'última aula é hoje'
-  return `faltam ${diasUteisLabel(uteis - 1)} até a última aula`
+/** "atrasada há 2 dias úteis" / "vence hoje" / "faltam 4 dias úteis" — a frase
+ *  que responde, no card, a única pergunta que importa na fila: já estourou? */
+function prazoLabel(p: PrazoAtendimento): string {
+  if (p.faixa === 'atrasada')   return `atrasada há ${diasUteisLabel(p.atraso)}`
+  if (p.faixa === 'vence_hoje') return 'o prazo vence hoje'
+  return `faltam ${diasUteisLabel(p.restantes)} de prazo`
 }
 
 function resolverPerfil(ref: { nome: string } | { nome: string }[] | null | undefined): string | null {
@@ -63,8 +62,14 @@ type Aba = 'fila' | 'historico'
 
 export function TransferenciasPage() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
   const [aba, setAba] = useState<Aba>('fila')
   const [busca, setBusca] = useState('')
+
+  // Chegada pelo sino: /transferencias?pedido=<id> abre a fila já apontando para
+  // o pedido escalado, em vez de largar a liderança na lista inteira.
+  const [params, setParams] = useSearchParams()
+  const destaque = params.get('pedido')
 
   const { data: fila = [], isLoading } = useTransferenciasFila()
   const { data: finalizadas = [] } = useTransferenciasFinalizadas()
@@ -92,19 +97,32 @@ export function TransferenciasPage() {
   const filaFiltrada = useMemo(() => filtrar(fila), [fila, busca])
   const historicoFiltrado = useMemo(() => filtrar(finalizadas), [finalizadas, busca])
 
+  // Cada pedido carrega o próprio prazo calculado uma vez, e a fila é ordenada
+  // pelo LIMITE (não pela última aula): quem estoura antes aparece antes.
+  const comPrazo = useMemo(
+    () => filaFiltrada
+      .map(t => ({ pedido: t, prazo: prazoAtendimento(t) }))
+      .sort((a, b) => a.prazo.limite.localeCompare(b.prazo.limite)),
+    [filaFiltrada],
+  )
+
   const porFaixa = useMemo(() => {
-    const mapa = new Map<FaixaTransferencia, TransferenciaComProfessor[]>()
-    for (const t of filaFiltrada) {
-      const f = faixaDaTransferencia(t)
-      const atual = mapa.get(f) ?? []
-      atual.push(t)
-      mapa.set(f, atual)
+    const mapa = new Map<FaixaTransferencia, typeof comPrazo>()
+    for (const item of comPrazo) {
+      const atual = mapa.get(item.prazo.faixa) ?? []
+      atual.push(item)
+      mapa.set(item.prazo.faixa, atual)
     }
     return mapa
-  }, [filaFiltrada])
+  }, [comPrazo])
 
-  const vencidas  = porFaixa.get('vencida')?.length ?? 0
-  const apertadas = porFaixa.get('apertada')?.length ?? 0
+  const atrasadas   = porFaixa.get('atrasada')   ?? []
+  const vencemHoje  = porFaixa.get('vence_hoje') ?? []
+
+  // A liderança do setor é quem recebe o escalonamento — para ela o aviso vem
+  // endereçado; para o resto do time é informação de fila.
+  const ehLideranca = (profile?.role === 'suporte_aluno' && profile?.is_lider === true)
+    || profile?.is_admin === true || profile?.role === 'admin'
 
   return (
     <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
@@ -112,12 +130,13 @@ export function TransferenciasPage() {
         <div className="space-y-0.5">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Transferências de Aluno</h1>
           <p className="text-[13px] text-ink-muted">
-            <span className="tabular-nums text-ink-secondary font-medium">{filaFiltrada.length}</span> na fila
-            {vencidas > 0 && (
-              <> · <span className="text-urg-critFg font-medium">{vencidas} com a última aula já passada</span></>
+            <span className="tabular-nums text-ink-secondary font-medium">{filaFiltrada.length}</span>{' '}
+            {filaFiltrada.length === 1 ? 'pendente' : 'pendentes'}
+            {atrasadas.length > 0 && (
+              <> · <span className="text-urg-critFg font-medium">{atrasadas.length} atrasada{atrasadas.length > 1 ? 's' : ''}</span></>
             )}
-            {apertadas > 0 && (
-              <> · <span className="text-urg-highFg font-medium">{apertadas} fora do prazo</span></>
+            {vencemHoje.length > 0 && (
+              <> · <span className="text-urg-highFg font-medium">{vencemHoje.length} vence{vencemHoje.length > 1 ? 'm' : ''} hoje</span></>
             )}
           </p>
         </div>
@@ -131,6 +150,10 @@ export function TransferenciasPage() {
           />
         </div>
       </header>
+
+      {aba === 'fila' && atrasadas.length > 0 && (
+        <AlertaAtraso itens={atrasadas} ehLideranca={ehLideranca} />
+      )}
 
       <CardLinkPublico />
 
@@ -176,11 +199,14 @@ export function TransferenciasPage() {
               if (!itens || itens.length === 0) return null
               return (
                 <SecaoFaixa key={faixa} faixa={faixa} qtd={itens.length}>
-                  {itens.map(t => (
+                  {itens.map(({ pedido, prazo }) => (
                     <CardPedido
-                      key={t.id}
-                      pedido={t}
-                      onVerPerfil={() => t.professor && navigate(`/professores/${t.professor.id}`)}
+                      key={pedido.id}
+                      pedido={pedido}
+                      prazo={prazo}
+                      destacado={pedido.id === destaque}
+                      onLimparDestaque={() => setParams({}, { replace: true })}
+                      onVerPerfil={() => pedido.professor && navigate(`/professores/${pedido.professor.id}`)}
                     />
                   ))}
                 </SecaoFaixa>
@@ -242,6 +268,46 @@ function CardLinkPublico() {
   )
 }
 
+// ─── Alerta de atraso ─────────────────────────────────────────────────────────
+// O que a cron `king-transferencia-atraso` manda para o sino da liderança, aqui
+// na tela e sempre visível — a notificação avisa uma vez, este bloco é o estoque
+// e não some enquanto houver pedido estourado.
+
+function AlertaAtraso({ itens, ehLideranca }: {
+  itens: { pedido: TransferenciaComProfessor; prazo: PrazoAtendimento }[]
+  ehLideranca: boolean
+}) {
+  const pior = itens.reduce((a, b) => (b.prazo.atraso > a.prazo.atraso ? b : a))
+  const semDono = itens.filter(i => i.pedido.status === 'pendente').length
+
+  return (
+    <div className="card-surface border-urg-critFg/40 bg-urg-critBg/30 p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-urg-critBg text-urg-critFg">
+          <ShieldAlert className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 space-y-1.5">
+          <p className="text-[13px] font-semibold text-urg-critFg">
+            {itens.length === 1
+              ? '1 transferência passou do prazo de atendimento'
+              : `${itens.length} transferências passaram do prazo de atendimento`}
+          </p>
+          <p className="text-[12px] leading-relaxed text-ink-secondary">
+            A mais antiga está atrasada há {diasUteisLabel(pior.prazo.atraso)} ({pior.pedido.aluno_nome}).
+            {semDono > 0 && ` ${semDono === 1 ? '1 ainda não foi assumida' : `${semDono} ainda não foram assumidas`} por ninguém.`}
+          </p>
+          <p className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
+            <BellRing className="h-3 w-3" />
+            {ehLideranca
+              ? 'Você recebe estes casos no sino assim que o prazo estoura.'
+              : 'A liderança do Suporte ao Aluno já foi avisada automaticamente.'}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Seção por faixa ──────────────────────────────────────────────────────────
 
 function SecaoFaixa({
@@ -253,8 +319,8 @@ function SecaoFaixa({
     <section className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={cn('flex h-6 w-6 items-center justify-center rounded-full', estilo.icon)}>
-          {faixa === 'vencida' ? <AlertTriangle className="h-3.5 w-3.5" />
-            : faixa === 'apertada' ? <Zap className="h-3.5 w-3.5" />
+          {faixa === 'atrasada' ? <AlertTriangle className="h-3.5 w-3.5" />
+            : faixa === 'vence_hoje' ? <Timer className="h-3.5 w-3.5" />
             : <Clock className="h-3.5 w-3.5" />}
         </span>
         <h2 className={cn('label-micro', estilo.tone)}>{meta.label} ({qtd})</h2>
@@ -268,8 +334,14 @@ function SecaoFaixa({
 // ─── Card de pedido ───────────────────────────────────────────────────────────
 
 function CardPedido({
-  pedido, onVerPerfil,
-}: { pedido: TransferenciaComProfessor; onVerPerfil: () => void }) {
+  pedido, prazo, destacado = false, onLimparDestaque, onVerPerfil,
+}: {
+  pedido: TransferenciaComProfessor
+  prazo: PrazoAtendimento
+  destacado?: boolean
+  onLimparDestaque?: () => void
+  onVerPerfil: () => void
+}) {
   const { profile } = useAuth()
   const assumir  = useAssumirTransferencia()
   const largar   = useLargarTransferencia()
@@ -282,7 +354,7 @@ function CardPedido({
   const [obsAberta, setObsAberta] = useState(false)
   const [incidenteAberto, setIncidenteAberto] = useState(false)
 
-  const faixa = faixaDaTransferencia(pedido)
+  const faixa = prazo.faixa
   const diasNaFila = diasDesde(pedido.created_at)
   const statusMeta = STATUS_TRANSFERENCIA_META[pedido.status]
   // Antecedência que o professor DEU (congelada no envio) — não envelhece junto
@@ -300,11 +372,22 @@ function CardPedido({
     toast.error(e instanceof Error ? e.message : padrao)
   }
 
+  // Chegou pelo sino: rola até o card e apaga o parâmetro, para o destaque não
+  // grudar na URL e reaparecer a cada re-render da fila.
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!destacado) return
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => onLimparDestaque?.(), 4000)
+    return () => clearTimeout(t)
+  }, [destacado, onLimparDestaque])
+
   return (
-    <div className={cn(
-      'card-surface p-4 space-y-3',
-      faixa === 'vencida' && 'border-urg-critFg/30',
-      faixa === 'apertada' && 'border-urg-highFg/30',
+    <div ref={ref} className={cn(
+      'card-surface p-4 space-y-3 transition-shadow',
+      faixa === 'atrasada' && 'border-urg-critFg/30',
+      faixa === 'vence_hoje' && 'border-urg-highFg/30',
+      destacado && 'ring-2 ring-accentBlue ring-offset-2 ring-offset-surface-page',
     )}>
       {/* Cabeçalho: aluno em destaque, professor como contexto */}
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -340,6 +423,20 @@ function CardPedido({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {faixa !== 'no_prazo' && (
+            <span
+              title={faixa === 'atrasada'
+                ? `O prazo de atendimento venceu em ${dataBR(prazo.limite)}. A liderança do Suporte ao Aluno foi avisada.`
+                : `O prazo de atendimento termina hoje, ${dataBR(prazo.limite)}.`}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                faixa === 'atrasada' ? 'bg-urg-critBg text-urg-critFg' : 'bg-urg-highBg text-urg-highFg',
+              )}
+            >
+              {faixa === 'atrasada' ? <AlertTriangle className="h-3 w-3" /> : <Timer className="h-3 w-3" />}
+              {faixa === 'atrasada' ? 'Atrasada' : 'Vence hoje'}
+            </span>
+          )}
           <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', statusMeta.cls)}>
             {statusMeta.label}
           </span>
@@ -348,16 +445,28 @@ function CardPedido({
 
       {/* Faixa de fatos — o resumo que evita abrir o dossiê no caso simples */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px]">
-        <span className={cn(
-          'font-semibold tabular-nums',
-          faixa === 'vencida' ? 'text-urg-critFg'
-            : faixa === 'apertada' ? 'text-urg-highFg' : 'text-ink-secondary',
-        )}>
-          {prazoLabel(pedido.data_ultima_aula)}
+        <span
+          title={prazo.regidoPelaUltimaAula
+            ? `O prazo é a própria última aula (${dataBR(prazo.limite)}): o professor avisou com menos de ${PRAZO_DIAS_UTEIS} dias úteis, então os ${PRAZO_DIAS_UTEIS} dias úteis de atendimento não cabem.`
+            : `Prazo de atendimento: ${PRAZO_DIAS_UTEIS} dias úteis a partir do pedido, ou seja, até ${dataBR(prazo.limite)}.`}
+          className={cn(
+            'inline-flex items-center gap-1 font-semibold tabular-nums',
+            faixa === 'atrasada' ? 'text-urg-critFg'
+              : faixa === 'vence_hoje' ? 'text-urg-highFg' : 'text-ink-secondary',
+          )}
+        >
+          <Timer className="h-3 w-3" />
+          {prazoLabel(prazo)} · até {dataBR(prazo.limite)}
         </span>
-        <span className="inline-flex items-center gap-1 text-ink-muted">
+        <span
+          className={cn('inline-flex items-center gap-1', prazoVencido(pedido.data_ultima_aula) ? 'font-medium text-urg-critFg' : 'text-ink-muted')}
+          title={prazoVencido(pedido.data_ultima_aula)
+            ? 'O aluno já teve a última aula com este professor e a transferência não foi processada.'
+            : undefined}
+        >
           <CalendarDays className="h-3 w-3" />
           última aula {dataBR(pedido.data_ultima_aula)}
+          {prazoVencido(pedido.data_ultima_aula) && ' — já passou'}
         </span>
         <span className="text-ink-muted" title="Há quanto tempo o pedido está na fila.">
           na fila {diasNaFila <= 0 ? 'desde hoje' : diasNaFila === 1 ? 'há 1 dia' : `há ${diasNaFila} dias`}

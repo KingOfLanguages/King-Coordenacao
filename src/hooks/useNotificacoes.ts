@@ -10,6 +10,9 @@ export type TipoNotificacao =
   /** Pausa de um professor chegou à data de fim — hora do contato da coordenação
    *  (disparada pelo cron king-cobrar-fim-pausa, ver 20260738_pausas.sql). */
   | 'pausa_fim'
+  /** Transferência de aluno que passou do prazo de atendimento, escalada para a
+   *  liderança do Suporte ao Aluno (cron king-transferencia-atraso, 20260769). */
+  | 'transferencia_atrasada'
 
 export interface Notificacao {
   id: string
@@ -17,6 +20,9 @@ export interface Notificacao {
   titulo: string
   corpo: string | null
   incidente_id: string | null
+  /** Rota interna a abrir ao clicar. Tem precedência sobre `incidente_id` —
+   *  é como os avisos que não são de chamado apontam para a tela certa. */
+  link: string | null
   lida: boolean
   created_at: string
 }
@@ -30,7 +36,7 @@ export function useNotificacoes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('notificacoes')
-        .select('id, tipo, titulo, corpo, incidente_id, lida, created_at')
+        .select('id, tipo, titulo, corpo, incidente_id, link, lida, created_at')
         .order('created_at', { ascending: false })
         .limit(30)
       if (error) throw error
