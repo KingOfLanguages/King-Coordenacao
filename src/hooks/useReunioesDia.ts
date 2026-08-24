@@ -20,6 +20,11 @@ export type ParticipanteCard = {
   } | null
 }
 
+/** Reunião oficial de acompanhamento × encontro extra só pra tirar dúvida.
+ *  A de dúvida não zera a cadência do portal, não conta na meta do dia e não
+ *  tira o professor das sugestões — "não implica em nada" (ver 20260770). */
+export type NaturezaReuniao = 'acompanhamento' | 'duvida'
+
 export type ReuniaoCard = {
   id: string
   data: string
@@ -29,6 +34,7 @@ export type ReuniaoCard = {
   status: string
   notas: string | null
   tipo_reuniao: 'professor' | 'interna' | 'grupo'
+  natureza: NaturezaReuniao
   pauta: string | null
   participantes_emails: string[]
   participantes: ParticipanteCard[]
@@ -53,6 +59,11 @@ export function isPendenteLancamento(r: ReuniaoCard, agora: Date = new Date()): 
   const parts = r.participantes
   if (parts.length === 0) return r.status !== 'concluida'
   return parts.some(p => p.status === 'pendente')
+}
+
+/** Encontro extra a pedido do professor — não conta como acompanhamento. */
+export function ehReuniaoDeDuvida(r: Pick<ReuniaoCard, 'natureza' | 'tipo_reuniao'>): boolean {
+  return r.tipo_reuniao === 'professor' && r.natureza === 'duvida'
 }
 
 export type ProfVinculo = { id: string; nome: string; data_inicio: string | null; email: string | null }
@@ -124,7 +135,7 @@ export function sugerirVinculos(
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 const REUNIOES_SELECT = `
-  id, data, titulo, meet_link, professor_email, status, notas, tipo_reuniao, pauta, participantes_emails,
+  id, data, titulo, meet_link, professor_email, status, notas, tipo_reuniao, natureza, pauta, participantes_emails,
   participantes:reuniao_professores (
     id, status, numero, observacao,
     professor:professores (
@@ -153,6 +164,8 @@ type ReuniaoRaw = {
   id: string; data: string; titulo: string | null; meet_link: string | null
   professor_email: string | null; status: string; notas: string | null
   tipo_reuniao: 'professor' | 'interna' | 'grupo'; pauta: string | null; participantes_emails: string[] | null
+  /** Ausente enquanto a 20260770 não estiver aplicada — cai em 'acompanhamento'. */
+  natureza: NaturezaReuniao | null
   participantes: ParticipanteRaw[] | null
 }
 
@@ -198,6 +211,7 @@ async function fetchReunioes(coordId: string, inicio: string, fim: string): Prom
     status: r.status,
     notas: r.notas,
     tipo_reuniao: r.tipo_reuniao,
+    natureza: r.natureza ?? 'acompanhamento',
     pauta: r.pauta,
     participantes_emails: r.participantes_emails ?? [],
     participantes: (r.participantes ?? []).map(mapParticipante),
@@ -503,24 +517,37 @@ export function useConfirmarParticipacao() {
   const queryClient = useQueryClient()
   const { profile } = useAuth()
   return useMutation({
-    mutationFn: async ({ participanteId, professorId, aconteceu, observacao }: {
+    mutationFn: async ({ participanteId, professorId, aconteceu, observacao, natureza = 'acompanhamento' }: {
       participanteId: string
       professorId: string | null
       aconteceu: boolean
       observacao?: string
+      /** Reunião de dúvida não numera nem move a data da última reunião. */
+      natureza?: NaturezaReuniao
     }) => {
+      const ehDuvida = natureza === 'duvida'
+
+      // Numeração de monitoramento: conta só as reuniões de ACOMPANHAMENTO já
+      // realizadas. Traz as linhas em vez de usar count+head porque o filtro é
+      // na tabela embutida (reunioes.natureza) — são poucas linhas por professor.
       let numero: number | null = null
-      if (aconteceu && professorId) {
-        const { count } = await supabase
+      if (aconteceu && professorId && !ehDuvida) {
+        const { data: anteriores } = await supabase
           .from('reuniao_professores')
-          .select('id', { count: 'exact', head: true })
+          .select('id, reuniao:reunioes!inner(natureza)')
           .eq('professor_id', professorId)
           .eq('status', 'realizada')
-        numero = (count ?? 0) + 1
+        type Linha = { reuniao: { natureza: string | null } | { natureza: string | null }[] }
+        const oficiais = ((anteriores ?? []) as unknown as Linha[]).filter(l => {
+          const r = Array.isArray(l.reuniao) ? l.reuniao[0] : l.reuniao
+          return (r?.natureza ?? 'acompanhamento') !== 'duvida'
+        })
+        numero = oficiais.length + 1
       }
 
       // 1ª reunião: guarda de quem era o professor antes, pra saber se mudou de mão.
-      const primeiraReuniao = numero === 1 && !!professorId
+      // Dúvida nunca é "a primeira" (o trigger da 20260770 também a ignora).
+      const primeiraReuniao = numero === 1 && !!professorId && !ehDuvida
       let coordAntes: string | null = null
       if (primeiraReuniao) {
         const { data } = await supabase
@@ -543,8 +570,10 @@ export function useConfirmarParticipacao() {
         .eq('id', participanteId)
       if (error) throw error
 
-      // Atualiza a data da última reunião do professor.
-      if (aconteceu && professorId) {
+      // Atualiza a data da última reunião do professor. `data_ultima_reuniao` é a
+      // data do ACOMPANHAMENTO — é ela que alimenta a cadência, as sugestões e o
+      // "tempo sem reunião" do painel. Uma conversa de dúvida não a move.
+      if (aconteceu && professorId && !ehDuvida) {
         await supabase
           .from('professores')
           .update({ data_ultima_reuniao: new Date().toISOString() })
@@ -579,6 +608,28 @@ export function useConfirmarParticipacao() {
       queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
       queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
       queryClient.invalidateQueries({ queryKey: ['professores'] })
+    },
+  })
+}
+
+/**
+ * Marca (ou desmarca) uma reunião 1:1 como "só uma dúvida".
+ *
+ * É o coordenador quem decide, ao lançar: o portal não tem como saber a intenção
+ * do professor, e a reunião chega da importação do Google Calendar sem nada que
+ * a distinga. Reversível de propósito — errar a marcação é barato.
+ */
+export function useDefinirNaturezaReuniao() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, natureza }: { id: string; natureza: NaturezaReuniao }) => {
+      const { error } = await supabase.from('reunioes').update({ natureza }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reunioes-dia'] })
+      queryClient.invalidateQueries({ queryKey: ['reunioes-periodo'] })
+      queryClient.invalidateQueries({ queryKey: ['sugestoes-reuniao'] })
     },
   })
 }

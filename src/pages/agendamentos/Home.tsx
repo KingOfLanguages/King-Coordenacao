@@ -11,7 +11,6 @@ import { usePortalLookup, useDeclararNaoFezReuniao, type PortalLookupResult } fr
 import { useTeacherLookup, type AgendaDisponivel as AgendaDisponivelType } from '@/hooks/useTeacherLookup'
 import { useBookMeeting, type ReuniaoConfirmada } from '@/hooks/useBookMeeting'
 import { OpcoesPortal } from '@/pages/agendamentos/OpcoesPortal'
-import { AvisoAgendamentoRecente } from '@/pages/agendamentos/AvisoAgendamentoRecente'
 import { AgendaDisponivel } from '@/pages/agendamentos/AgendaDisponivel'
 import { Confirmacao } from '@/pages/agendamentos/Confirmacao'
 
@@ -45,7 +44,6 @@ type Step =
   // Achou pelo nome → pede o e-mail pra cadastrar antes de seguir.
   | { tipo: 'cadastro-email'; resultado: PortalLookupResult; email: string; erro: string }
   | { tipo: 'confirmar-identidade'; resultado: PortalLookupResult }
-  | { tipo: 'aviso-agendamento-recente'; resultado: PortalLookupResult }
   | { tipo: 'opcoes'; resultado: PortalLookupResult }
   | { tipo: 'contato-coordenacao' }
   | { tipo: 'grupo-agendas'; professorId: string; professorNome: string; agendas: AgendaDisponivelType[] }
@@ -184,16 +182,15 @@ export function Home() {
     }
   }
 
+  // O aviso de "já fez o acompanhamento do mês" não é mais um passo do fluxo: ele
+  // vira uma faixa dentro das opções. O professor sempre cai direto na escolha.
   function handleConfirmarIdentidade(resultado: PortalLookupResult) {
-    if (resultado.avisoAgendamentoRecente) {
-      setStep({ tipo: 'aviso-agendamento-recente', resultado })
-    } else {
-      setStep({ tipo: 'opcoes', resultado })
-    }
+    setStep({ tipo: 'opcoes', resultado })
   }
 
+  /** "Essa reunião não aconteceu": libera a cadência e apaga a faixa. */
   async function handleDeclararNaoFez() {
-    if (step.tipo !== 'aviso-agendamento-recente' || !step.resultado.professor || !step.resultado.avisoAgendamentoRecente) return
+    if (step.tipo !== 'opcoes' || !step.resultado.professor || !step.resultado.avisoAgendamentoRecente) return
     try {
       await declararNaoFez.mutateAsync({
         professorId: step.resultado.professor.id,
@@ -203,11 +200,6 @@ export function Home() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível registrar agora. Tente novamente.')
     }
-  }
-
-  function handleSoTirarDuvida() {
-    if (step.tipo !== 'aviso-agendamento-recente') return
-    setStep({ tipo: 'opcoes', resultado: step.resultado })
   }
 
   async function handleConfirmar(horarioId: string) {
@@ -552,22 +544,14 @@ export function Home() {
           </div>
         )}
 
-        {step.tipo === 'aviso-agendamento-recente' && step.resultado.professor && step.resultado.avisoAgendamentoRecente && (
-          <AvisoAgendamentoRecente
-            professorNome={step.resultado.professor.nome}
-            aviso={step.resultado.avisoAgendamentoRecente}
-            pendingDeclarar={declararNaoFez.isPending}
-            onDeclararNaoFez={handleDeclararNaoFez}
-            onSoTirarDuvida={handleSoTirarDuvida}
-          />
-        )}
-
         {step.tipo === 'opcoes' && step.resultado.professor && (
           <OpcoesPortal
             professorNome={step.resultado.professor.nome}
             resultado={step.resultado}
             onEscolherGrupo={handleEscolherGrupo}
             carregandoGrupo={teacherLookup.isPending}
+            pendingDeclarar={declararNaoFez.isPending}
+            onDeclararNaoFez={handleDeclararNaoFez}
           />
         )}
 

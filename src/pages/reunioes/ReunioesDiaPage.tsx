@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Video, Check, X, Link2, Unlink2, Mail, Sparkles, Pencil, Trash2, Users2,
   Loader2, ChevronLeft, ChevronRight, CalendarDays, User, Users, Plus,
+  HelpCircle, CalendarCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -17,8 +18,8 @@ import {
   useReunioesPeriodo, useReunioesPendentes, useDadosVinculo, useVincularProfessor,
   useConfirmarParticipacao, useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna,
   usePerfisPorEmail, useDesvincularProfessor, useConfirmarReuniaoGrupo, sugerirVinculos,
-  isReuniaoGrupo, isPendenteLancamento,
-  type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo,
+  isReuniaoGrupo, isPendenteLancamento, ehReuniaoDeDuvida, useDefinirNaturezaReuniao,
+  type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo, type NaturezaReuniao,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
@@ -479,7 +480,9 @@ function DiaView({ dia, coordenadorId, carregando, lista, listaAgenda, dados }: 
   // Placar do dia contra a meta. Reunião interna não conta: a meta é de contato
   // com professor. Reunião de grupo conta como UMA — é um horário da agenda,
   // por mais professores que caibam nele.
-  const comProfessor = lista.filter(r => r.tipo_reuniao !== 'interna')
+  // Interna não conta (a meta é de contato com professor) e reunião de dúvida
+  // também não — ela é o encontro extra que "não implica em nada".
+  const comProfessor = lista.filter(r => r.tipo_reuniao !== 'interna' && !ehReuniaoDeDuvida(r))
   const agendadas    = comProfessor.filter(r => statusReuniao(r) !== 'cancelada').length + listaAgenda.length
   const realizadas   = comProfessor.filter(r => statusReuniao(r) === 'realizada').length
                      + listaAgenda.filter(o => statusOcorrencia(o) === 'realizada').length
@@ -1334,6 +1337,9 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
                 <Users2 className="h-3 w-3" />Interna
               </span>
             )}
+            {reuniao.tipo_reuniao === 'professor' && (
+              <NaturezaToggle reuniao={reuniao} podeEditar={podeEditar} />
+            )}
             {reuniao.professor_email && (
               <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
                 <Mail className="h-3 w-3" />{reuniao.professor_email}
@@ -1384,7 +1390,7 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
         ) : (
           reuniao.participantes.map(part =>
             part.professor
-              ? <ParticipanteRow key={part.id} part={part} />
+              ? <ParticipanteRow key={part.id} part={part} natureza={reuniao.natureza} />
               : <VincularBlock key={part.id} reuniao={reuniao} participanteId={part.id} dados={dados} />
           )
         )}
@@ -1393,6 +1399,57 @@ function ReuniaoCardView({ reuniao, dados }: { reuniao: ReuniaoCard; dados: Dado
       {editarAberto && <EditarReuniaoDialog reuniao={reuniao} onClose={() => setEditarAberto(false)} />}
       {excluirAberto && <ExcluirReuniaoDialog reuniao={reuniao} onClose={() => setExcluirAberto(false)} />}
     </div>
+  )
+}
+
+// ─── Acompanhamento × dúvida ──────────────────────────────────────────────────
+// A regra da coordenação: 1 acompanhamento oficial por mês até o 3º mês, mais
+// quantas conversas de dúvida o professor quiser. O sistema não tem como
+// adivinhar em qual das duas categorias a reunião caiu — ela chega do Google
+// Calendar igual —, então quem marca é o coordenador, aqui, ao lançar.
+//
+// Marcar como dúvida faz a reunião parar de contar: não numera, não move a data
+// da última reunião, não entra na meta do dia e não tira o professor da lista de
+// sugestões nem do agendamento do portal.
+
+function NaturezaToggle({ reuniao, podeEditar }: { reuniao: ReuniaoCard; podeEditar: boolean }) {
+  const definir = useDefinirNaturezaReuniao()
+  const ehDuvida = reuniao.natureza === 'duvida'
+
+  if (!podeEditar) {
+    return ehDuvida ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] font-medium text-ink-secondary">
+        <HelpCircle className="h-3 w-3" />Só dúvida
+      </span>
+    ) : null
+  }
+
+  return (
+    <button
+      onClick={() => definir.mutate(
+        { id: reuniao.id, natureza: ehDuvida ? 'acompanhamento' : 'duvida' },
+        {
+          onSuccess: () => toast.success(ehDuvida
+            ? 'Volta a contar como acompanhamento.'
+            : 'Marcada como dúvida — não conta como acompanhamento do mês.'),
+          onError: () => toast.error('Erro ao alterar a natureza da reunião.'),
+        },
+      )}
+      disabled={definir.isPending}
+      title={ehDuvida
+        ? 'Conversa extra: não conta como o acompanhamento do mês. Clique para voltar a contar.'
+        : 'Conta como o acompanhamento oficial do mês. Clique se foi só uma dúvida.'}
+      className={cn(
+        'btn-press inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors',
+        ehDuvida
+          ? 'bg-surface-subtle text-ink-secondary hover:bg-surface-subtle/70'
+          : 'bg-accentBlue-soft text-accentBlue hover:bg-accentBlue-soft/70',
+        definir.isPending && 'opacity-60',
+      )}
+    >
+      {ehDuvida ? <HelpCircle className="h-3 w-3" /> : <CalendarCheck className="h-3 w-3" />}
+      {ehDuvida ? 'Só dúvida' : 'Acompanhamento'}
+    </button>
   )
 }
 
@@ -1530,7 +1587,7 @@ function ExcluirReuniaoDialog({ reuniao, onClose }: { reuniao: ReuniaoCard; onCl
 
 // ─── Participante vinculado ─────────────────────────────────────────────────────
 
-function ParticipanteRow({ part }: { part: ParticipanteCard }) {
+function ParticipanteRow({ part, natureza }: { part: ParticipanteCard; natureza: NaturezaReuniao }) {
   const confirmar = useConfirmarParticipacao()
   const desvincular = useDesvincularProfessor()
   const [obs, setObs] = useState(part.observacao ?? '')
@@ -1540,12 +1597,13 @@ function ParticipanteRow({ part }: { part: ParticipanteCard }) {
 
   function confirmarReuniao(aconteceu: boolean) {
     confirmar.mutate(
-      { participanteId: part.id, professorId: prof.id, aconteceu, observacao: obs },
+      { participanteId: part.id, professorId: prof.id, aconteceu, observacao: obs, natureza },
       {
         // Na 1ª reunião o coordenador que a conduziu assume o professor no seu
         // grupo — o banco faz a troca, aqui só damos a notícia.
         onSuccess: res => toast.success(
           !aconteceu                ? 'Marcada como não realizada.'
+          : natureza === 'duvida'   ? 'Dúvida registrada — não conta como acompanhamento do mês.'
           : res?.assumidoPor        ? `Reunião confirmada — ${prof.nome} agora é da coordenação de ${res.assumidoPor}.`
           :                           'Reunião confirmada.',
         ),

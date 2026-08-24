@@ -49,16 +49,23 @@
 //
 // ── Aviso de agendamento recente ────────────────────────────────────────────
 // Professores que já passaram da janela de "1ª reunião" (>7 dias de casa) têm
-// uma cadência mínima de 30 dias entre reuniões de acompanhamento:
+// uma cadência mínima de 30 dias entre reuniões DE ACOMPANHAMENTO:
 //   - 8 a 90 dias de casa (1º-3º mês):  cadência MENSAL fixa (janela 30-30).
 //   - mais de 90 dias de casa:          janela FLEXÍVEL de 30 a 60 dias.
-// Se a última reunião vinculada (status realizada/pendente) tiver acontecido
-// há menos de 30 dias, a resposta inclui `avisoAgendamentoRecente` — o front
-// mostra um aviso antes das opções normais de agendamento, com duas saídas:
-// declarar que a reunião não aconteceu (via portal-agendamento-declarar-nao-fez,
-// libera o reagendamento) ou seguir direto pras opções (p.ex. só tirar uma dúvida).
-// Não há bloqueio por estar "atrasado" (>60 dias) — a janela máxima é só
-// informativa na mensagem, nunca impede o agendamento.
+//
+// O aviso NUNCA é uma trava (2026-08-21). A regra da coordenação é "1 reunião
+// de acompanhamento oficial por mês até o 3º mês, e quantas reuniões de dúvida
+// ele quiser". Então, quando a última reunião tem menos de 30 dias, a resposta
+// inclui `avisoAgendamentoRecente` e o front mostra o aviso JUNTO das opções de
+// agendamento — ele fica sabendo que já cumpriu o acompanhamento do mês e, se
+// mesmo assim quiser conversar, agenda na hora. O aviso segue oferecendo
+// declarar que a reunião não aconteceu (portal-agendamento-declarar-nao-fez).
+//
+// Só reuniões `natureza='acompanhamento'` entram nessa conta: a de dúvida é
+// justamente a que "não implica em nada" (ver 20260770).
+//
+// A reunião em GRUPO não passa por aqui: ela tem regra própria (score >= 1300 e
+// 2 meses de casa) e independe de quando foi a última reunião.
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
@@ -348,17 +355,23 @@ serve(async (req) => {
     // `.order(..., { referencedTable })` não ordena de forma confiável a tabela embutida aqui.
     const { data: reunioesDoProfessor } = await admin
       .from('reuniao_professores')
-      .select('id, reuniao:reunioes!inner(data)')
+      .select('id, reuniao:reunioes!inner(data, natureza)')
       .eq('professor_id', professor.id)
       .in('status', ['realizada', 'pendente'])
 
-    type LinhaReuniao = { id: string; reuniao: { data: string } | { data: string }[] }
+    type ReuniaoEmbutida = { data: string; natureza?: string | null }
+    type LinhaReuniao = { id: string; reuniao: ReuniaoEmbutida | ReuniaoEmbutida[] }
     const linhas = (reunioesDoProfessor ?? []) as LinhaReuniao[]
 
+    // A filtragem por natureza é feita aqui e não no `.eq()` de recurso embutido
+    // porque o embed já é `!inner` com alias — e porque `natureza` pode vir
+    // indefinida enquanto a 20260770 não estiver aplicada, caso em que o
+    // COALESCE abaixo mantém o comportamento antigo (tudo é acompanhamento).
     let ultima: { id: string; data: string } | null = null
     for (const linha of linhas) {
       const r = Array.isArray(linha.reuniao) ? linha.reuniao[0] : linha.reuniao
       if (!r) continue
+      if ((r.natureza ?? 'acompanhamento') === 'duvida') continue
       if (!ultima || new Date(r.data) > new Date(ultima.data)) {
         ultima = { id: linha.id, data: r.data }
       }

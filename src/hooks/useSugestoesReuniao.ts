@@ -19,12 +19,20 @@ import {
 // consultas são independentes e cada uma degrada sozinha.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Dias sem reunião a partir dos quais vale a pena chamar de novo. Abaixo disso
- *  o professor acabou de ser atendido e sugerir o nome dele é ruído. */
-const CARENCIA_DIAS = 7
+/**
+ * Dias sem reunião a partir dos quais o professor volta a ser sugerido.
+ *
+ * 30 e não 7 (2026-08-21): a régua da coordenação é UM acompanhamento oficial
+ * por mês até o 3º mês, então quem teve reunião dentro do mês está em dia e
+ * chamá-lo de novo é cobrar duas vezes a mesma coisa. Mesmo número da cadência
+ * do portal (CADENCIA_MIN_DIAS em portal-agendamento-lookup) — as duas telas
+ * não podem discordar sobre quem está em dia.
+ */
+const CARENCIA_DIAS = 30
 
-/** Janela para trás de "já tem reunião marcada" — reuniões futuras dentro dela
- *  tiram o professor da lista, porque o contato já foi feito. */
+/** Janela à frente de "já tem reunião marcada" — reuniões futuras dentro dela
+ *  tiram o professor da lista, porque o contato já foi feito. Reunião de dúvida
+ *  não conta: ela não substitui o acompanhamento. */
 const JANELA_AGENDADAS_DIAS = 30
 
 export interface SugestaoContato {
@@ -133,7 +141,7 @@ export function useSugestoesReuniao(coordenadorId: string | null) {
         supabase.from('grupos').select('id').eq('coordenador_id', coordId),
         supabase
           .from('reunioes')
-          .select('id, reuniao_professores (professor_id)')
+          .select('id, natureza, reuniao_professores (professor_id)')
           .eq('coordenador_id', coordId)
           .gte('data', inicioHoje.toISOString())
           .lte('data', fimJanela.toISOString()),
@@ -143,8 +151,15 @@ export function useSugestoesReuniao(coordenadorId: string | null) {
 
       const gruposIds = (gruposRes.data ?? []).map(g => g.id as string)
 
+      type ReuniaoAgendada = {
+        natureza?: string | null
+        reuniao_professores: { professor_id: string }[] | null
+      }
       const jaMarcados = new Set<string>()
-      for (const r of (agendadasRes.data ?? []) as { reuniao_professores: { professor_id: string }[] | null }[]) {
+      for (const r of (agendadasRes.data ?? []) as ReuniaoAgendada[]) {
+        // `natureza` pode vir indefinida enquanto a 20260770 não estiver
+        // aplicada — nesse caso tudo é acompanhamento, como era antes.
+        if ((r.natureza ?? 'acompanhamento') === 'duvida') continue
         for (const p of r.reuniao_professores ?? []) jaMarcados.add(p.professor_id)
       }
 

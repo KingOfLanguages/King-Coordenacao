@@ -1,18 +1,25 @@
 import { CalendarPlus, MessageCircle, Users, Sparkles, ArrowRight, Handshake, MessagesSquare, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { AvisoAgendamentoRecente } from '@/pages/agendamentos/AvisoAgendamentoRecente'
 import type { PortalLookupResult } from '@/hooks/usePortalAgendamento'
 
 export function OpcoesPortal({
   professorNome, resultado, onEscolherGrupo, carregandoGrupo,
+  pendingDeclarar, onDeclararNaoFez,
 }: {
   professorNome: string
   resultado: PortalLookupResult
   onEscolherGrupo: () => void
   carregandoGrupo: boolean
+  pendingDeclarar: boolean
+  onDeclararNaoFez: () => void
 }) {
   const { primeira_reuniao, acompanhamento, reuniao_grupo } = resultado.opcoes
   const nenhumaOpcao = !primeira_reuniao.elegivel && !acompanhamento.elegivel && !reuniao_grupo.elegivel
   const professorDestaque = reuniao_grupo.elegivel && reuniao_grupo.recomendada
+  // Já cumpriu o acompanhamento do mês. Não muda o que ele PODE fazer — só como
+  // a opção individual é apresentada (conversa extra, e não o acompanhamento).
+  const aviso = resultado.avisoAgendamentoRecente
 
   const cardGrupo = reuniao_grupo.elegivel && (
     reuniao_grupo.recomendada ? (
@@ -39,9 +46,11 @@ export function OpcoesPortal({
     <OpcaoCard
       key="acompanhamento"
       icone={<MessageCircle className="h-[18px] w-[18px]" />}
-      titulo="Reunião de Acompanhamento"
+      titulo={aviso ? 'Conversar com a Coordenação' : 'Reunião de Acompanhamento'}
       descricao={
-        professorDestaque
+        aviso
+          ? 'Um horário extra com seu coordenador pra tirar uma dúvida ou resolver alguma coisa — fora do acompanhamento do mês, que você já fez.'
+          : professorDestaque
           ? 'Prefere conversar individualmente? Essa opção continua disponível, mas o formato em grupo é o mais indicado pra quem está no seu momento.'
           : 'Um horário com seu coordenador pra compartilhar desafios, tirar dúvidas e acompanhar sua evolução.'
       }
@@ -65,6 +74,14 @@ export function OpcoesPortal({
           Escolha o tipo de reunião que você quer agendar.
         </p>
       </div>
+
+      {aviso && (
+        <AvisoAgendamentoRecente
+          aviso={aviso}
+          pendingDeclarar={pendingDeclarar}
+          onDeclararNaoFez={onDeclararNaoFez}
+        />
+      )}
 
       {nenhumaOpcao ? (
         <div className="rounded-2xl border border-line-soft bg-surface-canvas px-6 py-8 text-center">
