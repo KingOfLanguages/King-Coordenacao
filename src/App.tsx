@@ -23,6 +23,7 @@ import { CentralConvocacoesPage } from '@/pages/convocacoes/CentralConvocacoesPa
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
+import { ConfiabilidadePage } from '@/pages/comercial/ConfiabilidadePage'
 import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
@@ -55,7 +56,7 @@ const queryClient = new QueryClient({
 // Home: manda o usuário pra primeira página que ele pode ver, segundo o controle
 // de acesso configurável. Prioriza Dashboard, depois Professores, depois o resto —
 // assim ninguém cai numa rota bloqueada (o que causaria loop de redirect).
-const LANDING_PRIORITY = ['dashboard', 'professores', 'suporte-reunioes', 'convocacoes']
+const LANDING_PRIORITY = ['dashboard', 'professores', 'suporte-reunioes', 'convocacoes', 'confiabilidade']
 
 function IndexRedirect() {
   const { profile, loading } = useAuth()
@@ -131,6 +132,11 @@ export default function App() {
               <Route path="/professores/:id" element={
                 <ProtectedRoute page="professores">
                   <ProfessorDetalhePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/confiabilidade" element={
+                <ProtectedRoute page="confiabilidade">
+                  <ConfiabilidadePage />
                 </ProtectedRoute>
               } />
               <Route path="/observacoes/:id" element={

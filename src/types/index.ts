@@ -1,4 +1,4 @@
-export type RoleUsuario = 'admin' | 'coordenacao' | 'suporte' | 'suporte_aluno'
+export type RoleUsuario = 'admin' | 'coordenacao' | 'suporte' | 'suporte_aluno' | 'comercial'
 export type StatusReuniao = 'pendente' | 'concluida' | 'cancelada'
 export type TipoObservacao = 'reuniao' | 'ocorrencia' | 'feedback_positivo' | 'feedback_negativo' | 'feedback_neutro'
 export type StatusProfessor = 'ativo' | 'pausa' | 'desligado'

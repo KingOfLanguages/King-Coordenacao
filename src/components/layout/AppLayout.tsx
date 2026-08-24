@@ -27,7 +27,7 @@ const NAV: NavNode[] = [
   // Análise e Pausas foram pro grupo "Acompanhamento"; Incidentes e Reclamações
   // por Aluno pro grupo "Incidentes". Tarefas (ex-Central) segue como link de topo.
   { kind: 'group', label: 'Reuniões',       pageKeys: ['reunioes-dia', 'agendas', 'emails'] },
-  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'onboarding', 'suporte-reunioes'] },
+  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'confiabilidade', 'onboarding', 'suporte-reunioes'] },
   { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'pendencias', 'mes-analise', 'retorno-pausa', 'transferencias'] },
   { kind: 'group', label: 'Incidentes',     pageKeys: ['incidentes', 'alunos'] },
   { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral', 'retencao'] },
@@ -52,6 +52,7 @@ function roleLabel(role?: string, isLider?: boolean) {
     case 'coordenacao':   return isLider ? 'Coordenação · Líder' : 'Coordenação'
     case 'suporte':       return 'Suporte'
     case 'suporte_aluno': return isLider ? 'Suporte · Aluno · Líder' : 'Suporte · Aluno'
+    case 'comercial':     return 'Comercial'
     default:              return '—'
   }
 }

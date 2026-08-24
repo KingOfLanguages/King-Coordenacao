@@ -13,13 +13,14 @@ import type { Profile } from '@/types'
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Sujeitos configuráveis. Admin fica de fora de propósito: tem acesso a tudo. */
-export type PermSubject = 'coordenacao' | 'lider' | 'suporte' | 'suporte_aluno'
+export type PermSubject = 'coordenacao' | 'lider' | 'suporte' | 'suporte_aluno' | 'comercial'
 
 export const PERM_SUBJECTS: { key: PermSubject; label: string }[] = [
   { key: 'coordenacao',   label: 'Coordenação' },
   { key: 'lider',         label: 'Líder' },
   { key: 'suporte',       label: 'Suporte' },
   { key: 'suporte_aluno', label: 'Suporte · Aluno' },
+  { key: 'comercial',     label: 'Comercial' },
 ]
 
 const SUBJECT_SET = new Set<string>(PERM_SUBJECTS.map(s => s.key))
@@ -61,6 +62,10 @@ export const PAGES: PageDef[] = [
   { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'onboarding',      path: '/onboarding',     label: 'Onboarding',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
   { key: 'suporte-reunioes', path: '/suporte/reunioes', label: 'Buscar Reuniões',   section: 'Professores', nav: true,  defaultRoles: ['suporte'] },
+  // Tela do setor Comercial ("esse teacher é confiável?"). É a ÚNICA página do
+  // cargo comercial — mexer aqui tira o chão dele; coordenação/líder ganham junto
+  // porque a mesma leitura serve pra decidir alocação.
+  { key: 'confiabilidade',  path: '/confiabilidade', label: 'Confiabilidade do Professor', section: 'Professores', nav: true, defaultRoles: ['comercial', 'coordenacao', 'lider'] },
 
   // ── Acompanhamento ──
   // 'acompanhamento' é o Índice de Prioridade; o rótulo evita colidir com o nome do grupo.
@@ -106,6 +111,7 @@ export function subjectsOf(profile: Profile | null): { admin: boolean; subjects:
   if (profile.role === 'coordenacao')   subjects.add('coordenacao')
   if (profile.role === 'suporte')       subjects.add('suporte')
   if (profile.role === 'suporte_aluno') subjects.add('suporte_aluno')
+  if (profile.role === 'comercial')     subjects.add('comercial')
   if (profile.is_lider === true)        subjects.add('lider')
   return { admin, subjects }
 }

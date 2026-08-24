@@ -18,6 +18,7 @@ const ROLES: { value: RoleUsuario; label: string }[] = [
   { value: 'coordenacao',   label: 'Coordenação' },
   { value: 'suporte',       label: 'Suporte' },
   { value: 'suporte_aluno', label: 'Suporte · Aluno' },
+  { value: 'comercial',     label: 'Comercial' },
 ]
 
 /**

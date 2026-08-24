@@ -39,11 +39,15 @@ export function canDelete(perfil?: PerfilComoAdmin): boolean {
   return ehAdmin(perfil)
 }
 
-/** Adicionar informações (observações, ocorrências). Todos os cargos. */
+/** Adicionar informações (observações, ocorrências). Todos os cargos.
+ *  O comercial entra aqui só pra REGISTRAR incidente na tela /confiabilidade —
+ *  continua fora de canEdit/canEditIncidente (não assume, não resolve, não
+ *  edita). Espelhado na policy nexus_incidents_insert_comercial (20260768). */
 export function canAddInfo(perfil?: PerfilComoAdmin): boolean {
   return perfil?.role === 'coordenacao'
       || perfil?.role === 'suporte'
       || perfil?.role === 'suporte_aluno'
+      || perfil?.role === 'comercial'
       || ehAdmin(perfil)
 }
 
