@@ -1,4 +1,4 @@
-// Rótulos do ciclo de vida do aluno (saídas — retenção/turnover), vindos da API
+// Rótulos do ciclo de vida do aluno (saídas — retenção/churn), vindos da API
 // de Acompanhamento. Compartilhado entre a seção do professor e a página /retencao.
 
 export const MOTIVO_SAIDA_LABEL: Record<string, string> = {

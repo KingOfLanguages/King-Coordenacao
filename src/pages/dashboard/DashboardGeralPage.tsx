@@ -685,9 +685,9 @@ export function DashboardGeralPage() {
         />
       </section>
 
-      {/* ══ ZONA: TURNOVER ══ */}
+      {/* ══ ZONA: TURNOVER & CHURN ══ */}
       <section className="mb-11 space-y-4">
-        <Zone label="Turnover" meta={`professor e aluno · ${janela.label}`} />
+        <Zone label="Turnover & churn" meta={`professor e aluno · ${janela.label}`} />
         <TurnoverDashboardSection
           grupoId={coordenacaoFiltro === TODAS ? null : coordenacaoFiltro}
           janela={janela}

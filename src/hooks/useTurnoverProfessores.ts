@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 // Turnover de PROFESSOR — espelho da página de turnover da plataforma do King.
-// Não confundir com useRetencao, que mede saída de ALUNO: a King chama de
-// "turnover" o movimento de entrada/saída do professor, e é esse número que a
-// coordenação compara. Metodologia e validação: migration 20260757.
+// Turnover é sempre movimento do quadro de professores; saída de ALUNO é churn
+// (useChurnAlunos, mais abaixo) e é esse o número que a coordenação compara com
+// a King. Metodologia e validação: migration 20260757.
 //
 // turnover % = saídas ÷ média(ativos no início, ativos no fim)
 
@@ -79,15 +79,20 @@ export function useTurnoverProfessores(desde: string, ate: string) {
   })
 }
 
-// Turnover de ALUNO — mesma fórmula do de professor (migration 20260758), sobre
-// a matrícula na escola e a saída da escola. Troca de professor NÃO é saída.
+// CHURN de aluno — mesma fórmula do turnover de professor (migration 20260758),
+// sobre a matrícula na escola e a saída da escola. Troca de professor NÃO é saída.
+//
+// Nome: aluno que sai da escola é churn, não turnover — turnover é movimento de
+// entrada/saída do quadro (professor). As funções no banco ainda se chamam
+// turnover_alunos_* e devolvem turnover_pct; é só o nome antigo do contrato, o
+// número é o churn.
 //
 // Cuidado ao ler períodos antigos: a API devolve as saídas de aluno dos últimos
 // ~12 meses, então antes disso a base de ativos fica inflada. A tabela é
 // append-only, então a janela confiável cresce sozinha.
-export function useTurnoverAlunos(desde: string, ate: string) {
+export function useChurnAlunos(desde: string, ate: string) {
   return useQuery({
-    queryKey: ['turnover-alunos', desde, ate],
+    queryKey: ['churn-alunos', desde, ate],
     queryFn: async () => {
       const args = { p_desde: desde, p_ate: ate }
       const [resumo, porGrupo] = await Promise.all([

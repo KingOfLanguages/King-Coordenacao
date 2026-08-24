@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
-// Retenção/turnover de aluno agregado no servidor (RPCs retencao_por_grupo /
+// Retenção/churn de aluno agregado no servidor (RPCs retencao_por_grupo /
 // retencao_por_motivo) — evita o teto de 1000 linhas do PostgREST ao somar as
 // saídas de todos os professores. Ver migration 20260752_ciclo_vida_alunos.
 //
 // churn    = saiu_da_escola true  (aluno saiu da escola)
-// turnover = saiu_da_escola false (trocou de professor, segue matriculado)
+// turnover = saiu_da_escola false (trocou de professor, segue matriculado) — o
+//            campo tem esse nome no RPC; na tela é "trocou de professor", nunca
+//            "turnover", que é o movimento do quadro de professores.
 // total − churn − turnover = saídas sem o flag definido.
 
 export interface RetencaoGrupoRow {

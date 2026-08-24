@@ -1,29 +1,30 @@
 import { type ReactNode } from 'react'
 import { Users, GraduationCap } from 'lucide-react'
 import {
-  useTurnoverProfessores, useTurnoverAlunos, type TurnoverGrupo, type TurnoverResumo,
+  useTurnoverProfessores, useChurnAlunos, type TurnoverGrupo, type TurnoverResumo,
 } from '@/hooks/useTurnoverProfessores'
 import { type Janela } from '@/hooks/useDashboardGeral'
 import { cn } from '@/lib/utils'
 
-// Zona de turnover do Dashboard Geral — professor e aluno lado a lado, com o
-// mesmo recorte por coordenação. Mesma fórmula nos dois:
+// Zona de turnover & churn do Dashboard Geral — professor e aluno lado a lado,
+// com o mesmo recorte por coordenação. Mesma fórmula nos dois:
 //
-//   turnover % = saídas ÷ média(ativos no início, ativos no fim)
+//   taxa % = saídas ÷ média(ativos no início, ativos no fim)
 //
-// A de professor espelha a página da plataforma do King (validada em agosto/26:
-// 878 → 897). A de aluno aplica a mesma conta sobre matrícula e saída da escola
-// — troca de professor não conta como saída. Ver migrations 20260757/20260758.
+// Nomes diferentes porque medem coisas diferentes: no professor é TURNOVER
+// (movimento do quadro, espelha a página da plataforma do King — validada em
+// agosto/26: 878 → 897); no aluno é CHURN (saiu da escola; troca de professor
+// não conta como saída). Ver migrations 20260757/20260758.
 
 interface Props {
   grupoId: string | null
-  /** Janela do filtro global de período — o turnover é sempre apurado nela. */
+  /** Janela do filtro global de período — a taxa é sempre apurada nela. */
   janela: Janela
 }
 
 export function TurnoverDashboardSection({ grupoId, janela }: Props) {
   const professores = useTurnoverProfessores(janela.inicio, janela.fim)
-  const alunos      = useTurnoverAlunos(janela.inicio, janela.fim)
+  const alunos      = useChurnAlunos(janela.inicio, janela.fim)
 
   // Com uma coordenação selecionada, o consolidado passa a ser o dela — senão o
   // topo do card mostraria a escola inteira ao lado de uma tabela de uma linha.
@@ -40,6 +41,7 @@ export function TurnoverDashboardSection({ grupoId, janela }: Props) {
       <Bloco
         icone={<Users className="h-3.5 w-3.5" />}
         titulo="Turnover de professores"
+        metrica="Turnover"
         hint="mesma metodologia da plataforma do King"
         resumo={recorte(professores.data?.resumo, professores.data?.porGrupo ?? [])}
         grupos={gruposProf}
@@ -49,7 +51,8 @@ export function TurnoverDashboardSection({ grupoId, janela }: Props) {
       />
       <Bloco
         icone={<GraduationCap className="h-3.5 w-3.5" />}
-        titulo="Turnover de alunos"
+        titulo="Churn de alunos"
+        metrica="Churn"
         hint="saída da escola — troca de professor não conta"
         resumo={recorte(alunos.data?.resumo, alunos.data?.porGrupo ?? [])}
         grupos={gruposAluno}
@@ -62,9 +65,11 @@ export function TurnoverDashboardSection({ grupoId, janela }: Props) {
   )
 }
 
-function Bloco({ icone, titulo, hint, resumo, grupos, carregando, erro, unidade, nota }: {
+function Bloco({ icone, titulo, metrica, hint, resumo, grupos, carregando, erro, unidade, nota }: {
   icone: ReactNode
   titulo: string
+  /** Nome da taxa (Turnover no professor, Churn no aluno) — mesma conta, nomes diferentes. */
+  metrica: string
   hint: string
   resumo?: TurnoverResumo
   grupos: TurnoverGrupo[]
@@ -95,7 +100,7 @@ function Bloco({ icone, titulo, hint, resumo, grupos, carregando, erro, unidade,
             <MiniStat label="Base média" carregando={carregando}
                       value={resumo ? Math.round((resumo.ativos_inicio + resumo.ativos_fim) / 2) : undefined}
                       sub={resumo ? `${resumo.ativos_inicio} → ${resumo.ativos_fim}` : undefined} />
-            <MiniStat label="Turnover" carregando={carregando} destaque
+            <MiniStat label={metrica} carregando={carregando} destaque
                       value={resumo ? `${resumo.turnover_pct.toFixed(2)}%` : undefined}
                       sub={saldo !== 0 ? `saldo ${saldo > 0 ? '+' : ''}${saldo}` : 'saldo estável'} />
           </div>
@@ -114,7 +119,7 @@ function Bloco({ icone, titulo, hint, resumo, grupos, carregando, erro, unidade,
                   <th className="text-right font-semibold py-2">Entraram</th>
                   <th className="text-right font-semibold py-2">Saíram</th>
                   <th className="text-right font-semibold py-2">Ativos</th>
-                  <th className="text-right font-semibold py-2">Turnover</th>
+                  <th className="text-right font-semibold py-2">{metrica}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line-soft/60">
