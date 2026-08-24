@@ -22,3 +22,24 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fora do repo por decisão (2026-08-24): o repositório é PÚBLICO e nada além de
+# código de produto entra nele.
+#
+# docs/                 notas de integração e planilhas de análise. Contém
+#                       credencial (API CHATGURU.md) e nome de professor
+#                       (top-professores-*.xlsx/.csv) — nunca commitar.
+# analise-atendimento/  apuração local do PDI (script + export do ChatGuru).
+#                       Não é produto: não toca o banco, roda na máquina e
+#                       lê dado pessoal de professor.
+# extension-chamados.zip  artefato de build da extensão de chamados; o fonte
+#                       (extension-chamados/) é que é versionado.
+#
+# NB: public/extension/king-teachertrack-extension.zip continua RASTREADO de
+# propósito — é o pacote que os coordenadores baixam pelo app, não um artefato
+# descartável. Regenerar junto com toda mudança em extension/.
+# ─────────────────────────────────────────────────────────────────────────────
+docs/
+analise-atendimento/
+extension-chamados.zip
