@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import { Panel } from './Panel'
+import { injetarEstilos } from './estilos'
 
 function montar() {
   if (document.getElementById('king-teachertrack-root')) return
@@ -10,6 +11,7 @@ function montar() {
 
   // Shadow DOM isola os estilos do painel dos estilos (e do CSS reset) do Meet.
   const shadow = host.attachShadow({ mode: 'open' })
+  injetarEstilos(shadow)
   const mountPoint = document.createElement('div')
   shadow.appendChild(mountPoint)
 

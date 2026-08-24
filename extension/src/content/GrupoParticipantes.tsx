@@ -1,45 +1,8 @@
 import { useState } from 'react'
 import type { ParticipanteReuniao } from '../shared/types'
 
-const C = {
-  ink:       '#131316',
-  inkMuted:  '#818290',
-  border:    '#E5E5EA',
-  green:     '#1A9C5F',
-  greenSoft: '#E4F7EE',
-  red:       '#C0272D',
-  redSoft:   '#FBE7E7',
-}
-
-const botaoCheck = {
-  width: '24px',
-  height: '24px',
-  borderRadius: '4px',
-  border: `1px solid ${C.border}`,
-  background: '#FFFFFF',
-  cursor: 'pointer',
-  fontSize: '12px',
-  fontWeight: '600',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  transition: 'all 0.2s',
-}
-
-const botaoCheckActive = {
-  ...botaoCheck,
-  background: C.green,
-  color: '#FFFFFF',
-  border: `1px solid ${C.green}`,
-}
-
-const linhaParticipante = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  padding: '8px 0',
-  borderBottom: `1px solid ${C.border}`,
-}
+// Chamada de presença da reunião em grupo. Visual vem da folha do painel
+// (./estilos.ts) — aqui só classes, nada de estilo inline como antes.
 
 export function GrupoParticipantes({
   participantes: initialParticipantes,
@@ -72,78 +35,46 @@ export function GrupoParticipantes({
     }
   }
 
-  const contPresentes = participantes.filter(p => p.presente).length
-  const total = participantes.length
+  const presentes = participantes.filter(p => p.presente).length
 
   return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ marginBottom: 12 }}>
-        <p style={{ fontSize: 11, fontWeight: 600, color: C.inkMuted, margin: '0 0 6px', textTransform: 'uppercase' }}>
-          Presentes ({contPresentes}/{total})
-        </p>
-
-        <div style={{ background: '#F8FAFC', borderRadius: '6px', padding: '8px', marginBottom: 12 }}>
-          {participantes.map(p => (
-            <div key={p.reuniao_professor_id} style={linhaParticipante}>
-              <button
-                onClick={() => togglePresente(p.reuniao_professor_id)}
-                style={p.presente ? botaoCheckActive : botaoCheck}
-                title={p.presente ? 'Marcar ausente' : 'Marcar presente'}
-              >
-                {p.presente ? '✓' : ''}
-              </button>
-              <span style={{ fontSize: 13, color: C.ink, flexGrow: 1 }}>{p.professor_nome}</span>
-              {p.status === 'cancelada' && (
-                <span style={{ fontSize: 10, color: C.red, background: C.redSoft, padding: '2px 6px', borderRadius: '3px' }}>
-                  Cancelada
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <label style={{ display: 'block', marginBottom: 8 }}>
-          <p style={{ fontSize: 11, fontWeight: 600, color: C.inkMuted, margin: '0 0 4px', textTransform: 'uppercase' }}>
-            Observação comum
-          </p>
-          <textarea
-            value={observacao}
-            onChange={e => setObservacao(e.target.value)}
-            placeholder="Notas sobre a reunião de grupo…"
-            style={{
-              width: '100%',
-              minHeight: '60px',
-              padding: '8px',
-              borderRadius: '4px',
-              border: `1px solid ${C.border}`,
-              fontFamily: 'inherit',
-              fontSize: '12px',
-              resize: 'vertical',
-              boxSizing: 'border-box',
-            }}
-          />
-        </label>
-
-        <button
-          onClick={salvarConfirmacao}
-          disabled={salvando}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            background: C.green,
-            color: '#FFFFFF',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: '13px',
-            fontWeight: '600',
-            cursor: salvando ? 'not-allowed' : 'pointer',
-            opacity: salvando ? 0.6 : 1,
-            transition: 'opacity 0.2s',
-          }}
-        >
-          {salvando ? 'Salvando…' : 'Confirmar presença'}
-        </button>
+    <div>
+      <div className="ktm-cartao-topo">
+        <span className="ktm-rotulo">Presença</span>
+        <span className="ktm-selo-chip">{presentes} de {participantes.length}</span>
       </div>
+
+      <ul className="ktm-lista">
+        {participantes.map(p => (
+          <li key={p.reuniao_professor_id} className="ktm-item">
+            <button
+              className={`ktm-check${p.presente ? ' ktm-check--on' : ''}`}
+              onClick={() => togglePresente(p.reuniao_professor_id)}
+              title={p.presente ? 'Marcar ausente' : 'Marcar presente'}
+              aria-pressed={p.presente}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M3.5 8.5 6.5 11.5 12.5 5" fill="none" stroke="currentColor"
+                      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <span className="ktm-item-nome" style={{ flex: 1 }}>{p.professor_nome}</span>
+            {p.status === 'cancelada' && <span className="ktm-selo-chip ktm-selo-chip--vermelho">Cancelada</span>}
+          </li>
+        ))}
+      </ul>
+
+      <textarea
+        className="ktm-area"
+        style={{ marginTop: 10 }}
+        value={observacao}
+        onChange={e => setObservacao(e.target.value)}
+        placeholder="Notas sobre a reunião de grupo…"
+      />
+
+      <button onClick={salvarConfirmacao} disabled={salvando} className="ktm-btn ktm-btn--ok ktm-btn--bloco" style={{ marginTop: 9 }}>
+        {salvando ? 'Salvando…' : 'Confirmar presença'}
+      </button>
     </div>
   )
 }

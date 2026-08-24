@@ -114,3 +114,49 @@ export function confiancaMatch(candidatos: string[], nome: string): number {
   for (const c of candidatos) best = Math.max(best, scoreNome(toks(c), tr))
   return best
 }
+
+/** Resultado do match em lote de uma reunião em grupo. */
+export interface MatchEmLote<T> {
+  encontrados: (T & { confianca: number })[]
+  /** Nomes vistos na chamada que não bateram com nenhum professor ativo. */
+  naoIdentificados: string[]
+}
+
+/**
+ * Casa TODOS os nomes da chamada com professores — um por participante.
+ *
+ * matchProfessorPorNome resolve "quem é o professor desta chamada" e devolve um
+ * só; numa reunião em grupo a pergunta é outra ("quem são estes dez?"), então
+ * aqui cada nome é avaliado isoladamente e o mesmo professor nunca aparece
+ * duas vezes (dois participantes com nome parecido casariam no mesmo cadastro).
+ *
+ * O limiar é mais alto que o da busca manual: numa lista de dez, um falso
+ * positivo coloca no ranking alguém que nem está na sala.
+ */
+export function matchTodosPorNome<T extends { id: string; nome: string }>(
+  candidatos: string[],
+  professores: T[],
+  minScore = 0.62,
+): MatchEmLote<T> {
+  const encontrados: (T & { confianca: number })[] = []
+  const naoIdentificados: string[] = []
+  const usados = new Set<string>()
+
+  // Ordem decrescente de confiança: o nome mais claro fica com o cadastro
+  // primeiro, e um nome ambíguo não "rouba" o professor de quem casou melhor.
+  const avaliados = candidatos
+    .map(nome => ({ nome, melhor: sugerirProfessores(nome, professores, 1, minScore)[0] }))
+    .sort((a, b) => (b.melhor?.score ?? 0) - (a.melhor?.score ?? 0))
+
+  for (const { nome, melhor } of avaliados) {
+    if (!melhor || usados.has(melhor.id)) {
+      naoIdentificados.push(nome)
+      continue
+    }
+    usados.add(melhor.id)
+    const { score, ...prof } = melhor
+    encontrados.push({ ...(prof as unknown as T), confianca: score })
+  }
+
+  return { encontrados, naoIdentificados }
+}
