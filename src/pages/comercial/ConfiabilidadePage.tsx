@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { NovoIncidenteDialog } from '@/components/incidentes/NovoIncidenteDialog'
 import { useProfessoresBusca, useConfiabilidadeProfessor, type ProfessorBusca } from '@/hooks/useConfiabilidade'
+import { RankingProfessores } from '@/pages/comercial/RankingProfessores'
 import { useNomesPorPerfilId } from '@/hooks/usePerfisPublicos'
 import { useAuth } from '@/contexts/AuthContext'
 import { canAddInfo } from '@/lib/permissions'
@@ -139,7 +140,7 @@ export function ConfiabilidadePage() {
         )}
       </div>
 
-      {!professorId && <EstadoVazio />}
+      {!professorId && <RankingProfessores onSelecionar={id => setParams({ professor: id })} />}
 
       {professorId && isLoading && (
         <div className="flex h-64 items-center justify-center text-[13px] text-ink-muted">Carregando…</div>
@@ -416,19 +417,6 @@ export function ConfiabilidadePage() {
 }
 
 // ─── Peças ───────────────────────────────────────────────────────────────────
-
-function EstadoVazio() {
-  return (
-    <div className="rounded-2xl border border-dashed border-line px-6 py-14 text-center">
-      <ShieldQuestion className="mx-auto h-9 w-9 text-ink-subtle" strokeWidth={1.5} />
-      <p className="mt-3 text-[14px] font-medium text-ink">Busque um professor para começar</p>
-      <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
-        A consulta junta incidentes, desafios, faltas, no-show de 1ª aula e trocas de professor dos
-        últimos {JANELA_DIAS} dias, e devolve um veredito com os sinais que o justificam.
-      </p>
-    </div>
-  )
-}
 
 function SinalLinha({ sinal, mostrarPeso }: { sinal: Sinal; mostrarPeso?: boolean }) {
   const Icone = TOM_ICON[sinal.tom]

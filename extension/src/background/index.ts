@@ -258,10 +258,14 @@ async function buscarFeedbacks(professorId: string): Promise<FeedbacksJanela> {
   return { inicio, divisa, eventos, temSerieKing: naJanela.length > 0 }
 }
 
-/** Categorias da aba Plataforma — chamados de TI "sobre" o professor, que não são
- *  falha dele e por isso ficam fora do veredito. Espelha CATEGORIAS_PLATAFORMA
- *  em src/hooks/useIncidentes.ts (que não dá pra importar: arrasta react-query junto). */
-const CATEGORIAS_PLATAFORMA = new Set(['Bugs', 'Melhorias'])
+/** Categorias que NÃO são falha do professor e por isso ficam fora do veredito e
+ *  do ranking: bug do sistema aberto "sobre" ele. Espelha
+ *  CATEGORIAS_NAO_IMPUTAVEIS em src/hooks/useIncidentes.ts (que não dá pra
+ *  importar: arrasta react-query junto).
+ *  'Plataforma' entrou em 2026-08-24 — é categoria legada com o mesmo sentido de
+ *  Bugs/Melhorias ("erro ao autorizar pagamento", "edição break dando erro") e
+ *  vinha penalizando quem só reportou o problema. */
+const CATEGORIAS_PLATAFORMA = new Set(['Bugs', 'Melhorias', 'Plataforma'])
 
 /** Tudo que está em aberto sobre o professor FORA do King: pausa, transferência,
  *  convocação, tarefa, silêncio, onboarding, trilha, mensagem do dia e e-mail.
@@ -819,7 +823,7 @@ async function handleRankearGrupo(
   }
 
   const corteIso = new Date(Date.now() - JANELA_RANKING * 86_400_000).toISOString()
-  const [acompRes, incidentesRes, obsRes] = await Promise.all([
+  const [acompRes, incidentesRes, obsRes, alunosRes, fichaRes] = await Promise.all([
     supabase.from('professor_acompanhamento').select('professor_id, score_atual').in('professor_id', ids),
     supabase
       .from('nexus_incidents')
@@ -832,6 +836,10 @@ async function handleRankearGrupo(
       .in('professor_id', ids)
       .in('tipo', ['feedback_positivo', 'feedback_negativo'])
       .gte('created_at', corteIso),
+    // Lastro do desempate: carteira de hoje e data de início. Espelha o que a
+    // RPC ranking_professores_entradas faz na web — mesma régua, mesma conta.
+    supabase.from('professor_alunos_kms').select('professor_id').in('professor_id', ids).eq('status_aluno', 'ativo'),
+    supabase.from('professores').select('id, data_inicio').in('id', ids),
   ])
 
   const scorePor = new Map<string, number | null>()
@@ -855,6 +863,12 @@ async function handleRankearGrupo(
     fbPor.set(o.professor_id, alvo)
   }
 
+  const alunosPor = new Map<string, number>()
+  for (const a of alunosRes.data ?? []) alunosPor.set(a.professor_id, (alunosPor.get(a.professor_id) ?? 0) + 1)
+
+  const inicioPor = new Map<string, string | null>()
+  for (const f of fichaRes.data ?? []) inicioPor.set(f.id, f.data_inicio ?? null)
+
   const ranking = ranquear([...participantes.values()].map(p => ({
     professorId: p.id,
     nome: p.nome,
@@ -863,6 +877,8 @@ async function handleRankearGrupo(
     incidentesAbertos: incPor.get(p.id)?.abertos ?? 0,
     feedbacksPositivos: fbPor.get(p.id)?.pos ?? 0,
     feedbacksNegativos: fbPor.get(p.id)?.neg ?? 0,
+    alunos: alunosPor.get(p.id) ?? 0,
+    dataInicio: inicioPor.get(p.id) ?? null,
   })))
 
   return {

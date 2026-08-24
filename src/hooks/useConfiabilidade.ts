@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
-import { CATEGORIAS_PLATAFORMA } from '@/hooks/useIncidentes'
+import { CATEGORIAS_NAO_IMPUTAVEIS } from '@/hooks/useIncidentes'
 import {
   diagnosticar, inicioJanela, dentroDaJanela, contarNaJanela, JANELA_DIAS,
   type Diagnostico, type IncidenteResumo,
 } from '@/lib/confiabilidade'
+import { ranquear, JANELA_DIAS as JANELA_RANKING, type ItemRanking } from '@/lib/rankingProfessores'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dados da tela de Confiabilidade (setor comercial).
@@ -17,7 +18,7 @@ import {
 // isso é a view perfis_publicos (ver useNomesPorPerfilId).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PLATAFORMA = new Set<string>(CATEGORIAS_PLATAFORMA)
+const PLATAFORMA = new Set<string>(CATEGORIAS_NAO_IMPUTAVEIS)
 
 export interface ProfessorBusca {
   id: string
@@ -219,3 +220,87 @@ export function useConfiabilidadeProfessor(professorId: string | null) {
 }
 
 export { JANELA_DIAS }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ranking geral — do melhor ao pior, sobre TODOS os professores ativos.
+//
+// A agregação vem da RPC `ranking_professores_entradas` (migration 20260772) e a
+// PONTUAÇÃO é feita aqui, por `ranquear` de src/lib/rankingProfessores.ts — a
+// mesma função que a extensão do Meet usa na aba Grupo. Duas superfícies, uma
+// régua só: se a ordem mudar, muda nas duas juntas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lote da paginação. A RPC devolve ~890 linhas hoje, mas o PostgREST corta em
+ *  1.000 SEM ERRO — e um ranking truncado é indistinguível de um ranking certo.
+ *  Paginar remove a classe de bug inteira em vez de torcer pra base não crescer. */
+const LOTE_RANKING = 500
+
+type LinhaRanking = {
+  professor_id: string
+  nome: string
+  grupo_id: string | null
+  grupo_nome: string | null
+  score: number | null
+  incidentes: number
+  incidentes_abertos: number
+  feedbacks_positivos: number
+  feedbacks_negativos: number
+  alunos: number
+  data_inicio: string | null
+}
+
+export interface ItemRankingGeral extends ItemRanking {
+  grupoId: string | null
+  grupoNome: string | null
+}
+
+export interface RankingGeral {
+  itens: ItemRankingGeral[]
+  /** Grupos presentes, pro filtro por coordenação. */
+  grupos: { id: string; nome: string }[]
+  janelaDias: number
+}
+
+export function useRankingProfessores() {
+  return useQuery({
+    queryKey: ['ranking-professores'],
+    queryFn: async (): Promise<RankingGeral> => {
+      const desde = inicioJanela(JANELA_RANKING).toISOString()
+
+      const linhas: LinhaRanking[] = []
+      for (let inicio = 0; ; inicio += LOTE_RANKING) {
+        const { data, error } = await supabase
+          .rpc('ranking_professores_entradas', { p_desde: desde })
+          .range(inicio, inicio + LOTE_RANKING - 1)
+        if (error) throw error
+        const lote = (data ?? []) as LinhaRanking[]
+        linhas.push(...lote)
+        if (lote.length < LOTE_RANKING) break
+      }
+
+      const porId = new Map(linhas.map(l => [l.professor_id, l]))
+      const itens = ranquear(linhas.map(l => ({
+        professorId: l.professor_id,
+        nome: l.nome,
+        score: l.score,
+        incidentes: l.incidentes,
+        incidentesAbertos: l.incidentes_abertos,
+        feedbacksPositivos: l.feedbacks_positivos,
+        feedbacksNegativos: l.feedbacks_negativos,
+        alunos: l.alunos,
+        dataInicio: l.data_inicio,
+      }))).map(i => ({
+        ...i,
+        grupoId:   porId.get(i.professorId)?.grupo_id   ?? null,
+        grupoNome: porId.get(i.professorId)?.grupo_nome ?? null,
+      }))
+
+      const grupos = [...new Map(
+        linhas.filter(l => l.grupo_id && l.grupo_nome).map(l => [l.grupo_id!, { id: l.grupo_id!, nome: l.grupo_nome! }]),
+      ).values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+      return { itens, grupos, janelaDias: JANELA_RANKING }
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+}

@@ -139,7 +139,7 @@ export interface ReuniaoHistoricoItem {
 
 /** Um eixo do ranking (o "porquê" da posição) — espelha EixoRanking do app. */
 export interface EixoRankingResumo {
-  chave: 'score' | 'positivos' | 'incidentes' | 'negativos'
+  chave: 'score' | 'positivos' | 'incidentes' | 'negativos' | 'alunos' | 'casa'
   titulo: string
   /** Contribuição em pontos: positiva soma, negativa desconta. */
   pontos: number

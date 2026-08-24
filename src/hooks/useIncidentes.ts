@@ -62,6 +62,19 @@ export const CATEGORIAS_GERAL = [
 /** Categorias da aba Plataforma — bugs e melhorias reportados ao TI. */
 export const CATEGORIAS_PLATAFORMA = ['Bugs', 'Melhorias'] as const
 
+/** Categorias que NÃO são falha do professor — bug do sistema aberto "sobre" ele.
+ *  Ficam fora do veredito de confiabilidade e do ranking, mas continuam
+ *  aparecendo normalmente na listagem de incidentes.
+ *
+ *  É uma lista SEPARADA de CATEGORIAS_PLATAFORMA de propósito: aquela monta o
+ *  seletor de categoria dos formulários, e 'Plataforma' é um valor LEGADO que não
+ *  deve virar opção nova de cadastro — só precisa parar de contar. Entrou em
+ *  2026-08-24, ao medir que 66 incidentes em 90 dias com esse problem_type eram
+ *  coisas como "erro ao autorizar o pagamento pelo sistema novo" e "na agenda, a
+ *  edição break está dando erro": o professor era quem REPORTAVA, e levava a
+ *  culpa por isso nas três superfícies. */
+export const CATEGORIAS_NAO_IMPUTAVEIS = [...CATEGORIAS_PLATAFORMA, 'Plataforma'] as const
+
 /** Categorias visíveis só pra coordenação/admin — ocultas de suporte/suporte_aluno
  *  tanto na UI (filtros/formulários) quanto por RLS (ver migration 20260723). */
 export const CATEGORIAS_COORD_ONLY = [
