@@ -82,6 +82,13 @@ export type SolicitarTransferenciaInput = {
   /** ISO YYYY-MM-DD — último dia em que o aluno terá aula. Define a urgência
    *  do pedido; não existe mais urgência declarada. */
   dataUltimaAula: string
+  /** Dias/horários em que o aluno tem aula hoje — é o que orienta a busca do
+   *  próximo professor. Texto livre, obrigatório. */
+  horarioAtual: string
+  /** O aluno quer trocar de horário junto com a troca de professor. */
+  querMudarHorario: boolean | null
+  /** Só vai quando `querMudarHorario` é true. */
+  horarioDesejado: string
   jaConversou: boolean | null
   aceitaManter: boolean | null
 }

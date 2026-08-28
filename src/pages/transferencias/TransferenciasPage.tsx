@@ -4,7 +4,7 @@ import {
   UserCog, Search, Hand, XCircle, CheckCircle2, Link2, Check, AlertTriangle,
   Clock, User, Plus, FileWarning, ChevronDown, ChevronRight, Phone,
   MessageCircle, Users, Zap, MessagesSquare, Handshake, Inbox, CalendarDays,
-  Timer, BellRing, ShieldAlert,
+  Timer, BellRing, ShieldAlert, CalendarClock, ArrowRight,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -506,6 +506,9 @@ function CardPedido({
         {pedido.detalhe}
       </p>
 
+      {/* Horário — é por ele que se procura o próximo professor */}
+      <HorarioDoPedido pedido={pedido} />
+
       {/* Os dois sinais que dizem se ainda dá pra mediar */}
       <SinaisDoPedido pedido={pedido} />
 
@@ -664,6 +667,36 @@ function CardPedido({
           />
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * Horário das aulas do aluno — a primeira coisa que quem atende precisa para
+ * procurar o próximo professor, e por isso fica em destaque em vez de dentro
+ * do dossiê.
+ *
+ * Não aparece nos pedidos anteriores a 2026-08-28: o formulário não perguntava,
+ * e um "—" só ocuparia espaço. Nesses casos continua valendo ligar.
+ */
+function HorarioDoPedido({ pedido }: { pedido: TransferenciaComProfessor }) {
+  if (!pedido.horario_atual) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-line-soft px-3 py-2 text-[12px]">
+      <span className="inline-flex items-center gap-1.5 text-ink-muted">
+        <CalendarClock className="h-3.5 w-3.5" />aula hoje
+      </span>
+      <span className="font-medium text-ink">{pedido.horario_atual}</span>
+      {pedido.quer_mudar_horario && pedido.horario_desejado ? (
+        <>
+          <ArrowRight className="h-3.5 w-3.5 text-ink-muted" />
+          <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft px-2 py-0.5 text-[11px] font-medium text-accentBlue">
+            quer mudar para {pedido.horario_desejado}
+          </span>
+        </>
+      ) : pedido.quer_mudar_horario === false ? (
+        <span className="text-ink-muted">· quer manter o horário</span>
+      ) : null}
     </div>
   )
 }

@@ -69,6 +69,12 @@ export const ANTECEDENCIA_MIN_DIAS = 1
 /** Teto de agendamento, para erro de digitação não virar pedido para 2031. */
 export const FUTURO_MAX_DIAS = 180
 
+/** Horário é texto curto ("terça e quinta, 19h"). O mínimo é 2 porque "9h" é
+ *  resposta válida; o máximo só existe para o campo não virar um segundo relato.
+ *  Espelha HORARIO_MIN/MAX_CHARS em portal-transferencia. */
+export const HORARIO_MIN_CHARS = 2
+export const HORARIO_MAX_CHARS = 200
+
 export type SituacaoPrazo = 'vencido' | 'fora_do_prazo' | 'no_prazo'
 
 export const PRAZO_META: Record<SituacaoPrazo, { label: string; cls: string }> = {

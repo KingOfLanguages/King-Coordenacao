@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   UserCog, Phone, CheckCircle2, AlertTriangle, ChevronLeft, Users, Clock,
+  CalendarClock,
   type LucideIcon,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ import {
 import {
   MOTIVOS_TRANSFERENCIA, diasUteisLabel,
   PRAZO_DIAS_UTEIS, ANTECEDENCIA_MIN_DIAS, FUTURO_MAX_DIAS,
+  HORARIO_MIN_CHARS, HORARIO_MAX_CHARS,
   type MotivoTransferencia,
 } from '@/lib/transferenciaLabels'
 import { diasUteisEntre, hojeLocal, parseISODate } from '@/lib/diasUteis'
@@ -67,6 +69,9 @@ type Step =
       motivo: MotivoTransferencia | ''
       detalhe: string
       dataUltimaAula: string
+      horarioAtual: string
+      querMudarHorario: boolean | null
+      horarioDesejado: string
       jaConversou: boolean | null
       aceitaManter: boolean | null
       erro: string
@@ -74,7 +79,7 @@ type Step =
   | { tipo: 'confirmacao'; nome: string; alunoNome: string; dataUltimaAula: string }
 
 export function Home() {
-  const [step, setStep] = useState<Step>({ tipo: 'identificacao-email', email: '', erro: '' })
+  const [step, setStep] = useState<Step>({ tipo: 'formulario', professorId: 'x', nome: 'Marcos Duarte', alunos: [], aluno: { nome: 'Ana Beatriz Souza' }, motivo: '', detalhe: '', dataUltimaAula: '', horarioAtual: '', querMudarHorario: null, horarioDesejado: '', jaConversou: null, aceitaManter: null, erro: '' })
   const [mes, setMes] = useState<number | null>(null)
   const [ano, setAno] = useState<number | null>(null)
 
@@ -108,6 +113,7 @@ export function Home() {
       alunos: step.alunos,
       aluno,
       motivo: '', detalhe: '', dataUltimaAula: '',
+      horarioAtual: '', querMudarHorario: null, horarioDesejado: '',
       jaConversou: null, aceitaManter: null,
       erro: '',
     })
@@ -218,6 +224,18 @@ export function Home() {
       setStep({ ...step, erro: 'A última aula precisa ser a partir de amanhã. Se a aula já aconteceu, fale com o suporte.' })
       return
     }
+    if (step.horarioAtual.trim().length < HORARIO_MIN_CHARS) {
+      setStep({ ...step, erro: 'Informe o horário em que o aluno tem aula com você hoje.' })
+      return
+    }
+    if (step.querMudarHorario === null) {
+      setStep({ ...step, erro: 'Responda se o aluno quer mudar de horário.' })
+      return
+    }
+    if (step.querMudarHorario && step.horarioDesejado.trim().length < HORARIO_MIN_CHARS) {
+      setStep({ ...step, erro: 'Informe para qual horário o aluno quer mudar.' })
+      return
+    }
 
     try {
       await solicitar.mutateAsync({
@@ -226,6 +244,9 @@ export function Home() {
         motivo: step.motivo,
         detalhe: step.detalhe.trim(),
         dataUltimaAula: step.dataUltimaAula,
+        horarioAtual: step.horarioAtual.trim(),
+        querMudarHorario: step.querMudarHorario,
+        horarioDesejado: step.querMudarHorario ? step.horarioDesejado.trim() : '',
         jaConversou: step.jaConversou,
         aceitaManter: step.aceitaManter,
       })
@@ -557,6 +578,64 @@ export function Home() {
                   </p>
                 </div>
 
+                {/* Horário das aulas — é o que decide para QUEM o aluno pode ir.
+                    Sem isso, quem atende liga para o professor só pra perguntar
+                    o dia e a hora, e a busca do próximo professor só começa
+                    depois disso. */}
+                <div className="space-y-3 rounded-xl border border-line-soft bg-surface-subtle px-3.5 py-3">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="h-3.5 w-3.5 text-ink-muted" />
+                    <span className="text-[12px] font-semibold text-ink-secondary">Horário das aulas</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="horario-atual" className="text-[12px] text-ink-secondary font-medium">
+                      Em que horário o aluno faz aula com você hoje?
+                    </Label>
+                    <Input
+                      id="horario-atual"
+                      type="text"
+                      value={step.horarioAtual}
+                      maxLength={HORARIO_MAX_CHARS}
+                      onChange={ev => setStep({ ...step, horarioAtual: ev.target.value, erro: '' })}
+                      required
+                      placeholder="Ex.: terça e quinta, 19h"
+                      className="h-10 bg-surface-canvas border-line-soft text-[13px] rounded-xl"
+                    />
+                    <p className="text-[11.5px] text-ink-muted">
+                      Escreva os dias da semana e o horário das aulas dele.
+                    </p>
+                  </div>
+
+                  <PerguntaSimNao
+                    pergunta="O aluno quer mudar de horário?"
+                    valor={step.querMudarHorario}
+                    onChange={v => setStep({ ...step, querMudarHorario: v, erro: '' })}
+                  />
+
+                  {step.querMudarHorario === true && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="horario-desejado" className="text-[12px] text-ink-secondary font-medium">
+                        Para qual horário?
+                      </Label>
+                      <Input
+                        id="horario-desejado"
+                        type="text"
+                        value={step.horarioDesejado}
+                        maxLength={HORARIO_MAX_CHARS}
+                        onChange={ev => setStep({ ...step, horarioDesejado: ev.target.value, erro: '' })}
+                        required
+                        autoFocus
+                        placeholder="Ex.: segunda e quarta, a partir das 18h"
+                        className="h-10 bg-surface-canvas border-line-soft text-[13px] rounded-xl"
+                      />
+                      <p className="text-[11.5px] text-ink-muted">
+                        Se ele deu mais de uma opção, escreva todas — quanto mais alternativas, mais rápido achamos o próximo professor.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Dois sinais que mudam a conduta de quem atende */}
                 <div className="space-y-3 rounded-xl border border-line-soft bg-surface-subtle px-3.5 py-3">
                   <PerguntaSimNao
@@ -617,7 +696,7 @@ export function Home() {
         )}
 
         {step.tipo === 'confirmacao' && (
-          <div className="w-full max-w-sm space-y-6 text-center animate-fade-up">
+          <div className="w-full max-w-md space-y-6 text-center animate-fade-up">
             <div className="flex flex-col items-center gap-3.5">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-urg-lowBg text-urg-lowFg shadow-inner-top">
                 <CheckCircle2 className="h-7 w-7" />
@@ -633,15 +712,43 @@ export function Home() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4 text-left">
-              <div className="flex items-center justify-between text-[13px]">
-                <span className="text-ink-muted">Última aula</span>
+            <div className="rounded-2xl border border-line-soft bg-surface-canvas px-5 py-3 text-left">
+              <div className="flex items-center justify-between gap-3 text-[13px]">
+                <span className="text-ink-muted">Último dia de disponibilidade informado</span>
                 <span className="font-medium text-ink tabular-nums">{dataBR(step.dataUltimaAula)}</span>
               </div>
-              <p className="text-[12.5px] leading-relaxed text-ink-secondary">
-                Enquanto o pedido é analisado, <strong>continue atendendo o aluno normalmente</strong>.
-                A transferência só vale depois que o suporte confirmar.
-              </p>
+            </div>
+
+            {/* A retirada do aluno da agenda é o que vale — e ela pode acontecer
+                ANTES da data informada, porque o próximo professor precisa
+                pegar o aluno sem buraco entre uma aula e outra. O professor que
+                para de atender na data que ele mesmo escreveu deixa o aluno sem
+                aula no meio; é isso que este aviso evita. */}
+            <div className="text-left">
+              <Aviso tom="alerta" icone={AlertTriangle} titulo="Aviso importante">
+                <p>
+                  Sua solicitação de transferência foi enviada e será analisada pela nossa equipe.
+                </p>
+                <p>
+                  Até que o aluno seja efetivamente retirado da sua agenda,{' '}
+                  <strong className="font-semibold">continue atendendo-o normalmente</strong>, conforme
+                  sua disponibilidade e os horários já estabelecidos.
+                </p>
+                <p>
+                  A transferência será considerada válida{' '}
+                  <strong className="font-semibold">a partir do momento em que o aluno for retirado
+                  da sua agenda</strong>. Para garantir a continuidade das aulas e o acesso do aluno a
+                  outro professor,{' '}
+                  <strong className="font-semibold">a retirada poderá ocorrer antes da data definida
+                  como seu último dia de aula</strong>.
+                </p>
+                <p>
+                  Por isso, a data informada como último dia de disponibilidade{' '}
+                  <strong className="font-semibold">não representa necessariamente a data em que o
+                  aluno permanecerá em sua agenda</strong>. Aguarde a confirmação da transferência e a
+                  efetiva retirada do aluno antes de interromper os atendimentos.
+                </p>
+              </Aviso>
             </div>
           </div>
         )}
@@ -865,15 +972,19 @@ function Aviso({
       </span>
       <div className="min-w-0 space-y-0.5">
         <p className={cn('text-[12.5px] font-semibold leading-snug', t.titulo)}>{titulo}</p>
-        <p className="text-[12px] leading-relaxed text-ink-secondary">{children}</p>
+        {/* div, e não p: o aviso da tela de confirmação tem vários parágrafos,
+            e <p> dentro de <p> o navegador desmonta sozinho. */}
+        <div className="space-y-2 text-[12px] leading-relaxed text-ink-secondary">{children}</div>
       </div>
     </div>
   )
 }
 
-/** Par sim/não — as duas perguntas que dizem a quem atende se ainda dá pra
- *  mediar antes de mover o aluno. Opcionais de propósito: obrigar resposta
- *  aumentaria o abandono do formulário. */
+/** Par sim/não do formulário. Se responder é obrigatório ou não fica com quem
+ *  usa: os dois sinais de mediação são opcionais de propósito (obrigar resposta
+ *  aumentaria o abandono), enquanto a troca de horário é exigida — é ela que
+ *  define a busca do próximo professor, e um pedido sem ela volta pro suporte
+ *  como uma ligação a mais. */
 function PerguntaSimNao({
   pergunta, valor, onChange,
 }: { pergunta: string; valor: boolean | null; onChange: (v: boolean) => void }) {

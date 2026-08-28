@@ -21,7 +21,8 @@
 //     → { professor: { id, nome } | null, ambiguo, alunos: [...], jaPausado }
 //
 //   { "acao": "solicitar", "professorId", "alunoNome" (COMPLETO), "motivo",
-//     "detalhe", "dataUltimaAula", "jaConversou"?, "aceitaManter"? }
+//     "detalhe", "dataUltimaAula", "horarioAtual", "querMudarHorario",
+//     "horarioDesejado"?, "jaConversou"?, "aceitaManter"? }
 //     → { ok: true, transferenciaId }  |  { error: "…" } com 400/409
 //
 // Não existe mais urgência declarada: ela é derivada de `dataUltimaAula` contra
@@ -42,6 +43,10 @@ const CORS = {
 const NOME_MIN_CHARS    = 3
 const DETALHE_MIN_CHARS = 15
 const DETALHE_MAX_CHARS = 2000
+/** Horário é texto curto ("terça e quinta, 19h"). O mínimo baixo é de propósito:
+ *  "9h" é resposta válida. */
+const HORARIO_MIN_CHARS = 2
+const HORARIO_MAX_CHARS = 200
 const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const DATARE  = /^\d{4}-\d{2}-\d{2}$/
 
@@ -153,6 +158,9 @@ serve(async (req) => {
     const motivo      = typeof body.motivo      === 'string' ? body.motivo.trim()      : ''
     const detalhe     = typeof body.detalhe     === 'string' ? body.detalhe.trim()     : ''
     const dataUltimaAula = typeof body.dataUltimaAula === 'string' ? body.dataUltimaAula.trim() : ''
+    const horarioAtual = typeof body.horarioAtual === 'string' ? body.horarioAtual.trim() : ''
+    const querMudarHorario = typeof body.querMudarHorario === 'boolean' ? body.querMudarHorario : null
+    const horarioDesejadoBruto = typeof body.horarioDesejado === 'string' ? body.horarioDesejado.trim() : ''
     const jaConversou  = typeof body.jaConversou  === 'boolean' ? body.jaConversou  : null
     const aceitaManter = typeof body.aceitaManter === 'boolean' ? body.aceitaManter : null
 
@@ -189,6 +197,28 @@ serve(async (req) => {
     if (diasAteUltimaAula > DIAS_FUTURO_MAX) {
       return json({ error: 'Essa data está muito distante. Confira o dia informado.' }, 400)
     }
+
+    // Horário: é o que decide para QUEM o aluno pode ir. Sem ele, quem atende
+    // precisa ligar para o professor só para perguntar o dia e a hora.
+    if (horarioAtual.length < HORARIO_MIN_CHARS) {
+      return json({ error: 'Informe o horário em que o aluno tem aula com você hoje.' }, 400)
+    }
+    if (horarioAtual.length > HORARIO_MAX_CHARS) {
+      return json({ error: 'O horário ficou longo demais. Resuma os dias e as horas.' }, 400)
+    }
+    if (querMudarHorario === null) {
+      return json({ error: 'Responda se o aluno quer mudar de horário.' }, 400)
+    }
+    // "Quer mudar" sem dizer para quando é o mesmo que não ter perguntado.
+    if (querMudarHorario && horarioDesejadoBruto.length < HORARIO_MIN_CHARS) {
+      return json({ error: 'Informe para qual horário o aluno quer mudar.' }, 400)
+    }
+    if (horarioDesejadoBruto.length > HORARIO_MAX_CHARS) {
+      return json({ error: 'O horário desejado ficou longo demais. Resuma os dias e as horas.' }, 400)
+    }
+    // Quem mantém o horário não guarda um "desejado" solto: o campo fica NULL,
+    // e a fila lê isso como "não muda" sem precisar cruzar duas colunas.
+    const horarioDesejado = querMudarHorario ? horarioDesejadoBruto : null
 
     const { data: prof } = await admin
       .from('professores')
@@ -251,6 +281,9 @@ serve(async (req) => {
         motivo,
         detalhe,
         data_ultima_aula: dataUltimaAula,
+        horario_atual:      horarioAtual,
+        quer_mudar_horario: querMudarHorario,
+        horario_desejado:   horarioDesejado,
         ja_conversou:   jaConversou,
         aceita_manter:  aceitaManter,
         status:         'pendente',
