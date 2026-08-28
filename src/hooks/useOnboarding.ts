@@ -200,3 +200,39 @@ export function useRemoverOnboarding() {
     },
   })
 }
+
+/**
+ * Apaga uma tag do sistema inteiro: limpa rótulo e cor de todos os registros que
+ * a carregam. A tag não é uma entidade própria no banco — ela existe enquanto
+ * alguma linha do acompanhamento a usa —, então "excluir a tag" é exatamente
+ * isso. A observação de cada linha é preservada: é texto que alguém escreveu
+ * sobre o professor, não sobre a tag.
+ */
+export function useExcluirTagOnboarding() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ ids }: { ids: string[]; texto: string }) => {
+      if (ids.length === 0) return
+      const { error } = await supabase
+        .from('onboarding_professores')
+        .update({ tag_texto: null, tag_cor: null })
+        .in('id', ids)
+      if (error) throw error
+    },
+    onMutate: async ({ ids }) => {
+      await queryClient.cancelQueries({ queryKey: ['onboarding'] })
+      const anterior = queryClient.getQueryData<OnboardingRow[]>(['onboarding'])
+      const alvo = new Set(ids)
+      queryClient.setQueryData<OnboardingRow[]>(['onboarding'], (old) =>
+        (old ?? []).map(r => (alvo.has(r.id) ? { ...r, tag_texto: null, tag_cor: null } : r)),
+      )
+      return { anterior }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.anterior) queryClient.setQueryData(['onboarding'], ctx.anterior)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['onboarding'] })
+    },
+  })
+}

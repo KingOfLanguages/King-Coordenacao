@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useMemo, useState } from 'react'
-import { Search, UserPlus, Trash2, Check, Tag as TagIcon, StickyNote, CalendarClock } from 'lucide-react'
+import { Search, UserPlus, Trash2, Check, Tag as TagIcon, StickyNote, CalendarClock, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ import { useProfessores } from '@/hooks/useProfessores'
 import {
   useOnboarding, useAtualizarDiasOnboarding, useDefinirTelefone,
   useAdicionarOnboarding, useRemoverOnboarding, useAtualizarTagOnboarding,
-  useConfirmarMudancaInicio,
+  useExcluirTagOnboarding, useConfirmarMudancaInicio,
   type OnboardingRow, type StatusDia,
 } from '@/hooks/useOnboarding'
 
@@ -90,7 +90,16 @@ function SituacaoChip({ dias, dataInicio }: { dias: StatusDia[]; dataInicio: str
 
 // ─── Tag por registro (rótulo + cor + observação) ─────────────────────────────
 
-type Sugestao = { texto: string; cor: string | null }
+// Uma tag não tem cadastro próprio no banco: ela existe enquanto alguma linha do
+// acompanhamento a carrega. Por isso a sugestão anda junto com os registros que
+// a usam — é o que permite reaproveitar, filtrar e, na gerência, excluir.
+type Sugestao = {
+  chave: string           // texto normalizado (sem acento/caixa) — identidade da tag
+  texto: string           // grafia da primeira linha encontrada
+  cor: string | null
+  ids: string[]           // registros que carregam a tag
+  emAndamento: number     // quantos deles ainda não concluíram os 7 dias
+}
 
 function TagChip({ texto, cor, className }: { texto: string; cor: string | null; className?: string }) {
   const c = corDaTag(cor)
@@ -220,7 +229,7 @@ function TagDoRegistro({ row, sugestoes }: { row: OnboardingRow; sugestoes: Suge
               <div className="flex flex-wrap gap-1.5">
                 {sugestoes.map(s => (
                   <button
-                    key={s.texto}
+                    key={s.chave}
                     type="button"
                     className="btn-press"
                     onClick={() => { setTexto(s.texto); setCor(corDaTag(s.cor).id) }}
@@ -256,6 +265,124 @@ function TagDoRegistro({ row, sugestoes }: { row: OnboardingRow; sugestoes: Suge
             Salvar
           </Button>
         </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Gerência das tags (excluir o que caiu em desuso) ─────────────────────────
+// Como a tag mora nos registros, ela nunca "sai" sozinha: um rótulo criado para
+// uma situação pontual fica para sempre na barra de filtros e na lista de
+// reaproveitamento, mesmo depois que todo mundo que o usava concluiu. Excluir
+// aqui limpa o rótulo (e a cor) de todos os registros de uma vez. A observação
+// de cada linha é preservada — é anotação sobre o professor, não sobre a tag.
+
+function GerenciarTagsDialog({
+  sugestoes, aoExcluir,
+}: {
+  sugestoes: Sugestao[]
+  aoExcluir: (chave: string) => void
+}) {
+  const excluir = useExcluirTagOnboarding()
+  const [open, setOpen] = useState(false)
+  const [confirmando, setConfirmando] = useState<string | null>(null)
+
+  function abrir(v: boolean) {
+    if (v) setConfirmando(null)
+    setOpen(v)
+  }
+
+  function remover(s: Sugestao) {
+    excluir.mutate({ ids: s.ids, texto: s.texto }, {
+      onSuccess: () => {
+        setConfirmando(null)
+        aoExcluir(s.chave)
+        toast.success(`Tag "${s.texto}" excluída de ${s.ids.length} ${s.ids.length === 1 ? 'registro' : 'registros'}.`)
+        if (sugestoes.length <= 1) setOpen(false)
+      },
+      onError: () => toast.error('Não foi possível excluir a tag.'),
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={abrir}>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          title="Gerenciar tags"
+          className="btn-press inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink-secondary"
+        >
+          <Settings2 className="h-3 w-3" /> gerenciar
+        </button>
+      </DialogTrigger>
+
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-[15px]">Gerenciar tags</DialogTitle>
+        </DialogHeader>
+
+        <p className="text-[12px] text-ink-muted">
+          Excluir uma tag tira o rótulo de todos os registros que a usam. As observações
+          escritas em cada professor continuam onde estão.
+        </p>
+
+        <ul className="max-h-[320px] space-y-1 overflow-auto overscroll-contain">
+          {sugestoes.map(s => {
+            const confirma = confirmando === s.chave
+            const n = s.ids.length
+            return (
+              <li
+                key={s.chave}
+                className={cn(
+                  'flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 transition-colors',
+                  confirma ? 'bg-aviso-warnBg' : 'hover:bg-surface-subtle',
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <TagChip texto={s.texto} cor={s.cor} />
+                  <span className={cn('truncate text-[11.5px] tabular-nums', confirma ? 'text-aviso-warnFg' : 'text-ink-muted')}>
+                    {n} {n === 1 ? 'registro' : 'registros'}
+                    {s.emAndamento > 0 && ` · ${s.emAndamento} em andamento`}
+                  </span>
+                </div>
+
+                {confirma ? (
+                  <div className="flex flex-shrink-0 items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[11.5px] text-aviso-warnFg hover:bg-aviso-warnBd hover:text-aviso-warnFg"
+                      onClick={() => setConfirmando(null)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="btn-press h-7 px-2 text-[11.5px] bg-aviso-warnFg text-white hover:bg-aviso-warnFg"
+                      disabled={excluir.isPending}
+                      onClick={() => remover(s)}
+                    >
+                      Excluir
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    title={`Excluir a tag "${s.texto}" de ${n} ${n === 1 ? 'registro' : 'registros'}`}
+                    onClick={() => setConfirmando(s.chave)}
+                    className="btn-press flex-shrink-0 rounded-md p-1.5 text-ink-subtle transition-colors hover:bg-aviso-warnBg hover:text-aviso-warnFg"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+
+        {sugestoes.length === 0 && (
+          <p className="py-6 text-center text-[13px] text-ink-muted">Nenhuma tag em uso.</p>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -529,12 +656,19 @@ export function MensagensTab() {
 
   const idsExistentes = useMemo(() => new Set(rows.map(r => r.professor_id)), [rows])
 
-  // Tags já em uso — servem de atalho no editor e de filtro rápido na lista.
+  // Tags já em uso — servem de atalho no editor, de filtro rápido na lista e de
+  // catálogo na gerência. Grafias diferentes da mesma tag ("Contrato"/"contrato")
+  // contam como uma só: a chave é o texto normalizado.
   const sugestoes = useMemo<Sugestao[]>(() => {
     const m = new Map<string, Sugestao>()
     for (const r of rows) {
       const t = r.tag_texto?.trim()
-      if (t && !m.has(norm(t))) m.set(norm(t), { texto: t, cor: r.tag_cor })
+      if (!t) continue
+      const chave = norm(t)
+      const s = m.get(chave) ?? { chave, texto: t, cor: r.tag_cor, ids: [], emAndamento: 0 }
+      s.ids.push(r.id)
+      if (!concluido(r.dias ?? [])) s.emAndamento++
+      m.set(chave, s)
     }
     return [...m.values()].sort((a, b) => a.texto.localeCompare(b.texto))
   }, [rows])
@@ -625,13 +759,17 @@ export function MensagensTab() {
       {sugestoes.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Tags</span>
+          <GerenciarTagsDialog
+            sugestoes={sugestoes}
+            aoExcluir={chave => setTagFiltro(f => (f === chave ? null : f))}
+          />
           {sugestoes.map(s => {
-            const ativo = tagFiltro === norm(s.texto)
+            const ativo = tagFiltro === s.chave
             return (
               <button
-                key={s.texto}
+                key={s.chave}
                 type="button"
-                onClick={() => setTagFiltro(ativo ? null : norm(s.texto))}
+                onClick={() => setTagFiltro(ativo ? null : s.chave)}
                 className={cn('btn-press rounded-full transition-all', ativo ? 'ring-2 ring-ink/60' : 'opacity-75 hover:opacity-100')}
               >
                 <TagChip texto={s.texto} cor={s.cor} />
