@@ -79,7 +79,7 @@ type Step =
   | { tipo: 'confirmacao'; nome: string; alunoNome: string; dataUltimaAula: string }
 
 export function Home() {
-  const [step, setStep] = useState<Step>({ tipo: 'formulario', professorId: 'x', nome: 'Marcos Duarte', alunos: [], aluno: { nome: 'Ana Beatriz Souza' }, motivo: '', detalhe: '', dataUltimaAula: '', horarioAtual: '', querMudarHorario: null, horarioDesejado: '', jaConversou: null, aceitaManter: null, erro: '' })
+  const [step, setStep] = useState<Step>({ tipo: 'identificacao-email', email: '', erro: '' })
   const [mes, setMes] = useState<number | null>(null)
   const [ano, setAno] = useState<number | null>(null)
 
