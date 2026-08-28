@@ -68,6 +68,9 @@ export interface ProfessorCicloVidaRow {
   saiu_da_escola: boolean | null
   data_matricula_escola: string | null
   data_inicio_aulas: string | null
+  /** Entrada exata NESTE professor (20260774). NULL em saídas antigas — aí a
+   *  permanência é aproximada por data_inicio_aulas. */
+  data_entrada_professor: string | null
 }
 
 export function useProfessorAcompanhamento(professorId?: string) {
@@ -79,7 +82,11 @@ export function useProfessorAcompanhamento(professorId?: string) {
           supabase.from('professor_acompanhamento').select('*').eq('professor_id', professorId!).maybeSingle(),
           supabase.from('professor_score_historico').select('ano_mes, score').eq('professor_id', professorId!).order('ano_mes'),
           supabase.from('professor_alunos_kms').select('aluno_id, primeiro_nome, data_adicao, status_vinculo, status_vinculo_codigo, status_aluno, tipo_vinculo, data_matricula_escola').eq('professor_id', professorId!),
-          supabase.from('professor_ciclo_vida_alunos').select('aluno_id, primeiro_nome, data_saida, motivo_saida, saiu_da_escola, data_matricula_escola, data_inicio_aulas').eq('professor_id', professorId!).order('data_saida', { ascending: false }),
+          // `*` de propósito: a tabela é estreita e a lista explícita já quebrou
+          // a página inteira uma vez, quando o banco ficou uma migration atrás
+          // do frontend (o PostgREST devolve 400 na coluna que ainda não existe
+          // e o Promise.all derruba tudo junto).
+          supabase.from('professor_ciclo_vida_alunos').select('*').eq('professor_id', professorId!).order('data_saida', { ascending: false }),
         ])
       if (e1) throw e1
       if (e2) throw e2

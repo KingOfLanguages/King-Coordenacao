@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
   CalendarDays, Clock, DollarSign, Users, User, MapPin, GraduationCap,
-  PlayCircle, CheckCircle2, MessageCircle, Mail, Lock,
+  PlayCircle, CheckCircle2, MessageCircle, Mail, Lock, Hourglass, BadgeCheck,
+  Ban, Star, RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,6 +15,10 @@ import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, us
 import { useEncerrarPausa } from '@/hooks/usePausas'
 import { usePendenciaHistorico, usePendenciaLogs } from '@/hooks/usePendencias'
 import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms, type ProfessorCicloVidaRow } from '@/hooks/useProfessorAcompanhamento'
+import {
+  useProfessorSituacao, useProfessorAvaliacaoHistorico,
+  type ProfessorSituacao, type AvaliacaoPonto,
+} from '@/hooks/useProfessorDossie'
 import { useNexusDados, type NexusIncidente, type NexusTracking, type NexusAlerta } from '@/hooks/useNexusDados'
 import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
 import { useResolverObservacao, type ObservacaoSnapshot } from '@/hooks/useObservacoes'
@@ -36,7 +41,9 @@ import { AlunoId, nomesDuplicados } from '@/components/alunos/AlunoId'
 import { normalizarNome } from '@/hooks/useAcompanhamentoAlunos'
 import { toast } from 'sonner'
 import { cn, tempoDeCasaLabel, whatsappLink } from '@/lib/utils'
+import { calcularPermanencia, duracaoLabel, duracaoCurta, diasEntre, type Permanencia } from '@/lib/permanenciaAlunos'
 import { motivoSaidaLabel } from '@/lib/cicloVida'
+import { ORIGEM_LABEL, ETAPAS_CONVOCACAO, type OrigemConvocacao, type EtapaConvocacao } from '@/hooks/useConvocacoes'
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
 import type { StatusProfessor } from '@/types'
@@ -52,9 +59,16 @@ type ReuniaoRow = {
   observacao: string | null
   confirmado_em: string | null
   confirmado_por?: PerfilRef
-  reuniao?: ({ id: string; data: string; titulo: string | null }
-    | { id: string; data: string; titulo: string | null }[]
-    | null)
+  reuniao?: (ReuniaoRef | ReuniaoRef[] | null)
+}
+
+/** `natureza` distingue acompanhamento oficial de reunião de dúvida (20260770);
+ *  null em linhas anteriores à migration — o app inteiro lê como acompanhamento. */
+type ReuniaoRef = {
+  id: string
+  data: string
+  titulo: string | null
+  natureza?: 'acompanhamento' | 'duvida' | null
 }
 
 type ReuniaoHistorico = {
@@ -98,6 +112,9 @@ export function ProfessorDetalhePage() {
   const { data: professor, isLoading } = useProfessor(id!)
   const { data: acompanhamentoData } = useProfessorAcompanhamento(id)
   const { data: nexusData } = useNexusDados(id)
+  const { data: avaliacaoHistorico = [] } = useProfessorAvaliacaoHistorico(id)
+  // Tarefa não tem professor_id: o vínculo é o incidente que a originou.
+  const { data: situacao } = useProfessorSituacao(id, (nexusData?.incidentes ?? []).map(i => i.id))
   const atualizarMonitoramento = useAtualizarMonitoramento()
   const atualizarGrupo = useAtualizarGrupoProfessor()
   // Encerrar pausa passou a ser RPC: além de tirar da pausa, fecha a linha em
@@ -145,6 +162,7 @@ export function ProfessorDetalhePage() {
         ...r,
         data: reuniao?.data ?? r.confirmado_em,
         reuniaoId: reuniao?.id ?? null,
+        duvida: reuniao?.natureza === 'duvida',
         confirmadoPorNome: resolverNomePerfil(r.confirmado_por),
       }
     })
@@ -158,6 +176,18 @@ export function ProfessorDetalhePage() {
   // kms_id (id do professor no King) indexa o histórico de pendências (API do King).
   const kmsNum = professor.kms_id && !Number.isNaN(Number(professor.kms_id)) ? Number(professor.kms_id) : null
   const alunosCount = acompanhamentoData?.alunos?.length ?? 0
+
+  // Permanência do aluno com ESTE professor. Precisa das duas listas: a carteira
+  // de hoje dá o tempo em curso, o ciclo de vida dá as permanências fechadas.
+  const permanencia = calcularPermanencia(
+    acompanhamentoData?.alunos ?? [],
+    acompanhamentoData?.ciclo ?? [],
+  )
+  const temPermanencia = permanencia.emCurso.n > 0 || permanencia.concluidas.n > 0
+
+  // Reuniões de dúvida não entram na régua de acompanhamento (20260770).
+  const reunioesOficiais = reunioes.filter(r => !r.duvida && r.status === 'realizada').length
+  const reunioesDuvida   = reunioes.filter(r => r.duvida).length
 
   const obsFiltered = obsFiltro === 'todos'
     ? observacoes
@@ -223,6 +253,15 @@ export function ProfessorDetalhePage() {
                 {alunosCount} aluno{alunosCount !== 1 ? 's' : ''}
               </span>
             )}
+            {permanencia.concluidas.mediaDias !== null && (
+              <span
+                className="inline-flex items-center gap-1"
+                title={`Média de permanência dos ${permanencia.concluidas.n} aluno(s) que já saíram deste professor`}
+              >
+                <Hourglass className="h-3 w-3" />
+                aluno fica {duracaoLabel(permanencia.concluidas.mediaDias)}
+              </span>
+            )}
             {mesAnaliseCount > 0 && (
               <span
                 className="inline-flex items-center gap-1"
@@ -286,7 +325,12 @@ export function ProfessorDetalhePage() {
               </span>
             )}
             {tempoCasa && (
-              <span className="inline-flex items-center gap-1 text-ink-muted">
+              <span
+                className="inline-flex items-center gap-1 text-ink-muted"
+                title={professor.data_inicio
+                  ? `Início em ${new Date(professor.data_inicio).toLocaleDateString('pt-BR')}`
+                  : undefined}
+              >
                 <Clock className="h-3 w-3" />{tempoCasa} de casa
               </span>
             )}
@@ -314,6 +358,30 @@ export function ProfessorDetalhePage() {
               <a href={`mailto:${professor.email}`} className="inline-flex items-center gap-1 text-ink-muted hover:underline">
                 <Mail className="h-3 w-3" />{professor.email}
               </a>
+            )}
+            {/* Flag da API: o próprio professor confirmou o cadastro. Sem ela,
+                telefone/e-mail acima podem estar velhos — importa antes de
+                disparar convocação. */}
+            {professor.dados_atualizados === true && (
+              <span
+                className="inline-flex items-center gap-1 text-urg-lowFg"
+                title="O professor confirmou os dados cadastrais no King"
+              >
+                <BadgeCheck className="h-3 w-3" />Cadastro confirmado
+              </span>
+            )}
+            {professor.dados_atualizados === false && (
+              <span
+                className="inline-flex items-center gap-1 text-urg-medFg"
+                title="O professor ainda não confirmou os dados cadastrais no King — contato pode estar desatualizado"
+              >
+                <AlertTriangle className="h-3 w-3" />Cadastro não confirmado
+              </span>
+            )}
+            {professor.kms_id && (
+              <span className="text-ink-subtle tabular-nums" title="ID do professor no King">
+                #{professor.kms_id}
+              </span>
             )}
           </div>
         </div>
@@ -392,8 +460,14 @@ export function ProfessorDetalhePage() {
         <AcompanhamentoSection
           acompanhamento={acompanhamentoData.acompanhamento}
           historico={acompanhamentoData.historico}
+          avaliacaoHistorico={avaliacaoHistorico}
           alunos={acompanhamentoData.alunos}
         />
+      )}
+
+      {/* ── Permanência do aluno com o professor ── */}
+      {temPermanencia && (
+        <PermanenciaSection permanencia={permanencia} />
       )}
 
       {/* ── Alunos vinculados (KMS) ── */}
@@ -405,6 +479,9 @@ export function ProfessorDetalhePage() {
       {acompanhamentoData?.ciclo && acompanhamentoData.ciclo.length > 0 && (
         <CicloVidaSection ciclo={acompanhamentoData.ciclo} />
       )}
+
+      {/* ── Situação no KTM: pausa, convocação, tarefa, onboarding, trilha, e-mail ── */}
+      {situacao && <SituacaoSection situacao={situacao} />}
 
       {/* ── Transferências de aluno pedidas por ele (some quando não há nenhuma) ── */}
       {id && <TransferenciasProfessorSection professorId={id} />}
@@ -431,6 +508,12 @@ export function ProfessorDetalhePage() {
         {/* Reuniões */}
         <section className="card-surface p-5 space-y-3 self-start">
           <h2 className="label-micro">Reuniões ({reunioes.length})</h2>
+          {reunioes.length > 0 && (
+            <p className="text-[11px] text-ink-muted -mt-1.5">
+              {reunioesOficiais} de acompanhamento realizada{reunioesOficiais !== 1 ? 's' : ''}
+              {reunioesDuvida > 0 && ` · ${reunioesDuvida} de dúvida`}
+            </p>
+          )}
           {reunioes.length === 0 ? (
             <p className="text-[13px] text-ink-muted">Nenhuma reunião registrada.</p>
           ) : (
@@ -444,7 +527,16 @@ export function ProfessorDetalhePage() {
                       })}
                     </span>
                     <div className="flex items-center gap-1">
-                      {r.status === 'realizada' && r.numero && (
+                      {/* Dúvida não numera e não conta na régua mensal (20260770). */}
+                      {r.duvida && (
+                        <span
+                          className="inline-flex items-center rounded-full bg-surface-subtle text-ink-muted px-1.5 py-0.5 text-[10px] font-medium"
+                          title="Reunião de dúvida — não conta como acompanhamento do mês"
+                        >
+                          dúvida
+                        </span>
+                      )}
+                      {r.status === 'realizada' && r.numero && !r.duvida && (
                         <span className="text-[11px] text-ink-muted tabular-nums">{r.numero}º</span>
                       )}
                       <StatusBadge status={r.status} />
@@ -660,26 +752,47 @@ export function ProfessorDetalhePage() {
 
 // ─── Acompanhamento (score/alertas — API de Acompanhamento de Professores) ────
 
+/** Datas de falta/no-show em lista curta: "12/08 · 19/08 · +3". */
+function listaDeDatas(datas: string[] | undefined, max = 4): string | null {
+  if (!datas?.length) return null
+  const fmt = (d: string) => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  const visiveis = datas.slice(0, max).map(fmt).join(' · ')
+  return datas.length > max ? `${visiveis} · +${datas.length - max}` : visiveis
+}
+
 function AcompanhamentoSection({
-  acompanhamento, historico, alunos,
+  acompanhamento, historico, avaliacaoHistorico, alunos,
 }: {
   acompanhamento: ProfessorAcompanhamento
   historico: ProfessorScoreHistoricoRow[]
+  avaliacaoHistorico: AvaliacaoPonto[]
   alunos: ProfessorAlunoKms[]
 }) {
+  // O `detalhe` de cada alerta é o que a coordenação cita na conversa — as datas
+  // das faltas, os motivos do bloqueio. Vinha sendo montado e jogado fora.
+  const alertasLista = [
+    acompanhamento.aulas_pendentes_qtd > 0 && {
+      label: `${acompanhamento.aulas_pendentes_qtd} aula(s) pendente(s)`,
+      detalhe: acompanhamento.aulas_pendentes_data_mais_antiga
+        ? `mais antiga em ${new Date(acompanhamento.aulas_pendentes_data_mais_antiga).toLocaleDateString('pt-BR')}`
+        : null,
+    },
+    (acompanhamento.faltas_professor?.quantidade ?? 0) > 0 && {
+      label: `${acompanhamento.faltas_professor!.quantidade} falta(s) do professor`,
+      detalhe: listaDeDatas(acompanhamento.faltas_professor?.datas),
+    },
+    (acompanhamento.no_show_primeira_aula?.quantidade ?? 0) > 0 && {
+      label: `${acompanhamento.no_show_primeira_aula!.quantidade} no-show de 1ª aula`,
+      detalhe: listaDeDatas(acompanhamento.no_show_primeira_aula?.datas),
+    },
+    (acompanhamento.agendas_bloqueadas?.quantidade_horarios ?? 0) > 0 && {
+      label: `${acompanhamento.agendas_bloqueadas!.quantidade_horarios} horário(s) bloqueado(s)`,
+      detalhe: acompanhamento.agendas_bloqueadas?.motivos?.map(m => `${m.motivo} (${m.quantidade})`).join(' · ') ?? null,
+    },
+  ].filter(Boolean) as { label: string; detalhe: string | null }[]
+
   const temFaltasOuNoShow = (acompanhamento.faltas_professor?.quantidade ?? 0) > 0
     || (acompanhamento.no_show_primeira_aula?.quantidade ?? 0) > 0
-
-  const alertasLista = [
-    acompanhamento.aulas_pendentes_qtd > 0 &&
-      { label: `${acompanhamento.aulas_pendentes_qtd} aula(s) pendente(s)`, detalhe: acompanhamento.aulas_pendentes_data_mais_antiga },
-    (acompanhamento.faltas_professor?.quantidade ?? 0) > 0 &&
-      { label: `${acompanhamento.faltas_professor!.quantidade} falta(s) do professor`, detalhe: null },
-    (acompanhamento.no_show_primeira_aula?.quantidade ?? 0) > 0 &&
-      { label: `${acompanhamento.no_show_primeira_aula!.quantidade} no-show de 1ª aula`, detalhe: null },
-    (acompanhamento.agendas_bloqueadas?.quantidade_horarios ?? 0) > 0 &&
-      { label: `${acompanhamento.agendas_bloqueadas!.quantidade_horarios} horário(s) bloqueado(s)`, detalhe: null },
-  ].filter(Boolean) as { label: string; detalhe: string | null }[]
 
   const alunosMap = new Map(alunos.map(a => [a.aluno_id, a]))
   const av = acompanhamento.avaliacao_alunos
@@ -693,7 +806,37 @@ function AcompanhamentoSection({
 
   return (
     <section className="card-surface p-5 space-y-4">
-      <h2 className="label-micro">Acompanhamento</h2>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="label-micro">Acompanhamento (API King)</h2>
+        {acompanhamento.api_atualizado_em && (
+          <span
+            className="inline-flex items-center gap-1 text-[11px] text-ink-subtle"
+            title="Última rodada do kms-api-sync que tocou este professor"
+          >
+            <RefreshCw className="h-3 w-3" />
+            sincronizado em {new Date(acompanhamento.api_atualizado_em).toLocaleString('pt-BR', {
+              day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+            })}
+          </span>
+        )}
+      </div>
+
+      {/* Fora de operação: todos os horários bloqueados (≠ bloqueio parcial,
+          que aparece como alerta de horários). */}
+      {acompanhamento.agenda_bloqueada && (
+        <div className="flex items-start gap-2 rounded-lg bg-urg-highBg px-3 py-2">
+          <Ban className="h-3.5 w-3.5 text-urg-highFg mt-0.5 flex-shrink-0" />
+          <div className="space-y-0.5">
+            <p className="text-[12px] font-medium text-urg-highFg">Agenda bloqueada — professor fora de operação</p>
+            {(acompanhamento.motivos_bloqueio?.length ?? 0) > 0 && (
+              <p className="text-[11px] text-urg-highFg/80">
+                {acompanhamento.motivos_bloqueio!.map(m => `${m.motivo} (${m.quantidade})`).join(' · ')}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         {/* Score */}
         <div className="space-y-1.5">
@@ -762,18 +905,26 @@ function AcompanhamentoSection({
         </div>
       )}
 
-      {historico.length > 1 && <ScoreHistoricoChart historico={historico} />}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {historico.length > 1 && <ScoreHistoricoChart historico={historico} />}
+        {avaliacaoHistorico.length > 1 && <AvaliacaoHistoricoChart pontos={avaliacaoHistorico} />}
+      </div>
 
       {alertasLista.length > 0 && (
         <div className="space-y-1.5 pt-1">
           <p className="text-[11px] text-ink-muted">Alertas ativos</p>
-          <div className="flex flex-wrap gap-2">
+          <ul className="space-y-1.5">
             {alertasLista.map((a, i) => (
-              <span key={i} className="inline-flex items-center rounded-full bg-urg-medBg text-urg-medFg px-2.5 py-1 text-[11px] font-medium">
-                {a.label}
-              </span>
+              <li key={i} className="flex items-start gap-2 flex-wrap">
+                <span className="inline-flex items-center rounded-full bg-urg-medBg text-urg-medFg px-2.5 py-1 text-[11px] font-medium">
+                  {a.label}
+                </span>
+                {a.detalhe && (
+                  <span className="text-[11px] text-ink-muted pt-1 tabular-nums">{a.detalhe}</span>
+                )}
+              </li>
             ))}
-          </div>
+          </ul>
           {temFaltasOuNoShow && (
             <p className="text-[10.5px] text-ink-subtle italic">
               Faltas e no-show trazem só contagem e datas — a origem dos dados não vincula a um aluno específico.
@@ -886,16 +1037,20 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {visiveis.map(a => (
+        {visiveis.map(a => {
+          const comOProfessor = diasEntre(a.data_adicao)
+          return (
           <span
             key={a.aluno_id}
             title={[
               `#${a.aluno_id}`,
               rotuloStatusAluno(a),
-              a.data_adicao ? `adicionado em ${new Date(a.data_adicao).toLocaleDateString('pt-BR')}` : null,
+              a.data_adicao ? `com este professor desde ${new Date(a.data_adicao).toLocaleDateString('pt-BR')}` : null,
+              comOProfessor !== null ? `há ${duracaoLabel(comOProfessor)}` : null,
+              a.data_matricula_escola ? `na escola desde ${new Date(a.data_matricula_escola).toLocaleDateString('pt-BR')}` : null,
             ].filter(Boolean).join(' · ') || undefined}
             className={cn(
-              'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] cursor-help',
+              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] cursor-help',
               a.status_aluno === 'pausado'
                 ? 'bg-urg-medBg text-urg-medFg'
                 : 'bg-surface-subtle text-ink-secondary',
@@ -903,10 +1058,14 @@ function AlunosKmsSection({ alunos }: { alunos: ProfessorAlunoKms[] }) {
           >
             {a.primeiro_nome ?? `Aluno #${a.aluno_id}`}
             {a.primeiro_nome && duplicados.has(normalizarNome(a.primeiro_nome)) && (
-              <AlunoId id={a.aluno_id} className="ml-1 text-[10px] opacity-80" />
+              <AlunoId id={a.aluno_id} className="text-[10px] opacity-80" />
+            )}
+            {comOProfessor !== null && (
+              <span className="text-ink-subtle tabular-nums">{duracaoCurta(comOProfessor)}</span>
             )}
           </span>
-        ))}
+          )
+        })}
       </div>
       {ordenados.length > 16 && (
         <button
@@ -938,11 +1097,27 @@ function CicloVidaSection({ ciclo }: { ciclo: ProfessorCicloVidaRow[] }) {
         </p>
       </div>
       <ul className="divide-y divide-line-soft/60">
-        {visiveis.map(c => (
+        {visiveis.map(c => {
+          // Permanência exata quando a entrada foi capturada (20260774); senão
+          // aproxima pela 1ª aula do aluno na escola, e o "~" avisa.
+          const exata  = diasEntre(c.data_entrada_professor, c.data_saida)
+          const aprox  = exata === null ? diasEntre(c.data_inicio_aulas, c.data_saida) : null
+          const ficou  = exata ?? aprox
+          return (
           <li key={`${c.aluno_id}-${c.data_saida}`} className="flex items-center justify-between gap-2 py-1.5 text-[12px] flex-wrap">
             <span className="text-ink-secondary inline-flex items-center gap-1.5 flex-wrap">
               {c.primeiro_nome ?? `Aluno #${c.aluno_id}`}
               {c.primeiro_nome && <AlunoId id={c.aluno_id} className="text-[10.5px]" />}
+              {ficou !== null && (
+                <span
+                  className="text-ink-muted tabular-nums"
+                  title={exata !== null
+                    ? 'Tempo com este professor (entrada registrada)'
+                    : 'Aproximado: medido da 1ª aula do aluno na escola, não da entrada neste professor'}
+                >
+                  · ficou {exata === null ? '~' : ''}{duracaoLabel(ficou)}
+                </span>
+              )}
               <span className="text-ink-muted">· {motivoSaidaLabel(c.motivo_saida)}</span>
               <span className={cn(
                 'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
@@ -959,7 +1134,8 @@ function CicloVidaSection({ ciclo }: { ciclo: ProfessorCicloVidaRow[] }) {
               {new Date(c.data_saida).toLocaleDateString('pt-BR')}
             </span>
           </li>
-        ))}
+          )
+        })}
       </ul>
       {ciclo.length > 12 && (
         <button
@@ -968,6 +1144,335 @@ function CicloVidaSection({ ciclo }: { ciclo: ProfessorCicloVidaRow[] }) {
         >
           {expandido ? 'Ver menos' : `+ ${ciclo.length - 12} mais`}
         </button>
+      )}
+    </section>
+  )
+}
+
+// ─── Permanência do aluno com o professor ─────────────────────────────────────
+//
+// A pergunta é "quanto tempo um aluno fica com este professor". Ela tem duas
+// respostas e a tela mostra as duas, porque cada uma mente sozinha:
+//   • concluídas — quem já saiu. É a permanência fechada, mas ignora quem está
+//     lá há três anos e não saiu (puxa a média para baixo).
+//   • em curso — a carteira de hoje. Mede só o tempo decorrido até agora.
+// A conta e as fontes de data estão em src/lib/permanenciaAlunos.ts.
+
+function PermanenciaSection({ permanencia }: { permanencia: Permanencia }) {
+  const { concluidas, churn, troca, emCurso, faixas } = permanencia
+  const maxFaixa = Math.max(1, ...faixas.map(f => Math.max(f.concluidas, f.emCurso)))
+
+  return (
+    <section className="card-surface p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Hourglass className="h-4 w-4 text-ink-secondary" />
+        <h2 className="label-micro">Permanência do aluno com o professor</h2>
+      </div>
+
+      <div className="grid gap-px bg-line-soft sm:grid-cols-3 rounded-lg overflow-hidden">
+        <div className="bg-surface-canvas p-3.5 space-y-0.5">
+          <p className="text-[11px] text-ink-muted">Média de quem já saiu</p>
+          <p className="text-xl font-semibold text-ink tabular-nums">
+            {duracaoLabel(concluidas.mediaDias)}
+          </p>
+          <p className="text-[11px] text-ink-subtle tabular-nums">
+            {concluidas.n} aluno{concluidas.n !== 1 ? 's' : ''}
+            {concluidas.medianaDias !== null && ` · mediana ${duracaoLabel(concluidas.medianaDias)}`}
+          </p>
+        </div>
+        <div className="bg-surface-canvas p-3.5 space-y-0.5">
+          <p className="text-[11px] text-ink-muted">Carteira de hoje (em curso)</p>
+          <p className="text-xl font-semibold text-ink tabular-nums">
+            {duracaoLabel(emCurso.mediaDias)}
+          </p>
+          <p className="text-[11px] text-ink-subtle tabular-nums">
+            {emCurso.n} aluno{emCurso.n !== 1 ? 's' : ''}
+            {emCurso.maisAntigoDias !== null && ` · mais antigo ${duracaoLabel(emCurso.maisAntigoDias)}`}
+          </p>
+        </div>
+        <div className="bg-surface-canvas p-3.5 space-y-0.5">
+          <p className="text-[11px] text-ink-muted">Saiu da escola × trocou de professor</p>
+          <p className="text-[13px] text-ink tabular-nums pt-1">
+            {churn.n > 0 ? `${duracaoLabel(churn.mediaDias)} (${churn.n})` : '—'}
+            <span className="text-ink-subtle"> · </span>
+            {troca.n > 0 ? `${duracaoLabel(troca.mediaDias)} (${troca.n})` : '—'}
+          </p>
+          <p className="text-[11px] text-ink-subtle">
+            Média até a saída, por desfecho.
+          </p>
+        </div>
+      </div>
+
+      {/* A média esconde a forma: 4 alunos de 1 mês e 1 de 3 anos dão a mesma
+          média que 5 de 8 meses. As faixas mostram a diferença. */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] text-ink-muted">Distribuição</p>
+          <p className="text-[10.5px] text-ink-subtle flex items-center gap-2.5">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-sm bg-accentBlue" />já saíram
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-sm bg-line" />em curso
+            </span>
+          </p>
+        </div>
+        <ul className="space-y-1">
+          {faixas.map(f => (
+            <li key={f.label} className="flex items-center gap-2 text-[11px]">
+              <span className="w-[86px] flex-shrink-0 text-ink-muted">{f.label}</span>
+              <span className="flex-1 flex items-center gap-1 min-w-0">
+                <span
+                  className="h-2 rounded-sm bg-accentBlue"
+                  style={{ width: `${(f.concluidas / maxFaixa) * 100}%` }}
+                />
+                <span
+                  className="h-2 rounded-sm bg-line"
+                  style={{ width: `${(f.emCurso / maxFaixa) * 100}%` }}
+                />
+              </span>
+              <span className="w-[52px] flex-shrink-0 text-right text-ink-subtle tabular-nums">
+                {f.concluidas} · {f.emCurso}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="text-[10.5px] text-ink-subtle leading-relaxed">
+        Entrada exata só existe em saídas registradas a partir de 28/08/2026 — o King não guardava
+        essa data e o roster é reescrito a cada sincronização.
+        {concluidas.aproximadas > 0 && (
+          <> {concluidas.aproximadas} das {concluidas.n} saídas usam a 1ª aula do aluno na escola como
+          entrada; quem já tinha trocado de professor aparece com permanência maior do que a real.</>
+        )}
+        {concluidas.semData > 0 && (
+          <> {concluidas.semData} saída(s) ficaram de fora por não ter data de entrada utilizável.</>
+        )}
+      </p>
+    </section>
+  )
+}
+
+// ─── Situação no KTM (pausa, convocação, tarefa, onboarding, trilha, e-mail) ──
+//
+// Tudo que o KTM sabe sobre o professor FORA da API do King e que só a extensão
+// do Meet mostrava. Cada bloco some quando não há dado — e some também quando a
+// RLS do cargo barra a leitura (ver useProfessorSituacao).
+
+const ETAPA_LABEL: Record<string, string> =
+  Object.fromEntries(ETAPAS_CONVOCACAO.map(e => [e.id, e.titulo]))
+
+const PAUSA_STATUS_CLS: Record<string, string> = {
+  pendente:       'bg-urg-medBg text-urg-medFg',
+  em_atendimento: 'bg-urg-medBg text-urg-medFg',
+  concluida:      'bg-surface-subtle text-ink-secondary',
+}
+
+function SituacaoSection({ situacao }: { situacao: ProfessorSituacao }) {
+  const [expandido, setExpandido] = useState(false)
+
+  const pausaVigente     = situacao.pausas.find(p => p.ativada_em && !p.encerrada_em) ?? null
+  const convocAbertas    = situacao.convocacoes.filter(c => c.etapa !== 'realizada')
+  const tarefasAbertas   = situacao.tarefas.filter(t => t.status !== 'concluido')
+  const onboarding       = situacao.onboarding
+  const wp               = situacao.welcomePath
+  const ultimoEmail      = situacao.emails[0] ?? null
+
+  const temAlgo = situacao.pausas.length || situacao.convocacoes.length || situacao.tarefas.length
+    || onboarding || wp || situacao.contatoHoje || ultimoEmail
+  if (!temAlgo) return null
+
+  const enviadosOnboarding = onboarding?.dias?.filter(d => d === 2).length ?? 0
+
+  return (
+    <section className="card-surface p-5 space-y-4">
+      <h2 className="label-micro">Situação no KTM</h2>
+
+      <div className="grid gap-px bg-line-soft sm:grid-cols-2 lg:grid-cols-4 rounded-lg overflow-hidden">
+        {/* Pausa */}
+        <div className="bg-surface-canvas p-3.5 space-y-1">
+          <p className="text-[11px] text-ink-muted">Pausas</p>
+          {situacao.pausas.length === 0 ? (
+            <p className="text-[13px] text-ink-muted">Nenhuma</p>
+          ) : (
+            <>
+              <p className="text-[13px] text-ink tabular-nums">
+                {situacao.pausas.length} registro{situacao.pausas.length !== 1 ? 's' : ''}
+              </p>
+              {pausaVigente ? (
+                <p className="text-[11px] text-urg-medFg">
+                  Vigente até {new Date(`${pausaVigente.data_fim}T00:00:00`).toLocaleDateString('pt-BR')}
+                </p>
+              ) : (
+                <p className="text-[11px] text-ink-subtle">
+                  Última em {new Date(situacao.pausas[0].created_at).toLocaleDateString('pt-BR')}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Convocações */}
+        <div className="bg-surface-canvas p-3.5 space-y-1">
+          <p className="text-[11px] text-ink-muted">Convocações</p>
+          <p className={cn('text-[13px] tabular-nums', convocAbertas.length > 0 ? 'text-urg-highFg font-medium' : 'text-ink')}>
+            {convocAbertas.length > 0 ? `${convocAbertas.length} em aberto` : 'Nenhuma em aberto'}
+          </p>
+          {situacao.convocacoes.length > 0 && (
+            <p className="text-[11px] text-ink-subtle tabular-nums">
+              {situacao.convocacoes.length} no histórico
+            </p>
+          )}
+        </div>
+
+        {/* Tarefas */}
+        <div className="bg-surface-canvas p-3.5 space-y-1">
+          <p className="text-[11px] text-ink-muted">Tarefas (via incidente)</p>
+          <p className={cn('text-[13px] tabular-nums', tarefasAbertas.length > 0 ? 'text-urg-medFg font-medium' : 'text-ink')}>
+            {tarefasAbertas.length > 0 ? `${tarefasAbertas.length} aberta(s)` : 'Nenhuma aberta'}
+          </p>
+          {situacao.tarefas.length > 0 && (
+            <p className="text-[11px] text-ink-subtle tabular-nums">
+              {situacao.tarefas.length} no total
+            </p>
+          )}
+        </div>
+
+        {/* Trilha / onboarding */}
+        <div className="bg-surface-canvas p-3.5 space-y-1">
+          <p className="text-[11px] text-ink-muted">Boas-vindas</p>
+          {onboarding ? (
+            <p className="text-[13px] text-ink tabular-nums">
+              {enviadosOnboarding}/7 mensagens
+            </p>
+          ) : (
+            <p className="text-[13px] text-ink-muted">Fora do onboarding</p>
+          )}
+          {wp && (
+            <p className="text-[11px] text-ink-subtle tabular-nums">
+              Trilha {wp.concluidas}/{wp.total}
+              {wp.revisaoPendente > 0 && ` · ${wp.revisaoPendente} p/ revisar`}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Linha de contato: mensagem do dia + último e-mail disparado */}
+      {(situacao.contatoHoje || ultimoEmail) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-muted">
+          {situacao.contatoHoje && (
+            <span className="inline-flex items-center gap-1">
+              <MessageCircle className="h-3 w-3" />
+              Na lista de mensagens de hoje —{' '}
+              {situacao.contatoHoje.enviado
+                ? <span className="text-urg-lowFg font-medium">já contatado</span>
+                : <span className="text-urg-medFg font-medium">pendente</span>}
+            </span>
+          )}
+          {ultimoEmail && (
+            <span className="inline-flex items-center gap-1" title={ultimoEmail.assunto}>
+              <Mail className="h-3 w-3" />
+              Último e-mail ({ultimoEmail.tipo}) em{' '}
+              {new Date(ultimoEmail.created_at).toLocaleDateString('pt-BR')}
+              {!ultimoEmail.sucesso && <span className="text-urg-highFg font-medium">· falhou</span>}
+            </span>
+          )}
+        </div>
+      )}
+
+      {(situacao.pausas.length > 0 || situacao.convocacoes.length > 0 || situacao.tarefas.length > 0) && (
+        <button
+          onClick={() => setExpandido(v => !v)}
+          className="btn-press text-[12px] text-accentBlue font-medium"
+        >
+          {expandido ? 'Ocultar detalhes' : 'Ver detalhes'}
+        </button>
+      )}
+
+      {expandido && (
+        <div className="grid gap-4 lg:grid-cols-3 pt-1">
+          {situacao.pausas.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-ink-muted">Pausas</p>
+              <ul className="space-y-1.5">
+                {situacao.pausas.map(p => (
+                  <li key={p.id} className="text-[12px] space-y-0.5 border-b border-line-soft last:border-0 pb-1.5 last:pb-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ink-secondary tabular-nums">
+                        {new Date(`${p.data_inicio}T00:00:00`).toLocaleDateString('pt-BR')}
+                        {' → '}
+                        {new Date(`${p.data_fim}T00:00:00`).toLocaleDateString('pt-BR')}
+                      </span>
+                      <span className={cn(
+                        'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0',
+                        PAUSA_STATUS_CLS[p.status] ?? 'bg-surface-subtle text-ink-muted',
+                      )}>
+                        {p.encerrada_em ? 'encerrada' : p.status.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    {p.motivo && <p className="text-[11px] text-ink-muted leading-relaxed">{p.motivo}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {situacao.convocacoes.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-ink-muted">Convocações</p>
+              <ul className="space-y-1.5">
+                {situacao.convocacoes.map(c => (
+                  <li key={c.id} className="text-[12px] space-y-0.5 border-b border-line-soft last:border-0 pb-1.5 last:pb-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ink-secondary">
+                        {ORIGEM_LABEL[c.origem as OrigemConvocacao] ?? c.origem}
+                      </span>
+                      <span className="text-ink-subtle tabular-nums flex-shrink-0">
+                        {new Date(c.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                    <p className={cn(
+                      'text-[11px]',
+                      c.etapa === 'realizada' ? 'text-ink-subtle' : 'text-urg-medFg font-medium',
+                    )}>
+                      {ETAPA_LABEL[c.etapa as EtapaConvocacao] ?? c.etapa}
+                    </p>
+                    {c.motivo && <p className="text-[11px] text-ink-muted leading-relaxed">{c.motivo}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {situacao.tarefas.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-ink-muted">Tarefas</p>
+              <ul className="space-y-1.5">
+                {situacao.tarefas.map(t => (
+                  <li key={t.id} className="text-[12px] space-y-0.5 border-b border-line-soft last:border-0 pb-1.5 last:pb-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ink-secondary">{t.titulo}</span>
+                      <span className="text-ink-subtle tabular-nums flex-shrink-0">
+                        {new Date(t.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-ink-muted">
+                      {t.status === 'concluido' ? 'concluída' : 'aberta'}
+                      {t.atribuido_time && ` · ${t.atribuido_time}`}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {onboarding?.observacao && (
+        <p className="text-[11px] text-ink-muted leading-relaxed">
+          <span className="text-ink-subtle">Onboarding: </span>{onboarding.observacao}
+        </p>
       )}
     </section>
   )
@@ -1067,6 +1572,62 @@ function ScoreHistoricoChart({ historico }: { historico: ProfessorScoreHistorico
           </g>
         ))}
       </svg>
+    </div>
+  )
+}
+
+/** Evolução da avaliação de alunos (professor_avaliacao_historico, 20260771).
+ *  O eixo é fixo em 3★–5★: a variação real vive nesse pedaço, e escala 0–5
+ *  achata tudo numa linha reta. Ponto fora da faixa é preso na borda. */
+function AvaliacaoHistoricoChart({ pontos }: { pontos: AvaliacaoPonto[] }) {
+  const serie = pontos.filter(p => p.media_estrelas !== null)
+  if (serie.length < 2) return null
+
+  const W = 560, H = 100, padL = 24, padB = 16, padT = 8, padR = 8
+  const MIN = 3, MAX = 5
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+  const x = (i: number) => padL + (i / (serie.length - 1)) * innerW
+  const y = (v: number) => {
+    const preso = Math.min(MAX, Math.max(MIN, v))
+    return padT + innerH - ((preso - MIN) / (MAX - MIN)) * innerH
+  }
+  const points = serie.map((p, i) => `${x(i)},${y(Number(p.media_estrelas))}`).join(' ')
+
+  const primeiro = serie[0]
+  const ultimo   = serie[serie.length - 1]
+  const delta    = Number(ultimo.media_estrelas) - Number(primeiro.media_estrelas)
+  const diaBR    = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+
+  return (
+    <div className="pt-1">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-ink-muted flex items-center gap-1">
+          <Star className="h-3 w-3" />Evolução da avaliação
+        </p>
+        <p className={cn(
+          'text-[11px] font-medium tabular-nums',
+          delta > 0.01 ? 'text-urg-lowFg' : delta < -0.01 ? 'text-urg-highFg' : 'text-ink-muted',
+        )}>
+          {delta > 0 ? '+' : ''}{delta.toFixed(2)} desde {diaBR(primeiro.dia)}
+        </p>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full text-ink-muted" role="img" aria-label="Evolução da avaliação de alunos">
+        {[3, 4, 5].map(v => (
+          <g key={v}>
+            <line x1={padL} y1={y(v)} x2={W - padR} y2={y(v)} stroke="currentColor" strokeWidth="1" opacity={v === 3 ? 0.2 : 0.1} />
+            <text x={padL - 4} y={y(v) + 3} textAnchor="end" fontSize="8" fill="currentColor">{v}</text>
+          </g>
+        ))}
+        <polyline points={points} fill="none" stroke="var(--accent-blue)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(serie.length - 1)} cy={y(Number(ultimo.media_estrelas))} r="2.5" fill="var(--accent-blue)" />
+        <text x={padL} y={H - 4} textAnchor="start" fontSize="8" fill="currentColor">{diaBR(primeiro.dia)}</text>
+        <text x={W - padR} y={H - 4} textAnchor="end" fontSize="8" fill="currentColor">{diaBR(ultimo.dia)}</text>
+      </svg>
+      <p className="text-[10.5px] text-ink-subtle">
+        {Number(ultimo.media_estrelas).toFixed(2)}★ em {ultimo.total_avaliacoes ?? 0} avaliações
+        {serie.some(p => p.fonte === 'observacao') && ' · pontos antigos reconstruídos das observações'}
+      </p>
     </div>
   )
 }

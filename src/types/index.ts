@@ -49,6 +49,10 @@ export interface Professor {
   cidade: string | null
   estado: string | null
   nivel_recomendado_alunos: string | null
+  /** Flag da API: o professor confirmou os dados cadastrais (20260751). */
+  dados_atualizados: boolean | null
+  /** nivel_recomendado_alunos como vem da API — vocabulário diferente do curado. */
+  nivel_recomendado_alunos_raw: string | null
   created_at: string
 }
 
@@ -135,6 +139,13 @@ export interface TransferenciaAluno {
   /** Último dia em que o aluno terá aula com este professor. Define a urgência
    *  do pedido — não existe mais urgência declarada. */
   data_ultima_aula: string
+  /** Dias e horários em que o aluno tem aula hoje, como o professor descreveu.
+   *  NULL nos pedidos abertos antes de 2026-08-28, quando ninguém perguntava. */
+  horario_atual: string | null
+  /** O aluno quer trocar de horário junto com a troca de professor. */
+  quer_mudar_horario: boolean | null
+  /** Só preenchido quando `quer_mudar_horario` é true. */
+  horario_desejado: string | null
   ja_conversou: boolean | null
   aceita_manter: boolean | null
   status: StatusTransferencia

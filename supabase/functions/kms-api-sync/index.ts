@@ -63,6 +63,9 @@ interface CicloVidaKms {
   saiu_da_escola: boolean | null
   data_matricula_escola: string | null
   data_inicio_aulas: string | null
+  /** A API não manda (2026-08-28). Fica aqui para o dia em que mandar — até lá
+   *  a entrada vem do roster, capturada antes do delete (ver passo 4). */
+  data_adicao?: string | null
 }
 
 interface ScoreKms {
@@ -315,8 +318,25 @@ serve(async (req) => {
         }
 
         // 4 — Substitui o roster de alunos da página (delete em lote + insert em lote).
+        //
+        // ANTES do delete, guarda a data de entrada de cada vínculo. É a única
+        // janela em que ela existe: o aluno que saiu já não vem no roster novo,
+        // e é justamente dele que o passo 5 precisa saber quando começou — sem
+        // isso não há como medir permanência com o professor (ver migration
+        // 20260774).
         const professorIdsDaPagina = [...idByKmsId.values()]
+        const entradaPorVinculo = new Map<string, string>()
         if (professorIdsDaPagina.length) {
+          const { data: rosterAtual, error: rosterErr } = await admin
+            .from('professor_alunos_kms')
+            .select('professor_id, aluno_id, data_adicao')
+            .in('professor_id', professorIdsDaPagina)
+          if (rosterErr) throw new Error(rosterErr.message)
+          for (const r of rosterAtual ?? []) {
+            const d = dataSana(r.data_adicao)
+            if (d) entradaPorVinculo.set(`${r.professor_id}:${r.aluno_id}`, d)
+          }
+
           const { error: delErr } = await admin
             .from('professor_alunos_kms')
             .delete()
@@ -365,12 +385,19 @@ serve(async (req) => {
           professor_id: string; aluno_id: number; data_saida: string
           primeiro_nome: string | null; motivo_saida: string | null; saiu_da_escola: boolean | null
           data_matricula_escola: string | null; data_inicio_aulas: string | null
+          data_entrada_professor: string | null
         }>()
         for (const p of pagina.data) {
           const professorId = idByKmsId.get(String(p.professor_id))
           if (!professorId) continue
           for (const c of p.ciclo_vida_alunos ?? []) {
             if (!c.data_saida || c.aluno_id === 0) continue
+            // Entrada neste professor: o que a API mandar (hoje, nada) ou o que
+            // o roster da rodada anterior guardava. NULL aqui não apaga o valor
+            // já gravado — o gatilho da 20260774 protege a coluna.
+            const entrada = dataSana(c.data_adicao)
+              ?? entradaPorVinculo.get(`${professorId}:${c.aluno_id}`)
+              ?? null
             cicloPorChave.set(`${professorId}:${c.aluno_id}:${c.data_saida}`, {
               professor_id: professorId,
               aluno_id: c.aluno_id,
@@ -380,6 +407,8 @@ serve(async (req) => {
               saiu_da_escola: c.saiu_da_escola,
               data_matricula_escola: c.data_matricula_escola,
               data_inicio_aulas: c.data_inicio_aulas,
+              // Entrada depois da saída = dado sujo do King; melhor não gravar.
+              data_entrada_professor: entrada && entrada <= c.data_saida ? entrada : null,
             })
           }
         }

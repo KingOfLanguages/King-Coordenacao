@@ -85,7 +85,7 @@ export function useProfessor(id: string) {
           reuniao_professores (
             id, status, numero, observacao, confirmado_em,
             confirmado_por:profiles!confirmado_por (nome),
-            reuniao:reunioes!reuniao_id (id, data, titulo)
+            reuniao:reunioes!reuniao_id (id, data, titulo, natureza)
           ),
           observacoes (
             id, tipo, texto, created_at, snapshot, resolvido, resolvido_em,
