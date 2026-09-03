@@ -1,14 +1,23 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { NotebookPen, Lock, User, Users2, Search, Trash2 } from 'lucide-react'
+import { NotebookPen, Lock, User, Users2, Search, Trash2, FolderKanban, CircleHelp } from 'lucide-react'
 import { useMinhasAnotacoes, useSalvarAnotacao, type MinhaAnotacaoItem } from '@/hooks/useAnotacoesInternas'
+import { useMeusProjetos } from '@/hooks/useProjetos'
+import { MeusProjetosPanel } from '@/components/projetos/MeusProjetosPanel'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-// Perfil interno do coordenador: agrega TODAS as anotações internas que ele
-// escreveu (privadas — a RLS só devolve as dele), com o contexto da reunião.
+type Aba = 'anotacoes' | 'projetos'
+
+// Espaço pessoal: as anotações internas privadas de reunião e os projetos que a
+// pessoa sugeriu — inclusive os pedidos de informação que a liderança mandou e
+// que estão esperando resposta dela (o sino aponta pra cá).
 export function MinhaAreaPage() {
   const { data: anotacoes = [], isLoading } = useMinhasAnotacoes()
+  const { pedidosAbertos } = useMeusProjetos()
+  const [params] = useSearchParams()
+  const [aba, setAba] = useState<Aba>(params.get('aba') === 'projetos' ? 'projetos' : 'anotacoes')
   const [busca, setBusca] = useState('')
 
   const lista = useMemo(() => {
@@ -26,9 +35,36 @@ export function MinhaAreaPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Minha Área</h1>
         <p className="flex items-center gap-1.5 text-[13px] text-ink-muted">
           <Lock className="h-3.5 w-3.5" />
-          Suas anotações internas de reunião — visíveis só para você.
+          {aba === 'anotacoes'
+            ? 'Suas anotações internas de reunião — visíveis só para você.'
+            : 'Os projetos que você sugeriu e o que a liderança está perguntando.'}
         </p>
       </header>
+
+      <div className="flex items-center gap-1 rounded-lg border border-line bg-surface-canvas p-1 w-fit">
+        {([
+          { key: 'anotacoes', label: 'Anotações', icone: <NotebookPen className="h-3.5 w-3.5" />, n: 0 },
+          { key: 'projetos',  label: 'Projetos',  icone: <FolderKanban className="h-3.5 w-3.5" />, n: pedidosAbertos.length },
+        ] as { key: Aba; label: string; icone: React.ReactNode; n: number }[]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setAba(t.key)}
+            className={cn(
+              'btn-press inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors',
+              aba === t.key ? 'bg-surface-subtle text-ink' : 'text-ink-muted hover:text-ink',
+            )}
+          >
+            {t.icone}{t.label}
+            {t.n > 0 && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-aviso-warnBg px-1.5 py-0.5 text-[10px] font-semibold text-aviso-warnFg">
+                <CircleHelp className="h-2.5 w-2.5" />{t.n}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'projetos' ? <MeusProjetosPanel /> : <>
 
       <div className="relative w-full sm:w-72">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
@@ -61,6 +97,8 @@ export function MinhaAreaPage() {
           {lista.map(a => <AnotacaoCard key={a.id} item={a} />)}
         </div>
       )}
+
+      </>}
     </div>
   )
 }

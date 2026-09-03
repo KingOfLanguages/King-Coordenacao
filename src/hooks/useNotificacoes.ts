@@ -13,6 +13,12 @@ export type TipoNotificacao =
   /** Transferência de aluno que passou do prazo de atendimento, escalada para a
    *  liderança do Suporte ao Aluno (cron king-transferencia-atraso, 20260769). */
   | 'transferencia_atrasada'
+  /** Projetos da King (20260776): sugestão nova para a liderança avaliar,
+   *  decisão de aprovação e o vai-e-vem de pedidos de informação. */
+  | 'projeto_novo'
+  | 'projeto_decidido'
+  | 'projeto_info_pedido'
+  | 'projeto_info_respondido'
 
 export interface Notificacao {
   id: string

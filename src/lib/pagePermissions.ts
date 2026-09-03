@@ -85,6 +85,10 @@ export const PAGES: PageDef[] = [
   { key: 'minha-area',      path: '/minha-area',     label: 'Minha Área',           section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   // 'convocacoes' é a rota da página; o rótulo é "Tarefas" (o /tarefas antigo redireciona pra cá).
   { key: 'convocacoes',     path: '/convocacoes',    label: 'Tarefas',              section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
+  // Controle de projetos da King. Coordenação e Suporte (ao professor) sugerem;
+  // 'lider' entra explícito porque é quem aprova — e um líder de outro setor
+  // (ex.: Suporte ao Aluno) precisa enxergar a fila de aprovação.
+  { key: 'projetos',        path: '/projetos',       label: 'Projetos',             section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'lider'] },
 ]
 
 export const PAGE_BY_KEY: Record<string, PageDef> = Object.fromEntries(PAGES.map(p => [p.key, p]))

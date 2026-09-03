@@ -33,6 +33,7 @@ const NAV: NavNode[] = [
   { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral', 'retencao'] },
   { kind: 'link', pageKey: 'minha-area' },
   { kind: 'link', pageKey: 'convocacoes' },
+  { kind: 'link', pageKey: 'projetos' },
 ]
 
 // Administração continua fixo em admin (não é configurável, pra não travar o admin).

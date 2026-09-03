@@ -20,6 +20,7 @@ import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { CentralConvocacoesPage } from '@/pages/convocacoes/CentralConvocacoesPage'
+import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
@@ -213,6 +214,11 @@ export default function App() {
               <Route path="/convocacoes" element={
                 <ProtectedRoute page="convocacoes">
                   <CentralConvocacoesPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/projetos" element={
+                <ProtectedRoute page="projetos">
+                  <ProjetosPage />
                 </ProtectedRoute>
               } />
               {/* Admin */}
