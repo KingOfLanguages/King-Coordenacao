@@ -971,6 +971,7 @@ async function handleAbrirIncidente(
   natureza: 'informe' | 'desafio' = 'desafio',
   alunoNome: string | null = null,
   prazoResolucao: string | null = null,
+  alunoId: number | null = null,
 ): Promise<RespostaDoBackground> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { ok: false, erro: 'Não autenticado.' }
@@ -987,6 +988,7 @@ async function handleAbrirIncidente(
     id: crypto.randomUUID(),
     teacher_name: prof.nome,
     aluno_nome: alunoNome?.trim() || null,
+    aluno_id: alunoId ?? null,
     coordinator: perfil?.nome ?? 'KTM',
     problem_type: problemType,
     urgency,
@@ -1257,7 +1259,7 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
         case 'ABRIR_INCIDENTE':
           sendResponse(await handleAbrirIncidente(
             msg.professorId, msg.problemType, msg.urgency, msg.description,
-            msg.natureza, msg.alunoNome, msg.prazoResolucao,
+            msg.natureza, msg.alunoNome, msg.prazoResolucao, msg.alunoId,
           )); break
         case 'CRIAR_REUNIAO_AGORA':
           sendResponse(await handleCriarReuniaoAgora(msg.professorId)); break

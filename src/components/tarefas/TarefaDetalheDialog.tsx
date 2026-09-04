@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { urgenciaChip } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { useIncidente, statusChamado } from '@/hooks/useIncidentes'
+import { rotuloAluno, rotuloProfessor } from '@/lib/incidenteRelato'
 import type { Tarefa, TarefaStatus } from '@/hooks/useTarefas'
 
 const STATUS_TAREFA: Record<TarefaStatus, { label: string; cls: string }> = {
@@ -132,10 +133,10 @@ export function TarefaDetalheDialog({ open, onOpenChange, tarefa, podeMover, onM
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-muted">
-                      <span className="inline-flex items-center gap-1"><User2 className="h-3.5 w-3.5" />{incidente.teacher_name}</span>
-                      {incidente.aluno_nome && (
+                      <span className="inline-flex items-center gap-1"><User2 className="h-3.5 w-3.5" />{rotuloProfessor(incidente)}</span>
+                      {rotuloAluno(incidente) && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-2 py-0.5 text-[11px] font-medium">
-                          <GraduationCap className="h-3.5 w-3.5" />{incidente.aluno_nome}
+                          <GraduationCap className="h-3.5 w-3.5" />{rotuloAluno(incidente)}
                         </span>
                       )}
                     </div>

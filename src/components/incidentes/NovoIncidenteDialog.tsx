@@ -8,13 +8,16 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
 import {
-  useCriarIncidente, useAlunosDoProfessor, uploadImagemIncidente, categoriasVisiveis,
+  useCriarIncidente, useAlunosDoProfessor, useBuscarAlunos, uploadImagemIncidente, categoriasVisiveis,
   CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META,
   type Aba, type Natureza,
 } from '@/hooks/useIncidentes'
 import { useAuth } from '@/contexts/AuthContext'
 import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
 import { prazoSugeridoInput, prazoInputParaISO } from '@/lib/incidentePrazo'
+import {
+  faltasDoRelato, relatoCompletoObrigatorio, datetimeLocalParaISO, agoraDatetimeLocal, idKing,
+} from '@/lib/incidenteRelato'
 import { cn } from '@/lib/utils'
 
 const MAX_IMAGENS = 3
@@ -25,11 +28,25 @@ const NATUREZA_ICON: Record<Natureza, typeof Flag> = {
   informe: FileText,
 }
 
+/** Selo do ID no King ao lado de um nome — some quando o cadastro não tem ID. */
+function IdChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-surface-muted px-1.5 py-0.5 text-[10.5px] font-medium text-ink-muted whitespace-nowrap">
+      {children}
+    </span>
+  )
+}
+
+/** Asterisco de campo obrigatório (só onde o relato completo é exigido). */
+function Obrigatorio() {
+  return <span className="text-urg-critFg" title="Obrigatório">*</span>
+}
+
 interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
   /** Pré-preenchido quando a ação parte da tela do próprio professor — esconde a aba "geral". */
-  professorFixo?: { id: string; nome: string }
+  professorFixo?: { id: string; nome: string; kms_id?: string | null }
 }
 
 export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props) {
@@ -43,9 +60,14 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [aba, setAba] = useState<Aba>('professor')
   const [busca, setBusca] = useState('')
-  const [selecionado, setSelecionado] = useState<{ id: string; nome: string } | null>(professorFixo ?? null)
+  const [selecionado, setSelecionado] = useState<{ id: string; nome: string; kms_id?: string | null } | null>(professorFixo ?? null)
   const [tituloLivre, setTituloLivre] = useState('')
   const [alunoNome, setAlunoNome] = useState('')
+  // ID do aluno no King. Preenchido ao escolher na lista (e então `idAutomatico`
+  // fica true, pra limpar sozinho se a pessoa trocar o nome depois), ou digitado
+  // à mão quando o aluno não está no roster sincronizado.
+  const [alunoId, setAlunoId] = useState('')
+  const [idAutomatico, setIdAutomatico] = useState(false)
   const [alunoBusca, setAlunoBusca] = useState(false)
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_PROFESSOR[0])
   const [urgencia, setUrgencia] = useState('Média')
@@ -54,10 +76,19 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [prazo, setPrazo] = useState(() => prazoSugeridoInput('Média'))
   const [prazoManual, setPrazoManual] = useState(false)
   const [descricao, setDescricao] = useState('')
+  const [passos, setPassos] = useState('')
+  const [ocorridoEm, setOcorridoEm] = useState('')
   const [imagens, setImagens] = useState<File[]>([])
   const [enviandoImagens, setEnviandoImagens] = useState(false)
 
-  const { data: roster = [], isLoading: carregandoRoster } = useAlunosDoProfessor(selecionado?.id ?? null)
+  // Na aba Geral o incidente não tem professor, mesmo que um tenha ficado
+  // selecionado antes da troca de aba — a sugestão de aluno segue essa regra.
+  const professorAtivo = aba === 'geral' ? null : selecionado
+  const { data: roster = [], isLoading: carregandoRoster } = useAlunosDoProfessor(professorAtivo?.id ?? null)
+  // Sem professor escolhido (aba Geral, ou antes de escolher) a sugestão vem de
+  // uma busca no roster inteiro — é o que permite anexar o ID do aluno mesmo
+  // num incidente que não é de professor nenhum.
+  const { data: alunosGlobais = [] } = useBuscarAlunos(professorAtivo ? '' : alunoNome)
 
   const alunoBlurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -105,13 +136,30 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setBusca('')
     setTituloLivre('')
     setAlunoNome('')
+    setAlunoId('')
+    setIdAutomatico(false)
     setCategoria(CATEGORIAS_PROFESSOR[0])
     setUrgencia('Média')
     setPrazo(prazoSugeridoInput('Média'))
     setPrazoManual(false)
     setDescricao('')
+    setPassos('')
+    setOcorridoEm('')
     setImagens([])
   }, [open, professorFixo])
+
+  /** Trocar o nome à mão invalida o ID que veio da lista — sem isso o incidente
+   *  sairia com o nome de um aluno e o ID de outro. */
+  function trocarAlunoNome(valor: string) {
+    setAlunoNome(valor)
+    if (idAutomatico) { setAlunoId(''); setIdAutomatico(false) }
+  }
+
+  function escolherAluno(aluno: { aluno_id: number; primeiro_nome: string }) {
+    setAlunoNome(aluno.primeiro_nome)
+    setAlunoId(String(aluno.aluno_id))
+    setIdAutomatico(true)
+  }
 
   // Troca a urgência e, enquanto o prazo não foi editado à mão, reajusta a sugestão.
   function trocarUrgencia(v: string) {
@@ -145,7 +193,10 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     return roster.filter(a => a.primeiro_nome.toLowerCase().includes(termo)).slice(0, 6)
   }, [alunoNome, roster])
 
-  const podeConfirmar = !!descricao.trim() && (aba !== 'professor' || !!selecionado)
+  const relatoObrigatorio = relatoCompletoObrigatorio(aba)
+  const faltas = faltasDoRelato({ aba, descricao, passos, ocorridoEm })
+  if (aba === 'professor' && !selecionado) faltas.push('escolher o professor')
+  const podeConfirmar = faltas.length === 0
 
   async function handleConfirmar() {
     if (!podeConfirmar || criar.isPending || enviandoImagens) return
@@ -165,6 +216,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         professor_id: aba !== 'geral' ? selecionado?.id : null,
         titulo_livre: aba === 'geral' ? tituloLivre : undefined,
         aluno_nome: alunoNome,
+        aluno_id: alunoId.trim() ? Number(alunoId.trim()) : null,
+        ocorrido_em: datetimeLocalParaISO(ocorridoEm),
+        passos,
         image_urls: imageUrls,
         natureza,
         ti_status: aba === 'plataforma' ? 'chamado_aberto' : null,
@@ -290,10 +344,14 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
               {professorFixo ? (
                 <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-subtle px-3 py-2 text-[13px] text-ink">
                   {professorFixo.nome}
+                  {idKing(professorFixo.kms_id) && <IdChip>King {idKing(professorFixo.kms_id)}</IdChip>}
                 </div>
               ) : selecionado ? (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-surface-subtle px-3 py-2 text-[13px] text-ink">
-                  {selecionado.nome}
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{selecionado.nome}</span>
+                    {idKing(selecionado.kms_id) && <IdChip>King {idKing(selecionado.kms_id)}</IdChip>}
+                  </span>
                   <button onClick={() => setSelecionado(null)} className="text-ink-muted hover:text-ink transition-colors">
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -312,10 +370,11 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                       {resultados.map(p => (
                         <li key={p.id}>
                           <button
-                            onClick={() => { setSelecionado({ id: p.id, nome: p.nome }); setBusca('') }}
-                            className="w-full text-left px-3 py-2 text-[13px] text-ink hover:bg-surface-subtle transition-colors"
+                            onClick={() => { setSelecionado({ id: p.id, nome: p.nome, kms_id: p.kms_id }); setBusca('') }}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] text-ink hover:bg-surface-subtle transition-colors"
                           >
-                            {p.nome}
+                            <span className="truncate">{p.nome}</span>
+                            {idKing(p.kms_id) && <span className="text-[11px] text-ink-muted">King {idKing(p.kms_id)}</span>}
                           </button>
                         </li>
                       ))}
@@ -330,46 +389,82 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             <div className="flex items-start gap-2.5 rounded-lg border border-line-soft bg-surface-subtle/60 px-3.5 py-2.5">
               <Info className="h-3.5 w-3.5 text-accentBlue flex-shrink-0 mt-0.5" />
               <p className="text-[12px] text-ink-secondary leading-relaxed">
-                Se o bug/melhoria envolve um professor ou aluno específico, selecione-os acima e no campo
-                "Aluno" abaixo — isso agiliza o trabalho do TI.
+                Se o bug/melhoria envolve um professor ou aluno específico, identifique os dois acima — o TI
+                precisa do <strong className="font-medium text-ink">ID do King</strong> pra achar o caso lá.
+                Descreva também o passo a passo e a hora exata: é o que evita o chamado voltar pedindo isso.
               </p>
             </div>
           )}
 
-          <div className="space-y-1.5 relative">
+          <div className="space-y-1.5">
             <Label className="label-micro flex items-center gap-1.5">
               <GraduationCap className="h-3.5 w-3.5 text-ink-muted" />
               Aluno (opcional)
             </Label>
-            <Input
-              value={alunoNome}
-              onChange={e => setAlunoNome(e.target.value)}
-              onFocus={() => setAlunoBusca(true)}
-              onBlur={() => {
-                alunoBlurTimeout.current = setTimeout(() => setAlunoBusca(false), 150)
-              }}
-              placeholder="Nome do aluno relacionado ao incidente…"
-              className="h-9 bg-surface-canvas border-line"
-            />
-            {alunoBusca && selecionado && sugestoesAluno.length > 0 && (
-              <ul className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-line bg-surface-canvas shadow-lg">
-                {sugestoesAluno.map(a => (
-                  <li key={a.aluno_id}>
-                    <button
-                      onMouseDown={() => setAlunoNome(a.primeiro_nome)}
-                      className="w-full text-left px-3 py-2 text-[13px] text-ink hover:bg-surface-subtle transition-colors"
-                    >
-                      {a.primeiro_nome}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {alunoBusca && selecionado && !carregandoRoster && roster.length === 0 && (
-              <div className="absolute z-10 mt-1 w-full rounded-lg border border-line bg-surface-canvas px-3 py-2 text-[12px] text-ink-muted shadow-lg">
-                Nenhum aluno sincronizado pra esse professor ainda — pode digitar o nome manualmente.
+            {/* Nome + ID lado a lado: escolher na lista preenche os dois; o ID
+                fica editável pra quando o aluno não está no roster sincronizado. */}
+            <div className="grid grid-cols-[1fr_112px] gap-2">
+              <div className="relative">
+                <Input
+                  value={alunoNome}
+                  onChange={e => trocarAlunoNome(e.target.value)}
+                  onFocus={() => setAlunoBusca(true)}
+                  onBlur={() => {
+                    alunoBlurTimeout.current = setTimeout(() => setAlunoBusca(false), 150)
+                  }}
+                  placeholder="Nome do aluno…"
+                  className="h-9 bg-surface-canvas border-line"
+                />
+                {alunoBusca && professorAtivo && sugestoesAluno.length > 0 && (
+                  <ul className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-line bg-surface-canvas shadow-lg">
+                    {sugestoesAluno.map(a => (
+                      <li key={a.aluno_id}>
+                        <button
+                          onMouseDown={() => escolherAluno(a)}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] text-ink hover:bg-surface-subtle transition-colors"
+                        >
+                          <span className="truncate">{a.primeiro_nome}</span>
+                          <span className="text-[11px] text-ink-muted">King #{a.aluno_id}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {alunoBusca && !professorAtivo && alunosGlobais.length > 0 && (
+                  <ul className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-line bg-surface-canvas shadow-lg">
+                    {alunosGlobais.map(a => (
+                      <li key={`${a.professor_id}-${a.aluno_id}`}>
+                        <button
+                          onMouseDown={() => escolherAluno(a)}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] text-ink hover:bg-surface-subtle transition-colors"
+                        >
+                          <span className="truncate">
+                            {a.primeiro_nome}
+                            <span className="text-ink-muted"> · {a.professor_nome}</span>
+                          </span>
+                          <span className="text-[11px] text-ink-muted whitespace-nowrap">King #{a.aluno_id}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {alunoBusca && professorAtivo && !carregandoRoster && roster.length === 0 && (
+                  <div className="absolute z-10 mt-1 w-full rounded-lg border border-line bg-surface-canvas px-3 py-2 text-[12px] text-ink-muted shadow-lg">
+                    Nenhum aluno sincronizado pra esse professor ainda — pode digitar o nome e o ID manualmente.
+                  </div>
+                )}
               </div>
-            )}
+              <Input
+                value={alunoId}
+                onChange={e => { setAlunoId(e.target.value.replace(/\D/g, '')); setIdAutomatico(false) }}
+                inputMode="numeric"
+                placeholder="ID King"
+                className="h-9 bg-surface-canvas border-line"
+              />
+            </div>
+            <p className="text-[11px] text-ink-subtle">
+              Guardamos só o primeiro nome do aluno — é o ID do King que identifica de quem se trata.
+            </p>
           </div>
 
           {/* min-w-0 nas colunas + w-full no trigger: sem isso o SelectTrigger é
@@ -424,7 +519,22 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
           )}
 
           <div className="space-y-1.5">
-            <Label className="label-micro">Descrição</Label>
+            <Label className="label-micro flex items-center gap-1.5">
+              <CalendarClock className="h-3.5 w-3.5 text-ink-muted" />
+              Quando aconteceu{relatoObrigatorio && <Obrigatorio />}
+            </Label>
+            <Input
+              type="datetime-local"
+              value={ocorridoEm}
+              max={agoraDatetimeLocal()}
+              onChange={e => setOcorridoEm(e.target.value)}
+              className="h-9 bg-surface-canvas border-line w-full"
+            />
+            <p className="text-[11px] text-ink-subtle">Data e hora do fato — não é a data em que você está registrando.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="label-micro">Qual exatamente é o problema{relatoObrigatorio && <Obrigatorio />}</Label>
             <textarea
               value={descricao}
               onChange={e => setDescricao(e.target.value)}
@@ -433,8 +543,29 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                 'w-full resize-none rounded-lg border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink',
                 'placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue transition-colors',
               )}
-              placeholder="O que aconteceu…"
+              placeholder={aba === 'plataforma'
+                ? 'Ex: ao salvar a aula do dia 02/09 a tela mostra "erro ao processar" e a aula não fica lançada.'
+                : 'O que aconteceu…'}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="label-micro">Como aconteceu — passo a passo{relatoObrigatorio && <Obrigatorio />}</Label>
+            <textarea
+              value={passos}
+              onChange={e => setPassos(e.target.value)}
+              rows={3}
+              className={cn(
+                'w-full resize-none rounded-lg border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink',
+                'placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-accentBlue-soft focus:border-accentBlue transition-colors',
+              )}
+              placeholder={'1. Entrei em…\n2. Cliquei em…\n3. Aí apareceu…'}
+            />
+            <p className="text-[11px] text-ink-subtle">
+              {aba === 'plataforma'
+                ? 'Quem for resolver precisa repetir o caminho pra ver o erro acontecer.'
+                : 'Opcional — o caminho até o problema, se ajudar a entender.'}
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -473,6 +604,12 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
               onChange={e => { addImagens(e.target.files); e.target.value = '' }}
             />
           </div>
+
+          {faltas.length > 0 && (
+            <p className="text-[11.5px] text-ink-muted">
+              Falta preencher: <span className="text-ink-secondary">{faltas.join(', ')}</span>.
+            </p>
+          )}
 
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-ink-secondary">

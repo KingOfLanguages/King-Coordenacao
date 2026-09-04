@@ -18,6 +18,7 @@ import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidente
 import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
 import { urgenciaChip, URGENCIA_EXPLICACAO, tiStatusLabel } from '@/lib/nexusLabels'
 import { statusPrazo } from '@/lib/incidentePrazo'
+import { rotuloAluno } from '@/lib/incidenteRelato'
 import { atributosChamadoTi } from '@/lib/chamadoTi'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -177,7 +178,11 @@ export function IncidentesPage() {
         i.teacher_name.toLowerCase().includes(termo) ||
         (i.aluno_nome ?? '').toLowerCase().includes(termo) ||
         i.coordinator.toLowerCase().includes(termo) ||
-        i.description.toLowerCase().includes(termo)
+        i.description.toLowerCase().includes(termo) ||
+        (i.passos ?? '').toLowerCase().includes(termo) ||
+        // ID do King (professor e aluno) — buscar por "1234" tem que achar.
+        String(i.aluno_id ?? '') === termo ||
+        (i.professor_kms_id ?? '') === termo
       )) return false
       return true
     })
@@ -264,7 +269,7 @@ export function IncidentesPage() {
         <div className="relative w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
           <Input
-            placeholder={aba === 'professor' ? 'Buscar por professor, aluno ou descrição…' : 'Buscar por referência ou descrição…'}
+            placeholder={aba === 'professor' ? 'Buscar por professor, aluno, ID do King ou descrição…' : 'Buscar por referência, ID do King ou descrição…'}
             value={busca}
             onChange={e => setBusca(e.target.value)}
             className="pl-9 h-9 bg-surface-canvas border-line"
@@ -404,9 +409,9 @@ export function IncidentesPage() {
                   ) : (
                     <span className="text-[13px] font-medium text-ink-secondary italic">{i.teacher_name}</span>
                   )}
-                  {i.aluno_nome && (
+                  {rotuloAluno(i) && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-1.5 py-0.5 text-[10.5px] font-medium">
-                      <GraduationCap className="h-3 w-3" />{i.aluno_nome}
+                      <GraduationCap className="h-3 w-3" />{rotuloAluno(i)}
                     </span>
                   )}
                   <span className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-1.5 py-0.5 text-[10.5px] font-medium">

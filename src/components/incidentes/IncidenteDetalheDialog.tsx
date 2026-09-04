@@ -10,6 +10,7 @@ import { urgenciaChip, tiStatusLabel } from '@/lib/nexusLabels'
 import { cn } from '@/lib/utils'
 import { statusChamado, natureza as naturezaDe, abaDoIncidente, type Incidente } from '@/hooks/useIncidentes'
 import { buildMensagemIncidente } from '@/lib/incidenteMensagem'
+import { idKing, rotuloAluno } from '@/lib/incidenteRelato'
 import { atributosChamadoTi } from '@/lib/chamadoTi'
 
 const STATUS_DETALHE: Record<string, { label: string; cls: string }> = {
@@ -99,7 +100,7 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
           <div className="space-y-4 flex-1">
           <div className="flex flex-wrap items-center gap-3 text-[12px] text-ink-muted">
             <span className="inline-flex items-center gap-1"><User2 className="h-3.5 w-3.5" />{incidente.coordinator}</span>
-            <span className="inline-flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5" />{dataFmt(incidente.created_at)}</span>
+            <span className="inline-flex items-center gap-1" title="Registrado em"><CalendarClock className="h-3.5 w-3.5" />{dataFmt(incidente.created_at)}</span>
             <span className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-2 py-0.5 text-[11px] font-medium">
               {incidente.problem_type}
             </span>
@@ -112,11 +113,29 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
             </div>
           )}
 
-          {incidente.aluno_nome && (
-            <div className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-2.5 py-1 text-[12px] font-medium">
-              <GraduationCap className="h-3.5 w-3.5" />Aluno: {incidente.aluno_nome}
-            </div>
-          )}
+          {/* Identificação: é o que uma equipe de fora (TI, escola) precisa pra
+              saber de QUEM se trata — nome sozinho não identifica ninguém. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {incidente.professor_id && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-surface-subtle text-ink-secondary px-2.5 py-1 text-[12px] font-medium">
+                <User2 className="h-3.5 w-3.5" />
+                Professor {idKing(incidente.professor_kms_id) ? `King ${idKing(incidente.professor_kms_id)}` : 'sem ID no King'}
+              </span>
+            )}
+            {rotuloAluno(incidente) && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-accentBlue-soft/60 text-accentBlue px-2.5 py-1 text-[12px] font-medium">
+                <GraduationCap className="h-3.5 w-3.5" />Aluno: {rotuloAluno(incidente)}
+              </span>
+            )}
+          </div>
+
+          <div className="text-[12px] text-ink-secondary">
+            {incidente.ocorrido_em ? (
+              <>Aconteceu em <strong className="font-medium text-ink">{dataFmt(incidente.ocorrido_em)}</strong></>
+            ) : (
+              <span className="text-ink-muted">Quando aconteceu: não informado (registrado em {dataFmt(incidente.created_at)})</span>
+            )}
+          </div>
 
           {!incidente.resolved && incidente.assumido_por_nome && (
             <p className="text-[12px] text-accentBlue">
@@ -126,9 +145,16 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
           )}
 
           <div className="space-y-1">
-            <p className="label-micro">Descrição</p>
+            <p className="label-micro">Qual é o problema</p>
             <p className="text-[13.5px] text-ink-secondary whitespace-pre-wrap">{incidente.description}</p>
           </div>
+
+          {incidente.passos?.trim() && (
+            <div className="space-y-1">
+              <p className="label-micro">Como aconteceu</p>
+              <p className="text-[13.5px] text-ink-secondary whitespace-pre-wrap">{incidente.passos}</p>
+            </div>
+          )}
 
           {incidente.resolved && incidente.solution && (
             <div className="space-y-1">

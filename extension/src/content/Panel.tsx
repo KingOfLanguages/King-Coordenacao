@@ -1087,6 +1087,8 @@ export function Panel() {
   const [incNatureza, setIncNatureza] = useState<'informe' | 'desafio'>('desafio')
   const [incTipo, setIncTipo]         = useState<string>(CATEGORIAS_INCIDENTE[0])
   const [incUrgencia, setIncUrgencia] = useState<string>('Média')
+  // Guarda o ID do aluno (não o nome): o nome sai do roster na hora de enviar,
+  // e é o ID que identifica de quem se trata do outro lado.
   const [incAluno, setIncAluno]       = useState('')
   const [incTexto, setIncTexto]       = useState('')
   const [salvandoInc, setSalvandoInc] = useState(false)
@@ -1232,7 +1234,8 @@ export function Panel() {
       urgency: incNatureza === 'informe' ? 'Baixa' : incUrgencia,
       description: incTexto,
       natureza: incNatureza,
-      alunoNome: incAluno || null,
+      alunoNome: resultado.alunos.find(a => String(a.aluno_id) === incAluno)?.primeiro_nome ?? null,
+      alunoId: incAluno ? Number(incAluno) : null,
       prazoResolucao: incNatureza === 'informe' ? null : prazoSugeridoISO(incUrgencia),
     })
     setSalvandoInc(false)
@@ -1687,7 +1690,7 @@ export function Panel() {
                         <option value="">Sem aluno específico</option>
                         {resultado.alunos.map(a => {
                           const nome = a.primeiro_nome ?? `Aluno ${a.aluno_id}`
-                          return <option key={a.aluno_id} value={nome}>{nome}</option>
+                          return <option key={a.aluno_id} value={String(a.aluno_id)}>{`${nome} · King #${a.aluno_id}`}</option>
                         })}
                       </select>
                     )}

@@ -1,6 +1,7 @@
 import { tiStatusLabel } from '@/lib/nexusLabels'
 import { statusChamado, natureza as naturezaDe, abaDoIncidente, type Incidente } from '@/hooks/useIncidentes'
 import { urlDoIncidente } from '@/lib/incidenteMensagem'
+import { linhasIdentificacao, linhasPassos } from '@/lib/incidenteRelato'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ponte KTM → plataforma de chamados do TI (chamadostikingoflanguages).
@@ -84,17 +85,20 @@ export function tituloChamadoTi(i: Incidente): string {
   return truncar(base, MAX_TITULO)
 }
 
-/** Descrição do chamado: a descrição do incidente primeiro (é o que o TI lê),
- *  seguida do contexto que ele não tem como adivinhar e do link de volta. */
+/** Descrição do chamado: o relato primeiro (é o que o TI lê) — o problema, o
+ *  passo a passo e a identificação de quem estava envolvido —, seguido do
+ *  contexto que ele não tem como adivinhar e do link de volta. */
 export function descricaoChamadoTi(i: Incidente, origin?: string): string {
   const linhas: string[] = []
 
   linhas.push(i.description?.trim() || '(sem descrição registrada)')
+  linhas.push(...linhasPassos(i))
+  linhas.push('')
+  linhas.push('IDENTIFICAÇÃO')
+  linhas.push(...linhasIdentificacao(i))
   linhas.push('')
   linhas.push('──────────────────────────────')
   linhas.push(`Origem: incidente #${i.id.slice(0, 8).toUpperCase()} no KTM (${i.problem_type})`)
-  linhas.push(`Referência: ${i.teacher_name}`)
-  if (i.aluno_nome) linhas.push(`Aluno: ${i.aluno_nome}`)
   linhas.push(`Registrado por: ${i.coordinator} em ${dataFmt(i.created_at)}`)
   if (i.responsavel_nome) linhas.push(`Responsável no KTM: ${i.responsavel_nome}`)
   linhas.push(

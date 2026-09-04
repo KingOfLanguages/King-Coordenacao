@@ -744,7 +744,7 @@ export function ProfessorDetalhePage() {
       <NovoIncidenteDialog
         open={novoIncidenteAberto}
         onOpenChange={setNovoIncidenteAberto}
-        professorFixo={{ id: professor.id, nome: professor.nome }}
+        professorFixo={{ id: professor.id, nome: professor.nome, kms_id: professor.kms_id }}
       />
     </div>
   )

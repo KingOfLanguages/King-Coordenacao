@@ -1,5 +1,6 @@
 import { tiStatusLabel } from '@/lib/nexusLabels'
 import { statusChamado, natureza as naturezaDe, abaDoIncidente, type Incidente } from '@/hooks/useIncidentes'
+import { linhasIdentificacao, linhasPassos } from '@/lib/incidenteRelato'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Texto de um incidente pronto para copiar e apresentar a uma equipe externa
@@ -42,8 +43,7 @@ export function buildMensagemIncidente(i: Incidente, origin?: string): string {
   const linhas: string[] = []
   linhas.push(`INCIDENTE #${ref} — ${i.problem_type}`)
   linhas.push('──────────────────────────────')
-  linhas.push(`Referência: ${i.teacher_name}`)
-  if (i.aluno_nome) linhas.push(`Aluno: ${i.aluno_nome}`)
+  linhas.push(...linhasIdentificacao(i))
   linhas.push(`Categoria: ${i.problem_type}${aba ? ` (${aba})` : ''}`)
   linhas.push(`Urgência: ${i.urgency}`)
   linhas.push(`Status: ${status}${isInforme ? ' · Informe' : ''}`)
@@ -58,8 +58,9 @@ export function buildMensagemIncidente(i: Incidente, origin?: string): string {
   }
 
   linhas.push('')
-  linhas.push('DESCRIÇÃO')
+  linhas.push('O QUE ACONTECEU')
   linhas.push(i.description?.trim() || '(sem descrição registrada)')
+  linhas.push(...linhasPassos(i))
 
   if (i.resolved && i.solution?.trim()) {
     linhas.push('')

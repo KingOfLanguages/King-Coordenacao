@@ -439,6 +439,8 @@ export type MensagemParaBackground =
       natureza?: 'informe' | 'desafio'
       /** Aluno citado (vem do roster carregado no painel, ou digitado). */
       alunoNome?: string | null
+      /** ID do aluno no King — sai do mesmo roster do nome. Nome sozinho não identifica ninguém. */
+      alunoId?: number | null
       /** Data-limite (ISO). Sugerida pela urgência; só vale para natureza=desafio. */
       prazoResolucao?: string | null
     }

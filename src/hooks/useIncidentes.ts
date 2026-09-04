@@ -37,6 +37,48 @@ export function useAlunosDoProfessor(professorId: string | null) {
   })
 }
 
+export interface AlunoEncontrado {
+  aluno_id: number
+  primeiro_nome: string
+  professor_id: string
+  professor_nome: string
+}
+
+/** Busca de aluno em TODO o roster, por primeiro nome — é o que permite anexar
+ *  o ID do aluno a um incidente que não tem professor vinculado (aba Geral) ou
+ *  cujo professor ainda não foi escolhido. Com professor selecionado, prefira
+ *  `useAlunosDoProfessor` (lista fechada, sem homônimo de outra carteira). */
+export function useBuscarAlunos(termo: string) {
+  const busca = termo.trim()
+  return useQuery({
+    queryKey: ['buscar-alunos', busca.toLowerCase()],
+    enabled: busca.length >= 2,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<AlunoEncontrado[]> => {
+      const { data, error } = await supabase
+        .from('professor_alunos_kms')
+        .select('aluno_id, primeiro_nome, professor_id, professor:professores!professor_id (nome)')
+        .ilike('primeiro_nome', `%${busca}%`)
+        .order('primeiro_nome')
+        .limit(8)
+      if (error) throw error
+      return (data ?? []).map(row => {
+        const r = row as unknown as {
+          aluno_id: number; primeiro_nome: string; professor_id: string
+          professor?: { nome: string } | { nome: string }[] | null
+        }
+        const prof = Array.isArray(r.professor) ? r.professor[0] : r.professor
+        return {
+          aluno_id: r.aluno_id,
+          primeiro_nome: r.primeiro_nome,
+          professor_id: r.professor_id,
+          professor_nome: prof?.nome ?? '—',
+        }
+      })
+    },
+  })
+}
+
 /** Categorias de incidentes sobre professor (aluno, sala de aula, conduta). */
 export const CATEGORIAS_PROFESSOR = [
   'No-show',
@@ -110,7 +152,15 @@ export interface Incidente {
   id: string
   professor_id: string | null
   teacher_name: string
+  /** ID do professor no King (professores.kms_id) — vem por join, não é coluna do incidente. */
+  professor_kms_id: string | null
   aluno_nome: string | null
+  /** ID do aluno no King. Snapshot na criação — o roster é reescrito a cada sync. */
+  aluno_id: number | null
+  /** Quando o problema ACONTECEU (≠ created_at, quando foi registrado). */
+  ocorrido_em: string | null
+  /** Como aconteceu, passo a passo. `description` é "o que exatamente é o problema". */
+  passos: string | null
   coordinator: string
   created_by: string | null
   problem_type: string
@@ -168,7 +218,27 @@ export const NATUREZA_META: Record<Natureza, {
   },
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, prazo_resolucao, assumido_por, assumido_em, responsavel_id, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome), responsavel_perfil:profiles!responsavel_id (nome)'
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, aluno_id, ocorrido_em, passos, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, prazo_resolucao, assumido_por, assumido_em, responsavel_id, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome), responsavel_perfil:profiles!responsavel_id (nome), professor:professores!professor_id (kms_id)'
+
+type Embed<T> = T | T[] | null | undefined
+
+/** Achata os joins (perfis + professor) numa linha de `Incidente`. PostgREST
+ *  devolve o embed como objeto ou array conforme a cardinalidade — daí o `um()`. */
+function normalizarIncidente(row: unknown): Incidente {
+  const { assumido_por_perfil, responsavel_perfil, professor, ...i } = row as Record<string, unknown> & {
+    assumido_por_perfil?: Embed<{ nome: string }>
+    responsavel_perfil?: Embed<{ nome: string }>
+    professor?: Embed<{ kms_id: string | null }>
+  }
+  const um = <T,>(v: Embed<T>): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null)
+  return {
+    ...(i as unknown as Incidente),
+    image_urls: (i as { image_urls?: string[] }).image_urls ?? [],
+    assumido_por_nome: um(assumido_por_perfil)?.nome ?? null,
+    responsavel_nome: um(responsavel_perfil)?.nome ?? null,
+    professor_kms_id: um(professor)?.kms_id ?? null,
+  }
+}
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
@@ -182,20 +252,7 @@ export function useIncidentes() {
         .neq('problem_type', PROBLEM_TYPE_MES_ANALISE)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return (data ?? []).map(row => {
-        const { assumido_por_perfil, responsavel_perfil, ...i } = row as Record<string, unknown> & {
-          assumido_por_perfil?: { nome: string } | { nome: string }[] | null
-          responsavel_perfil?: { nome: string } | { nome: string }[] | null
-        }
-        const perfil = Array.isArray(assumido_por_perfil) ? assumido_por_perfil[0] : assumido_por_perfil
-        const respPerfil = Array.isArray(responsavel_perfil) ? responsavel_perfil[0] : responsavel_perfil
-        return {
-          ...(i as unknown as Incidente),
-          image_urls: (i as { image_urls?: string[] }).image_urls ?? [],
-          assumido_por_nome: perfil?.nome ?? null,
-          responsavel_nome: respPerfil?.nome ?? null,
-        }
-      }) as Incidente[]
+      return (data ?? []).map(normalizarIncidente)
     },
   })
 }
@@ -214,18 +271,7 @@ export function useIncidente(id: string | null | undefined) {
         .maybeSingle()
       if (error) throw error
       if (!data) return null
-      const { assumido_por_perfil, responsavel_perfil, ...i } = data as Record<string, unknown> & {
-        assumido_por_perfil?: { nome: string } | { nome: string }[] | null
-        responsavel_perfil?: { nome: string } | { nome: string }[] | null
-      }
-      const perfil = Array.isArray(assumido_por_perfil) ? assumido_por_perfil[0] : assumido_por_perfil
-      const respPerfil = Array.isArray(responsavel_perfil) ? responsavel_perfil[0] : responsavel_perfil
-      return {
-        ...(i as unknown as Incidente),
-        image_urls: (i as { image_urls?: string[] }).image_urls ?? [],
-        assumido_por_nome: perfil?.nome ?? null,
-        responsavel_nome: respPerfil?.nome ?? null,
-      } as Incidente
+      return normalizarIncidente(data)
     },
   })
 }
@@ -244,6 +290,12 @@ export function useCriarIncidente() {
       titulo_livre?: string
       /** Nome do aluno referido no incidente — sempre opcional, com ou sem professor vinculado. */
       aluno_nome?: string
+      /** ID do aluno no King. Vem do roster ao escolher na busca, ou digitado à mão. */
+      aluno_id?: number | null
+      /** Quando o problema aconteceu (ISO). Diferente de created_at. */
+      ocorrido_em?: string | null
+      /** Como aconteceu, passo a passo. */
+      passos?: string | null
       /** URLs de imagens já enviadas ao Storage (bucket "incidentes"). */
       image_urls?: string[]
       /** Informe (só registro) ou Desafio (segue o fluxo normal de resolução). Default: desafio. */
@@ -269,6 +321,9 @@ export function useCriarIncidente() {
         id: crypto.randomUUID(),
         teacher_name: teacherName,
         aluno_nome: input.aluno_nome?.trim() || null,
+        aluno_id: input.aluno_id ?? null,
+        ocorrido_em: input.ocorrido_em ?? null,
+        passos: input.passos?.trim() || null,
         coordinator: profile?.nome ?? 'KTM',
         problem_type: input.problem_type,
         urgency: input.urgency,
@@ -309,6 +364,12 @@ export function useAtualizarIncidente() {
       description: string
       needs_follow_up: boolean
       aluno_nome?: string | null
+      /** ID do aluno no King. undefined = não mexe; null limpa. */
+      aluno_id?: number | null
+      /** Quando aconteceu (ISO). undefined = não mexe; null limpa. */
+      ocorrido_em?: string | null
+      /** Como aconteceu, passo a passo. undefined = não mexe; null limpa. */
+      passos?: string | null
       /** Só para incidentes gerais (sem professor): o rótulo livre exibido. */
       titulo_livre?: string
       professor_id?: string | null
@@ -324,8 +385,11 @@ export function useAtualizarIncidente() {
         aluno_nome: input.aluno_nome?.trim() || null,
         natureza: input.natureza ?? 'desafio',
       }
-      // undefined = manter o prazo atual (edições que não tocam no campo não o apagam).
+      // undefined = manter o valor atual (edições que não tocam no campo não o apagam).
       if (input.prazo_resolucao !== undefined) patch.prazo_resolucao = input.prazo_resolucao
+      if (input.aluno_id !== undefined) patch.aluno_id = input.aluno_id
+      if (input.ocorrido_em !== undefined) patch.ocorrido_em = input.ocorrido_em
+      if (input.passos !== undefined) patch.passos = input.passos?.trim() || null
       // Para geral, o teacher_name é o rótulo livre (cai no problem_type se vazio).
       if (!input.professor_id) {
         patch.teacher_name = input.titulo_livre?.trim() || input.problem_type
