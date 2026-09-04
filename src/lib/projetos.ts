@@ -16,7 +16,7 @@ export type ProjetoTipo       = 'sistema' | 'processo' | 'pessoas' | 'outro'
 export type ProjetoUrgencia   = 'baixa' | 'media' | 'alta' | 'critica'
 export type ProjetoStatus     = 'rascunho' | 'proposto' | 'aprovado' | 'recusado' | 'cancelado'
 export type ProjetoFase       = 'planejamento' | 'em_andamento' | 'validacao' | 'concluido'
-export type ProjetoOnde       = 'plataforma' | 'extensao' | 'portal' | 'processo' | 'outro'
+export type ProjetoOnde       = 'kms' | 'aluno' | 'gestao' | 'extensao' | 'portal' | 'processo' | 'outro'
 export type ProjetoNatureza   = 'melhoria' | 'novo'
 
 export const TIPO_PROJETO: { key: ProjetoTipo; label: string; descricao: string }[] = [
@@ -29,13 +29,19 @@ export const TIPO_PROJETO: { key: ProjetoTipo; label: string; descricao: string 
 export const TIPO_LABEL: Record<ProjetoTipo, string> =
   Object.fromEntries(TIPO_PROJETO.map(t => [t.key, t.label])) as Record<ProjetoTipo, string>
 
-/** Onde a mudança encosta. O TI usa isso pra saber quem toca antes de ler o resto. */
+// Onde a mudança encosta. O TI usa isso pra saber quem toca antes de ler o resto.
+//
+// Atenção ao vocabulário: quando o time diz "a plataforma", fala do King
+// Management System ou da plataforma do aluno — NÃO desta ferramenta interna,
+// que aqui aparece como "Gestão dos Professores".
 export const ONDE_APLICADO: { key: ProjetoOnde; label: string; descricao: string }[] = [
-  { key: 'plataforma', label: 'Plataforma (esta)',     descricao: 'Telas internas da Gestão dos Professores.' },
-  { key: 'extensao',   label: 'Extensão do Meet',      descricao: 'O painel que abre durante a reunião.' },
-  { key: 'portal',     label: 'Portal do professor',   descricao: 'Páginas públicas: agendamento, pausa, transferência, welcome path.' },
-  { key: 'processo',   label: 'Processo do time',      descricao: 'Rotina de trabalho — não necessariamente vira software.' },
-  { key: 'outro',      label: 'Outro',                 descricao: 'Fora dos anteriores; explique no caminho.' },
+  { key: 'kms',      label: 'King Management System', descricao: 'A plataforma onde o professor dá aula e lança a turma.' },
+  { key: 'aluno',    label: 'Plataforma do aluno',    descricao: 'O que o aluno vê e usa.' },
+  { key: 'gestao',   label: 'Gestão dos Professores', descricao: 'Esta ferramenta — as telas internas da coordenação e do suporte.' },
+  { key: 'extensao', label: 'Extensão do Meet',       descricao: 'O painel que abre durante a reunião.' },
+  { key: 'portal',   label: 'Portais do professor',   descricao: 'Nossas páginas públicas: agendamento, pausa, transferência, welcome path.' },
+  { key: 'processo', label: 'Processo do time',       descricao: 'Rotina de trabalho — não necessariamente vira software.' },
+  { key: 'outro',    label: 'Outro',                  descricao: 'Fora dos anteriores; explique no caminho.' },
 ]
 
 export const ONDE_LABEL: Record<ProjetoOnde, string> =

@@ -358,7 +358,7 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
                 <Area
                   id="p-caminho" rows={4} value={f.caminho}
                   onChange={v => setF({ ...f, caminho: v })}
-                  placeholder="Ex.: Menu Professores → abro o professor → aba Reuniões → clico em Convocar → a lista vem vazia mesmo com reunião marcada."
+                  placeholder="Ex.: entro no King Management System → menu Turmas → abro a turma → aba Lançamento → o botão de salvar não aparece quando a turma tem mais de 20 alunos."
                 />
               </Campo>
 
