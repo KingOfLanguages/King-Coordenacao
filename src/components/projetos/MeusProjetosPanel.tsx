@@ -1,33 +1,35 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { CircleHelp, FolderKanban, Plus, Send, ArrowUpRight } from 'lucide-react'
+import {
+  CircleHelp, FolderKanban, Plus, Send, ArrowUpRight, PencilLine, CircleAlert,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useNomesPorPerfilId } from '@/hooks/usePerfisPublicos'
 import {
-  useMeusProjetos, useProjetos, useResponderInfo, type Projeto,
+  useMeusProjetos, useProjetos, useResponderInfo, useContagemEtapas,
 } from '@/hooks/useProjetos'
-import { NovoProjetoDialog } from '@/components/projetos/NovoProjetoDialog'
-import { ProjetoDetalheDialog } from '@/components/projetos/ProjetoDetalheDialog'
+import { FichaProjetoAssistente } from '@/components/projetos/FichaProjetoAssistente'
 import {
-  FASE_LABEL, PRIORIDADE_META, STATUS_META, TIPO_LABEL,
-  FAIXA_PRAZO_CLS, prazoProjeto, fmtData,
+  FASE_LABEL, URGENCIA_META, STATUS_META, TIPO_LABEL,
+  FAIXA_PRAZO_CLS, itensFicha, prazoProjeto, fmtData,
 } from '@/lib/projetos'
 import { cn } from '@/lib/utils'
 
 /**
- * Aba "Projetos" da Minha Área: o que EU sugeri (ou toco) e — o ponto central —
- * as perguntas da liderança que estão esperando resposta minha. É aqui que o
- * pedido de informação chega; o sino aponta para esta tela.
+ * Aba "Projetos" da Minha Área: meus rascunhos, o que eu sugeri (ou toco) e —
+ * o ponto central — as perguntas da liderança esperando resposta minha. É aqui
+ * que o pedido de informação chega; o sino aponta para cá.
  */
 export function MeusProjetosPanel() {
-  const { projetos, pedidosAbertos, isLoading } = useMeusProjetos()
+  const { projetos, rascunhos, pedidosAbertos, isLoading } = useMeusProjetos()
   const { data: todos = [] } = useProjetos()
+  const { data: contagem } = useContagemEtapas()
   const { mapa: nomes } = useNomesPorPerfilId()
   const responder = useResponderInfo()
 
   const [novo, setNovo] = useState(false)
-  const [detalhe, setDetalhe] = useState<Projeto | null>(null)
+  const [continuando, setContinuando] = useState<string | null>(null)
   const [respostas, setRespostas] = useState<Record<string, string>>({})
 
   const tituloDoProjeto = (id: string) => todos.find(p => p.id === id)?.titulo ?? 'Projeto'
@@ -64,9 +66,14 @@ export function MeusProjetosPanel() {
             Pedidos de informação esperando você ({pedidosAbertos.length})
           </h2>
           {pedidosAbertos.map(q => (
-            <div key={q.id} className="rounded-lg border border-aviso-warnBd bg-aviso-warnBg/40 p-3.5 space-y-2.5">
+            <div key={q.id} className="space-y-2.5 rounded-lg border border-aviso-warnBd bg-aviso-warnBg/40 p-3.5">
               <div className="space-y-0.5">
-                <p className="text-[12.5px] font-medium text-ink">{tituloDoProjeto(q.projeto_id)}</p>
+                <Link
+                  to={`/projetos/${q.projeto_id}`}
+                  className="text-[12.5px] font-medium text-ink hover:underline"
+                >
+                  {tituloDoProjeto(q.projeto_id)}
+                </Link>
                 <p className="text-[10.5px] uppercase tracking-wide text-ink-muted">
                   {nomes.get(q.solicitado_por ?? '') ?? 'Liderança'} perguntou · {fmtData(q.created_at)}
                 </p>
@@ -86,6 +93,41 @@ export function MeusProjetosPanel() {
               </div>
             </div>
           ))}
+        </section>
+      )}
+
+      {/* ── Rascunhos: fichas começadas e não enviadas ── */}
+      {rascunhos.length > 0 && (
+        <section className="space-y-2.5">
+          <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+            <PencilLine className="h-3.5 w-3.5" />
+            Rascunhos ({rascunhos.length}) — só você enxerga
+          </h2>
+          {rascunhos.map(p => {
+            const faltam = itensFicha(p, contagem?.get(p.id)?.total ?? 0).filter(i => !i.ok).length
+            return (
+              <div key={p.id} className="card-surface flex flex-wrap items-center justify-between gap-2 p-3.5">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-ink">
+                    {p.titulo || 'Rascunho sem título'}
+                  </p>
+                  <p className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-ink-muted">
+                    {faltam > 0
+                      ? <><CircleAlert className="h-3 w-3" />Faltam {faltam} {faltam === 1 ? 'item' : 'itens'} para enviar</>
+                      : 'Ficha completa — pronta para enviar'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to={`/projetos/${p.id}`}>Abrir</Link>
+                  </Button>
+                  <Button size="sm" onClick={() => setContinuando(p.id)}>
+                    <PencilLine /> Continuar
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
         </section>
       )}
 
@@ -109,9 +151,9 @@ export function MeusProjetosPanel() {
         {projetos.length === 0 ? (
           <div className="card-surface flex flex-col items-center justify-center gap-2 py-12 text-center">
             <FolderKanban className="h-7 w-7 text-ink-subtle" />
-            <p className="text-[13px] font-medium text-ink-secondary">Você ainda não sugeriu nenhum projeto.</p>
+            <p className="text-[13px] font-medium text-ink-secondary">Você ainda não enviou nenhum projeto.</p>
             <p className="max-w-xs text-[12px] text-ink-muted">
-              Viu uma melhoria de sistema ou de processo que faria diferença? Mande pra liderança avaliar.
+              Viu uma melhoria de sistema ou de processo que faria diferença? Monte a ficha e mande pra liderança.
             </p>
           </div>
         ) : (
@@ -120,10 +162,10 @@ export function MeusProjetosPanel() {
               const st = STATUS_META[p.status]
               const prazo = prazoProjeto(p.data_entrega, p.fase)
               return (
-                <button
+                <Link
                   key={p.id}
-                  onClick={() => setDetalhe(p)}
-                  className="card-surface w-full space-y-2 p-3.5 text-left transition-colors hover:bg-surface-subtle/40"
+                  to={`/projetos/${p.id}`}
+                  className="card-surface block space-y-2 p-3.5 text-left transition-colors hover:bg-surface-subtle/40"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="min-w-0 truncate text-[13.5px] font-medium text-ink">{p.titulo}</p>
@@ -136,8 +178,8 @@ export function MeusProjetosPanel() {
                     <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[10.5px] font-medium text-ink-secondary">
                       {TIPO_LABEL[p.tipo]}
                     </span>
-                    <span className={cn('rounded-full px-2 py-0.5 text-[10.5px] font-medium', PRIORIDADE_META[p.prioridade].cls)}>
-                      {PRIORIDADE_META[p.prioridade].label}
+                    <span className={cn('rounded-full px-2 py-0.5 text-[10.5px] font-medium', URGENCIA_META[p.prioridade].cls)}>
+                      {URGENCIA_META[p.prioridade].label}
                     </span>
                     {p.status === 'aprovado' && (
                       <span className={cn('rounded-full px-2 py-0.5 text-[10.5px] font-medium', FAIXA_PRAZO_CLS[prazo.faixa])}>
@@ -150,18 +192,18 @@ export function MeusProjetosPanel() {
                       {p.motivo_decisao}
                     </p>
                   )}
-                </button>
+                </Link>
               )
             })}
           </div>
         )}
       </section>
 
-      <NovoProjetoDialog open={novo} onOpenChange={setNovo} />
-      <ProjetoDetalheDialog
-        open={!!detalhe}
-        onOpenChange={v => { if (!v) setDetalhe(null) }}
-        projeto={detalhe ? todos.find(p => p.id === detalhe.id) ?? detalhe : null}
+      <FichaProjetoAssistente open={novo} onOpenChange={setNovo} />
+      <FichaProjetoAssistente
+        open={!!continuando}
+        onOpenChange={v => { if (!v) setContinuando(null) }}
+        rascunhoId={continuando}
       />
     </div>
   )

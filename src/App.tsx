@@ -21,6 +21,7 @@ import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { CentralConvocacoesPage } from '@/pages/convocacoes/CentralConvocacoesPage'
 import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
+import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { AlunosPage } from '@/pages/alunos/AlunosPage'
@@ -219,6 +220,13 @@ export default function App() {
               <Route path="/projetos" element={
                 <ProtectedRoute page="projetos">
                   <ProjetosPage />
+                </ProtectedRoute>
+              } />
+              {/* A ficha completa tem página própria: o sino e o chamado do TI
+                  apontam direto pra ela. */}
+              <Route path="/projetos/:id" element={
+                <ProtectedRoute page="projetos">
+                  <ProjetoDetalhePage />
                 </ProtectedRoute>
               } />
               {/* Admin */}
