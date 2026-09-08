@@ -3,10 +3,14 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Anotações internas de reunião — a "versão própria" de anotações de cada
-// coordenador. PRIVADAS: a RLS (reuniao_anotacoes_internas) só devolve as do
-// próprio autor, então toda leitura aqui já vem filtrada por quem está logado.
-// Uma anotação por (reunião, autor) — upsert; texto vazio apaga.
+// Anotações internas — a "versão própria" de anotações de cada coordenador.
+// PRIVADAS: a RLS (reuniao_anotacoes_internas) só devolve as do próprio autor,
+// então toda leitura aqui já vem filtrada por quem está logado.
+//
+// Duas origens:
+//  • de reunião — uma por (reunião, autor), upsert; texto vazio apaga;
+//  • avulsa — escrita direto na Minha Área, reuniao_id NULL, quantas quiser.
+// Qualquer uma pode ser FIXADA pelo autor pra subir ao topo da Minha Área.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface AnotacaoInterna {
@@ -74,6 +78,7 @@ export interface MinhaAnotacaoItem {
   id: string
   texto: string
   updated_at: string
+  fixada: boolean
   reuniao: {
     id: string
     data: string
@@ -94,6 +99,7 @@ type AnotacaoRaw = {
   id: string
   texto: string
   updated_at: string
+  fixada: boolean | null
   reuniao: ReuniaoRaw | ReuniaoRaw[] | null
 }
 
@@ -108,12 +114,13 @@ export function useMinhasAnotacoes() {
       const { data, error } = await supabase
         .from('reuniao_anotacoes_internas')
         .select(`
-          id, texto, updated_at,
+          id, texto, updated_at, fixada,
           reuniao:reunioes (
             id, data, titulo, tipo_reuniao,
             participantes:reuniao_professores ( professor:professores ( nome ) )
           )
         `)
+        .order('fixada', { ascending: false })
         .order('updated_at', { ascending: false })
       if (error) throw error
 
@@ -123,6 +130,7 @@ export function useMinhasAnotacoes() {
           id: a.id,
           texto: a.texto,
           updated_at: a.updated_at,
+          fixada: !!a.fixada,
           reuniao: r
             ? {
                 id: r.id,
@@ -137,5 +145,71 @@ export function useMinhasAnotacoes() {
         }
       })
     },
+  })
+}
+
+// ─── Nota avulsa e edição por id (Minha Área) ─────────────────────────────────
+
+/** Cria uma anotação avulsa — sem reunião, escrita direto na Minha Área. */
+export function useCriarAnotacaoAvulsa() {
+  const qc = useQueryClient()
+  const { profile } = useAuth()
+  return useMutation({
+    mutationFn: async (texto: string) => {
+      const autor = profile?.id
+      if (!autor) throw new Error('Sessão inválida.')
+      const limpo = texto.trim()
+      if (!limpo) throw new Error('Escreva alguma coisa antes de salvar.')
+
+      const { error } = await supabase
+        .from('reuniao_anotacoes_internas')
+        .insert({ reuniao_id: null, autor_id: autor, texto: limpo })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['minhas-anotacoes'] }),
+  })
+}
+
+/**
+ * Edita uma anotação pelo id — serve pras duas origens (de reunião e avulsa).
+ * Texto vazio apaga a anotação. A RLS já garante que só mexo nas minhas.
+ */
+export function useEditarAnotacao() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, texto }: { id: string; texto: string }) => {
+      const limpo = texto.trim()
+
+      if (!limpo) {
+        const { error } = await supabase.from('reuniao_anotacoes_internas').delete().eq('id', id)
+        if (error) throw error
+        return
+      }
+
+      const { error } = await supabase
+        .from('reuniao_anotacoes_internas')
+        .update({ texto: limpo, updated_at: new Date().toISOString() })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['minhas-anotacoes'] })
+      qc.invalidateQueries({ queryKey: ['anotacao-interna'] })
+    },
+  })
+}
+
+/** Fixa/desfixa uma anotação. Não mexe em updated_at: fixar não é editar. */
+export function useFixarAnotacao() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, fixada }: { id: string; fixada: boolean }) => {
+      const { error } = await supabase
+        .from('reuniao_anotacoes_internas')
+        .update({ fixada })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['minhas-anotacoes'] }),
   })
 }
