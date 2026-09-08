@@ -25,6 +25,36 @@ export type ProjetoSecao =
   | 'caminho' | 'objetivo' | 'descricao' | 'diferenca_hoje'
   | 'etapas' | 'passo_a_passo' | 'resultado_esperado' | 'geral'
 
+export type ProjetoQuemConstroi = 'ti_king' | 'nosso_time' | 'externo' | 'nao_sei'
+
+/** Quem executa. É select e não texto porque a resposta redireciona o projeto
+ *  inteiro: o KMS e a plataforma do aluno são do King, e nada ali passa pelo
+ *  nosso repositório. */
+export const QUEM_CONSTROI: { key: ProjetoQuemConstroi; label: string; descricao: string }[] = [
+  { key: 'ti_king',    label: 'TI da King',        descricao: 'Mexe no KMS ou na plataforma do aluno — depende da fila deles.' },
+  { key: 'nosso_time', label: 'Nosso time',        descricao: 'Esta plataforma, a extensão do Meet ou os portais do professor.' },
+  { key: 'externo',    label: 'Fornecedor externo', descricao: 'Alguém de fora constrói ou já vendeu pronto.' },
+  { key: 'nao_sei',    label: 'Não sei',           descricao: 'Tudo bem — a liderança descobre. Não deixe em branco por dúvida.' },
+]
+
+export const QUEM_CONSTROI_LABEL: Record<ProjetoQuemConstroi, string> =
+  Object.fromEntries(QUEM_CONSTROI.map(q => [q.key, q.label])) as Record<ProjetoQuemConstroi, string>
+
+/** Verbos que denunciam etapa irreversível. Servem para perguntar a regra de
+ *  desfazer sobre as etapas QUE A PESSOA ESCREVEU, em vez de no vácuo — foi
+ *  assim que a contradição "tranca a pasta × apaga a pasta" ficou visível. */
+const VERBOS_SENSIVEIS = [
+  'exclu', 'apag', 'remov', 'delet', 'bloque', 'tranc', 'transfer',
+  'arquiv', 'desativ', 'cancel', 'substitu', 'sobrescrev', 'move', 'mover',
+]
+
+export function etapasSensiveis<T extends { titulo: string }>(etapas: T[]): T[] {
+  return etapas.filter(e => {
+    const t = e.titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    return VERBOS_SENSIVEIS.some(v => t.includes(v))
+  })
+}
+
 export const MIMES_IMAGEM = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 export const MIME_PDF = 'application/pdf'
 
@@ -115,6 +145,12 @@ export interface FichaVerificavel {
   diferenca_hoje?: string | null
   passo_a_passo?: string | null
   resultado_esperado?: string | null
+  quem_usa?: string | null
+  permissoes?: string | null
+  quando_da_errado?: string | null
+  dado_existente?: string | null
+  quem_constroi?: string | null
+  criterio_aceite?: string | null
 }
 
 export interface ItemFicha {
@@ -128,7 +164,10 @@ export interface ItemFicha {
 
 const tam = (v: string | null | undefined) => (v ?? '').trim().length
 
-/** Checklist "Pronto para o TI". `ok` em todos = pode enviar. */
+/** Checklist "Pronto para o TI". `ok` em todos = pode enviar.
+ *
+ *  Os seis itens do passo 5 saíram, um a um, de buracos reais da primeira ficha
+ *  que o TI leu — não de um modelo genérico de requisitos. */
 export function itensFicha(f: FichaVerificavel, totalEtapas: number): ItemFicha[] {
   const itens: ItemFicha[] = [
     {
@@ -169,9 +208,34 @@ export function itensFicha(f: FichaVerificavel, totalEtapas: number): ItemFicha[
       passo: 4, label: 'O passo a passo para funcionar', ok: tam(f.passo_a_passo) >= 20,
       porque: 'Como se usa depois de pronto — o TI entrega, o time precisa saber operar.',
     },
+    // ── As regras: o que trava um dev que já leu a descrição inteira ──
     {
-      passo: 5, label: 'O resultado esperado', ok: tam(f.resultado_esperado) >= 15,
-      porque: 'É contra isso que a gente confere se deu certo.',
+      passo: 5, label: 'Quem usa e o que cada um enxerga', ok: tam(f.quem_usa) >= 15,
+      porque: 'Uma coisa de todo mundo e uma coisa de cada um são projetos diferentes.',
+    },
+    {
+      passo: 5, label: 'O que dá para desfazer e quem pode', ok: tam(f.permissoes) >= 15,
+      porque: 'Sem isso, apagar sem volta e apagar com lixeira viram a mesma frase.',
+    },
+    {
+      passo: 5, label: 'O que acontece quando dá errado', ok: tam(f.quando_da_errado) >= 15,
+      porque: 'O caminho infeliz é metade do trabalho e some quando ninguém pergunta.',
+    },
+    {
+      passo: 5, label: 'O que acontece com o que já existe hoje', ok: tam(f.dado_existente) >= 10,
+      porque: 'No dia da virada alguém pode ter que organizar tudo à mão.',
+    },
+    {
+      passo: 5, label: 'Quem constrói', ok: !!f.quem_constroi,
+      porque: 'O KMS e a plataforma do aluno são do King — não passam pelo nosso time.',
+    },
+    {
+      passo: 5, label: 'Como saberemos que deu certo', ok: tam(f.criterio_aceite) >= 15,
+      porque: 'Sem uma frase verificável, ninguém consegue dizer se acabou.',
+    },
+    {
+      passo: 6, label: 'O resultado esperado', ok: tam(f.resultado_esperado) >= 15,
+      porque: 'É o ganho que justifica o projeto entrar na fila.',
     },
   )
 

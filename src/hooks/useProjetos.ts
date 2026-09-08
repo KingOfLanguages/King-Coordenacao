@@ -3,7 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   MIMES_IMAGEM, MIME_PDF,
-  type ProjetoFase, type ProjetoNatureza, type ProjetoOnde, type ProjetoSecao,
+  type ProjetoFase, type ProjetoNatureza, type ProjetoOnde,
+  type ProjetoQuemConstroi, type ProjetoSecao,
   type ProjetoStatus, type ProjetoTipo, type ProjetoUrgencia,
 } from '@/lib/projetos'
 
@@ -38,6 +39,15 @@ export interface Projeto {
   diferenca_hoje: string | null
   passo_a_passo: string | null
   resultado_esperado: string | null
+  // ── As regras (migration 20260782) ──
+  quem_usa: string | null
+  permissoes: string | null
+  quando_da_errado: string | null
+  dado_existente: string | null
+  quem_constroi: ProjetoQuemConstroi | null
+  criterio_aceite: string | null
+  fora_de_escopo: string | null
+  volume_esperado: string | null
   data_entrega: string | null
   responsavel_id: string | null
   criado_por: string | null
@@ -114,6 +124,8 @@ const SELECT_PROJETO = `
   id, titulo, descricao, tipo, prioridade, status, fase,
   onde_aplicado, caminho, objetivo, natureza, diferenca_hoje,
   passo_a_passo, resultado_esperado,
+  quem_usa, permissoes, quando_da_errado, dado_existente,
+  quem_constroi, criterio_aceite, fora_de_escopo, volume_esperado,
   data_entrega, responsavel_id, criado_por, decidido_por, decidido_em,
   motivo_decisao, concluido_em,
   edicao_liberada, edicao_liberada_por, edicao_liberada_em,
@@ -316,6 +328,14 @@ export interface FichaInput {
   diferenca_hoje?: string | null
   passo_a_passo?: string | null
   resultado_esperado?: string | null
+  quem_usa?: string | null
+  permissoes?: string | null
+  quando_da_errado?: string | null
+  dado_existente?: string | null
+  quem_constroi?: ProjetoQuemConstroi | null
+  criterio_aceite?: string | null
+  fora_de_escopo?: string | null
+  volume_esperado?: string | null
   data_entrega?: string | null
 }
 

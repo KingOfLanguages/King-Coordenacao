@@ -21,12 +21,14 @@ import { ArquivosSecao } from '@/components/projetos/ArquivosSecao'
 import { LinksProjeto } from '@/components/projetos/LinksProjeto'
 import {
   TIPO_PROJETO, ONDE_APLICADO, NATUREZA_PROJETO, URGENCIA_META, URGENCIAS,
-  itensFicha, type ProjetoNatureza, type ProjetoOnde, type ProjetoTipo, type ProjetoUrgencia,
+  QUEM_CONSTROI, etapasSensiveis, itensFicha,
+  type ProjetoNatureza, type ProjetoOnde, type ProjetoQuemConstroi,
+  type ProjetoTipo, type ProjetoUrgencia,
 } from '@/lib/projetos'
 import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A ficha que o TI exige, quebrada em 5 passos.
+// A ficha que o TI exige, quebrada em 6 passos.
 //
 // Por que assistente e não um formulário só: a régua é estrita (o banco recusa
 // envio com ficha incompleta), e um paredão de 10 campos obrigatórios faz a
@@ -42,8 +44,16 @@ const PASSOS = [
   { n: 2, titulo: 'O problema',    subtitulo: 'O caminho até ele e o que queremos resolver.' },
   { n: 3, titulo: 'A proposta',    subtitulo: 'Explique como se fosse para alguém de fora.' },
   { n: 4, titulo: 'Como funciona', subtitulo: 'As etapas e o passo a passo de uso.' },
-  { n: 5, titulo: 'Resultado',     subtitulo: 'O que esperamos, o desenho e os links.' },
+  { n: 5, titulo: 'As regras',     subtitulo: 'O que o TI pergunta depois de ler tudo — e trava sem resposta.' },
+  { n: 6, titulo: 'Resultado',     subtitulo: 'O que esperamos, o desenho e os links.' },
 ]
+
+const ULTIMO_PASSO = 6
+
+const OPCIONAL = '(opcional)'
+
+/** Onde volume vira decisão de arquitetura. Projeto de processo não tem tela. */
+const PRECISA_VOLUME: string[] = ['kms', 'aluno', 'gestao', 'extensao', 'portal']
 
 interface Campos {
   titulo: string
@@ -57,13 +67,24 @@ interface Campos {
   diferenca_hoje: string
   passo_a_passo: string
   resultado_esperado: string
+  quem_usa: string
+  permissoes: string
+  quando_da_errado: string
+  dado_existente: string
+  quem_constroi: ProjetoQuemConstroi | ''
+  criterio_aceite: string
+  fora_de_escopo: string
+  volume_esperado: string
   data_entrega: string
 }
 
 const VAZIO: Campos = {
   titulo: '', descricao: '', tipo: 'sistema', prioridade: 'media', natureza: 'melhoria',
   onde_aplicado: '', caminho: '', objetivo: '', diferenca_hoje: '',
-  passo_a_passo: '', resultado_esperado: '', data_entrega: '',
+  passo_a_passo: '', resultado_esperado: '',
+  quem_usa: '', permissoes: '', quando_da_errado: '', dado_existente: '',
+  quem_constroi: '', criterio_aceite: '', fora_de_escopo: '', volume_esperado: '',
+  data_entrega: '',
 }
 
 function doProjeto(p: Projeto): Campos {
@@ -79,6 +100,14 @@ function doProjeto(p: Projeto): Campos {
     diferenca_hoje: p.diferenca_hoje ?? '',
     passo_a_passo: p.passo_a_passo ?? '',
     resultado_esperado: p.resultado_esperado ?? '',
+    quem_usa: p.quem_usa ?? '',
+    permissoes: p.permissoes ?? '',
+    quando_da_errado: p.quando_da_errado ?? '',
+    dado_existente: p.dado_existente ?? '',
+    quem_constroi: p.quem_constroi ?? '',
+    criterio_aceite: p.criterio_aceite ?? '',
+    fora_de_escopo: p.fora_de_escopo ?? '',
+    volume_esperado: p.volume_esperado ?? '',
     data_entrega: p.data_entrega ?? '',
   }
 }
@@ -162,10 +191,16 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
   const { data: etapas = [] } = useEtapasProjeto(projetoId)
 
   const itens = useMemo(
-    () => itensFicha({ ...f, onde_aplicado: f.onde_aplicado || null }, etapas.length),
+    () => itensFicha({
+      ...f,
+      onde_aplicado: f.onde_aplicado || null,
+      quem_constroi: f.quem_constroi || null,
+    }, etapas.length),
     [f, etapas.length],
   )
   const faltam = itens.filter(i => !i.ok)
+  // Pergunta a regra de desfazer sobre as etapas QUE A PESSOA ESCREVEU.
+  const sensiveis = useMemo(() => etapasSensiveis(etapas), [etapas])
   const completa = faltam.length === 0
 
   const patch = (): FichaInput => ({
@@ -180,6 +215,14 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
     diferenca_hoje: f.natureza === 'novo' ? null : f.diferenca_hoje,
     passo_a_passo: f.passo_a_passo,
     resultado_esperado: f.resultado_esperado,
+    quem_usa: f.quem_usa,
+    permissoes: f.permissoes,
+    quando_da_errado: f.quando_da_errado,
+    dado_existente: f.dado_existente,
+    quem_constroi: (f.quem_constroi || null) as ProjetoQuemConstroi | null,
+    criterio_aceite: f.criterio_aceite,
+    fora_de_escopo: f.fora_de_escopo,
+    volume_esperado: f.volume_esperado,
     data_entrega: f.data_entrega || null,
   })
 
@@ -206,7 +249,7 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
     }
     const id = await garantirRascunho()
     if (!id) return
-    setPasso(Math.min(5, Math.max(1, destino)))
+    setPasso(Math.min(ULTIMO_PASSO, Math.max(1, destino)))
   }
 
   async function salvarESair() {
@@ -453,6 +496,127 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
 
           {passo === 5 && (
             <div className="space-y-3.5">
+              <p className="rounded-lg border border-aviso-infoBd bg-aviso-infoBg px-3 py-2 text-[11.5px] leading-relaxed text-aviso-infoFg">
+                Você já contou o que acontece quando tudo dá certo. Estas perguntas
+                cobrem o resto — são as que o TI manda de volta quando faltam, e aí o
+                projeto para por dias esperando resposta.
+              </p>
+
+              <Campo
+                id="p-quem-usa" label="Quem usa isso, e o que cada um enxerga?"
+                dica="Se duas pessoas diferentes abrirem essa tela, veem a mesma coisa? Alguém só olha, sem poder mexer?"
+              >
+                <Area
+                  id="p-quem-usa" rows={3} value={f.quem_usa}
+                  onChange={v => setF({ ...f, quem_usa: v })}
+                  placeholder="Ex.: o time de materiais organiza e todo mundo vê a mesma organização; o professor só consulta."
+                />
+              </Campo>
+
+              <Campo
+                id="p-permissoes" label="O que dá para desfazer, e quem pode?"
+                dica="Nas etapas que apagam, bloqueiam ou movem alguma coisa: dá para voltar atrás? Quem consegue?"
+              >
+                {sensiveis.length > 0 && (
+                  <div className="rounded-md border border-line bg-surface-subtle/40 px-2.5 py-2">
+                    <p className="text-[11px] font-medium text-ink-secondary">
+                      Nas suas etapas, estas mexem em algo de forma difícil de voltar atrás:
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {sensiveis.map(e => (
+                        <li key={e.id} className="text-[11px] text-ink-muted">• {e.titulo}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <Area
+                  id="p-permissoes" rows={3} value={f.permissoes}
+                  onChange={v => setF({ ...f, permissoes: v })}
+                  placeholder="Ex.: só quem trancou (ou um coordenador) destranca; apagar pasta trancada não é permitido."
+                />
+              </Campo>
+
+              <Campo
+                id="p-errado" label="E quando dá errado?"
+                dica="Apagou sem querer, duas pessoas mexeram ao mesmo tempo, faltou preencher algo: o que o sistema faz?"
+              >
+                <Area
+                  id="p-errado" rows={3} value={f.quando_da_errado}
+                  onChange={v => setF({ ...f, quando_da_errado: v })}
+                  placeholder="Ex.: o que foi apagado fica 30 dias numa lixeira que o time de materiais enxerga, e some sozinho depois."
+                />
+              </Campo>
+
+              <Campo
+                id="p-existente" label="O que acontece com o que já existe hoje?"
+                dica="No dia em que isso entrar no ar, o que fazemos com o que já está lá?"
+              >
+                <Area
+                  id="p-existente" rows={2} value={f.dado_existente}
+                  onChange={v => setF({ ...f, dado_existente: v })}
+                  placeholder="Ex.: todo material atual cai numa pasta 'Sem categoria' e o time organiza aos poucos."
+                />
+              </Campo>
+
+              <Campo label="Quem constrói?" dica={QUEM_CONSTROI.find(q => q.key === f.quem_constroi)?.descricao}>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {QUEM_CONSTROI.map(q => (
+                    <button
+                      key={q.key}
+                      onClick={() => setF({ ...f, quem_constroi: q.key })}
+                      className={cn(
+                        'btn-press rounded-lg border px-3 py-2 text-left transition-colors',
+                        f.quem_constroi === q.key
+                          ? 'border-accentBlue bg-accentBlue-soft'
+                          : 'border-line hover:bg-surface-subtle/50',
+                      )}
+                    >
+                      <p className="text-[12.5px] font-medium text-ink">{q.label}</p>
+                      <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">{q.descricao}</p>
+                    </button>
+                  ))}
+                </div>
+              </Campo>
+
+              <Campo
+                id="p-aceite" label="Como saberemos que deu certo?"
+                dica="Uma frase que dê para conferir daqui a um mês. 'Melhor organização' não dá."
+              >
+                <Area
+                  id="p-aceite" rows={2} value={f.criterio_aceite}
+                  onChange={v => setF({ ...f, criterio_aceite: v })}
+                  placeholder="Ex.: em 30 dias, todo material da plataforma está dentro de alguma pasta."
+                />
+              </Campo>
+
+              <Campo
+                id="p-fora" label={'O que NÃO entra ' + OPCIONAL}
+                dica="A fronteira do projeto. Barato de escrever agora, caro de discutir depois."
+              >
+                <Area
+                  id="p-fora" rows={2} value={f.fora_de_escopo}
+                  onChange={v => setF({ ...f, fora_de_escopo: v })}
+                  placeholder="Ex.: não mexe em como o aluno enxerga o material."
+                />
+              </Campo>
+
+              {PRECISA_VOLUME.includes(f.onde_aplicado) && (
+                <Campo
+                  id="p-volume" label={'Volume esperado ' + OPCIONAL}
+                  dica="Quantos itens ou pessoas de cada vez? Arrastar 30 coisas e arrastar 800 são projetos diferentes."
+                >
+                  <Input
+                    id="p-volume" value={f.volume_esperado}
+                    onChange={e => setF({ ...f, volume_esperado: e.target.value })}
+                    placeholder="Ex.: uns 400 materiais hoje, crescendo ~20 por mês"
+                  />
+                </Campo>
+              )}
+            </div>
+          )}
+
+          {passo === 6 && (
+            <div className="space-y-3.5">
               <Campo
                 id="p-resultado" label="Resultado esperado"
                 dica="É contra isso que a gente confere, depois de pronto, se deu certo."
@@ -561,7 +725,7 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
               <ChevronLeft /> Voltar
             </Button>
           )}
-          {passo < 5 ? (
+          {passo < ULTIMO_PASSO ? (
             <Button size="sm" onClick={() => irPara(passo + 1)} disabled={ocupado}>
               Continuar <ChevronRight />
             </Button>

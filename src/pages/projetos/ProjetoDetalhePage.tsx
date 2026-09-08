@@ -4,7 +4,8 @@ import { toast } from 'sonner'
 import {
   ArrowLeft, CalendarClock, Check, CircleAlert, CircleHelp, ClipboardCopy,
   FileText, Link2, LockKeyhole, LockKeyholeOpen, MapPin, MessageSquarePlus,
-  Pencil, Route, Send, Sparkles, Target, Trash2, User2, UserCog, X,
+  Pencil, Route, Send, ShieldQuestion, Sparkles, Target, Trash2, User2,
+  UserCog, Users, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,7 +28,8 @@ import { ArquivosSecao } from '@/components/projetos/ArquivosSecao'
 import { LinksProjeto } from '@/components/projetos/LinksProjeto'
 import {
   FASES_PROJETO, FASE_LABEL, ONDE_LABEL, STATUS_META, TIPO_LABEL, URGENCIA_META,
-  FAIXA_PRAZO_CLS, itensFicha, prazoProjeto, proximaFase, fmtData, fmtDataHora,
+  QUEM_CONSTROI_LABEL, FAIXA_PRAZO_CLS, itensFicha, prazoProjeto, proximaFase,
+  fmtData, fmtDataHora,
   type ProjetoFase,
 } from '@/lib/projetos'
 import { cn } from '@/lib/utils'
@@ -371,6 +373,23 @@ export function ProjetoDetalhePage() {
             <ArquivosSecao projetoId={projeto.id} secao="passo_a_passo" podeEditar={podeEditarFicha} />
           </Secao>
 
+          <Secao icone={<Users className="h-3.5 w-3.5" />} titulo="Quem usa e o que cada um enxerga">
+            <Texto valor={projeto.quem_usa} />
+          </Secao>
+
+          <Secao icone={<ShieldQuestion className="h-3.5 w-3.5" />} titulo="Regras">
+            <Regra rotulo="O que dá para desfazer, e quem pode" valor={projeto.permissoes} />
+            <Regra rotulo="Quando dá errado" valor={projeto.quando_da_errado} />
+            <Regra rotulo="O que já existe hoje" valor={projeto.dado_existente} />
+            {projeto.fora_de_escopo && <Regra rotulo="O que NÃO entra" valor={projeto.fora_de_escopo} />}
+            {projeto.volume_esperado && <Regra rotulo="Volume esperado" valor={projeto.volume_esperado} />}
+            <Regra
+              rotulo="Quem constrói"
+              valor={projeto.quem_constroi ? QUEM_CONSTROI_LABEL[projeto.quem_constroi] : null}
+            />
+            <Regra rotulo="Como saberemos que deu certo" valor={projeto.criterio_aceite} />
+          </Secao>
+
           <Secao icone={<Target className="h-3.5 w-3.5" />} titulo="Resultado esperado">
             <Texto valor={projeto.resultado_esperado} />
             <ArquivosSecao projetoId={projeto.id} secao="resultado_esperado" podeEditar={podeEditarFicha} />
@@ -662,6 +681,17 @@ function Secao({ icone, titulo, acessorio, children }: {
       </div>
       {children}
     </section>
+  )
+}
+
+/** Rótulo + resposta. As regras são muitas e curtas: sem o rótulo em cima,
+ *  viram um bloco de texto que ninguém separa na leitura. */
+function Regra({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-medium text-ink-muted">{rotulo}</p>
+      <Texto valor={valor} />
+    </div>
   )
 }
 
