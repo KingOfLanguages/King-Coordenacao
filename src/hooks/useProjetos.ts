@@ -1,8 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import type {
-  ProjetoFase, ProjetoNatureza, ProjetoOnde, ProjetoStatus, ProjetoTipo, ProjetoUrgencia,
+import {
+  MIMES_IMAGEM, MIME_PDF,
+  type ProjetoFase, type ProjetoNatureza, type ProjetoOnde, type ProjetoSecao,
+  type ProjetoStatus, type ProjetoTipo, type ProjetoUrgencia,
 } from '@/lib/projetos'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,6 +45,10 @@ export interface Projeto {
   decidido_em: string | null
   motivo_decisao: string | null
   concluido_em: string | null
+  /** Liderança destravou a ficha de um projeto já decidido. */
+  edicao_liberada: boolean
+  edicao_liberada_por: string | null
+  edicao_liberada_em: string | null
   created_at: string
   updated_at: string
 }
@@ -63,8 +69,23 @@ export interface AnexoProjeto {
   id: string
   projeto_id: string
   nome: string
+  /** Caminho DO ARQUIVO no bucket — não confundir com `projetos.caminho`. */
   caminho: string
+  secao: ProjetoSecao
+  mime: string | null
   tamanho_bytes: number | null
+  autor_id: string | null
+  created_at: string
+  /** URL assinada, resolvida na consulta: o bucket é privado e a imagem
+   *  precisa renderizar inline. Vale 1h. */
+  url: string | null
+}
+
+export interface LinkProjeto {
+  id: string
+  projeto_id: string
+  titulo: string
+  url: string
   autor_id: string | null
   created_at: string
 }
@@ -94,11 +115,13 @@ const SELECT_PROJETO = `
   onde_aplicado, caminho, objetivo, natureza, diferenca_hoje,
   passo_a_passo, resultado_esperado,
   data_entrega, responsavel_id, criado_por, decidido_por, decidido_em,
-  motivo_decisao, concluido_em, created_at, updated_at
+  motivo_decisao, concluido_em,
+  edicao_liberada, edicao_liberada_por, edicao_liberada_em,
+  created_at, updated_at
 `
 
 const SELECT_ETAPA  = 'id, projeto_id, ordem, titulo, detalhe, quem_faz, concluida, concluida_em, created_at'
-const SELECT_ANEXO  = 'id, projeto_id, nome, caminho, tamanho_bytes, autor_id, created_at'
+const SELECT_ANEXO  = 'id, projeto_id, nome, caminho, secao, mime, tamanho_bytes, autor_id, created_at'
 const SELECT_PEDIDO = `
   id, projeto_id, pergunta, solicitado_por, destinatario_id,
   resposta, respondido_por, respondido_em, created_at
@@ -153,10 +176,14 @@ export function useEtapasProjeto(projetoId: string | null | undefined) {
   })
 }
 
+/** Arquivos do projeto JÁ COM url assinada. O bucket é privado, e imagem que
+ *  precisa de um clique pra abrir não ilustra nada — então as urls saem em
+ *  lote aqui (uma chamada), com validade de 1h. */
 export function useAnexosProjeto(projetoId: string | null | undefined) {
   return useQuery({
     queryKey: ['projetos', 'anexos', projetoId],
     enabled: !!projetoId,
+    staleTime: 30 * 60 * 1000,
     queryFn: async (): Promise<AnexoProjeto[]> => {
       const { data, error } = await supabase
         .from('projeto_anexos')
@@ -164,7 +191,32 @@ export function useAnexosProjeto(projetoId: string | null | undefined) {
         .eq('projeto_id', projetoId!)
         .order('created_at', { ascending: true })
       if (error) throw error
-      return (data ?? []) as AnexoProjeto[]
+
+      const linhas = (data ?? []) as AnexoProjeto[]
+      if (!linhas.length) return []
+
+      const { data: urls } = await supabase.storage
+        .from(BUCKET_PROJETOS)
+        .createSignedUrls(linhas.map(a => a.caminho), 60 * 60)
+
+      const porCaminho = new Map((urls ?? []).map(u => [u.path ?? '', u.signedUrl]))
+      return linhas.map(a => ({ ...a, url: porCaminho.get(a.caminho) ?? null }))
+    },
+  })
+}
+
+export function useLinksProjeto(projetoId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['projetos', 'links', projetoId],
+    enabled: !!projetoId,
+    queryFn: async (): Promise<LinkProjeto[]> => {
+      const { data, error } = await supabase
+        .from('projeto_links')
+        .select('id, projeto_id, titulo, url, autor_id, created_at')
+        .eq('projeto_id', projetoId!)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as LinkProjeto[]
     },
   })
 }
@@ -391,29 +443,50 @@ export function useTrocarOrdemEtapas() {
 
 // ─── Anexos (PDF) ────────────────────────────────────────────────────────────
 
-export const TAMANHO_MAX_ANEXO = 10 * 1024 * 1024
-export const MAX_ANEXOS = 3
+export const TAMANHO_MAX_PDF    = 10 * 1024 * 1024
+export const TAMANHO_MAX_IMAGEM = 5 * 1024 * 1024
+/** Por SEÇÃO, não por projeto: quatro prints já contam a história de um trecho;
+ *  mais que isso vira álbum e ninguém olha. */
+export const MAX_ARQUIVOS_SECAO = 4
 
-/** Sobe o PDF pro bucket privado e registra a linha. O caminho leva o id do
- *  projeto na frente pra ficar óbvio a quem pertence o arquivo. */
+export function limiteDoArquivo(file: File): { ok: boolean; erro?: string } {
+  const imagem = MIMES_IMAGEM.includes(file.type)
+  if (!imagem && file.type !== MIME_PDF) {
+    return { ok: false, erro: 'Só imagem (PNG, JPG, WEBP, GIF) ou PDF.' }
+  }
+  const max = imagem ? TAMANHO_MAX_IMAGEM : TAMANHO_MAX_PDF
+  if (file.size > max) {
+    return { ok: false, erro: imagem ? 'A imagem passa de 5 MB.' : 'O PDF passa de 10 MB.' }
+  }
+  return { ok: true }
+}
+
+/** Sobe o arquivo pro bucket privado e registra a linha, já grudado na SEÇÃO da
+ *  ficha que ele ilustra. O caminho leva o id do projeto na frente pra ficar
+ *  óbvio a quem pertence. */
 export function useEnviarAnexo() {
   const qc = useQueryClient()
   const { profile } = useAuth()
   return useMutation({
-    mutationFn: async ({ projetoId, file }: { projetoId: string; file: File }) => {
-      if (file.type !== 'application/pdf') throw new Error('Só PDF por aqui.')
-      if (file.size > TAMANHO_MAX_ANEXO) throw new Error('O arquivo passa de 10 MB.')
+    mutationFn: async ({ projetoId, file, secao }: {
+      projetoId: string; file: File; secao: ProjetoSecao
+    }) => {
+      const limite = limiteDoArquivo(file)
+      if (!limite.ok) throw new Error(limite.erro)
 
-      const caminho = `${projetoId}/${crypto.randomUUID()}.pdf`
+      const ext = file.type === MIME_PDF ? 'pdf' : (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '')
+      const caminho = `${projetoId}/${crypto.randomUUID()}.${ext}`
       const up = await supabase.storage
         .from(BUCKET_PROJETOS)
-        .upload(caminho, file, { contentType: 'application/pdf', upsert: false })
+        .upload(caminho, file, { contentType: file.type, upsert: false })
       if (up.error) throw up.error
 
       const { error } = await supabase.from('projeto_anexos').insert({
         projeto_id: projetoId,
         nome: file.name,
         caminho,
+        secao,
+        mime: file.type,
         tamanho_bytes: file.size,
         autor_id: profile?.id ?? null,
       })
@@ -439,13 +512,40 @@ export function useExcluirAnexo() {
   })
 }
 
-/** URL temporária pra abrir o PDF — o bucket é privado de propósito. */
-export async function urlAnexo(caminho: string): Promise<string> {
-  const { data, error } = await supabase.storage
-    .from(BUCKET_PROJETOS)
-    .createSignedUrl(caminho, 60 * 60)
-  if (error) throw error
-  return data.signedUrl
+// ─── Links externos ──────────────────────────────────────────────────────────
+
+export function useAdicionarLink() {
+  const qc = useQueryClient()
+  const { profile } = useAuth()
+  return useMutation({
+    mutationFn: async ({ projetoId, titulo, url }: {
+      projetoId: string; titulo: string; url: string
+    }) => {
+      const limpa = url.trim()
+      // O banco recusa o que não for http(s); aqui só damos a mãozinha de
+      // completar quem colou "drive.google.com/..." sem o protocolo.
+      const final = /^https?:\/\//i.test(limpa) ? limpa : `https://${limpa}`
+      const { error } = await supabase.from('projeto_links').insert({
+        projeto_id: projetoId,
+        titulo: titulo.trim() || final,
+        url: final,
+        autor_id: profile?.id ?? null,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projetos'] }),
+  })
+}
+
+export function useExcluirLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('projeto_links').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projetos'] }),
+  })
 }
 
 // ─── Decisão e condução ──────────────────────────────────────────────────────
@@ -470,6 +570,22 @@ export function useDecidirProjeto() {
       if (input.responsavel_id !== undefined) patch.responsavel_id = input.responsavel_id || null
 
       const { error } = await supabase.from('projetos').update(patch).eq('id', input.id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projetos'] }),
+  })
+}
+
+/** Destrava (ou volta a travar) a ficha de um projeto já decidido. Só líder —
+ *  o trigger recusa o resto e registra quem liberou. */
+export function useLiberarEdicao() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, liberar }: { id: string; liberar: boolean }) => {
+      const { error } = await supabase
+        .from('projetos')
+        .update({ edicao_liberada: liberar })
+        .eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projetos'] }),

@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   ArrowLeft, CalendarClock, Check, CircleAlert, CircleHelp, ClipboardCopy,
-  FileText, MapPin, MessageSquarePlus, Pencil, Route, Send, Sparkles,
-  Target, Trash2, User2, UserCog, X,
+  FileText, Link2, LockKeyhole, LockKeyholeOpen, MapPin, MessageSquarePlus,
+  Pencil, Route, Send, Sparkles, Target, Trash2, User2, UserCog, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,11 +18,13 @@ import {
   useProjeto, useEtapasProjeto, useAtualizacoesProjeto, usePedidosInfo,
   useSouLideranca, useAdicionarAtualizacao, useDecidirProjeto, useExcluirProjeto,
   useMoverFase, usePedirInfo, useResponderInfo, useAtualizarConducao,
-  useEditarEtapa, useEnviarProjeto, type EtapaProjeto, type Projeto,
+  useEditarEtapa, useEnviarProjeto, useLiberarEdicao, useLinksProjeto,
+  type EtapaProjeto, type LinkProjeto, type Projeto,
 } from '@/hooks/useProjetos'
 import { FichaProjetoAssistente } from '@/components/projetos/FichaProjetoAssistente'
 import { FluxogramaEtapas } from '@/components/projetos/FluxogramaEtapas'
-import { AnexosProjeto } from '@/components/projetos/AnexosProjeto'
+import { ArquivosSecao } from '@/components/projetos/ArquivosSecao'
+import { LinksProjeto } from '@/components/projetos/LinksProjeto'
 import {
   FASES_PROJETO, FASE_LABEL, ONDE_LABEL, STATUS_META, TIPO_LABEL, URGENCIA_META,
   FAIXA_PRAZO_CLS, itensFicha, prazoProjeto, proximaFase, fmtData, fmtDataHora,
@@ -51,6 +53,7 @@ export function ProjetoDetalhePage() {
   const { data: perfis = [] } = usePerfisPublicos()
   const { data: pedidos = [] } = usePedidosInfo()
   const { data: atualizacoes = [] } = useAtualizacoesProjeto(id)
+  const { data: links = [] } = useLinksProjeto(id)
 
   const decidir   = useDecidirProjeto()
   const moverFase = useMoverFase()
@@ -61,6 +64,7 @@ export function ProjetoDetalhePage() {
   const excluir   = useExcluirProjeto()
   const editarEtapa = useEditarEtapa()
   const enviar    = useEnviarProjeto()
+  const liberar   = useLiberarEdicao()
 
   const [motivo, setMotivo]       = useState('')
   const [prazoNovo, setPrazoNovo] = useState('')
@@ -109,8 +113,11 @@ export function ProjetoDetalhePage() {
   const souResponsavel = !!meuId && projeto.responsavel_id === meuId
   const podeConduzir   = souLideranca || souResponsavel
   const podeExcluir    = souLideranca || (souAutor && ['rascunho', 'proposto'].includes(projeto.status))
-  const emEdicao       = projeto.status === 'rascunho' || projeto.status === 'proposto'
-  const podeEditarFicha = souAutor && emEdicao
+  // Antes da decisão o autor mexe à vontade; depois, só com a liderança
+  // destravando (o trigger aplica a mesma regra, esta é só a da tela).
+  const emEdicao        = projeto.status === 'rascunho' || projeto.status === 'proposto'
+  const decidido        = !emEdicao
+  const podeEditarFicha = souAutor && (emEdicao || projeto.edicao_liberada)
   const feitas = etapas.filter(e => e.concluida).length
 
   async function aprovar() {
@@ -192,6 +199,17 @@ export function ProjetoDetalhePage() {
     }
   }
 
+  async function alternarEdicao(liberarAgora: boolean) {
+    try {
+      await liberar.mutateAsync({ id: projeto!.id, liberar: liberarAgora })
+      toast.success(liberarAgora
+        ? 'Edição liberada — quem sugeriu foi avisado.'
+        : 'Ficha travada de novo.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao mudar a trava.')
+    }
+  }
+
   async function reenviar() {
     try {
       await enviar.mutateAsync(projeto!.id)
@@ -214,7 +232,7 @@ export function ProjetoDetalhePage() {
 
   async function copiarFicha() {
     try {
-      await navigator.clipboard.writeText(fichaEmTexto(projeto!, etapas, nomes))
+      await navigator.clipboard.writeText(fichaEmTexto(projeto!, etapas, links, nomes))
       toast.success('Ficha copiada — é só colar no chamado do TI.')
     } catch {
       toast.error('O navegador não deixou copiar.')
@@ -313,6 +331,7 @@ export function ProjetoDetalhePage() {
         <div className="space-y-5">
           <Secao icone={<Route className="h-3.5 w-3.5" />} titulo="O caminho até o problema">
             <Texto valor={projeto.caminho} />
+            <ArquivosSecao projetoId={projeto.id} secao="caminho" podeEditar={podeEditarFicha} rotulo="Anexar print da tela" />
           </Secao>
 
           <Secao icone={<Target className="h-3.5 w-3.5" />} titulo="Objetivo">
@@ -321,11 +340,13 @@ export function ProjetoDetalhePage() {
 
           <Secao icone={<FileText className="h-3.5 w-3.5" />} titulo="Descrição do projeto">
             <Texto valor={projeto.descricao} />
+            <ArquivosSecao projetoId={projeto.id} secao="descricao" podeEditar={podeEditarFicha} />
           </Secao>
 
           {projeto.natureza === 'melhoria' && (
             <Secao icone={<Sparkles className="h-3.5 w-3.5" />} titulo="Como é diferente do que temos hoje">
               <Texto valor={projeto.diferenca_hoje} />
+              <ArquivosSecao projetoId={projeto.id} secao="diferenca_hoje" podeEditar={podeEditarFicha} rotulo="Anexar o antes / o depois" />
             </Secao>
           )}
 
@@ -342,23 +363,60 @@ export function ProjetoDetalhePage() {
                   : undefined
               }
             />
+            <ArquivosSecao projetoId={projeto.id} secao="etapas" podeEditar={podeEditarFicha} rotulo="Anexar desenho do fluxo" />
           </Secao>
 
           <Secao icone={<Check className="h-3.5 w-3.5" />} titulo="Passo a passo para funcionar">
             <Texto valor={projeto.passo_a_passo} />
+            <ArquivosSecao projetoId={projeto.id} secao="passo_a_passo" podeEditar={podeEditarFicha} />
           </Secao>
 
           <Secao icone={<Target className="h-3.5 w-3.5" />} titulo="Resultado esperado">
             <Texto valor={projeto.resultado_esperado} />
+            <ArquivosSecao projetoId={projeto.id} secao="resultado_esperado" podeEditar={podeEditarFicha} />
           </Secao>
 
-          <Secao icone={<FileText className="h-3.5 w-3.5" />} titulo="Desenho em PDF">
-            <AnexosProjeto projetoId={projeto.id} podeEditar={podeEditarFicha || souLideranca} />
+          <Secao icone={<Link2 className="h-3.5 w-3.5" />} titulo="Links">
+            <LinksProjeto projetoId={projeto.id} podeEditar={podeEditarFicha} />
+          </Secao>
+
+          <Secao icone={<FileText className="h-3.5 w-3.5" />} titulo="Desenho do projeto">
+            <ArquivosSecao projetoId={projeto.id} secao="geral" podeEditar={podeEditarFicha} />
           </Secao>
         </div>
 
         {/* ── Coluna de ação ── */}
         <aside className="space-y-4">
+          {decidido && projeto.edicao_liberada && (
+            <div className="rounded-lg border border-aviso-infoBd bg-aviso-infoBg px-4 py-3">
+              <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-aviso-infoFg">
+                <LockKeyholeOpen className="h-3.5 w-3.5" /> Edição liberada
+              </p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-aviso-infoFg/90">
+                {nomes.get(projeto.edicao_liberada_por ?? '') ?? 'A liderança'} destravou a ficha
+                em {fmtData(projeto.edicao_liberada_em)}. {souAutor ? 'Você pode ajustar.' : ''}
+              </p>
+            </div>
+          )}
+
+          {souLideranca && decidido && (
+            <Bloco titulo="Edição da ficha">
+              <p className="text-[12px] leading-relaxed text-ink-muted">
+                {projeto.edicao_liberada
+                  ? 'O autor está com a ficha destravada. Trave de volta quando o ajuste terminar.'
+                  : 'Depois de decidido, o autor não altera a ficha. Libere se o projeto precisar de correção.'}
+              </p>
+              <Button
+                size="sm" variant="ghost" className="mt-2 w-full"
+                disabled={liberar.isPending}
+                onClick={() => alternarEdicao(!projeto.edicao_liberada)}
+              >
+                {projeto.edicao_liberada
+                  ? <><LockKeyhole /> Travar edição</>
+                  : <><LockKeyholeOpen /> Liberar edição</>}
+              </Button>
+            </Bloco>
+          )}
           {projeto.status === 'rascunho' && souAutor && (
             <Bloco titulo="Rascunho">
               <p className="text-[12px] leading-relaxed text-ink-muted">
@@ -631,7 +689,9 @@ function Bloco({ titulo, contagem, children }: {
 }
 
 /** Ficha em texto puro — para colar no chamado do TI sem perder nada. */
-function fichaEmTexto(p: Projeto, etapas: EtapaProjeto[], nomes: Map<string, string>): string {
+function fichaEmTexto(
+  p: Projeto, etapas: EtapaProjeto[], links: LinkProjeto[], nomes: Map<string, string>,
+): string {
   const linhas = [
     `PROJETO: ${p.titulo}`,
     `Tipo: ${TIPO_LABEL[p.tipo]}`,
@@ -653,6 +713,8 @@ function fichaEmTexto(p: Projeto, etapas: EtapaProjeto[], nomes: Map<string, str
     `PASSO A PASSO PARA FUNCIONAR:\n${p.passo_a_passo ?? '—'}`,
     '',
     `RESULTADO ESPERADO:\n${p.resultado_esperado ?? '—'}`,
+    links.length ? '\nLINKS:' : '',
+    ...links.map(l => `  ${l.titulo}: ${l.url}`),
   ]
   return linhas.filter(l => l !== '').join('\n')
 }

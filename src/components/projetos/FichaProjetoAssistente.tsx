@@ -17,7 +17,8 @@ import {
   useProjeto, type FichaInput, type Projeto,
 } from '@/hooks/useProjetos'
 import { EditorEtapas } from '@/components/projetos/EditorEtapas'
-import { AnexosProjeto } from '@/components/projetos/AnexosProjeto'
+import { ArquivosSecao } from '@/components/projetos/ArquivosSecao'
+import { LinksProjeto } from '@/components/projetos/LinksProjeto'
 import {
   TIPO_PROJETO, ONDE_APLICADO, NATUREZA_PROJETO, URGENCIA_META, URGENCIAS,
   itensFicha, type ProjetoNatureza, type ProjetoOnde, type ProjetoTipo, type ProjetoUrgencia,
@@ -41,7 +42,7 @@ const PASSOS = [
   { n: 2, titulo: 'O problema',    subtitulo: 'O caminho até ele e o que queremos resolver.' },
   { n: 3, titulo: 'A proposta',    subtitulo: 'Explique como se fosse para alguém de fora.' },
   { n: 4, titulo: 'Como funciona', subtitulo: 'As etapas e o passo a passo de uso.' },
-  { n: 5, titulo: 'Resultado',     subtitulo: 'O que esperamos e o desenho em PDF.' },
+  { n: 5, titulo: 'Resultado',     subtitulo: 'O que esperamos, o desenho e os links.' },
 ]
 
 interface Campos {
@@ -360,6 +361,12 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
                   onChange={v => setF({ ...f, caminho: v })}
                   placeholder="Ex.: entro no King Management System → menu Turmas → abro a turma → aba Lançamento → o botão de salvar não aparece quando a turma tem mais de 20 alunos."
                 />
+                {projetoId && (
+                  <ArquivosSecao
+                    projetoId={projetoId} secao="caminho" podeEditar
+                    rotulo="Anexar print da tela"
+                  />
+                )}
               </Campo>
 
               <Campo
@@ -386,6 +393,7 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
                   onChange={v => setF({ ...f, descricao: v })}
                   placeholder="Hoje… O problema é que… A proposta é…"
                 />
+                {projetoId && <ArquivosSecao projetoId={projetoId} secao="descricao" podeEditar />}
               </Campo>
 
               {f.natureza === 'melhoria' && (
@@ -398,6 +406,12 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
                     onChange={v => setF({ ...f, diferenca_hoje: v })}
                     placeholder="Hoje: alguém abre a planilha toda segunda. Depois: o aviso chega sozinho no dia."
                   />
+                  {projetoId && (
+                    <ArquivosSecao
+                      projetoId={projetoId} secao="diferenca_hoje" podeEditar
+                      rotulo="Anexar o antes / o depois"
+                    />
+                  )}
                 </Campo>
               )}
             </div>
@@ -410,7 +424,13 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
                 dica="Um passo por linha, na ordem em que acontecem. É daqui que sai o fluxograma — você não precisa desenhar nada."
               >
                 {projetoId ? (
-                  <EditorEtapas projetoId={projetoId} etapas={etapas} />
+                  <div className="space-y-2">
+                    <EditorEtapas projetoId={projetoId} etapas={etapas} />
+                    <ArquivosSecao
+                      projetoId={projetoId} secao="etapas" podeEditar
+                      rotulo="Anexar desenho do fluxo"
+                    />
+                  </div>
                 ) : (
                   <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-[11.5px] text-ink-subtle">
                     Preencha o título no passo 1 para começar a listar as etapas.
@@ -442,6 +462,7 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
                   onChange={v => setF({ ...f, resultado_esperado: v })}
                   placeholder="Ex.: nenhum professor passa mais de 3 dias sem lançamento sem alguém falar com ele."
                 />
+                {projetoId && <ArquivosSecao projetoId={projetoId} secao="resultado_esperado" podeEditar />}
               </Campo>
 
               <Campo id="p-prazo" label="Prazo desejado" dica="Opcional — a liderança confirma na aprovação.">
@@ -453,14 +474,27 @@ function CorpoAssistente({ projetoInicial, onFechar }: {
               </Campo>
 
               <Campo
-                label="Desenho do projeto em PDF"
-                dica="Opcional, mas ajuda: fluxograma, print com marcação, esboço de tela."
+                label="Desenho do projeto"
+                dica="Opcional, mas ajuda: fluxograma, print com marcação, esboço de tela. Cada parte da ficha também aceita imagem nos passos anteriores."
               >
                 {projetoId ? (
-                  <AnexosProjeto projetoId={projetoId} podeEditar />
+                  <ArquivosSecao projetoId={projetoId} secao="geral" podeEditar />
                 ) : (
                   <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-[11.5px] text-ink-subtle">
                     Preencha os passos anteriores para anexar arquivos.
+                  </p>
+                )}
+              </Campo>
+
+              <Campo
+                label="Links"
+                dica="Protótipo externo, pasta do Drive, planilha — onde dá para ver o projeto por inteiro."
+              >
+                {projetoId ? (
+                  <LinksProjeto projetoId={projetoId} podeEditar />
+                ) : (
+                  <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-[11.5px] text-ink-subtle">
+                    Preencha os passos anteriores para adicionar links.
                   </p>
                 )}
               </Campo>

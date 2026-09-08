@@ -19,6 +19,19 @@ export type ProjetoFase       = 'planejamento' | 'em_andamento' | 'validacao' | 
 export type ProjetoOnde       = 'kms' | 'aluno' | 'gestao' | 'extensao' | 'portal' | 'processo' | 'outro'
 export type ProjetoNatureza   = 'melhoria' | 'novo'
 
+/** Parte da ficha que um arquivo ilustra. Imagem grudada na seção que ela
+ *  explica é lida junto com o texto; solta no fim do documento, não é lida. */
+export type ProjetoSecao =
+  | 'caminho' | 'objetivo' | 'descricao' | 'diferenca_hoje'
+  | 'etapas' | 'passo_a_passo' | 'resultado_esperado' | 'geral'
+
+export const MIMES_IMAGEM = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+export const MIME_PDF = 'application/pdf'
+
+export function ehImagem(mime: string | null | undefined): boolean {
+  return !!mime && MIMES_IMAGEM.includes(mime)
+}
+
 export const TIPO_PROJETO: { key: ProjetoTipo; label: string; descricao: string }[] = [
   { key: 'sistema',  label: 'Melhoria no sistema',  descricao: 'Mudança na plataforma, na extensão ou em algum automatismo.' },
   { key: 'processo', label: 'Melhoria de processo',  descricao: 'Como o time trabalha: régua, rotina, fluxo de atendimento.' },
