@@ -37,11 +37,14 @@ function iniciais(nome: string): string {
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
+// Identificação em UM passo: e-mail OU nome completo, o que o professor souber
+// (ou os dois). Basta um bater. Antes eram dois passos em série — e-mail e, se
+// falhasse, nome — o que fazia todo furo no e-mail cair no casamento exato de
+// nome, de longe a parte mais fácil de errar.
+// tentativa: 1ª ou 2ª tentativa. desempate: pede mês/ano (nomes idênticos).
 type Step =
-  | { tipo: 'identificacao-email'; email: string; erro: string }
-  // tentativa: 1ª ou 2ª tentativa de nome. desempate: pede mês/ano (nomes idênticos).
-  | { tipo: 'identificacao'; tentativa: 1 | 2; desempate: boolean; nome: string; erro: string; emailInformado: string }
-  // Achou pelo nome → pede o e-mail pra cadastrar antes de seguir.
+  | { tipo: 'identificacao'; tentativa: 1 | 2; desempate: boolean; email: string; nome: string; erro: string }
+  // Achou pelo nome e ele não informou e-mail → oferece cadastrar (pulável).
   | { tipo: 'cadastro-email'; resultado: PortalLookupResult; email: string; erro: string }
   | { tipo: 'confirmar-identidade'; resultado: PortalLookupResult }
   | { tipo: 'opcoes'; resultado: PortalLookupResult }
@@ -49,8 +52,10 @@ type Step =
   | { tipo: 'grupo-agendas'; professorId: string; professorNome: string; agendas: AgendaDisponivelType[] }
   | { tipo: 'confirmacao'; reuniao: ReuniaoConfirmada }
 
+const PASSO_INICIAL: Step = { tipo: 'identificacao', tentativa: 1, desempate: false, email: '', nome: '', erro: '' }
+
 export function Home() {
-  const [step, setStep] = useState<Step>({ tipo: 'identificacao-email', email: '', erro: '' })
+  const [step, setStep] = useState<Step>(PASSO_INICIAL)
   const [mes, setMes] = useState<number | null>(null)
   const [ano, setAno] = useState<number | null>(null)
 
@@ -59,37 +64,28 @@ export function Home() {
   const book             = useBookMeeting()
   const declararNaoFez   = useDeclararNaoFezReuniao()
 
-  async function handleSubmitEmail(e: React.FormEvent) {
-    e.preventDefault()
-    if (step.tipo !== 'identificacao-email') return
-    const emailAtual = step.email.trim()
-    if (!EMAIL_RE.test(emailAtual)) {
-      setStep({ ...step, erro: 'Digite um e-mail válido.' })
-      return
-    }
-
-    try {
-      const resultado = await lookup.mutateAsync({ email: emailAtual })
-
-      if (resultado.professor) {
-        // E-mail bateu → confirma o nome e segue.
-        setStep({ tipo: 'confirmar-identidade', resultado })
-        return
-      }
-
-      // E-mail não bateu → pede o nome completo (guardando o e-mail informado
-      // pra pré-preencher o cadastro quando o professor for identificado).
-      setStep({ tipo: 'identificacao', tentativa: 1, desempate: false, nome: '', erro: '', emailInformado: emailAtual })
-    } catch {
-      setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
-    }
-  }
-
-  async function handleSubmitNome(e: React.FormEvent) {
+  /** Identificação: manda o que estiver preenchido — e-mail, nome, ou os dois.
+   *  Basta um bater (o servidor tenta o e-mail primeiro, que é mais confiável). */
+  async function handleSubmitIdentificacao(e: React.FormEvent) {
     e.preventDefault()
     if (step.tipo !== 'identificacao') return
-    const nomeAtual = step.nome.trim()
-    if (nomeAtual.length < 3) {
+
+    const emailAtual = step.email.trim()
+    const nomeAtual  = step.nome.trim()
+    const temEmail   = emailAtual.length > 0
+    const temNome    = nomeAtual.length > 0
+
+    if (!temEmail && !temNome) {
+      setStep({ ...step, erro: 'Preencha seu e-mail ou seu nome completo — qualquer um dos dois serve.' })
+      return
+    }
+    // Só reclama do formato do campo que ele escolheu preencher: quem só quer
+    // usar o nome não pode ser barrado por um e-mail vazio, e vice-versa.
+    if (temEmail && !EMAIL_RE.test(emailAtual)) {
+      setStep({ ...step, erro: 'Esse e-mail parece incompleto. Confira, ou deixe em branco e use só o nome.' })
+      return
+    }
+    if (!temEmail && nomeAtual.length < 3) {
       setStep({ ...step, erro: 'Digite ao menos 3 letras do seu nome.' })
       return
     }
@@ -100,35 +96,32 @@ export function Home() {
 
     try {
       const resultado = await lookup.mutateAsync({
-        nome: nomeAtual,
-        ...(step.emailInformado ? { email: step.emailInformado } : {}),
+        ...(temEmail ? { email: emailAtual } : {}),
+        ...(temNome  ? { nome:  nomeAtual  } : {}),
         ...(step.desempate && mes != null && ano != null ? { mesInicio: mes, anoInicio: ano } : {}),
       })
 
       if (resultado.professor) {
-        // Nome completo bateu → pede o e-mail pra cadastrar.
-        setStep({ tipo: 'cadastro-email', resultado, email: step.emailInformado, erro: '' })
+        // Achou. Se ele informou um e-mail válido, o servidor já o guardou —
+        // segue direto pra confirmação. Se veio só o nome, oferecemos cadastrar
+        // o e-mail pra próxima vez ser instantânea (mas dá pra pular).
+        if (temEmail) setStep({ tipo: 'confirmar-identidade', resultado })
+        else          setStep({ tipo: 'cadastro-email', resultado, email: '', erro: '' })
         return
       }
 
       if (resultado.ambiguo) {
         // Mais de uma pessoa com o mesmo nome. Se ainda não pedimos mês/ano, pede;
         // se já pedimos e continua ambíguo, manda pro contato da coordenação.
-        if (!step.desempate) {
-          setStep({ ...step, nome: nomeAtual, desempate: true, erro: '' })
-        } else {
-          setStep({ tipo: 'contato-coordenacao' })
-        }
+        if (!step.desempate) setStep({ ...step, desempate: true, erro: '' })
+        else                 setStep({ tipo: 'contato-coordenacao' })
         return
       }
 
-      // Não encontrado. 1ª tentativa → reforça "nome completo" e deixa tentar de
-      // novo; 2ª tentativa (ou desempate sem match) → contato da coordenação.
-      if (step.desempate || step.tentativa >= 2) {
-        setStep({ tipo: 'contato-coordenacao' })
-      } else {
-        setStep({ ...step, nome: nomeAtual, tentativa: 2, erro: 'reforco' })
-      }
+      // Não encontrado. 1ª tentativa → reforça o que costuma faltar e deixa
+      // tentar de novo; 2ª (ou desempate sem match) → contato da coordenação.
+      if (step.desempate || step.tentativa >= 2) setStep({ tipo: 'contato-coordenacao' })
+      else setStep({ ...step, tentativa: 2, erro: 'reforco' })
     } catch {
       setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
     }
@@ -159,7 +152,7 @@ export function Home() {
   function recomecar() {
     setMes(null)
     setAno(null)
-    setStep({ tipo: 'identificacao-email', email: '', erro: '' })
+    setStep(PASSO_INICIAL)
   }
 
   async function handleEscolherGrupo() {
@@ -227,72 +220,6 @@ export function Home() {
       />
 
       <div className="relative z-10 flex items-center justify-center w-full">
-        {step.tipo === 'identificacao-email' && (
-          <div className="w-full max-w-sm space-y-6 animate-fade-up">
-            <div className="space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accentBlue-soft text-accentBlue shadow-inner-top">
-                <CalendarClock className="h-6 w-6" />
-              </div>
-              <div className="space-y-1.5">
-                <span className="label-micro flex items-center gap-1.5 text-accentBlue">
-                  <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
-                  Portal do professor
-                </span>
-                <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-                  Agendamento de Reuniões
-                </h1>
-                <p className="text-[14px] text-ink-muted leading-relaxed">
-                  Informe seu e-mail cadastrado para ver as opções de agendamento disponíveis para você.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
-                            shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
-              <div className="rounded-[1.5rem] bg-surface-canvas px-6 py-7 space-y-5">
-                <form onSubmit={handleSubmitEmail} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-[12px] text-ink-secondary font-medium">
-                      E-mail
-                    </Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      inputMode="email"
-                      value={step.email}
-                      onChange={ev => setStep({ ...step, email: ev.target.value })}
-                      required
-                      autoComplete="email"
-                      placeholder="seu.email@exemplo.com"
-                      className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
-                    />
-                  </div>
-
-                  {step.erro && (
-                    <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
-                                    text-[12.5px] text-brand-strong font-medium">
-                      <p>{step.erro}</p>
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={lookup.isPending}
-                    className={cn(
-                      'btn-press w-full h-11 rounded-full bg-ink text-ink-inverse',
-                      'flex items-center justify-center',
-                      'hover:bg-ink/90 disabled:opacity-60 disabled:cursor-not-allowed',
-                      'font-medium text-[13.5px]',
-                    )}
-                  >
-                    {lookup.isPending ? 'Buscando…' : 'Continuar'}
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-
         {step.tipo === 'identificacao' && (
           <div className="w-full max-w-sm space-y-6 animate-fade-up">
             <div className="space-y-3">
@@ -310,7 +237,7 @@ export function Home() {
                 <p className="text-[14px] text-ink-muted leading-relaxed">
                   {step.desempate
                     ? 'Encontramos mais de uma pessoa com esse nome. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'
-                    : 'Não encontramos esse e-mail no cadastro. Digite seu nome completo, exatamente como aparece na plataforma da King.'}
+                    : 'Pra ver suas opções de agendamento, informe seu e-mail ou seu nome completo — qualquer um dos dois serve.'}
                 </p>
               </div>
             </div>
@@ -318,7 +245,31 @@ export function Home() {
             <div className="rounded-[1.625rem] p-[1.5px] bg-surface-subtle border border-line-soft
                             shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
               <div className="rounded-[1.5rem] bg-surface-canvas px-6 py-7 space-y-5">
-                <form onSubmit={handleSubmitNome} className="space-y-4">
+                <form onSubmit={handleSubmitIdentificacao} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="text-[12px] text-ink-secondary font-medium">
+                      E-mail
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      inputMode="email"
+                      value={step.email}
+                      onChange={ev => setStep({ ...step, email: ev.target.value, erro: '' })}
+                      autoComplete="email"
+                      placeholder="seu.email@exemplo.com"
+                      className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
+                    />
+                  </div>
+
+                  {/* Separador "ou": deixa explícito que os dois campos são
+                      caminhos alternativos, não um formulário a preencher todo. */}
+                  <div className="flex items-center gap-3" aria-hidden>
+                    <span className="h-px flex-1 bg-line-soft" />
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-ink-muted">ou</span>
+                    <span className="h-px flex-1 bg-line-soft" />
+                  </div>
+
                   <div className="space-y-1.5">
                     <Label htmlFor="nome" className="text-[12px] text-ink-secondary font-medium">
                       Nome completo
@@ -327,14 +278,13 @@ export function Home() {
                       id="nome"
                       type="text"
                       value={step.nome}
-                      onChange={ev => setStep({ ...step, nome: ev.target.value })}
-                      required
+                      onChange={ev => setStep({ ...step, nome: ev.target.value, erro: '' })}
                       autoComplete="name"
                       placeholder="Seu nome completo, como no cadastro"
                       className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
                     />
                     <p className="text-[11.5px] text-ink-muted">
-                      Digite o nome completo, igual ao que aparece na plataforma da King (sem abreviações nem apelido).
+                      Igual ao que aparece na plataforma da King — sem abreviações nem apelido.
                     </p>
                   </div>
 
@@ -373,7 +323,10 @@ export function Home() {
                     <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
                                     text-[12.5px] text-brand-strong font-medium space-y-1">
                       <p className="font-semibold">Ainda não encontramos você.</p>
-                      <p>Confira: precisa ser o <strong>nome completo</strong>, exatamente igual ao cadastro na plataforma — sem abreviações e sem apelido.</p>
+                      <p>
+                        Tente <strong>preencher os dois campos</strong> — basta um deles bater. No nome, use o
+                        <strong> nome completo</strong> igual ao cadastro na plataforma, sem abreviações e sem apelido.
+                      </p>
                     </div>
                   ) : step.erro ? (
                     <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
@@ -394,20 +347,11 @@ export function Home() {
                   >
                     {lookup.isPending ? 'Buscando…' : 'Continuar'}
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={recomecar}
-                    className="btn-press w-full text-[12px] text-ink-muted hover:text-ink-secondary"
-                  >
-                    Voltar e usar o e-mail
-                  </button>
                 </form>
               </div>
             </div>
           </div>
         )}
-
         {step.tipo === 'cadastro-email' && step.resultado.professor && (
           <div className="w-full max-w-sm space-y-6 animate-fade-up">
             <div className="flex flex-col items-center gap-3.5 text-center">
@@ -419,7 +363,7 @@ export function Home() {
                   Encontramos você, {step.resultado.professor.nome.split(' ')[0]}!
                 </h1>
                 <p className="text-[13px] text-ink-muted">
-                  Confirme seu e-mail para cadastrarmos — assim seu agendamento fica mais rápido da próxima vez.
+                  Quer cadastrar seu e-mail? Da próxima vez ele sozinho já te identifica. Se preferir, pode pular.
                 </p>
               </div>
             </div>
@@ -462,7 +406,18 @@ export function Home() {
                       'font-medium text-[13.5px]',
                     )}
                   >
-                    {lookup.isPending ? 'Salvando…' : 'Continuar'}
+                    {lookup.isPending ? 'Salvando…' : 'Cadastrar e continuar'}
+                  </button>
+
+                  {/* Cadastrar o e-mail é uma conveniência pra próxima vez, não um
+                      requisito: ele já foi identificado pelo nome. Travar aqui só
+                      criaria mais um jeito de o professor não conseguir agendar. */}
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmarIdentidade(step.resultado)}
+                    className="btn-press w-full h-10 rounded-full border border-line-soft text-[13px] font-medium text-ink-secondary hover:bg-surface-subtle"
+                  >
+                    Pular e ver minhas opções
                   </button>
 
                   <button

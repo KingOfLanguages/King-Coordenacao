@@ -2,14 +2,21 @@
 // Edge Function: portal-agendamento-lookup
 //
 // Usada pela tela pública /agendar (sem login) como primeiro passo do Portal
-// de Agendamento. A identificação é feita PRIMEIRO pelo e-mail (exato, via
-// professor_emails) — hoje ~todos os professores têm e-mail cadastrado, então
-// esse caminho resolve com 100% de certeza e sem ambiguidade. Só caímos no
-// casamento por nome quando o professor não informou e-mail OU o e-mail não
-// bate com nenhum cadastro (e-mail novo / os poucos que ainda faltam). Nesse
-// fallback, se o professor for resolvido pelo nome e um e-mail válido tiver
-// sido informado, ele é APRENDIDO (origem 'portal') — assim o portal vai
-// preenchendo sozinho quem ainda não tem e-mail.
+// de Agendamento. A tela pede E-MAIL **OU** NOME COMPLETO de uma vez só: o
+// professor preenche o que souber (ou os dois) e basta UM bater pra ser
+// identificado. Antes eram dois passos em série — e-mail primeiro e, só se
+// falhasse, nome — o que transformava qualquer furo no e-mail num funil
+// obrigatório pelo casamento exato de nome, que é bem mais fácil de errar.
+//
+// A ordem de resolução continua a mesma (e-mail é mais confiável que nome):
+//   1. `professorId` — escolha explícita já resolvida.
+//   2. E-mail exato — `professor_emails` E `professores.email` (ver
+//      professorIdPorEmail).
+//   3. Nome completo exato.
+//
+// Quando o professor é resolvido pelo NOME e mandou um e-mail válido junto,
+// esse e-mail é APRENDIDO (origem 'portal') — assim o portal vai preenchendo
+// sozinho quem ainda não tem e-mail, e na próxima vez o e-mail já resolve.
 //
 // O casamento por nome exige o NOME COMPLETO EXATO (letra por letra); só caixa
 // (maiúscula/minúscula) e acentuação não precisam bater. Nada de nome parcial —
@@ -18,8 +25,8 @@
 //   • Bateu exatamente 1 professor  → resolvido (front confirma "Você é X?").
 //   • Bateu >1 (nomes idênticos, raro) → o front pede mês/ano de início e reenvia
 //     com `mesInicio`/`anoInicio`, usados como desempate (± 1 mês) contra data_inicio.
-//   • Não bateu exato → oferecemos "nomes próximos" (fuzzy) pra escolher da lista,
-//     só quando genuinamente parecidos (guardrail anti-scan do roster).
+//   • Não bateu exato → não encontrado. Sem sugestões fuzzy de propósito:
+//     devolver "nomes próximos" viraria um jeito de escanear o roster.
 //
 // Em qualquer caso de ambiguidade ou não-encontrado, a resposta é genérica
 // (`professor: null`) — nunca revela quantos bateram nem o motivo exato,
@@ -71,7 +78,8 @@
 //   POST /functions/v1/portal-agendamento-lookup
 //   Body: { "email"?: "prof@exemplo.com", "nome"?: "Fulano de Tal",
 //           "mesInicio"?: 3, "anoInicio"?: 2026 }
-//   (e-mail e nome são opcionais isoladamente, mas pelo menos um é obrigatório)
+//   (e-mail e nome são opcionais isoladamente, mas pelo menos um é obrigatório;
+//    mandar os dois é o caso normal e dobra a chance de identificar)
 //   Retorna: {
 //     professor:   { id, nome } | null,
 //     coordenador: { id, nome } | null,
@@ -93,7 +101,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -167,6 +175,69 @@ function diasDesde(dataIso: string | null): number | null {
 
 const diasDeCasa = diasDesde
 
+/** Resolve o professor a partir do e-mail informado, casando de forma EXATA
+ *  (só a caixa não precisa bater). Duas fontes, nesta ordem:
+ *
+ *    1. `professor_emails` — identificadores aprendidos (cadastro/calendar/portal).
+ *    2. `professores.email` — e-mail CANÔNICO do cadastro, mantido pelo
+ *       kms-api-sync via `perfil.email`.
+ *
+ *  A fonte 2 só era consultada pelo daily-import. Sem ela aqui, todo professor
+ *  cujo e-mail chegou pela API depois do backfill único de 20260629 respondia
+ *  "não encontramos esse e-mail" mesmo digitando o e-mail certo — e era jogado
+ *  no casamento por nome exato sem necessidade.
+ *
+ *  O filtro vai como `ilike` e a igualdade é RECONFERIDA em JS de propósito:
+ *  `_` e `%` são curinga no LIKE e aparecem em e-mail de verdade
+ *  (fulano_tal@…), então o banco pode devolver linhas a mais — nunca a menos.
+ *  Por isso também nada de `.maybeSingle()` aqui: com curinga ele daria 406 e
+ *  o e-mail viraria "não encontrado" em silêncio. */
+async function professorIdPorEmail(
+  admin: SupabaseClient,
+  email: string,
+): Promise<string | null> {
+  const alvo = email.toLowerCase().trim()
+
+  const { data: vinculos } = await admin
+    .from('professor_emails')
+    .select('professor_id, email')
+    .ilike('email', email)
+    .limit(50)
+  for (const v of (vinculos ?? []) as { professor_id: string; email: string | null }[]) {
+    if (v.email?.toLowerCase().trim() === alvo) return v.professor_id
+  }
+
+  const { data: cadastro } = await admin
+    .from('professores')
+    .select('id, email')
+    .ilike('email', email)
+    .limit(50)
+  for (const p of (cadastro ?? []) as { id: string; email: string | null }[]) {
+    if (p.email?.toLowerCase().trim() === alvo) return p.id
+  }
+
+  return null
+}
+
+/** Guarda o e-mail informado como identificador do professor, se ainda não
+ *  pertencer a ninguém. `professor_emails` tem índice único em lower(email),
+ *  então checamos antes — um e-mail pertence a no máximo um professor. */
+async function aprenderEmail(
+  admin: SupabaseClient,
+  professorId: string,
+  email: string,
+): Promise<void> {
+  if (await professorIdPorEmail(admin, email)) return
+  await admin.from('professor_emails').insert({ professor_id: professorId, email, origem: 'portal' })
+}
+
+/** Professor identificável pelo portal. `pausa` entra: quem está pausado
+ *  continua sendo professor da casa e pode precisar falar com a coordenação —
+ *  barrá-lo dava exatamente a mesma tela de "não encontramos você" que um nome
+ *  errado, sem nenhuma pista do motivo real. Só `desligado` fica de fora.
+ *  (É o mesmo critério que o portal-welcome-path já usava.) */
+const STATUS_FORA = 'desligado'
+
 const OPCOES_VAZIAS = {
   primeira_reuniao: { elegivel: false, link: null },
   acompanhamento:   { elegivel: false, link: null },
@@ -217,52 +288,38 @@ serve(async (req) => {
       .select('id, nome, status, coordenador_id, data_inicio')
       .eq('id', professorIdInput)
       .maybeSingle()
-    if (p && p.status === 'ativo') {
+    if (p && p.status !== STATUS_FORA) {
       professor = p as ProfRow
-      // Cadastro do e-mail do professor (passo "solicita e-mail" após achar pelo
-      // nome): quando o front reenvia professorId + o e-mail confirmado, gravamos
-      // se ainda não existir esse e-mail (professor_emails não tem unique em email).
-      if (emailValido) {
-        const { data: jaTem } = await admin
-          .from('professor_emails')
-          .select('id')
-          .ilike('email', email)
-          .limit(1)
-          .maybeSingle()
-        if (!jaTem) {
-          await admin.from('professor_emails').insert({ professor_id: p.id, email, origem: 'portal' })
-        }
-      }
+      // Cadastro do e-mail do professor (passo "solicita e-mail" quando ele foi
+      // achado pelo nome sem informar e-mail): o front reenvia professorId + o
+      // e-mail confirmado e a gente guarda.
+      if (emailValido) await aprenderEmail(admin, p.id, email)
     }
   }
 
   if (!professor && emailValido) {
-    const { data: emailRow } = await admin
-      .from('professor_emails')
-      .select('professor_id')
-      .ilike('email', email)
-      .maybeSingle()
-    if (emailRow) {
+    const professorId = await professorIdPorEmail(admin, email)
+    if (professorId) {
       const { data: p } = await admin
         .from('professores')
         .select('id, nome, status, coordenador_id, data_inicio')
-        .eq('id', emailRow.professor_id)
+        .eq('id', professorId)
         .maybeSingle()
-      if (p && p.status === 'ativo') professor = p as ProfRow
+      if (p && p.status !== STATUS_FORA) professor = p as ProfRow
     }
   }
 
-  // ── 2. Fallback por nome (token match) + aprendizado do e-mail informado ─────
+  // ── 2. Caminho do nome (quando o e-mail não veio ou não bateu) ───────────────
   if (!professor) {
-    // Sem nome (ex.: 1º passo só com e-mail que não bateu) → front pede o nome.
+    // Nem e-mail nem nome resolveram → não encontrado.
     if (!temNome) return json(respostaVazia(false))
 
-    const { data: ativos } = await admin
+    const { data: naCasa } = await admin
       .from('professores')
       .select('id, nome, status, coordenador_id, data_inicio')
-      .eq('status', 'ativo')
+      .neq('status', STATUS_FORA)
 
-    let candidatos = ((ativos ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
+    let candidatos = ((naCasa ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
 
     // Desempate por mês/ano de início, só quando ainda ambíguo.
     if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
@@ -276,9 +333,12 @@ serve(async (req) => {
     if (candidatos.length > 1)   return json(respostaVazia(true))
 
     professor = candidatos[0]
-    // NÃO aprendemos o e-mail aqui: o cadastro do e-mail é um passo explícito no
-    // front (o professor confirma/corrige o e-mail), que reenvia professorId +
-    // e-mail — gravado no bloco do professorIdInput acima.
+
+    // Resolvido pelo NOME com um e-mail válido junto: agora os dois vêm no mesmo
+    // envio (a tela de identificação pede e-mail OU nome numa vez só), então o
+    // e-mail que ele acabou de digitar é aprendido aqui mesmo — sem a tela extra
+    // de "confirme seu e-mail". Da próxima vez o e-mail sozinho já resolve.
+    if (emailValido) await aprenderEmail(admin, professor.id, email)
   }
 
   if (!professor) return json(respostaVazia(false))
