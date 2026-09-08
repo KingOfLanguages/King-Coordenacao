@@ -10,7 +10,10 @@ import { supabase } from '@/lib/supabase'
 // devolve o resultado por destinatário.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type StatusDisparo = 'enviado' | 'falha' | 'sem_email'
+// 'inativo' = a Edge Function barrou no envio porque o professor já não está
+// ativo/pausado. A lista da tela só traz ativos, mas o status pode virar entre
+// carregar a página e clicar em enviar — quem decide é o servidor.
+export type StatusDisparo = 'enviado' | 'falha' | 'sem_email' | 'inativo'
 
 export interface MensagemAlvo {
   professor_id: string
@@ -31,6 +34,7 @@ export interface RespostaDisparo {
   enviados: number
   falhas: number
   sem_email: number
+  inativos: number
   resultados: ResultadoDisparo[]
 }
 

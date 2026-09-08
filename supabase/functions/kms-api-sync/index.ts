@@ -21,6 +21,14 @@
 // distribuição continua sendo feita pelo nosso algoritmo
 // (atribuir_grupo_professor / distribuir_professores_inicial).
 //
+// AUSÊNCIA (2026-09-04): upsert sozinho só sabe falar de quem VEIO. Quem sumia
+// do feed ficava 'ativo' pra sempre e seguia recebendo convocação por e-mail —
+// com o agravante de que o snapshot congelado ("precisa marcar reunião", data
+// velha) empurrava o fantasma pro topo da fila de prioridade. Agora toda pessoa
+// devolvida pela API recebe o carimbo `visto_na_api_em`, e no fim de uma rodada
+// LIMPA chamamos reconciliar_professores_ausentes() pra dar baixa em quem
+// passou da carência sem aparecer. Ver migration 20260780.
+//
 // Secrets necessários:
 //   KMS_API_BASE_URL, KMS_API_EMAIL, KMS_API_PASSWORD
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (já existentes no projeto)
@@ -29,6 +37,17 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+/** Dias que um professor pode ficar fora do feed antes de ser desligado. O cron
+ *  roda de hora em hora, então 7 dias é ~168 chances de ele reaparecer: cobre
+ *  instabilidade da API e mudança de cadastro do outro lado sem dar baixa em
+ *  quem continua na escola. */
+const GRACA_AUSENCIA_DIAS = 7
+
+/** Fração dos nossos não-desligados que a rodada precisa ter carimbado pra
+ *  valer como prova de ausência de alguém. Um feed truncado responde 200 sem
+ *  erro nenhum; sem esse piso, ele viraria desligamento em massa. */
+const COBERTURA_MINIMA = 0.8
 
 interface AlunoKms {
   aluno_id: number
@@ -204,6 +223,11 @@ serve(async (req) => {
   let paginas = 0
   const erros: { pagina: number; erro: string }[] = []
 
+  // Um único instante pra rodada inteira: com o mesmo carimbo em todas as
+  // páginas, "veio nesta rodada" vira uma comparação exata, sem depender de
+  // quanto tempo a paginação levou.
+  const inicioRodada = new Date().toISOString()
+
   try {
     const token = await login(baseUrl, email, password)
     let cursor: string | null = null
@@ -249,6 +273,10 @@ serve(async (req) => {
             // Espelho da API (sobrescreve). O nivel curado NÃO é tocado.
             dados_atualizados:            perfil?.dados_atualizados ?? null,
             nivel_recomendado_alunos_raw: perfil?.nivel_recomendado_alunos ?? null,
+            // Prova de vida: "a API devolveu esta pessoa nesta rodada". É o que
+            // torna a AUSÊNCIA detectável lá embaixo — sem o carimbo, sumir do
+            // feed é indistinguível de não ter mudado nada.
+            visto_na_api_em: inicioRodada,
           }
         })
         const { data: upserted, error: upsertErr } = await admin
@@ -458,7 +486,71 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: msg, recebidos, criados, atualizados, paginas, erros }), { status: 500 })
   }
 
-  const result = { recebidos, criados, atualizados, paginas, erros }
+  // ── Reconciliação de ausentes ───────────────────────────────────────────────
+  // Desligar em lote é destrutivo, então só roda com a rodada COMPROVADAMENTE
+  // íntegra. Duas travas, e as duas importam:
+  //
+  //   1. `erros.length === 0` — uma página que falha aborta a paginação
+  //      (`cursor = null` no catch), então metade do roster simplesmente não foi
+  //      carimbada nesta rodada. Reconciliar aí desligaria a outra metade.
+  //   2. Cobertura — a API pode responder 200 com um feed truncado, sem erro
+  //      nenhum. Se o que veio não cobre a maior parte de quem temos como
+  //      ativo/pausado, a rodada não serve de prova de ausência de ninguém.
+  //
+  // A cobertura NÃO pode ser medida por `recebidos` cru: o feed devolve também
+  // os já desligados (1124 dos 2033 cadastros hoje), então `recebidos` sozinho
+  // fica ~2x maior que a base viva e passaria em qualquer piso, inclusive num
+  // feed pela metade. O que interessa é quantos dos NOSSOS não-desligados esta
+  // rodada de fato carimbou — que é exatamente a população em risco de baixa.
+  //
+  // Falhar aqui é só não reconciliar agora: o carimbo continua no banco e a
+  // próxima rodada limpa dá a mesma baixa. Nunca vale o risco do inverso.
+  let reconciliados: { id: string; nome: string; kms_id: string; visto_em: string }[] = []
+  let reconciliacao: string
+
+  const { count: naoDesligados } = await admin
+    .from('professores')
+    .select('*', { count: 'exact', head: true })
+    .neq('status', 'desligado')
+
+  const { count: vistosAgora } = await admin
+    .from('professores')
+    .select('*', { count: 'exact', head: true })
+    .neq('status', 'desligado')
+    .gte('visto_na_api_em', inicioRodada)
+
+  const cobertura = naoDesligados && naoDesligados > 0
+    ? (vistosAgora ?? 0) / naoDesligados
+    : 0
+
+  if (erros.length > 0) {
+    reconciliacao = `pulada — ${erros.length} página(s) com erro`
+  } else if (recebidos === 0) {
+    reconciliacao = 'pulada — a API não devolveu ninguém'
+  } else if (cobertura < COBERTURA_MINIMA) {
+    reconciliacao = `pulada — a rodada viu só ${vistosAgora} dos ${naoDesligados} não-desligados (${(cobertura * 100).toFixed(0)}%)`
+  } else {
+    const { data, error } = await admin.rpc('reconciliar_professores_ausentes', {
+      p_graca_dias: GRACA_AUSENCIA_DIAS,
+    })
+    if (error) {
+      console.error('[kms-api-sync] reconciliação falhou:', error.message)
+      reconciliacao = `erro — ${error.message}`
+      erros.push({ pagina: -1, erro: `reconciliação: ${error.message}` })
+    } else {
+      reconciliados = (data ?? []) as typeof reconciliados
+      reconciliacao = `ok — ${reconciliados.length} desligado(s) por ausência`
+      for (const p of reconciliados) {
+        console.log(`[kms-api-sync] desligado por ausência: ${p.nome} (kms ${p.kms_id}), visto por último em ${p.visto_em}`)
+      }
+    }
+  }
+
+  const result = {
+    recebidos, criados, atualizados, paginas, erros,
+    reconciliacao,
+    desligados_por_ausencia: reconciliados.map(p => ({ nome: p.nome, kms_id: p.kms_id, visto_em: p.visto_em })),
+  }
   console.log('[kms-api-sync] Concluído:', JSON.stringify(result))
 
   return new Response(JSON.stringify(result), {

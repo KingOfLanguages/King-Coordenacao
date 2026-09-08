@@ -106,9 +106,14 @@ interface ResultadoDisparo {
   professor_id: string
   nome: string
   email: string | null
-  status: 'enviado' | 'falha' | 'sem_email'
+  status: 'enviado' | 'falha' | 'sem_email' | 'inativo'
   erro?: string | null
 }
+
+/** Quem ainda recebe e-mail da coordenação. Fora daqui (hoje só 'desligado') o
+ *  vínculo com a escola acabou — mandar convocação é constrangedor pra pessoa e
+ *  queima quota. Ver a trava no passo 3. */
+const STATUS_QUE_RECEBEM = new Set(['ativo', 'pausa'])
 
 // ─── Servidor ─────────────────────────────────────────────────────────────────
 
@@ -166,14 +171,18 @@ serve(async (req) => {
   const ids = mensagens.map(m => m.professor_id)
   const { data: profs, error: profErr } = await admin
     .from('professores')
-    .select('id, nome, email')
+    .select('id, nome, email, status')
     .in('id', ids)
   if (profErr) {
     console.error('[enviar-email-massa] erro ao ler professores:', profErr.message)
     return json({ error: 'Erro ao localizar os professores.' }, 500)
   }
-  const profPor = new Map<string, { nome: string | null; email: string | null }>()
-  for (const p of profs ?? []) profPor.set(p.id as string, { nome: p.nome as string | null, email: p.email as string | null })
+  const profPor = new Map<string, { nome: string | null; email: string | null; status: string | null }>()
+  for (const p of profs ?? []) profPor.set(p.id as string, {
+    nome: p.nome as string | null,
+    email: p.email as string | null,
+    status: p.status as string | null,
+  })
 
   // ── 4. Envio via Brevo (sequencial) ──────────────────────────────────────────
   const brevoKey = Deno.env.get('BREVO_API_KEY')
@@ -190,6 +199,16 @@ serve(async (req) => {
     const prof  = profPor.get(m.professor_id)
     const nome  = prof?.nome ?? 'Professor(a)'
     const email = prof?.email?.trim() ?? ''
+
+    // Trava de desligado. A tela já filtra a lista por status, mas o status pode
+    // mudar entre carregar a tela e clicar em enviar — e o único ponto que sabe
+    // o status NA HORA DO ENVIO é este aqui. Sem log em email_disparos: nada foi
+    // enviado, e a linha contaria contra a quota do dia.
+    if (!prof || !STATUS_QUE_RECEBEM.has(prof.status ?? '')) {
+      console.log(`[enviar-email-massa] ⊘ ${nome}: status '${prof?.status ?? 'inexistente'}' — não recebe e-mail`)
+      resultados.push({ professor_id: m.professor_id, nome, email: email || null, status: 'inativo' })
+      continue
+    }
 
     if (!email) {
       resultados.push({ professor_id: m.professor_id, nome, email: null, status: 'sem_email' })
@@ -246,7 +265,8 @@ serve(async (req) => {
   const enviados  = resultados.filter(r => r.status === 'enviado').length
   const falhas    = resultados.filter(r => r.status === 'falha').length
   const semEmail  = resultados.filter(r => r.status === 'sem_email').length
+  const inativos  = resultados.filter(r => r.status === 'inativo').length
 
-  console.log(`[enviar-email-massa] lote ${loteId}: ${enviados} enviados, ${falhas} falhas, ${semEmail} sem e-mail`)
-  return json({ lote_id: loteId, total: resultados.length, enviados, falhas, sem_email: semEmail, resultados })
+  console.log(`[enviar-email-massa] lote ${loteId}: ${enviados} enviados, ${falhas} falhas, ${semEmail} sem e-mail, ${inativos} inativos`)
+  return json({ lote_id: loteId, total: resultados.length, enviados, falhas, sem_email: semEmail, inativos, resultados })
 })

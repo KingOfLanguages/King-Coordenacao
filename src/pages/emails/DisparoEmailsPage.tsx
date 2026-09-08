@@ -684,18 +684,21 @@ function PainelResultado({ resultado, onFechar }: { resultado: RespostaDisparo; 
         <h2 className="label-micro flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-urg-lowFg" /> Resultado do disparo</h2>
         <button onClick={onFechar} className="btn-press text-ink-muted hover:text-ink"><X className="h-4 w-4" /></button>
       </div>
-      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line-soft bg-line-soft">
+      <div className="grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line-soft bg-line-soft">
         <MetricCell label="Enviados" valor={resultado.enviados} tone="low" />
         <MetricCell label="Falhas" valor={resultado.falhas} tone={resultado.falhas > 0 ? 'high' : 'neutral'} />
         <MetricCell label="Sem e-mail" valor={resultado.sem_email} tone={resultado.sem_email > 0 ? 'high' : 'neutral'} />
+        <MetricCell label="Inativos" valor={resultado.inativos ?? 0} tone={(resultado.inativos ?? 0) > 0 ? 'high' : 'neutral'} />
       </div>
       {problemas.length > 0 && (
         <ul className="space-y-1 max-h-40 overflow-y-auto">
           {problemas.map(p => (
             <li key={p.professor_id} className="flex items-center justify-between gap-2 text-[12px]">
               <span className="text-ink truncate">{p.nome}</span>
-              <span className={cn('flex-shrink-0 text-[11px] font-medium', p.status === 'sem_email' ? 'text-ink-muted' : 'text-urg-highFg')}>
-                {p.status === 'sem_email' ? 'sem e-mail' : 'falha'}
+              <span className={cn('flex-shrink-0 text-[11px] font-medium', p.status === 'falha' ? 'text-urg-highFg' : 'text-ink-muted')}>
+                {p.status === 'sem_email' ? 'sem e-mail'
+                  : p.status === 'inativo' ? 'não está mais ativo'
+                  : 'falha'}
               </span>
             </li>
           ))}

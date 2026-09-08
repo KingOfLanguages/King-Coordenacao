@@ -136,7 +136,7 @@ serve(async (req) => {
   // ── Monta query: individual ou geral ─────────────────────────────────────────
   let query = admin
     .from('reunioes')
-    .select(`id, data, meet_link, titulo, professor_email, professores(nome, email), coordenador:profiles!coordenador_id(nome)`)
+    .select(`id, data, meet_link, titulo, professor_email, professores(nome, email, status), coordenador:profiles!coordenador_id(nome)`)
     .eq('status', 'pendente')
 
   if (reuniaoId) {
@@ -158,11 +158,19 @@ serve(async (req) => {
   let skipped = 0
 
   for (const r of reunioes ?? []) {
-    const prof      = r.professores as { nome: string; email: string | null } | null
+    const prof      = r.professores as { nome: string; email: string | null; status: string | null } | null
     const destEmail = (r.professor_email as string | null) ?? prof?.email ?? null
     const destNome  = prof?.nome ?? 'Professor(a)'
 
     if (!destEmail) { skipped++; continue }
+
+    // Reunião pendente de quem já foi desligado não vira lembrete. Reunião
+    // interna não tem professor vinculado (prof === null) e segue normal.
+    if (prof && !['ativo', 'pausa'].includes(prof.status ?? '')) {
+      console.log(`[send-reminders] ⊘ ${destNome}: status '${prof.status}' — sem lembrete`)
+      skipped++
+      continue
+    }
 
     const hora      = new Date(r.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
     const coordNome = (r.coordenador as { nome: string } | null)?.nome ?? 'Coordenação'

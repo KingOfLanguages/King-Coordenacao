@@ -131,7 +131,7 @@ serve(async (req) => {
   const admin = createClient(url, serviceKey)
   const { data: contato, error: contatoErr } = await admin
     .from('contatos_diarios')
-    .select('id, enviado, professor:professores(nome, email)')
+    .select('id, enviado, professor:professores(nome, email, status)')
     .eq('id', contatoId)
     .maybeSingle()
 
@@ -141,9 +141,18 @@ serve(async (req) => {
   }
   if (!contato) return json({ error: 'Contato não encontrado.' }, 404)
 
-  const prof  = contato.professor as { nome: string | null; email: string | null } | null
+  const prof  = contato.professor as { nome: string | null; email: string | null; status: string | null } | null
   const email = prof?.email?.trim() ?? ''
   const nome  = prof?.nome ?? 'Professor(a)'
+
+  // Trava de desligado: a lista do dia é gerada de madrugada só com ativos, mas
+  // o professor pode ter sido desligado no meio do dia — e quem clica em enviar
+  // está olhando uma tela carregada antes disso.
+  if (!prof || !['ativo', 'pausa'].includes(prof.status ?? '')) {
+    console.log(`[enviar-convite-email] ⊘ ${nome}: status '${prof?.status ?? 'inexistente'}'`)
+    return json({ error: 'Este professor não está mais ativo — o e-mail não foi enviado.' }, 422)
+  }
+
   if (!email) return json({ error: 'Este professor não tem e-mail cadastrado.' }, 422)
 
   // ── 4. Envio via Brevo ───────────────────────────────────────────────────────
