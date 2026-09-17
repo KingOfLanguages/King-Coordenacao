@@ -70,3 +70,24 @@ export function imagensDaGaleria(meta: Record<string, unknown> | null | undefine
 export function galeriaColunas(meta: Record<string, unknown> | null | undefined): 2 | 3 {
   return meta?.colunas === 3 ? 3 : 2
 }
+
+// ─── Embed ──────────────────────────────────────────────────────────────────
+// Página interativa nossa dentro da etapa, num iframe isolado (a calculadora de
+// pagamento é a primeira). Só caminho interno: o bloco existe para as páginas
+// de public/, não para embutir site de terceiro — e um iframe de outra origem
+// não teria como combinar altura e tema com a gente.
+
+/** Aceita só caminho da própria origem começando por `/`, sem `//` (que o
+ *  navegador leria como protocolo-relativo e sairia para outro host). */
+export function embedInterno(url: string | null | undefined): string | null {
+  const bruta = (url ?? '').trim()
+  if (!bruta.startsWith('/') || bruta.startsWith('//')) return null
+  return bruta
+}
+
+/** Altura inicial do iframe, antes de a página avisar a real por postMessage.
+ *  Só evita o salto do primeiro quadro. Default 640. */
+export function embedAltura(meta: Record<string, unknown> | null | undefined): number {
+  const v = meta?.altura
+  return typeof v === 'number' && v >= 160 && v <= 4000 ? Math.round(v) : 640
+}

@@ -4,7 +4,7 @@ import {
   Plus, Trash2, ChevronUp, ChevronDown, Type, Video, Image as ImageIcon,
   AlertTriangle, ListChecks, Eye, Heading1, Heading2, Code2, PanelLeft,
   List, MousePointerClick, Quote, Minus, Copy, Upload, ImagePlus,
-  GripVertical, Images, Film,
+  GripVertical, Images, Film, Calculator,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -58,6 +58,14 @@ const TIPOS_ELEMENTO: {
   { id: 'botao',   label: 'Botão',     icone: MousePointerClick, dica: 'Botão que leva a um link — planilha, formulário, material.' },
   { id: 'divisor', label: 'Divisor',   icone: Minus,             dica: 'Linha, pontos ou espaço para separar seções.' },
   { id: 'html',    label: 'HTML',      icone: Code2,             dica: 'Escotilha de fuga: só para conteúdo já pronto em HTML.' },
+  { id: 'embed',   label: 'Interativo', icone: Calculator,       dica: 'Página interativa nossa dentro da etapa — como a calculadora de pagamento.' },
+]
+
+/** As páginas interativas prontas. A lista é curta de propósito: o bloco existe
+ *  para o que NÓS publicamos em public/welcome-path/, não para embutir site de
+ *  terceiro. Página nova aqui = uma linha aqui e o arquivo lá. */
+const EMBEDS = [
+  { url: '/welcome-path/calculadora-pagamento.html', label: 'Calculadora de pagamento' },
 ]
 
 const TIPO_POR_ID = Object.fromEntries(TIPOS_ELEMENTO.map(t => [t.id, t]))
@@ -737,6 +745,28 @@ function EditorElemento({
             <p className="text-[11px] text-ink-muted">
               Use só para colar conteúdo que já existe em HTML. Para escrever do zero, prefira
               Título / Parágrafo / Destaque — eles ficam certos sozinhos no celular e no modo escuro.
+            </p>
+          </>
+        )}
+
+        {bloco.tipo === 'embed' && (
+          <>
+            <select
+              value={bloco.url ?? ''}
+              onChange={e => patch({ url: e.target.value || null })}
+              className="h-7 rounded-lg border border-line bg-surface-canvas px-2 text-[12px] text-ink focus:border-accentBlue focus:outline-none"
+            >
+              <option value="">Escolha a página…</option>
+              {EMBEDS.map(e => <option key={e.url} value={e.url}>{e.label}</option>)}
+            </select>
+            <CampoTexto
+              valor={bloco.titulo ?? ''}
+              onSalvar={v => patch({ titulo: v || null })}
+              placeholder="Título acima da página (opcional)"
+            />
+            <p className="text-[11px] text-ink-muted">
+              A página abre dentro da etapa, isolada do resto da plataforma, e acompanha o tema
+              claro/escuro. A altura se ajusta sozinha ao conteúdo.
             </p>
           </>
         )}

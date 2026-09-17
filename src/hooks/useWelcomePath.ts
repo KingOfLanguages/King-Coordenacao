@@ -69,7 +69,7 @@ export type EtapaTrilha = {
  *  extensões nossas. */
 export type TipoBloco =
   | 'h1' | 'h2' | 'text' | 'video' | 'imagem' | 'callout' | 'html'
-  | 'lista' | 'divisor' | 'botao' | 'citacao' | 'galeria'
+  | 'lista' | 'divisor' | 'botao' | 'citacao' | 'galeria' | 'embed'
 
 export type BlocoEtapa = {
   id: string

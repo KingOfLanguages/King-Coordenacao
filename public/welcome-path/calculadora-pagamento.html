@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculadora de pagamento</title>
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Calculadora de pagamento do professor — embutida na trilha do Welcome
+     Path pelo bloco `embed` (ver src/pages/welcomePath/Blocos.tsx).
+
+     Roda dentro de um iframe com sandbox="allow-scripts", sem
+     allow-same-origin: o script funciona, mas não enxerga o localStorage nem
+     a sessão do app, e o CSS daqui não vaza para a plataforma. Foi por isso
+     que o bloco `html` não servia — ele injeta por innerHTML, onde <script>
+     não executa e <style> com :root repinta o KTM inteiro.
+
+     Duas conversas com o pai, ambas por postMessage:
+       recebe  { tipo:"ktm-tema", tema:"light"|"dark" }
+       envia   { tipo:"ktm-embed-altura", altura:<px> }
+     A origem aqui é opaca (sandbox), então o pai valida por event.source,
+     nunca por event.origin.
+
+     As cores espelham os tokens de src/index.css. Repare que accent e urgency
+     NÃO viram com o tema na plataforma — por isso o par --hold-* (valor
+     retido) é definido aqui nos dois temas, no mesmo espírito dos tokens
+     `aviso.*`, em vez de reusar o amarelo de urgency, que no escuro ficaria
+     pastel sobre preto.
+     ───────────────────────────────────────────────────────────────────── -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg-canvas:#ffffff; --bg-subtle:#eef0f4; --bg-muted:#e5e7ec;
+  --fg-primary:#131316; --fg-secondary:#474850; --fg-muted:#818290; --fg-subtle:#b2b4bd;
+  --border-soft:#eaecf0; --border-default:#dde0e7; --border-strong:#c8cbd4;
+  --accent:#2a5cff; --accent-hov:#1d47d6; --accent-on:#ffffff;
+  --info-bg:#dde8ff; --info-fg:#1c3f9e; --info-bd:#b9ccff;
+  --ok-bg:#d3eedf;   --ok-fg:#0e6430;   --ok-bd:#a5d8bd;
+  --hold-bg:#fbe0c0; --hold-fg:#894800; --hold-bd:#eec79b;
+  --shadow-card:0 1px 3px 0 rgba(0,0,0,.04);
+  --r-lg:14px; --r-md:10px; --r-sm:6px;
+}
+:root[data-theme="dark"]{
+  --bg-canvas:#0e1016; --bg-subtle:#1a1e29; --bg-muted:#212636;
+  --fg-primary:#edeef2; --fg-secondary:#bbbdc8; --fg-muted:#878a96; --fg-subtle:#565966;
+  --border-soft:#181c27; --border-default:#22283a; --border-strong:#2e3548;
+  --info-bg:#121f3f; --info-fg:#a8c1ff; --info-bd:#26386d;
+  --ok-bg:#0f2a1d;   --ok-fg:#6ed69a;   --ok-bd:#1e4a34;
+  --hold-bg:#2e1f08; --hold-fg:#f0c274; --hold-bd:#553c12;
+  --shadow-card:0 1px 3px 0 rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html{background:transparent}
+body{
+  margin:0; background:transparent; color:var(--fg-primary);
+  font-family:Geist,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-feature-settings:"rlig","calt","cv11","ss01";
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  font-size:14.5px; line-height:1.55;
+}
+.wrap{padding:2px 2px 10px}
+h1,h2{margin:0; letter-spacing:-0.02em; text-wrap:balance}
+h1{font-size:23px; font-weight:700; line-height:1.15}
+h2{font-size:16.5px; font-weight:600}
+p{margin:0}
+.num{font-family:"Geist Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+.eyebrow{font-size:10.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-muted)}
+button{font-family:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-sm)}
+@media (prefers-reduced-motion:no-preference){ .flash{animation:flash .45s ease} }
+@keyframes flash{0%{transform:scale(1)}35%{transform:scale(1.04)}100%{transform:scale(1)}}
+
+/* topo */
+header.top{display:flex; flex-direction:column; gap:8px; margin-bottom:18px}
+header.top .sub{color:var(--fg-muted); font-size:13.5px; line-height:1.6; max-width:68ch}
+.brand{color:var(--accent)}
+.brand span{color:var(--border-strong); margin:0 4px}
+.periodo{display:flex; flex-wrap:wrap; margin-top:6px; border:1px solid var(--border-soft); border-radius:var(--r-md); background:var(--bg-canvas); overflow:hidden; box-shadow:var(--shadow-card)}
+.periodo > div{padding:9px 15px; border-right:1px solid var(--border-soft); display:flex; flex-direction:column; gap:2px; flex:1 1 150px}
+.periodo > div:last-child{border-right:0}
+.periodo b{font:600 14px Geist,sans-serif}
+
+/* passos */
+.passo{margin-top:30px}
+.passo-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px}
+.passo-n{width:24px; height:24px; flex:none; border-radius:50%; background:var(--accent); color:var(--accent-on); display:grid; place-items:center; font:600 12px Geist,sans-serif}
+.passo-sub{color:var(--fg-muted); font-size:13px; line-height:1.6; max-width:72ch; margin-bottom:13px}
+.reset{margin-left:auto; background:transparent; border:1px solid var(--border-default); color:var(--fg-muted); border-radius:var(--r-sm); padding:6px 11px; font:500 12px Geist,sans-serif; cursor:pointer; transition:border-color .15s,color .15s}
+.reset:hover{border-color:var(--hold-bd); color:var(--hold-fg)}
+
+/* presets */
+.presets{display:flex; gap:7px; flex-wrap:wrap; margin-bottom:13px; align-items:center}
+.presets .lab{font-size:12.5px; color:var(--fg-muted); margin-right:2px}
+.preset{background:var(--bg-canvas); border:1px solid var(--border-default); color:var(--fg-secondary); border-radius:var(--r-sm); padding:6px 12px; font:500 12.5px Geist,sans-serif; cursor:pointer; transition:border-color .15s,color .15s}
+.preset:hover{border-color:var(--accent); color:var(--accent)}
+.preset[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-on)}
+
+/* card do aluno em detalhe */
+.aluno{background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:var(--r-lg); box-shadow:var(--shadow-card); overflow:hidden}
+.aluno-head{display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border-soft); flex-wrap:wrap}
+.aluno-head input[type=text]{flex:1 1 150px; min-width:0; font:600 16px/1.3 Geist,sans-serif; color:var(--fg-primary); background:transparent; border:0; border-bottom:1px dashed var(--border-strong); padding:3px 2px}
+select{font:500 13px Geist,sans-serif; color:var(--fg-primary); background:var(--bg-subtle); border:1px solid var(--border-soft); border-radius:var(--r-sm); padding:5px 8px}
+.dias{display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--border-soft); background:var(--bg-subtle)}
+.dias .lab{font-size:12.5px; color:var(--fg-muted)}
+.chip{font:500 12.5px Geist,sans-serif; padding:6px 12px; border-radius:var(--r-sm); cursor:pointer; background:var(--bg-canvas); color:var(--fg-secondary); border:1px solid var(--border-default); transition:border-color .15s}
+.chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-on)}
+.chip:disabled{cursor:not-allowed; opacity:.45}
+.freq{margin-left:auto; font-size:12.5px; color:var(--fg-muted)}
+.freq b{color:var(--fg-primary); font-weight:600}
+.aluno-body{display:grid; grid-template-columns:minmax(0,270px) 1fr; gap:22px; padding:18px 16px}
+
+/* calendário */
+.cal-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:8px}
+.cal{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
+.cal .dow{font:600 9.5px Geist,sans-serif; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-subtle); text-align:center; padding-bottom:2px}
+.day{aspect-ratio:1; border-radius:var(--r-sm); display:grid; place-items:center; font:12px "Geist Mono",monospace; border:1px solid transparent; background:transparent; color:var(--fg-subtle); padding:0}
+.day.off{opacity:.45}
+.day.aula{background:var(--info-bg); color:var(--info-fg); border-color:var(--info-bd); cursor:pointer}
+.day.aula:hover{border-color:var(--accent)}
+.day.t-repo,.day.t-prof{color:var(--hold-fg); cursor:pointer; background:var(--hold-bg)}
+.day.t-repo{border:1px dashed var(--hold-bd)}
+.day.t-prof{border:2px solid var(--hold-bd)}
+.day.t-sem{background:var(--accent); color:var(--accent-on); border-color:var(--accent); cursor:pointer; font-weight:600}
+.day.blank{border:0}
+.cal-hint{font-size:11.5px; line-height:1.55; color:var(--fg-muted); margin-top:9px}
+.legend{display:grid; gap:5px; margin-top:9px; font-size:11.5px; color:var(--fg-muted)}
+.legend i{width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:6px; flex:none}
+.l-aula{background:var(--info-bg); border:1px solid var(--info-bd)}
+.l-repo{border:1px dashed var(--hold-bd); background:var(--hold-bg)}
+.l-prof{border:2px solid var(--hold-bd); background:var(--hold-bg)}
+.l-sem{background:var(--accent); border:1px solid var(--accent)}
+
+/* valor do plano */
+.plano-val{font:600 31px/1 "Geist Mono",monospace; color:var(--accent); display:block; margin:5px 0 3px; letter-spacing:-0.02em}
+.plano-sub{font-size:12.5px; color:var(--fg-muted); line-height:1.55}
+.bar{height:40px; border-radius:var(--r-md); margin:15px 0 8px; display:flex; overflow:hidden; border:1px solid var(--border-soft)}
+.bar-pay{background:var(--info-bg); flex-grow:1; display:grid; place-items:center; font:600 12.5px "Geist Mono",monospace; color:var(--info-fg); min-width:0}
+/* min-width + nowrap: quando o retido é uma fração pequena do plano, a faixa
+   fica estreita e a etiqueta quebrava em três linhas, estourando a altura. */
+.bar-hold{background:var(--hold-bg); border-left:1px solid var(--border-soft); display:grid; place-items:center; font:600 11.5px "Geist Mono",monospace; color:var(--hold-fg); min-width:104px; white-space:nowrap; padding:0 8px; overflow:hidden}
+.fatos{margin-top:15px; border:1px solid var(--border-soft); border-radius:var(--r-md); overflow:hidden}
+.fato{display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:10px 13px; border-bottom:1px solid var(--border-soft); font-size:13px}
+.fato:last-child{border-bottom:0}
+.fato span:first-child{color:var(--fg-muted)}
+.fato b{font:600 13px "Geist Mono",monospace; white-space:nowrap}
+.fato.hold b{color:var(--hold-fg)}
+.fato.extra b{color:var(--ok-fg)}
+.stepper{display:inline-flex; align-items:center; border:1px solid var(--border-soft); border-radius:var(--r-sm); background:var(--bg-subtle); margin-left:6px; vertical-align:middle}
+.stepper button{width:23px; height:23px; border:0; background:transparent; color:var(--fg-primary); cursor:pointer; font:14px/1 "Geist Mono",monospace}
+.stepper button:disabled{color:var(--fg-subtle); cursor:not-allowed}
+.stepper .val{width:22px; text-align:center; font:600 12.5px "Geist Mono",monospace}
+.conta{border-top:1px solid var(--border-soft); padding:12px 16px; background:var(--bg-subtle); font:13px "Geist Mono",monospace; display:flex; flex-wrap:wrap; gap:7px; align-items:center}
+.conta .op{color:var(--fg-muted)}
+.conta .res{margin-left:auto; font-weight:600; font-size:15.5px; color:var(--accent)}
+.tag-hold{color:var(--hold-fg); background:var(--hold-bg); padding:2px 7px; border-radius:var(--r-sm)}
+.tag-extra{color:var(--ok-fg); background:var(--ok-bg); padding:2px 7px; border-radius:var(--r-sm)}
+
+/* outros alunos */
+.outros{margin-top:12px; border:1px solid var(--border-soft); border-radius:var(--r-lg); background:var(--bg-canvas); overflow:hidden; box-shadow:var(--shadow-card)}
+.outros-head{padding:9px 14px; border-bottom:1px solid var(--border-soft); background:var(--bg-subtle)}
+.linha{display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--border-soft); font-size:13px; flex-wrap:wrap}
+.linha:last-child{border-bottom:0}
+.linha .foco{background:transparent; border:0; color:var(--accent); font:600 13px Geist,sans-serif; cursor:pointer; text-align:left; padding:0; text-decoration:underline; text-underline-offset:3px}
+.linha .plan{color:var(--fg-muted); font-size:12.5px}
+.linha .v{margin-left:auto; font:600 13px "Geist Mono",monospace}
+.linha .kill{background:transparent; border:1px solid var(--border-soft); color:var(--fg-muted); border-radius:var(--r-sm); width:23px; height:23px; cursor:pointer; font-size:13px; line-height:1}
+.linha .kill:hover{border-color:var(--border-strong); color:var(--fg-primary)}
+.add{border:1px dashed var(--border-default); background:transparent; color:var(--fg-muted); cursor:pointer; border-radius:var(--r-md); padding:9px 14px; font:500 12.5px Geist,sans-serif; align-self:flex-start; margin-top:11px; transition:border-color .15s,color .15s}
+.add:hover{border-color:var(--accent); color:var(--accent)}
+
+/* cenários */
+.cenarios{display:grid; grid-template-columns:repeat(3,1fr); gap:9px}
+.cena{text-align:left; background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:var(--r-md); padding:12px 13px; cursor:pointer; color:var(--fg-primary); display:flex; flex-direction:column; gap:3px; box-shadow:var(--shadow-card); transition:border-color .15s}
+.cena:hover{border-color:var(--accent)}
+.cena b{font:600 13.5px Geist,sans-serif; line-height:1.35}
+.cena span{font-size:12px; color:var(--fg-muted)}
+.cena.und b{color:var(--ok-fg)}
+.delta{margin-top:11px; border:1px solid var(--border-soft); border-radius:var(--r-lg); background:var(--bg-canvas); padding:14px 16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; box-shadow:var(--shadow-card)}
+.delta .antes{font:14px "Geist Mono",monospace; color:var(--fg-subtle); text-decoration:line-through}
+.delta .seta{color:var(--fg-subtle)}
+.delta .depois{font:600 21px "Geist Mono",monospace; color:var(--accent); letter-spacing:-0.02em}
+.delta .pill{font:600 11px Geist,sans-serif; letter-spacing:.05em; text-transform:uppercase; padding:5px 9px; border-radius:var(--r-sm)}
+.pill-igual{background:var(--info-bg); color:var(--info-fg)}
+.pill-menos{background:var(--hold-bg); color:var(--hold-fg)}
+.pill-mais{background:var(--ok-bg); color:var(--ok-fg)}
+.delta .exp{flex-basis:100%; font-size:12.5px; line-height:1.6; color:var(--fg-muted)}
+
+/* recibo */
+.recibo{background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:var(--r-lg); box-shadow:var(--shadow-card); overflow:hidden}
+.recibo-grid{display:grid; grid-template-columns:minmax(210px,290px) 1fr}
+.recibo-top{padding:20px 22px; border-right:1px dashed var(--border-default); display:flex; flex-direction:column; justify-content:center}
+.recibo-top .total{font:600 clamp(31px,5vw,42px)/1.05 "Geist Mono",monospace; color:var(--accent); display:block; margin-top:5px; letter-spacing:-0.03em}
+.recibo-lines{padding:20px 22px; display:flex; flex-direction:column; justify-content:center; gap:9px; font-size:13.5px}
+.rline{display:flex; justify-content:space-between; gap:12px; align-items:baseline}
+.rline span:last-child{font-family:"Geist Mono",monospace; font-variant-numeric:tabular-nums}
+.rline.hold{color:var(--hold-fg)}
+.hold-box{margin:0 22px 20px; padding:11px 13px; border:1px solid var(--hold-bd); border-radius:var(--r-md); background:var(--hold-bg); font-size:12.5px; line-height:1.6; color:var(--hold-fg)}
+.hold-box b{font-family:"Geist Mono",monospace}
+.tl{display:grid; grid-template-columns:1fr 40px 1fr; align-items:stretch; margin-top:12px}
+.tl-card{background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:var(--r-lg); padding:16px; box-shadow:var(--shadow-card)}
+.tl-card .v{font:600 25px "Geist Mono",monospace; display:block; margin:6px 0 9px; letter-spacing:-0.02em}
+.tl-card ul{margin:0; padding-left:16px; font-size:12.5px; line-height:1.6; color:var(--fg-muted)}
+.tl-arrow{display:grid; place-items:center; color:var(--fg-subtle); font-size:19px}
+
+/* meta */
+.meta-in{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:13px}
+.meta-in label{font-size:13px; color:var(--fg-muted)}
+.meta-in input{width:132px; font:600 18px "Geist Mono",monospace; color:var(--fg-primary); background:var(--bg-canvas); border:1px solid var(--border-default); border-radius:var(--r-sm); padding:7px 10px}
+.meta-atual{font-size:13px; color:var(--fg-muted)}
+.meta-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:9px}
+.meta-card{background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:var(--r-md); padding:13px 14px; box-shadow:var(--shadow-card)}
+.meta-card .q{font:600 28px/1 "Geist Mono",monospace; color:var(--accent); display:block; margin:5px 0 4px; letter-spacing:-0.02em}
+.meta-card .p{font:600 12.5px Geist,sans-serif}
+.meta-card .r{font-size:11.5px; line-height:1.5; color:var(--fg-muted); margin-top:2px; display:block}
+
+/* apoio */
+.rules{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px}
+.rule-col{border:1px solid var(--border-soft); border-radius:var(--r-lg); background:var(--bg-canvas); overflow:hidden; box-shadow:var(--shadow-card)}
+.rule-col > header{padding:10px 15px; font:600 13px Geist,sans-serif; border-bottom:1px solid var(--border-soft)}
+.rule-col.move > header{background:var(--hold-bg); color:var(--hold-fg)}
+.rule-col.still > header{background:var(--info-bg); color:var(--info-fg)}
+.rule{padding:11px 15px; border-bottom:1px solid var(--border-soft); font-size:13px}
+.rule:last-child{border-bottom:0}
+.rule b{display:block; font:600 13px Geist,sans-serif; margin-bottom:2px}
+.rule span{color:var(--fg-muted); line-height:1.55}
+.steps{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px}
+.stepcard{background:var(--bg-canvas); border:1px solid var(--border-soft); border-left:3px solid var(--accent); border-radius:var(--r-md); padding:13px; box-shadow:var(--shadow-card)}
+.stepcard .n{font:600 10.5px Geist,sans-serif; letter-spacing:.08em; text-transform:uppercase; color:var(--accent)}
+.stepcard b{display:block; font:600 13px Geist,sans-serif; margin:4px 0 3px}
+.stepcard span{font-size:12px; line-height:1.55; color:var(--fg-muted)}
+footer{margin-top:32px; padding-top:14px; border-top:1px solid var(--border-soft); font-size:11.5px; line-height:1.6; color:var(--fg-subtle)}
+
+@media (max-width:820px){
+  .aluno-body{grid-template-columns:1fr}
+  .rules,.tl{grid-template-columns:1fr}
+  .steps,.meta-grid{grid-template-columns:1fr 1fr}
+  .tl-arrow{transform:rotate(90deg); padding:6px 0}
+  .freq{margin-left:0; flex-basis:100%}
+}
+@media (max-width:640px){
+  .recibo-grid{grid-template-columns:1fr}
+  .recibo-top{border-right:0; border-bottom:1px dashed var(--border-default)}
+  .cenarios{grid-template-columns:1fr 1fr}
+}
+@media (max-width:440px){ .cenarios,.meta-grid,.steps{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow brand">King of Languages <span>·</span> Financeiro</p>
+    <h1>Calculadora de pagamento do professor</h1>
+    <p class="sub">Você recebe pelo <strong>plano do aluno</strong>, não por aula dada. Monte a sua agenda, teste o que acontece no mês e veja a conta se montar. Nada aqui altera a plataforma — é só para você entender.</p>
+    <div class="periodo">
+      <div><span class="eyebrow">Mês de referência</span><b id="pRef">—</b></div>
+      <div><span class="eyebrow">Fechamento</span><b id="pFech">—</b></div>
+      <div><span class="eyebrow">Pagamento até</span><b id="pPag">—</b></div>
+    </div>
+  </header>
+
+  <!-- PASSO 1 -->
+  <div class="passo">
+    <div class="passo-head">
+      <span class="passo-n">1</span><h2>Monte a sua agenda</h2>
+      <button class="reset" id="resetBtn" type="button">Recomeçar do zero</button>
+    </div>
+    <p class="passo-sub">Comece com um aluno para entender a conta, ou use um atalho para ver como fica a renda com a agenda cheia.</p>
+
+    <div class="presets">
+      <span class="lab">Atalhos:</span>
+      <button class="preset" type="button" data-preset="1">1 aluno</button>
+      <button class="preset" type="button" data-preset="5">5 alunos</button>
+      <button class="preset" type="button" data-preset="10">10 alunos</button>
+      <button class="preset" type="button" data-preset="15">15 alunos</button>
+    </div>
+
+    <div id="detalhe"></div>
+    <div id="outros"></div>
+    <button class="add" id="addBtn" type="button">+ Adicionar aluno</button>
+  </div>
+
+  <!-- PASSO 2 -->
+  <div class="passo">
+    <div class="passo-head"><span class="passo-n">2</span><h2>Teste o que pode acontecer no mês</h2></div>
+    <p class="passo-sub">Clique em uma situação e veja o valor reagir. Tudo se aplica ao aluno em detalhe acima, e o dia afetado aparece marcado no calendário. Repare em quantas dessas situações <strong>não mudam nada</strong> no seu pagamento.</p>
+    <div class="cenarios" id="cenarios"></div>
+    <div class="delta" id="delta">
+      <span class="depois num" id="deltaDepois">R$ 0,00</span>
+      <span class="pill pill-igual" id="deltaPill">Ponto de partida</span>
+      <span class="exp" id="deltaExp">Escolha uma situação acima para simular.</span>
+    </div>
+  </div>
+
+  <!-- PASSO 3 -->
+  <div class="passo">
+    <div class="passo-head"><span class="passo-n">3</span><h2>O resultado do mês</h2></div>
+    <p class="passo-sub" id="p3sub">Este é o valor que a plataforma fecha no fechamento do mês, somando todos os alunos da sua agenda.</p>
+    <section class="recibo" aria-label="Resumo consolidado">
+      <div class="recibo-grid">
+        <div class="recibo-top">
+          <p class="eyebrow" id="reciboRot">Você recebe</p>
+          <span class="total num" id="total">R$ 0,00</span>
+        </div>
+        <div class="recibo-lines" id="linhas"></div>
+      </div>
+      <div class="hold-box" id="holdBox" hidden></div>
+    </section>
+
+    <div class="tl">
+      <div class="tl-card">
+        <p class="eyebrow" id="tlNowRot">Este mês</p>
+        <span class="v num" id="tlNow">R$ 0,00</span>
+        <ul>
+          <li>Planos cheios de todos os alunos</li>
+          <li>Menos as faltas que ainda esperam reposição</li>
+        </ul>
+      </div>
+      <div class="tl-arrow" aria-hidden="true">→</div>
+      <div class="tl-card">
+        <p class="eyebrow" id="tlNextRot">Mês que vem, se repuser tudo</p>
+        <span class="v num" id="tlNext">R$ 0,00</span>
+        <ul>
+          <li>Planos cheios de novo</li>
+          <li>Mais as reposições que ficaram deste mês</li>
+          <li>A falta do aluno vence 30 dias corridos depois: passando disso, ou se ele abrir mão, você recebe do mesmo jeito anexando a evidência</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 4 -->
+  <div class="passo">
+    <div class="passo-head"><span class="passo-n">4</span><h2>Quanto eu preciso para chegar na minha meta</h2></div>
+    <p class="passo-sub">Só existe uma alavanca de renda na King: quantos alunos você tem e que planos eles fazem. Diga o valor que você quer por mês.</p>
+    <div class="meta-in">
+      <label for="metaInput">Quero receber por mês</label>
+      <input type="number" id="metaInput" value="2000" min="0" step="100" inputmode="numeric">
+      <span class="meta-atual" id="metaAtual"></span>
+    </div>
+    <div class="meta-grid" id="metaGrid"></div>
+  </div>
+
+  <!-- APOIO -->
+  <div class="passo">
+    <div class="passo-head"><span class="passo-n">5</span><h2>Para consultar depois</h2></div>
+    <p class="passo-sub">As duas listas que resolvem quase toda dúvida de pagamento, e a rotina que garante o valor certo.</p>
+    <div class="rules">
+      <div class="rule-col move">
+        <header>Mexe no seu valor</header>
+        <div class="rule"><b>Falta do aluno com direito a reposição</b><span>Retém uma fração do plano até você repor. Limite de 4 reposições por aluno no mês.</span></div>
+        <div class="rule"><b>Falta sua</b><span>Gera reposição automática e não tem prazo para vencer. Você só recebe depois de repor.</span></div>
+        <div class="rule"><b>Reposição feita de um mês anterior</b><span>Entra somada ao plano cheio do mês em que você deu a aula.</span></div>
+        <div class="rule"><b>Aluno que entra ou sai da sua agenda</b><span>Muda o número de planos que você tem. É o que realmente faz a sua renda subir ou cair.</span></div>
+      </div>
+      <div class="rule-col still">
+        <header>Não mexe em nada</header>
+        <div class="rule"><b>Quantos dias o mês tem</b><span>O mês pode cair com 12, 13 ou 14 aulas na sua agenda. O plano paga igual.</span></div>
+        <div class="rule"><b>Feriado nacional</b><span>É pago. Lance como Falta do aluno sem direito a reposição e escreva "Feriado" na observação.</span></div>
+        <div class="rule"><b>Falta sem direito a reposição</b><span>É paga normalmente, porque entra como aula completa.</span></div>
+        <div class="rule"><b>Aula que você ainda não lançou</b><span>Não desconta durante o mês, mas lance mesmo assim: acúmulo de pendências trava a sua agenda e você para de receber alunos novos.</span></div>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="stepcard"><span class="n">Todo dia</span><b>Lance a aula</b><span>É o lançamento que constrói o seu pagamento. Sem ele a aula não existe.</span></div>
+      <div class="stepcard"><span class="n" id="stepFech">Fechamento</span><b>Confira o fechamento</b><span>Compare o valor com as faltas que você registrou.</span></div>
+      <div class="stepcard"><span class="n">Em seguida</span><b>Autorize na plataforma</b><span>Só autorize com todas as aulas lançadas. Divergência, avise antes de autorizar.</span></div>
+      <div class="stepcard"><span class="n" id="stepPag">Pagamento</span><b>Receba</b><span>Quem autoriza mais cedo recebe mais cedo.</span></div>
+    </div>
+  </div>
+
+  <footer>
+    Simulação de apoio da Coordenação de Professores. A aula experimental é remunerada à parte e não entra nesta conta. Em caso de divergência, o valor válido é o do fechamento da plataforma.
+  </footer>
+</div>
+
+<script>
+(function(){
+  /* ---------- mês de referência: sempre o mês corrente ---------- */
+  var HOJE = new Date();
+  var REF  = { ano: HOJE.getFullYear(), mes: HOJE.getMonth() + 1 };
+
+  var MESES = ["janeiro","fevereiro","março","abril","maio","junho",
+               "julho","agosto","setembro","outubro","novembro","dezembro"];
+
+  /* Feriados nacionais de data fixa. Os móveis (Carnaval, Sexta-feira Santa,
+     Corpus Christi) ficam de fora de propósito: o cenário do feriado é
+     ilustrativo, e o professor lança qualquer um deles do mesmo jeito. */
+  var FERIADOS = {
+    1:[{d:1,  n:"Confraternização Universal"}],
+    4:[{d:21, n:"Tiradentes"}],
+    5:[{d:1,  n:"Dia do Trabalho"}],
+    9:[{d:7,  n:"Independência"}],
+    10:[{d:12,n:"Nossa Senhora Aparecida"}],
+    11:[{d:2, n:"Finados"},{d:15,n:"Proclamação da República"},{d:20,n:"Consciência Negra"}],
+    12:[{d:25,n:"Natal"}]
+  };
+
+  var MAX_REPOS = 4, MIN_DIAS = 2, MAX_DIAS = 5;
+  var SEMANA = [{d:1,n:"seg"},{d:2,n:"ter"},{d:3,n:"qua"},{d:4,n:"qui"},{d:5,n:"sex"}];
+  var DOW = ["dom","seg","ter","qua","qui","sex","sáb"];
+  var uid = 0, foco = null, alunos = [], antes = null;
+
+  var elDet = document.getElementById("detalhe"),
+      elOut = document.getElementById("outros"),
+      elCen = document.getElementById("cenarios");
+
+  function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+  function mesRef(){ return MESES[REF.mes - 1] + " de " + REF.ano; }
+  function mesNome(){ return MESES[REF.mes - 1]; }
+  function mesProx(){
+    var m = REF.mes === 12 ? 1 : REF.mes + 1, a = REF.mes === 12 ? REF.ano + 1 : REF.ano;
+    return MESES[m - 1] + " de " + a;
+  }
+  function dd(n){ return (n < 10 ? "0" : "") + n; }
+  function mesSeguinte(){ return REF.mes === 12 ? 1 : REF.mes + 1; }
+  function dataFech(){ return "01/" + dd(mesSeguinte()); }
+  function dataPag(){  return "07/" + dd(mesSeguinte()); }
+
+  /* ---------- modelo ---------- */
+  function novoAluno(nome, dias, dur){
+    return { id:++uid, nome:nome, dias:dias.slice(), dur:dur||30, marcas:{}, repos:0 };
+  }
+  function ultimoDia(){ return new Date(REF.ano, REF.mes, 0).getDate(); }
+  function dowDe(d){ return new Date(REF.ano, REF.mes - 1, d).getDay(); }
+  function valorAula(a){ return a.dur === 60 ? 15 : 7.5; }
+  function aulasDoPlano(a){ return a.dias.length * 4; }
+  function valorPlano(a){ return aulasDoPlano(a) * valorAula(a); }
+  function aulasNoCalendario(a){
+    var n = 0;
+    for (var d = 1; d <= ultimoDia(); d++) if (a.dias.indexOf(dowDe(d)) > -1) n++;
+    return n;
+  }
+  function contaTipo(a, tipos){
+    var n = 0;
+    for (var d in a.marcas) if (tipos.indexOf(a.marcas[d]) > -1) n++;
+    return n;
+  }
+  function retidas(a){ return contaTipo(a, ["repo","prof"]); }
+  function retido(a){ return retidas(a) * valorAula(a); }
+  function devolvido(a){ return a.repos * valorAula(a); }
+  function recebe(a){ return valorPlano(a) - retido(a) + devolvido(a); }
+  function totalGeral(){ var t=0; alunos.forEach(function(a){ t += recebe(a); }); return t; }
+  function brl(v){ return "R$ " + Number(v).toFixed(2).replace(".", ","); }
+  function esc(t){ return String(t).replace(/"/g, "&quot;"); }
+  function alunoFoco(){ for (var i=0;i<alunos.length;i++) if (alunos[i].id === foco) return alunos[i]; return alunos[0]; }
+  function listaDias(a){ return a.dias.slice().sort().map(function(d){ return DOW[d]; }).join(", "); }
+  function primeiroLivre(a){
+    for (var d = 1; d <= ultimoDia(); d++){
+      if (a.dias.indexOf(dowDe(d)) > -1 && !a.marcas[d]) return d;
+    }
+    return null;
+  }
+
+  /** Primeiro feriado do mês que cai em dia útil — o cenário só faz sentido se
+   *  puder bater num dia de aula. Devolve null quando não há. */
+  function feriadoDoMes(){
+    var lista = FERIADOS[REF.mes] || [];
+    for (var i = 0; i < lista.length; i++){
+      var w = dowDe(lista[i].d);
+      if (w >= 1 && w <= 5) return lista[i];
+    }
+    return null;
+  }
+
+  /* ---------- calendário ---------- */
+  function calendarioHTML(a){
+    var html = "";
+    DOW.forEach(function(n){ html += '<div class="dow">' + n.charAt(0) + '</div>'; });
+    for (var b = 0; b < dowDe(1); b++) html += '<div class="day blank"></div>';
+    for (var d = 1; d <= ultimoDia(); d++){
+      if (a.dias.indexOf(dowDe(d)) < 0){ html += '<div class="day off">' + d + '</div>'; continue; }
+      var t = a.marcas[d];
+      var cls = t ? "day t-" + t : "day aula";
+      var rot = t === "repo" ? "Dia " + d + ": falta do aluno com direito a reposição"
+              : t === "prof" ? "Dia " + d + ": falta sua, reposição obrigatória"
+              : t === "sem"  ? "Dia " + d + ": falta sem direito a reposição, paga normalmente"
+              : "Dia " + d + ": aula prevista";
+      html += '<button type="button" class="' + cls + '" data-dia="' + d + '" title="' + rot + ' — clique para trocar" aria-label="' + rot + '">' + d + '</button>';
+    }
+    return html;
+  }
+
+  /* ---------- render ---------- */
+  function renderDetalhe(){
+    var a = alunoFoco();
+    if (!a){ elDet.innerHTML = '<p class="passo-sub">Nenhum aluno na agenda. Use um atalho acima ou adicione um aluno.</p>'; return; }
+    var cal = aulasNoCalendario(a), plano = valorPlano(a), hold = retido(a);
+    var pct = plano ? Math.min(100, (hold / plano) * 100) : 0;
+    var pagas = contaTipo(a, ["sem"]);
+
+    var chips = SEMANA.map(function(s){
+      var on = a.dias.indexOf(s.d) > -1;
+      var trava = (on && a.dias.length <= MIN_DIAS) || (!on && a.dias.length >= MAX_DIAS);
+      return '<button type="button" class="chip" aria-pressed="' + on + '" data-diasem="' + s.d + '"' + (trava?" disabled":"") + '>' + s.n + '</button>';
+    }).join("");
+
+    var el = document.createElement("div");
+    el.className = "aluno";
+    el.innerHTML =
+      '<div class="aluno-head">' +
+        '<input type="text" id="nomeFoco" value="' + esc(a.nome) + '" aria-label="Nome do aluno">' +
+        '<select id="durFoco" aria-label="Duração da aula">' +
+          [30,60].map(function(d){ return '<option value="'+d+'"'+(a.dur===d?" selected":"")+'>aula de '+d+' min</option>'; }).join("") +
+        '</select>' +
+      '</div>' +
+      '<div class="dias"><span class="lab">Dias de aula na semana:</span>' + chips +
+        '<span class="freq">plano de <b>' + a.dias.length + 'x por semana</b></span></div>' +
+      '<div class="aluno-body">' +
+        '<div>' +
+          '<div class="cal-head"><p class="eyebrow">' + cap(mesRef()) + '</p><span class="num" style="font-size:12.5px">' + cal + ' aulas previstas</span></div>' +
+          '<div class="cal" id="cal">' + calendarioHTML(a) + '</div>' +
+          '<p class="cal-hint">Clique em um dia para alternar entre aula prevista, falta do aluno com reposição, falta sua e falta sem direito a reposição.</p>' +
+          '<div class="legend">' +
+            '<span><i class="l-aula"></i>Aula prevista</span>' +
+            '<span><i class="l-repo"></i>Falta do aluno com reposição — retém</span>' +
+            '<span><i class="l-prof"></i>Falta sua — retém, sem prazo</span>' +
+            '<span><i class="l-sem"></i>Sem direito a reposição ou feriado — paga</span>' +
+          '</div>' +
+        '</div>' +
+        '<div>' +
+          '<p class="eyebrow">O plano deste aluno vale</p>' +
+          '<span class="plano-val">' + brl(plano) + '</span>' +
+          '<p class="plano-sub">' + a.dias.length + ' dias por semana (' + listaDias(a) + ') × 4 semanas × aula de ' + a.dur + ' min</p>' +
+          '<div class="bar" role="img" aria-label="' + brl(plano - hold) + ' liberados, ' + brl(hold) + ' retidos">' +
+            '<div class="bar-pay">' + brl(plano - hold) + ' liberado</div>' +
+            (hold ? '<div class="bar-hold" style="flex:0 0 ' + pct + '%">' + brl(hold) + ' retido</div>' : '') +
+          '</div>' +
+          '<div class="fatos">' +
+            '<div class="fato"><span>Aulas previstas em ' + mesNome() + '</span><b>' + cal + '</b></div>' +
+            '<div class="fato"><span>O plano é calculado sobre</span><b>' + aulasDoPlano(a) + ' aulas</b></div>' +
+            '<div class="fato ' + (hold?"hold":"") + '"><span>Faltas que retêm (' + retidas(a) + ')</span><b>' + (hold ? "− " + brl(hold) : "—") + '</b></div>' +
+            '<div class="fato"><span>Faltas que não retêm (' + pagas + ')</span><b>R$ 0,00</b></div>' +
+            '<div class="fato extra"><span>Reposições de meses anteriores' +
+              ' <span class="stepper"><button type="button" data-rep="-1" aria-label="Menos uma reposição"' + (a.repos<=0?" disabled":"") + '>−</button>' +
+              '<span class="val">' + a.repos + '</span>' +
+              '<button type="button" data-rep="1" aria-label="Mais uma reposição"' + (a.repos>=8?" disabled":"") + '>+</button></span>' +
+            '</span><b>' + (a.repos ? "+ " + brl(devolvido(a)) : "—") + '</b></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="conta">' +
+        '<span>' + brl(plano) + ' do plano</span>' +
+        (hold ? '<span class="op">−</span><span class="tag-hold">' + brl(hold) + ' retido</span>' : '') +
+        (a.repos ? '<span class="op">+</span><span class="tag-extra">' + brl(devolvido(a)) + ' reposto</span>' : '') +
+        '<span class="res">' + brl(recebe(a)) + '</span>' +
+      '</div>';
+    elDet.innerHTML = ""; elDet.appendChild(el);
+  }
+
+  function renderOutros(){
+    var out = alunos.filter(function(a){ return a.id !== foco; });
+    if (!out.length){ elOut.innerHTML = ""; return; }
+    var html = '<div class="outros"><div class="outros-head"><span class="eyebrow">Outros alunos da agenda (' + out.length + ')</span></div>';
+    out.forEach(function(a){
+      html += '<div class="linha">' +
+        '<button type="button" class="foco" data-foco="' + a.id + '">' + esc(a.nome) + '</button>' +
+        '<span class="plan">' + a.dias.length + 'x de ' + a.dur + ' min · ' + listaDias(a) + (retidas(a) ? ' · ' + retidas(a) + ' retida(s)' : '') + '</span>' +
+        '<span class="v">' + brl(recebe(a)) + '</span>' +
+        '<button type="button" class="kill" data-kill="' + a.id + '" aria-label="Remover ' + esc(a.nome) + '">×</button>' +
+      '</div>';
+    });
+    elOut.innerHTML = html + '</div>';
+  }
+
+  function renderCenas(){
+    var f = feriadoDoMes();
+    var CENAS = [
+      {k:"repo", b:"O aluno avisou com 24h e faltou", s:"Falta com direito a reposição"},
+      {k:"sem",  b:"O aluno faltou sem avisar",       s:"Falta sem direito a reposição"},
+      {k:"prof", b:"Eu faltei",                       s:"Gera reposição automática"},
+      {k:"fer",  b:"Caiu feriado nacional",           s:f ? dd(f.d) + "/" + dd(REF.mes) + ", " + f.n : "Não há feriado fixo neste mês"},
+      {k:"rep",  b:"Repus tudo que estava pendente",  s:"Libera o valor retido", u:true},
+      {k:"venc", b:"Venceram os 30 dias sem reposição", s:"Com evidência anexada", u:true}
+    ];
+    elCen.innerHTML = CENAS.map(function(c){
+      return '<button type="button" class="cena' + (c.u?" und":"") + '" data-cena="' + c.k + '"><b>' + c.b + '</b><span>' + c.s + '</span></button>';
+    }).join("");
+  }
+
+  function renderResumo(){
+    var total = 0, hold = 0, planoTot = 0, repoTot = 0;
+    alunos.forEach(function(a){ total += recebe(a); hold += retido(a); planoTot += valorPlano(a); repoTot += devolvido(a); });
+
+    document.getElementById("total").textContent = brl(total);
+    var rot = alunos.length === 1 ? "Plano do aluno" : "Planos dos " + alunos.length + " alunos";
+    var l = '<div class="rline"><span>' + rot + '</span><span>' + brl(planoTot) + '</span></div>';
+    if (hold)    l += '<div class="rline hold"><span>Faltas aguardando reposição</span><span>− ' + brl(hold) + '</span></div>';
+    if (repoTot) l += '<div class="rline"><span>Reposições de meses anteriores</span><span>+ ' + brl(repoTot) + '</span></div>';
+    document.getElementById("linhas").innerHTML = l;
+
+    var box = document.getElementById("holdBox");
+    box.hidden = !hold;
+    if (hold) box.innerHTML = 'Você não perdeu <b>' + brl(hold) + '</b>. Esse valor entra no mês em que as reposições forem feitas — ou quando vencerem os 30 dias corridos e você anexar a evidência.';
+
+    document.getElementById("tlNow").textContent  = brl(total);
+    document.getElementById("tlNext").textContent = brl(planoTot + hold);
+    renderMeta(total);
+  }
+
+  var PLANOS = [
+    {n:"2x de 30 min", v:60},  {n:"3x de 30 min", v:90},
+    {n:"4x de 30 min", v:120}, {n:"5x de 30 min", v:150}
+  ];
+  function renderMeta(total){
+    var meta = Number(document.getElementById("metaInput").value) || 0;
+    document.getElementById("metaAtual").textContent =
+      "Sua agenda de hoje soma " + brl(total) + (meta > total ? " — faltam " + brl(meta - total) : " — meta alcançada");
+    document.getElementById("metaGrid").innerHTML = PLANOS.map(function(p){
+      var q = Math.ceil(meta / p.v) || 0;
+      return '<div class="meta-card"><span class="p">' + p.n + '</span>' +
+             '<span class="q">' + q + '</span>' +
+             '<span class="r">alunos · ' + brl(p.v) + ' cada · total ' + brl(q * p.v) + '</span></div>';
+    }).join("");
+  }
+
+  function mostraDelta(txt){
+    var depois = totalGeral();
+    var el = document.getElementById("deltaDepois");
+    el.textContent = brl(depois);
+    var pill = document.getElementById("deltaPill");
+    var dif = antes === null ? 0 : depois - antes;
+    var cls = dif === 0 ? "pill-igual" : (dif < 0 ? "pill-menos" : "pill-mais");
+    pill.className = "pill " + cls;
+    pill.textContent = dif === 0 ? "Sem alteração no seu valor"
+                     : (dif < 0 ? "− " + brl(-dif) + " retido" : "+ " + brl(dif));
+    var host = document.getElementById("delta");
+    var velho = host.querySelector(".antes"); if (velho) velho.remove();
+    var seta  = host.querySelector(".seta");  if (seta) seta.remove();
+    if (antes !== null && dif !== 0){
+      var s1 = document.createElement("span"); s1.className = "antes num"; s1.textContent = brl(antes);
+      var s2 = document.createElement("span"); s2.className = "seta"; s2.textContent = "→";
+      host.insertBefore(s2, el); host.insertBefore(s1, s2);
+    }
+    document.getElementById("deltaExp").textContent = txt;
+    el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+    avisaAltura();
+  }
+
+  function render(){
+    renderDetalhe(); renderOutros(); renderResumo();
+    document.querySelectorAll(".preset").forEach(function(b){
+      b.setAttribute("aria-pressed", String(+b.dataset.preset === alunos.length));
+    });
+    avisaAltura();
+  }
+
+  /* ---------- cenários ---------- */
+  function aplicaCena(k){
+    var a = alunoFoco(); if (!a) return;
+    antes = totalGeral();
+    var d, txt;
+
+    if (k === "repo" || k === "prof" || k === "sem"){
+      d = primeiroLivre(a);
+      if (!d){ mostraDelta("Todos os dias de aula deste aluno já estão marcados. Use Recomeçar para limpar."); return; }
+      if ((k === "repo" || k === "prof") && retidas(a) >= MAX_REPOS){
+        mostraDelta("Limite de 4 reposições por aluno no mês já atingido."); render(); return;
+      }
+      a.marcas[d] = k;
+      txt = k === "repo" ? "Dia " + d + ": o aluno avisou com 24h, então tem direito a reposição. O valor da aula sai agora e volta quando você repuser."
+          : k === "prof" ? "Dia " + d + ": falta sua. A reposição é obrigatória e não vence nunca — você só recebe depois de dar a aula."
+          : "Dia " + d + ": sem aviso de 24h, não há direito a reposição. A aula entra como completa e é paga normalmente.";
+    }
+    else if (k === "fer"){
+      var f = feriadoDoMes();
+      if (!f){
+        mostraDelta("Não há feriado nacional de data fixa em " + mesNome() + ". A regra vale igual quando houver: feriado é pago.");
+        render(); return;
+      }
+      if (a.dias.indexOf(dowDe(f.d)) < 0){
+        mostraDelta(dd(f.d) + "/" + dd(REF.mes) + " cai numa " + DOW[dowDe(f.d)] + ", e este aluno não tem aula nesse dia. Ative " + DOW[dowDe(f.d)] + " nos dias da semana para ver o efeito.");
+        render(); return;
+      }
+      a.marcas[f.d] = "sem";
+      txt = dd(f.d) + "/" + dd(REF.mes) + ", " + f.n + ". Feriado nacional é pago. Lance como Falta do aluno sem direito a reposição e escreva \"Feriado\" na observação.";
+    }
+    else if (k === "rep" || k === "venc"){
+      var n = retidas(a);
+      if (!n){ mostraDelta("Não há nada retido neste aluno para liberar."); render(); return; }
+      for (var chave in a.marcas) if (a.marcas[chave] === "repo" || a.marcas[chave] === "prof") delete a.marcas[chave];
+      txt = k === "rep"
+        ? "Você repôs " + n + " aula(s). O valor retido volta inteiro no mês em que a reposição foi dada."
+        : "Passaram os 30 dias corridos sem o aluno remarcar. Preencha o formulário na plataforma com a evidência e você recebe as " + n + " aula(s) do mesmo jeito.";
+    }
+    render();
+    mostraDelta(txt);
+  }
+
+  /* ---------- eventos ---------- */
+  elDet.addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    var a = alunoFoco(); if (!a) return;
+    antes = totalGeral();
+    if (b.dataset.dia){
+      var d = +b.dataset.dia, t = a.marcas[d];
+      var prox = t === undefined ? "repo" : t === "repo" ? "prof" : t === "prof" ? "sem" : null;
+      if (prox === null) delete a.marcas[d];
+      else if ((prox === "repo" || prox === "prof") && retidas(a) >= MAX_REPOS && !t) return;
+      else a.marcas[d] = prox;
+      render();
+      var nome = prox === "repo" ? "falta do aluno com reposição" : prox === "prof" ? "falta sua"
+               : prox === "sem" ? "falta sem direito a reposição, paga normalmente" : "aula prevista";
+      mostraDelta("Dia " + d + " marcado como " + nome + ".");
+      return;
+    }
+    if (b.dataset.diasem){
+      var ds = +b.dataset.diasem, i = a.dias.indexOf(ds);
+      if (i > -1){ if (a.dias.length <= MIN_DIAS) return; a.dias.splice(i,1); }
+      else { if (a.dias.length >= MAX_DIAS) return; a.dias.push(ds); }
+      Object.keys(a.marcas).forEach(function(d){ if (a.dias.indexOf(dowDe(+d)) < 0) delete a.marcas[d]; });
+      render();
+      mostraDelta("Plano de " + a.dias.length + "x por semana (" + listaDias(a) + "): " + brl(valorPlano(a)) + " por mês.");
+      return;
+    }
+    if (b.dataset.rep){
+      a.repos = Math.max(0, Math.min(8, a.repos + (+b.dataset.rep)));
+      render();
+      mostraDelta(a.repos ? a.repos + " reposição(ões) de meses anteriores dada(s) em " + mesNome() + ", somadas ao plano cheio."
+                          : "Sem reposições de meses anteriores.");
+    }
+  });
+  elDet.addEventListener("change", function(e){
+    if (e.target.id === "durFoco"){ var a = alunoFoco(); antes = totalGeral(); a.dur = +e.target.value; render();
+      mostraDelta("Aula de " + a.dur + " min: cada aula vale " + brl(valorAula(a)) + " na conta do plano."); }
+  });
+  elDet.addEventListener("input", function(e){
+    if (e.target.id === "nomeFoco"){ var a = alunoFoco(); if (a) a.nome = e.target.value; }
+  });
+
+  elOut.addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.foco){ foco = +b.dataset.foco; render(); return; }
+    if (b.dataset.kill){
+      antes = totalGeral();
+      alunos = alunos.filter(function(a){ return a.id !== +b.dataset.kill; });
+      render(); mostraDelta("Aluno removido da agenda. Cada aluno que sai é um plano inteiro a menos por mês.");
+    }
+  });
+
+  elCen.addEventListener("click", function(e){
+    var b = e.target.closest("button[data-cena]"); if (b) aplicaCena(b.dataset.cena);
+  });
+
+  document.getElementById("addBtn").addEventListener("click", function(){
+    antes = totalGeral();
+    var a = novoAluno("Novo aluno", [2,4], 30);
+    alunos.push(a); render();
+    mostraDelta("Aluno novo na agenda: + " + brl(valorPlano(a)) + " por mês.");
+  });
+
+  document.querySelectorAll(".preset").forEach(function(b){
+    b.addEventListener("click", function(){ monta(+b.dataset.preset); });
+  });
+  document.getElementById("resetBtn").addEventListener("click", function(){ monta(1); });
+  document.getElementById("metaInput").addEventListener("input", function(){ renderMeta(totalGeral()); avisaAltura(); });
+
+  /* ---------- montagem ---------- */
+  var NOMES = ["Ana Beatriz","Rafael","Juliana","Marcos","Patrícia","Thiago","Camila","Bruno","Letícia","Eduardo","Fernanda","Gustavo","Helena","Igor","Natália"];
+  var MIX = [[1,3,5],[2,4],[1,2,3,4,5],[1,3],[2,4,5],[1,2,3,4]];
+  function monta(n){
+    uid = 0; alunos = [];
+    for (var i = 0; i < n; i++){
+      var dias = i === 0 ? [1,3,5] : MIX[i % MIX.length];
+      alunos.push(novoAluno(NOMES[i % NOMES.length], dias, (i % 5 === 4) ? 60 : 30));
+    }
+    /* Um retido de exemplo já na abertura: é o ponto didático da etapa, e o
+       professor vê a barra dividida antes de clicar em qualquer coisa. */
+    if (n === 1){
+      var d = primeiroLivre(alunos[0]);
+      if (d) alunos[0].marcas[d] = "repo";
+    }
+    foco = alunos.length ? alunos[0].id : null;
+    antes = null;
+    render();
+    document.getElementById("deltaDepois").textContent = brl(totalGeral());
+    var pill = document.getElementById("deltaPill");
+    pill.className = "pill pill-igual"; pill.textContent = "Ponto de partida";
+    document.getElementById("deltaExp").textContent = "Escolha uma situação acima para simular.";
+    var host = document.getElementById("delta");
+    [".antes",".seta"].forEach(function(s){ var el = host.querySelector(s); if (el) el.remove(); });
+  }
+
+  /* ---------- rótulos que dependem do mês ---------- */
+  document.getElementById("pRef").textContent  = cap(mesRef());
+  document.getElementById("pFech").textContent = dataFech();
+  document.getElementById("pPag").textContent  = dataPag();
+  document.getElementById("p3sub").textContent =
+    "Este é o valor que a plataforma fecha em " + dataFech() + ", somando todos os alunos da sua agenda.";
+  document.getElementById("reciboRot").textContent = "Você recebe em " + mesNome();
+  document.getElementById("tlNowRot").textContent  = cap(mesRef());
+  document.getElementById("tlNextRot").textContent = cap(mesProx()) + ", se repuser tudo";
+  document.getElementById("stepFech").textContent  = dataFech();
+  document.getElementById("stepPag").textContent   = "Até " + dataPag();
+
+  /* ---------- integração com o KTM ---------- */
+  /* Origem opaca por causa do sandbox: o pai valida por event.source, e daqui
+     mandamos para "*" porque não temos a origem dele de forma confiável. */
+  var ultimaAltura = 0;
+  function avisaAltura(){
+    var h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+    if (h === ultimaAltura) return;
+    ultimaAltura = h;
+    try { parent.postMessage({ tipo: "ktm-embed-altura", altura: h }, "*"); } catch (_) {}
+  }
+
+  function aplicaTema(t){
+    if (t !== "dark" && t !== "light") return;
+    document.documentElement.dataset.theme = t;
+    avisaAltura();
+  }
+
+  aplicaTema(new URLSearchParams(location.search).get("tema"));
+
+  window.addEventListener("message", function(e){
+    var d = e.data;
+    if (d && d.tipo === "ktm-tema") aplicaTema(d.tema);
+  });
+
+  if (window.ResizeObserver) new ResizeObserver(avisaAltura).observe(document.documentElement);
+  window.addEventListener("load", avisaAltura);
+
+  renderCenas();
+  monta(1);
+})();
+</script>
+</body>
+</html>

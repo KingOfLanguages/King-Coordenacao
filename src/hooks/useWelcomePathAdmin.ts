@@ -16,7 +16,7 @@ import { supabase } from '@/lib/supabase'
  *  e 20260749. */
 export type TipoBlocoAdmin =
   | 'h1' | 'h2' | 'text' | 'video' | 'imagem' | 'callout' | 'html'
-  | 'lista' | 'divisor' | 'botao' | 'citacao' | 'galeria'
+  | 'lista' | 'divisor' | 'botao' | 'citacao' | 'galeria' | 'embed'
 export type TipoQuestaoAdmin =
   | 'multipla_escolha' | 'multipla_selecao' | 'verdadeiro_falso' | 'dissertativa'
 

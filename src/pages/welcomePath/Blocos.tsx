@@ -1,11 +1,13 @@
-import { ImageOff, VideoOff, Link2Off, ArrowUpRight, Quote } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useTheme } from 'next-themes'
+import { ImageOff, VideoOff, Link2Off, ArrowUpRight, Quote, MonitorOff } from 'lucide-react'
 import { videoEmbed } from '@/lib/videoEmbed'
 import { cn } from '@/lib/utils'
 import type { BlocoEtapa } from '@/hooks/useWelcomePath'
 import { CALLOUT_VARIANTES, varianteDoCallout } from './callout'
 import {
   itensDaLista, listaOrdenada, linkExterno, botaoEstilo, divisorEstilo,
-  imagensDaGaleria, galeriaColunas,
+  imagensDaGaleria, galeriaColunas, embedInterno, embedAltura,
 } from './blocoExtras'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,6 +21,11 @@ import {
 //
 // `imagem` e `html` são extensões nossas: a trilha usa print de tela o tempo
 // todo, e o conteúdo herdado do app antigo já veio escrito em HTML.
+//
+// `embed` é a extensão para conteúdo que PRECISA rodar script — a calculadora
+// de pagamento da etapa "Como calcular pagamento". Não dava para reaproveitar o
+// `html`: innerHTML não executa <script>, e o <style> de uma página inteira
+// vazaria para a plataforma. Ver BlocoEmbed mais abaixo.
 //
 // Sobre o dangerouslySetInnerHTML do tipo `html`: é escrito pela coordenação
 // (o editor é restrito a coordenacao/admin — ver pode_gerir_welcome_path na
@@ -185,6 +192,66 @@ function BlocoDivisor({ bloco }: { bloco: BlocoEtapa }) {
   return <hr className="border-line-soft" />
 }
 
+/** Página interativa nossa (hoje, a calculadora de pagamento) dentro da etapa.
+ *
+ *  `sandbox="allow-scripts"` sem `allow-same-origin` é deliberado: o arquivo é
+ *  servido pela MESMA origem do app, e sem essa combinação o iframe enxergaria
+ *  o localStorage e a sessão de quem está lendo. O preço é que a origem dele
+ *  fica opaca — por isso as duas pontas conversam por `event.source`, nunca por
+ *  `event.origin`, que chega como "null".
+ *
+ *  A altura vem de dentro: a página mede o próprio conteúdo e avisa. Sem isso
+ *  seria altura fixa, que no celular sobra ou corta — e um iframe com rolagem
+ *  interna atrapalharia a leitura da etapa. */
+function BlocoEmbed({ bloco }: { bloco: BlocoEtapa }) {
+  const src = embedInterno(bloco.url)
+  const ref = useRef<HTMLIFrameElement>(null)
+  const [altura, setAltura] = useState(() => embedAltura(bloco.meta))
+  const { resolvedTheme } = useTheme()
+  const tema = resolvedTheme === 'dark' ? 'dark' : 'light'
+
+  useEffect(() => {
+    function aoReceber(e: MessageEvent) {
+      if (e.source !== ref.current?.contentWindow) return
+      const d = e.data as { tipo?: unknown; altura?: unknown } | null
+      if (!d || d.tipo !== 'ktm-embed-altura' || typeof d.altura !== 'number') return
+      // Limites largos, só para uma página com bug não esticar a etapa sem fim.
+      setAltura(Math.min(8000, Math.max(160, Math.ceil(d.altura))))
+    }
+    window.addEventListener('message', aoReceber)
+    return () => window.removeEventListener('message', aoReceber)
+  }, [])
+
+  // O tema chega na URL (primeiro quadro, sem piscar) e por mensagem (quando a
+  // coordenação troca com o preview aberto).
+  useEffect(() => {
+    ref.current?.contentWindow?.postMessage({ tipo: 'ktm-tema', tema }, '*')
+  }, [tema])
+
+  if (!src) {
+    return <BlocoVazio icone={MonitorOff} texto="Este bloco aponta para um endereço inválido. Avise a coordenação." />
+  }
+
+  return (
+    <section className="space-y-2.5">
+      {bloco.titulo && (
+        <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{bloco.titulo}</h3>
+      )}
+      <iframe
+        ref={ref}
+        src={`${src}${src.includes('?') ? '&' : '?'}tema=${tema}`}
+        title={bloco.titulo ?? 'Conteúdo interativo da etapa'}
+        loading="lazy"
+        sandbox="allow-scripts"
+        scrolling="no"
+        style={{ height: altura }}
+        className="w-full border-0 bg-transparent"
+      />
+      {bloco.conteudo && <p className="text-[12px] text-ink-muted">{bloco.conteudo}</p>}
+    </section>
+  )
+}
+
 export function BlocoView({ bloco }: { bloco: BlocoEtapa }) {
   switch (bloco.tipo) {
     case 'h1':
@@ -238,6 +305,9 @@ export function BlocoView({ bloco }: { bloco: BlocoEtapa }) {
 
     case 'divisor':
       return <BlocoDivisor bloco={bloco} />
+
+    case 'embed':
+      return <BlocoEmbed bloco={bloco} />
 
     case 'html':
       return bloco.conteudo
