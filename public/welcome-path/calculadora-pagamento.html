@@ -350,8 +350,8 @@ footer{margin-top:32px; padding-top:14px; border-top:1px solid var(--border-soft
     <div class="rules">
       <div class="rule-col move">
         <header>Mexe no seu valor</header>
-        <div class="rule"><b>Falta do aluno com direito a reposição</b><span>Retém uma fração do plano até você repor. Limite de 4 reposições por aluno no mês.</span></div>
-        <div class="rule"><b>Falta sua</b><span>Gera reposição automática e não tem prazo para vencer. Você só recebe depois de repor.</span></div>
+        <div class="rule"><b>Falta do aluno com direito a reposição</b><span>Retém uma fração do plano até você repor. Limite de 4 por aluno no mês — da quinta em diante a falta dele é paga.</span></div>
+        <div class="rule"><b>Falta sua</b><span>Gera reposição automática, <strong>sem limite de quantidade</strong> e sem prazo para vencer. Se você faltar o mês inteiro, o aluno tem direito ao mês inteiro — e você só recebe depois de repor.</span></div>
         <div class="rule"><b>Reposição feita de um mês anterior</b><span>Entra somada ao plano cheio do mês em que você deu a aula.</span></div>
         <div class="rule"><b>Aluno que entra ou sai da sua agenda</b><span>Muda o número de planos que você tem. É o que realmente faz a sua renda subir ou cair.</span></div>
       </div>
@@ -398,7 +398,10 @@ footer{margin-top:32px; padding-top:14px; border-top:1px solid var(--border-soft
     12:[{d:25,n:"Natal"}]
   };
 
-  var MAX_REPOS = 4, MIN_DIAS = 2, MAX_DIAS = 5;
+  /* O limite de 4 no mês é das faltas DO ALUNO. A falta do professor não tem
+     teto: se ele faltar o mês inteiro, o aluno tem direito ao mês inteiro de
+     reposição — e o professor só recebe depois de repor tudo. */
+  var MAX_REPOS_ALUNO = 4, MIN_DIAS = 2, MAX_DIAS = 5;
   var SEMANA = [{d:1,n:"seg"},{d:2,n:"ter"},{d:3,n:"qua"},{d:4,n:"qui"},{d:5,n:"sex"}];
   var DOW = ["dom","seg","ter","qua","qui","sex","sáb"];
   var uid = 0, foco = null, alunos = [], antes = null;
@@ -439,7 +442,12 @@ footer{margin-top:32px; padding-top:14px; border-top:1px solid var(--border-soft
     return n;
   }
   function retidas(a){ return contaTipo(a, ["repo","prof"]); }
-  function retido(a){ return retidas(a) * valorAula(a); }
+  /** Só as faltas do aluno contam para o teto de 4 — ver MAX_REPOS_ALUNO. */
+  function retidasAluno(a){ return contaTipo(a, ["repo"]); }
+  /** Trava no valor do plano: o professor pode faltar mais vezes do que as
+   *  aulas que o plano cobre (o mês tem mais dias de aula do que as 4 semanas
+   *  do plano), e ninguém recebe valor negativo. Tudo fica retido, nada além. */
+  function retido(a){ return Math.min(retidas(a) * valorAula(a), valorPlano(a)); }
   function devolvido(a){ return a.repos * valorAula(a); }
   function recebe(a){ return valorPlano(a) - retido(a) + devolvido(a); }
   function totalGeral(){ var t=0; alunos.forEach(function(a){ t += recebe(a); }); return t; }
@@ -525,8 +533,10 @@ footer{margin-top:32px; padding-top:14px; border-top:1px solid var(--border-soft
           '<span class="plano-val">' + brl(plano) + '</span>' +
           '<p class="plano-sub">' + a.dias.length + ' dias por semana (' + listaDias(a) + ') × 4 semanas × aula de ' + a.dur + ' min</p>' +
           '<div class="bar" role="img" aria-label="' + brl(plano - hold) + ' liberados, ' + brl(hold) + ' retidos">' +
-            '<div class="bar-pay">' + brl(plano - hold) + ' liberado</div>' +
-            (hold ? '<div class="bar-hold" style="flex:0 0 ' + pct + '%">' + brl(hold) + ' retido</div>' : '') +
+            // Com o mês inteiro retido não sobra faixa azul — a amarela toma a
+            // barra, em vez de espremer um "R$ 0,00 liberado" ilegível.
+            (plano - hold > 0 ? '<div class="bar-pay">' + brl(plano - hold) + ' liberado</div>' : '') +
+            (hold ? '<div class="bar-hold" style="flex:' + (plano - hold > 0 ? '0 0 ' + pct + '%' : '1 1 auto') + '">' + brl(hold) + ' retido</div>' : '') +
           '</div>' +
           '<div class="fatos">' +
             '<div class="fato"><span>Aulas previstas em ' + mesNome() + '</span><b>' + cal + '</b></div>' +
@@ -656,12 +666,13 @@ footer{margin-top:32px; padding-top:14px; border-top:1px solid var(--border-soft
     if (k === "repo" || k === "prof" || k === "sem"){
       d = primeiroLivre(a);
       if (!d){ mostraDelta("Todos os dias de aula deste aluno já estão marcados. Use Recomeçar para limpar."); return; }
-      if ((k === "repo" || k === "prof") && retidas(a) >= MAX_REPOS){
-        mostraDelta("Limite de 4 reposições por aluno no mês já atingido."); render(); return;
+      if (k === "repo" && retidasAluno(a) >= MAX_REPOS_ALUNO){
+        mostraDelta("Este aluno já usou as 4 reposições do mês. A partir daqui a falta dele entra sem direito a reposição — e é paga.");
+        render(); return;
       }
       a.marcas[d] = k;
       txt = k === "repo" ? "Dia " + d + ": o aluno avisou com 24h, então tem direito a reposição. O valor da aula sai agora e volta quando você repuser."
-          : k === "prof" ? "Dia " + d + ": falta sua. A reposição é obrigatória e não vence nunca — você só recebe depois de dar a aula."
+          : k === "prof" ? "Dia " + d + ": falta sua. A reposição é obrigatória, não vence nunca e não tem limite de quantidade — você só recebe depois de dar a aula."
           : "Dia " + d + ": sem aviso de 24h, não há direito a reposição. A aula entra como completa e é paga normalmente.";
     }
     else if (k === "fer"){
@@ -697,8 +708,10 @@ footer{margin-top:32px; padding-top:14px; border-top:1px solid var(--border-soft
     if (b.dataset.dia){
       var d = +b.dataset.dia, t = a.marcas[d];
       var prox = t === undefined ? "repo" : t === "repo" ? "prof" : t === "prof" ? "sem" : null;
+      // Aluno no teto: o ciclo pula "falta do aluno" e vai direto para "falta
+      // sua", em vez de travar o dia — a falta do professor não tem limite.
+      if (prox === "repo" && retidasAluno(a) >= MAX_REPOS_ALUNO) prox = "prof";
       if (prox === null) delete a.marcas[d];
-      else if ((prox === "repo" || prox === "prof") && retidas(a) >= MAX_REPOS && !t) return;
       else a.marcas[d] = prox;
       render();
       var nome = prox === "repo" ? "falta do aluno com reposição" : prox === "prof" ? "falta sua"
