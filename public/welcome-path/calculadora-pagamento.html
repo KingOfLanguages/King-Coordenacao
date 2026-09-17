@@ -137,8 +137,10 @@ select{font:500 13px Geist,sans-serif; color:var(--fg-primary); background:var(-
 .bar{height:40px; border-radius:var(--r-md); margin:15px 0 8px; display:flex; overflow:hidden; border:1px solid var(--border-soft)}
 .bar-pay{background:var(--info-bg); flex-grow:1; display:grid; place-items:center; font:600 12.5px "Geist Mono",monospace; color:var(--info-fg); min-width:0}
 /* min-width + nowrap: quando o retido é uma fração pequena do plano, a faixa
-   fica estreita e a etiqueta quebrava em três linhas, estourando a altura. */
-.bar-hold{background:var(--hold-bg); border-left:1px solid var(--border-soft); display:grid; place-items:center; font:600 11.5px "Geist Mono",monospace; color:var(--hold-fg); min-width:104px; white-space:nowrap; padding:0 8px; overflow:hidden}
+   fica estreita e a etiqueta quebrava em três linhas, estourando a altura.
+   124px é a medida do pior caso — "R$ 60,00 retido", o teto de 4 reposições
+   numa aula de 60 min — mais o padding. Abaixo disso o texto era cortado. */
+.bar-hold{background:var(--hold-bg); border-left:1px solid var(--border-soft); display:grid; place-items:center; font:600 11.5px "Geist Mono",monospace; color:var(--hold-fg); min-width:124px; white-space:nowrap; padding:0 8px; overflow:hidden}
 .fatos{margin-top:15px; border:1px solid var(--border-soft); border-radius:var(--r-md); overflow:hidden}
 .fato{display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:10px 13px; border-bottom:1px solid var(--border-soft); font-size:13px}
 .fato:last-child{border-bottom:0}
