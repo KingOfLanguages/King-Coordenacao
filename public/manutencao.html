@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR" class="notranslate" translate="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <meta name="google" content="notranslate" />
+  <title>Em manutenção · King of Languages</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <style>
+    :root { --bg: #f7f6f3; --card: #ffffff; --text: #1c1b19; --muted: #6b6860; --line: #e6e3dc; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #151514; --card: #1f1e1c; --text: #f1efe9; --muted: #a3a097; --line: #2e2d2a; }
+      .logo-light { display: none; }
+      .logo-dark { display: block; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    main {
+      width: 100%; max-width: 440px; background: var(--card);
+      border: 1px solid var(--line); border-radius: 16px; padding: 36px 28px; text-align: center;
+    }
+    img { height: 44px; width: auto; margin: 0 auto 24px; }
+    .logo-dark { display: none; }
+    h1 { font-size: 1.35rem; margin: 0 0 10px; }
+    p { margin: 0; color: var(--muted); line-height: 1.55; }
+    small { display: block; margin-top: 22px; color: var(--muted); font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo-light" src="/king-logo.png" alt="King of Languages" />
+    <img class="logo-dark" src="/king-logo-dark.png" alt="King of Languages" />
+    <h1>Estamos em manutenção</h1>
+    <p>A plataforma está temporariamente fora do ar para melhorias. Volte em breve.</p>
+    <small>Esta página volta sozinha quando o sistema estiver no ar.</small>
+  </main>
+  <script>
+    // Enquanto a manutenção durar, "/" responde com redirecionamento pra cá.
+    // Quando deixar de redirecionar, o site voltou.
+    setInterval(function () {
+      fetch('/', { redirect: 'manual', cache: 'no-store' })
+        .then(function (r) { if (r.type !== 'opaqueredirect' && r.ok) location.replace('/'); })
+        .catch(function () {});
+    }, 60000);
+  </script>
+</body>
+</html>

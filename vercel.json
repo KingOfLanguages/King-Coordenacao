@@ -1,4 +1,11 @@
 {
+  "redirects": [
+    {
+      "source": "/((?!manutencao\\.html$|favicon\\.png$|king-logo\\.png$|king-logo-dark\\.png$).*)",
+      "destination": "/manutencao.html",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
