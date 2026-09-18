@@ -19,6 +19,8 @@ import {
   agoraDatetimeLocal, idKing,
 } from '@/lib/incidenteRelato'
 import { cn } from '@/lib/utils'
+import { SeletorPrioridade } from '@/components/incidentes/SeletorPrioridade'
+import { normalizarPrioridade, type Prioridade } from '@/lib/incidentePrioridade'
 
 interface Props {
   open: boolean
@@ -38,7 +40,9 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
   const [alunoId, setAlunoId] = useState('')
   const [alunoBusca, setAlunoBusca] = useState(false)
   const [categoria, setCategoria] = useState('')
-  const [urgencia, setUrgencia] = useState('Média')
+  const [urgencia, setUrgencia] = useState<Prioridade>('Média')
+  const [justificativa, setJustificativa] = useState('')
+  const [prazoManual, setPrazoManual] = useState(false)
   const [prazo, setPrazo] = useState('')
   const [natureza, setNatureza] = useState<Natureza>('desafio')
   const [descricao, setDescricao] = useState('')
@@ -53,9 +57,11 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
     setAlunoNome(incidente.aluno_nome ?? '')
     setAlunoId(incidente.aluno_id != null ? String(incidente.aluno_id) : '')
     setCategoria(incidente.problem_type)
-    setUrgencia(incidente.urgency)
-    // Prazo salvo; na falta dele (linha antiga), sugere pela urgência.
+    setUrgencia(normalizarPrioridade(incidente.urgency))
+    setJustificativa(incidente.urgencia_justificativa ?? '')
+    // Prazo salvo; na falta dele (linha antiga), sugere pela prioridade.
     setPrazo(isoParaPrazoInput(incidente.prazo_resolucao) || prazoSugeridoInput(incidente.urgency))
+    setPrazoManual(false)
     setNatureza(naturezaDe(incidente))
     setDescricao(incidente.description)
     setPassos(incidente.passos ?? '')
@@ -68,8 +74,15 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
     return lista.slice(0, 6)
   })()
 
-  // Informe é registro puro — urgência não faz sentido (não segue fluxo de resolução).
-  const mostrarUrgencia = natureza === 'desafio'
+  // Informe é registro puro: sem prazo. A prioridade dele vira importância de leitura.
+  const temPrazo = natureza === 'desafio'
+
+  /** Mudou o nível: o prazo acompanha, a menos que a pessoa já o tenha mexido
+   *  nesta edição — um prazo combinado não some porque o nível subiu. */
+  function trocarUrgencia(v: Prioridade) {
+    setUrgencia(v)
+    if (!prazoManual && incidente && v !== normalizarPrioridade(incidente.urgency)) setPrazo(prazoSugeridoInput(v))
+  }
 
   const categoriasBase = aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : ehGeral ? CATEGORIAS_GERAL : CATEGORIAS_PROFESSOR
   const categorias = categoriasVisiveis(categoriasBase, podeVerCoordOnly)
@@ -80,6 +93,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
 
   const relatoObrigatorio = relatoCompletoObrigatorio(aba)
   const faltas = faltasDoRelato({ aba, descricao, passos, ocorridoEm })
+  if (urgencia === 'Urgente' && !justificativa.trim()) faltas.push('dizer por que é urgente')
   const podeSalvar = faltas.length === 0
 
   async function handleSalvar() {
@@ -88,7 +102,8 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
       await atualizar.mutateAsync({
         id: incidente.id,
         problem_type: categoria,
-        urgency: mostrarUrgencia ? urgencia : 'Baixa',
+        urgency: urgencia,
+        urgencia_justificativa: urgencia === 'Urgente' ? justificativa : null,
         description: descricao,
         needs_follow_up: incidente.needs_follow_up,
         aluno_nome: alunoNome,
@@ -98,7 +113,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
         titulo_livre: ehGeral ? titulo : undefined,
         professor_id: incidente.professor_id,
         natureza,
-        prazo_resolucao: mostrarUrgencia ? prazoInputParaISO(prazo) : null,
+        prazo_resolucao: temPrazo ? prazoInputParaISO(prazo) : null,
       })
       toast.success('Chamado atualizado.')
       onOpenChange(false)
@@ -182,39 +197,30 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
               <p className="text-[11px] text-ink-subtle">O ID do King é o que identifica o aluno — o primeiro nome sozinho não.</p>
             </div>
 
-            <div className={cn('grid gap-2', mostrarUrgencia ? 'grid-cols-2' : 'grid-cols-1')}>
-              <div className="space-y-1.5">
-                <Label className="label-micro">Categoria</Label>
-                <Select value={categoria} onValueChange={setCategoria}>
-                  <SelectTrigger className="bg-surface-canvas border-line text-ink">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
-                    {opcoesCategoria.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {mostrarUrgencia && (
-                <div className="space-y-1.5">
-                  <Label className="label-micro">Urgência</Label>
-                  <Select value={urgencia} onValueChange={setUrgencia}>
-                    <SelectTrigger className="bg-surface-canvas border-line text-ink">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-surface-canvas border-line text-ink">
-                      <SelectItem value="Baixa">Baixa</SelectItem>
-                      <SelectItem value="Média">Média</SelectItem>
-                      <SelectItem value="Alta">Alta</SelectItem>
-                      <SelectItem value="Crítico">Crítico</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+            <div className="space-y-1.5">
+              <Label className="label-micro">Categoria</Label>
+              <Select value={categoria} onValueChange={setCategoria}>
+                <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
+                  {opcoesCategoria.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {mostrarUrgencia && (
+            <SeletorPrioridade
+              valor={urgencia}
+              onChange={trocarUrgencia}
+              natureza={natureza}
+              justificativa={justificativa}
+              onJustificativa={setJustificativa}
+              onConverterEmDesafio={() => setNatureza('desafio')}
+            />
+
+            {temPrazo && (
               <div className="space-y-1.5">
                 <Label className="label-micro flex items-center gap-1.5">
                   <CalendarClock className="h-3.5 w-3.5 text-ink-muted" />
@@ -223,7 +229,7 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                 <Input
                   type="date"
                   value={prazo}
-                  onChange={e => setPrazo(e.target.value)}
+                  onChange={e => { setPrazo(e.target.value); setPrazoManual(true) }}
                   className="h-9 bg-surface-canvas border-line w-full"
                 />
               </div>

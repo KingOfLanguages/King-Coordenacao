@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
 import { useColarImagens } from '@/hooks/useColarImagens'
+import { SeletorPrioridade } from '@/components/incidentes/SeletorPrioridade'
+import { sugestaoPorCategoria, type Prioridade } from '@/lib/incidentePrioridade'
 import {
   useCriarIncidente, useAlunosDoProfessor, useBuscarAlunos, uploadImagemIncidente, categoriasVisiveis,
   CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META,
@@ -71,7 +73,10 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [idAutomatico, setIdAutomatico] = useState(false)
   const [alunoBusca, setAlunoBusca] = useState(false)
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_PROFESSOR[0])
-  const [urgencia, setUrgencia] = useState('Média')
+  const [urgencia, setUrgencia] = useState<Prioridade>(() => sugestaoPorCategoria(CATEGORIAS_PROFESSOR[0]))
+  // A sugestão pela categoria só mexe no nível até a pessoa escolher um à mão.
+  const [urgenciaManual, setUrgenciaManual] = useState(false)
+  const [justificativa, setJustificativa] = useState('')
   // Prazo sugerido pela urgência, mas editável — `prazoManual` trava a sugestão
   // automática assim que a pessoa mexe no campo.
   const [prazo, setPrazo] = useState(() => prazoSugeridoInput('Média'))
@@ -94,8 +99,8 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const alunoBlurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Informe é registro puro — urgência não faz sentido (não segue fluxo de resolução).
-  const mostrarUrgencia = natureza === 'desafio'
+  // Informe é registro puro: sem prazo. A prioridade dele vira importância de leitura.
+  const temPrazo = natureza === 'desafio'
 
   // URLs de preview locais — revogadas quando a lista muda ou o diálogo desmonta.
   const previews = useMemo(() => imagens.map(f => URL.createObjectURL(f)), [imagens])
@@ -144,8 +149,10 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setAlunoId('')
     setIdAutomatico(false)
     setCategoria(CATEGORIAS_PROFESSOR[0])
-    setUrgencia('Média')
-    setPrazo(prazoSugeridoInput('Média'))
+    setUrgencia(sugestaoPorCategoria(CATEGORIAS_PROFESSOR[0]))
+    setUrgenciaManual(false)
+    setJustificativa('')
+    setPrazo(prazoSugeridoInput(sugestaoPorCategoria(CATEGORIAS_PROFESSOR[0])))
     setPrazoManual(false)
     setDescricao('')
     setPassos('')
@@ -166,10 +173,23 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setIdAutomatico(true)
   }
 
-  // Troca a urgência e, enquanto o prazo não foi editado à mão, reajusta a sugestão.
-  function trocarUrgencia(v: string) {
+  // Troca a prioridade e, enquanto o prazo não foi editado à mão, reajusta a sugestão.
+  function aplicarUrgencia(v: Prioridade) {
     setUrgencia(v)
     if (!prazoManual) setPrazo(prazoSugeridoInput(v))
+  }
+  function escolherUrgencia(v: Prioridade) {
+    setUrgenciaManual(true)
+    aplicarUrgencia(v)
+  }
+
+  /** Nível que a categoria sugere — informe parte de Baixa (é só registro). */
+  function sugestaoPara(cat: string, nat: Natureza = natureza): Prioridade {
+    return nat === 'informe' ? 'Baixa' : sugestaoPorCategoria(cat)
+  }
+  function trocarCategoria(cat: string) {
+    setCategoria(cat)
+    if (!urgenciaManual) aplicarUrgencia(sugestaoPara(cat))
   }
 
   const categoriasBase = aba === 'professor' ? CATEGORIAS_PROFESSOR : aba === 'plataforma' ? CATEGORIAS_PLATAFORMA : CATEGORIAS_GERAL
@@ -177,13 +197,14 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
 
   function escolherIntencao(n: Natureza) {
     setNatureza(n)
+    if (!urgenciaManual) aplicarUrgencia(sugestaoPara(categoria, n))
     setPasso(2)
   }
 
   function trocarAba(novaAba: Aba) {
     setAba(novaAba)
     const base = novaAba === 'professor' ? CATEGORIAS_PROFESSOR : novaAba === 'plataforma' ? CATEGORIAS_PLATAFORMA : CATEGORIAS_GERAL
-    setCategoria(categoriasVisiveis(base, podeVerCoordOnly)[0])
+    trocarCategoria(categoriasVisiveis(base, podeVerCoordOnly)[0])
   }
 
   const resultados = useMemo(() => {
@@ -201,6 +222,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const relatoObrigatorio = relatoCompletoObrigatorio(aba)
   const faltas = faltasDoRelato({ aba, descricao, passos, ocorridoEm })
   if (aba === 'professor' && !selecionado) faltas.push('escolher o professor')
+  if (urgencia === 'Urgente' && !justificativa.trim()) faltas.push('dizer por que é urgente')
   const podeConfirmar = faltas.length === 0
 
   async function handleConfirmar() {
@@ -215,7 +237,8 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
       }
       await criar.mutateAsync({
         problem_type: categoria,
-        urgency: mostrarUrgencia ? urgencia : 'Baixa',
+        urgency: urgencia,
+        urgencia_justificativa: urgencia === 'Urgente' ? justificativa : null,
         description: descricao.trim(),
         needs_follow_up: false,
         professor_id: aba !== 'geral' ? selecionado?.id : null,
@@ -227,7 +250,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         image_urls: imageUrls,
         natureza,
         ti_status: aba === 'plataforma' ? 'chamado_aberto' : null,
-        prazo_resolucao: mostrarUrgencia ? prazoInputParaISO(prazo) : null,
+        prazo_resolucao: temPrazo ? prazoInputParaISO(prazo) : null,
       })
       toast.success(natureza === 'informe' ? 'Informe registrado.' : 'Chamado aberto.')
       onOpenChange(false)
@@ -472,42 +495,31 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             </p>
           </div>
 
-          {/* min-w-0 nas colunas + w-full no trigger: sem isso o SelectTrigger é
-              w-fit e cresce com a categoria longa, invadindo a coluna da urgência.
-              Com w-full o valor respeita o line-clamp-1 e trunca dentro da coluna. */}
-          <div className={cn('grid gap-2', mostrarUrgencia ? 'grid-cols-2' : 'grid-cols-1')}>
-            <div className="space-y-1.5 min-w-0">
-              <Label className="label-micro">Categoria</Label>
-              <Select value={categoria} onValueChange={setCategoria}>
-                <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
-                  {categorias.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {mostrarUrgencia && (
-              <div className="space-y-1.5 min-w-0">
-                <Label className="label-micro">Urgência</Label>
-                <Select value={urgencia} onValueChange={trocarUrgencia}>
-                  <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-surface-canvas border-line text-ink">
-                    <SelectItem value="Baixa">Baixa</SelectItem>
-                    <SelectItem value="Média">Média</SelectItem>
-                    <SelectItem value="Alta">Alta</SelectItem>
-                    <SelectItem value="Crítico">Crítico</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          <div className="space-y-1.5 min-w-0">
+            <Label className="label-micro">Categoria</Label>
+            <Select value={categoria} onValueChange={trocarCategoria}>
+              <SelectTrigger className="w-full bg-surface-canvas border-line text-ink">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-surface-canvas border-line text-ink max-h-64">
+                {categorias.map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {mostrarUrgencia && (
+          <SeletorPrioridade
+            valor={urgencia}
+            onChange={escolherUrgencia}
+            natureza={natureza}
+            justificativa={justificativa}
+            onJustificativa={setJustificativa}
+            sugestao={sugestaoPara(categoria)}
+            onConverterEmDesafio={() => setNatureza('desafio')}
+          />
+
+          {temPrazo && (
             <div className="space-y-1.5">
               <Label className="label-micro flex items-center gap-1.5">
                 <CalendarClock className="h-3.5 w-3.5 text-ink-muted" />
@@ -519,7 +531,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                 onChange={e => { setPrazo(e.target.value); setPrazoManual(true) }}
                 className="h-9 bg-surface-canvas border-line w-full"
               />
-              <p className="text-[11px] text-ink-subtle">Sugerido pela urgência ({urgencia}). Ajuste se precisar.</p>
+              <p className="text-[11px] text-ink-subtle">Sugerido pela prioridade ({urgencia}), em dias úteis. Ajuste se precisar.</p>
             </div>
           )}
 

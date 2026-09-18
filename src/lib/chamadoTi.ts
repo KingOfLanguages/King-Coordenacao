@@ -7,14 +7,14 @@ import { linhasIdentificacao, linhasPassos } from '@/lib/incidenteRelato'
 // Ponte KTM → plataforma de chamados do TI (chamadostikingoflanguages).
 //
 // Aqui mora TODA a tradução do vocabulário: o incidente do KTM (categoria,
-// urgência "Crítico", natureza, aba) vira exatamente os quatro campos que o
+// prioridade "Urgente", natureza, aba) vira exatamente os quatro campos que o
 // formulário do TI aceita. A extensão de navegador é só um cano — ela lê este
 // payload de um atributo `data-ktm-chamado` no card e digita no outro site.
 //
 // Consequência prática: categoria nova no KTM não exige atualizar a extensão.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Urgências aceitas pelo formulário do TI. Atenção: lá é "Crítica", aqui "Crítico". */
+/** Urgências aceitas pelo formulário do TI. Atenção: lá é "Crítica", aqui "Urgente" (antes "Crítico"). */
 export type UrgenciaTi = 'Baixa' | 'Média' | 'Alta' | 'Crítica'
 
 /** Tipos aceitos pelo formulário do TI (valores dos radios). */
@@ -45,6 +45,7 @@ const URGENCIA_TI: Record<string, UrgenciaTi> = {
   Baixa: 'Baixa',
   Média: 'Média',
   Alta: 'Alta',
+  Urgente: 'Crítica',
   Crítico: 'Crítica',
 }
 

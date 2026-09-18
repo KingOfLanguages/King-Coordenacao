@@ -28,6 +28,7 @@ function tomIncidente(i: Incidente): string {
   if (i.resolved) return 'bg-urg-lowFg'
   if (statusPrazo(i.prazo_resolucao, i.resolved)?.atrasado) return 'bg-urg-critFg'
   switch (i.urgency) {
+    case 'Urgente': return 'bg-urg-critFg'
     case 'Crítico':
     case 'Crítica':
     case 'Alta':  return 'bg-urg-highFg'

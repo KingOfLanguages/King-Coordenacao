@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 // Barra de urgência por ocorrência — mesmos tokens da tela de Incidentes.
 const URG_BAR: Record<string, string> = {
-  Baixa: 'bg-urg-lowFg', Média: 'bg-urg-medFg', Alta: 'bg-urg-highFg', Crítico: 'bg-urg-critFg',
+  Baixa: 'bg-urg-lowFg', Média: 'bg-urg-medFg', Alta: 'bg-urg-highFg', Urgente: 'bg-urg-critFg', Crítico: 'bg-urg-critFg',
 }
 
 function fmtData(iso: string): string {

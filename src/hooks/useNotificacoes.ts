@@ -7,6 +7,11 @@ export type TipoNotificacao =
   | 'incidente_critico'
   | 'incidente_assumido'
   | 'incidente_concluido'
+  /** Prioridade de incidentes (20260784, cron king-incidentes-prazo): ninguém
+   *  assumiu dentro do prazo de 1ª ação / o prazo de resolução venceu. Uma vez
+   *  por chamado. O Urgente elevado depois de criado reusa 'incidente_critico'. */
+  | 'incidente_sem_acao'
+  | 'incidente_atrasado'
   /** Pausa de um professor chegou à data de fim — hora do contato da coordenação
    *  (disparada pelo cron king-cobrar-fim-pausa, ver 20260738_pausas.sql). */
   | 'pausa_fim'

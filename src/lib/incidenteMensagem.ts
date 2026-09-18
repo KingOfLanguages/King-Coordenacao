@@ -45,7 +45,8 @@ export function buildMensagemIncidente(i: Incidente, origin?: string): string {
   linhas.push('──────────────────────────────')
   linhas.push(...linhasIdentificacao(i))
   linhas.push(`Categoria: ${i.problem_type}${aba ? ` (${aba})` : ''}`)
-  linhas.push(`Urgência: ${i.urgency}`)
+  linhas.push(`Prioridade: ${i.urgency}`)
+  if (i.urgencia_justificativa) linhas.push(`Por que é urgente: ${i.urgencia_justificativa}`)
   linhas.push(`Status: ${status}${isInforme ? ' · Informe' : ''}`)
   if (isPlataforma && i.ti_status) {
     linhas.push(`Situação no TI: ${tiStatusLabel[i.ti_status] ?? i.ti_status}`)

@@ -170,8 +170,18 @@ export interface Incidente {
   needs_follow_up: boolean
   resolved: boolean
   resolved_at: string | null
-  /** Data-limite de resolução (SLA). Sugerida pela urgência na criação, editável. */
+  /** Data-limite de resolução (SLA). Sugerida pela prioridade na criação, editável. */
   prazo_resolucao: string | null
+  /** Por que é Urgente — obrigatória nesse nível (gatilho no banco). */
+  urgencia_justificativa: string | null
+  /** Até quando alguém precisa assumir. Calculado no banco pela prioridade. */
+  prazo_primeira_acao: string | null
+  /** Primeira vez que alguém assumiu ou concluiu (largar não apaga). */
+  primeira_acao_em: string | null
+  /** Informe: quem leu e quando. Sem ciência = informe novo. */
+  ciente_por: string | null
+  ciente_por_nome: string | null
+  ciente_em: string | null
   assumido_por: string | null
   assumido_em: string | null
   assumido_por_nome: string | null
@@ -207,27 +217,28 @@ export const NATUREZA_META: Record<Natureza, {
   desafio: {
     label: 'Desafio',
     titulo: 'Resolver um problema',
-    descricao: 'Entra na fila, alguém assume e é acompanhado até resolver. Tem urgência.',
+    descricao: 'Entra na fila, alguém assume e é acompanhado até resolver. Tem prioridade e prazo.',
     verbo: 'Abrir chamado',
   },
   informe: {
     label: 'Informe',
     titulo: 'Só deixar registrado',
-    descricao: 'Fica no histórico do professor como sinal. Não precisa de resolução.',
+    descricao: 'Fica no histórico do professor como sinal. Não tem prazo: a coordenação marca como lido.',
     verbo: 'Registrar informe',
   },
 }
 
-const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, aluno_id, ocorrido_em, passos, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, prazo_resolucao, assumido_por, assumido_em, responsavel_id, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome), responsavel_perfil:profiles!responsavel_id (nome), professor:professores!professor_id (kms_id)'
+const SELECT_INCIDENTE = 'id, professor_id, teacher_name, aluno_nome, aluno_id, ocorrido_em, passos, coordinator, created_by, problem_type, urgency, description, solution, needs_follow_up, resolved, resolved_at, prazo_resolucao, urgencia_justificativa, prazo_primeira_acao, primeira_acao_em, ciente_por, ciente_em, assumido_por, assumido_em, responsavel_id, created_at, image_urls, natureza, ti_status, assumido_por_perfil:profiles!assumido_por (nome), responsavel_perfil:profiles!responsavel_id (nome), ciente_perfil:profiles!ciente_por (nome), professor:professores!professor_id (kms_id)'
 
 type Embed<T> = T | T[] | null | undefined
 
 /** Achata os joins (perfis + professor) numa linha de `Incidente`. PostgREST
  *  devolve o embed como objeto ou array conforme a cardinalidade — daí o `um()`. */
 function normalizarIncidente(row: unknown): Incidente {
-  const { assumido_por_perfil, responsavel_perfil, professor, ...i } = row as Record<string, unknown> & {
+  const { assumido_por_perfil, responsavel_perfil, ciente_perfil, professor, ...i } = row as Record<string, unknown> & {
     assumido_por_perfil?: Embed<{ nome: string }>
     responsavel_perfil?: Embed<{ nome: string }>
+    ciente_perfil?: Embed<{ nome: string }>
     professor?: Embed<{ kms_id: string | null }>
   }
   const um = <T,>(v: Embed<T>): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null)
@@ -236,6 +247,7 @@ function normalizarIncidente(row: unknown): Incidente {
     image_urls: (i as { image_urls?: string[] }).image_urls ?? [],
     assumido_por_nome: um(assumido_por_perfil)?.nome ?? null,
     responsavel_nome: um(responsavel_perfil)?.nome ?? null,
+    ciente_por_nome: um(ciente_perfil)?.nome ?? null,
     professor_kms_id: um(professor)?.kms_id ?? null,
   }
 }
@@ -302,8 +314,10 @@ export function useCriarIncidente() {
       natureza?: Natureza
       /** Só pra categorias da aba Plataforma — estado inicial do chamado junto ao TI. */
       ti_status?: TiStatus | null
-      /** Data-limite de resolução (ISO). Sugerida pela urgência, editável. */
+      /** Data-limite de resolução (ISO). Sugerida pela prioridade, editável. */
       prazo_resolucao?: string | null
+      /** Obrigatória quando a prioridade é Urgente. */
+      urgencia_justificativa?: string | null
     }) => {
       let teacherName: string
       if (input.professor_id) {
@@ -327,6 +341,7 @@ export function useCriarIncidente() {
         coordinator: profile?.nome ?? 'KTM',
         problem_type: input.problem_type,
         urgency: input.urgency,
+        urgencia_justificativa: input.urgencia_justificativa?.trim() || null,
         description: input.description.trim(),
         solution: '',
         needs_follow_up: input.needs_follow_up,
@@ -376,6 +391,8 @@ export function useAtualizarIncidente() {
       natureza?: Natureza
       /** Data-limite de resolução (ISO). undefined = não mexe; null limpa. */
       prazo_resolucao?: string | null
+      /** Obrigatória ao passar para Urgente. undefined = não mexe. */
+      urgencia_justificativa?: string | null
     }) => {
       const patch: Record<string, unknown> = {
         problem_type: input.problem_type,
@@ -387,6 +404,7 @@ export function useAtualizarIncidente() {
       }
       // undefined = manter o valor atual (edições que não tocam no campo não o apagam).
       if (input.prazo_resolucao !== undefined) patch.prazo_resolucao = input.prazo_resolucao
+      if (input.urgencia_justificativa !== undefined) patch.urgencia_justificativa = input.urgencia_justificativa?.trim() || null
       if (input.aluno_id !== undefined) patch.aluno_id = input.aluno_id
       if (input.ocorrido_em !== undefined) patch.ocorrido_em = input.ocorrido_em
       if (input.passos !== undefined) patch.passos = input.passos?.trim() || null
@@ -450,6 +468,65 @@ export function useAtualizarTiStatus() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })
+    },
+  })
+}
+
+/** Informe: marcar (ou desmarcar) como lido pela coordenação. */
+export function useCienteInforme() {
+  const qc = useQueryClient()
+  const { profile } = useAuth()
+  return useMutation({
+    mutationFn: async ({ id, ciente }: { id: string; ciente: boolean }) => {
+      const { data, error } = await supabase
+        .from('nexus_incidents')
+        .update(ciente
+          ? { ciente_por: profile?.id ?? null, ciente_em: new Date().toISOString() }
+          : { ciente_por: null, ciente_em: null })
+        .eq('id', id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('Nada foi atualizado — sem permissão para este informe.')
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['incidentes'] })
+    },
+  })
+}
+
+export interface MudancaPrioridade {
+  id: string
+  de: string | null
+  para: string
+  justificativa: string | null
+  alterado_por_nome: string | null
+  alterado_em: string
+}
+
+/** Histórico de prioridade de um incidente (gravado por gatilho no banco). */
+export function useHistoricoPrioridade(incidenteId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['incidente-prioridade-historico', incidenteId],
+    enabled: !!incidenteId,
+    queryFn: async (): Promise<MudancaPrioridade[]> => {
+      const { data, error } = await supabase
+        .from('incidente_prioridade_historico')
+        .select('id, de, para, justificativa, alterado_por, alterado_em')
+        .eq('incidente_id', incidenteId!)
+        .order('alterado_em')
+      if (error) throw error
+      const linhas = data ?? []
+      // Nome via perfis_publicos: join aninhado em profiles volta NULL pela RLS.
+      const ids = [...new Set(linhas.map(l => l.alterado_por).filter((v): v is string => !!v))]
+      const nomes = new Map<string, string>()
+      if (ids.length) {
+        const { data: perfis } = await supabase.from('perfis_publicos').select('id, nome').in('id', ids)
+        for (const p of perfis ?? []) nomes.set(p.id as string, p.nome as string)
+      }
+      return linhas.map(l => ({
+        id: l.id, de: l.de, para: l.para, justificativa: l.justificativa, alterado_em: l.alterado_em,
+        alterado_por_nome: l.alterado_por ? nomes.get(l.alterado_por) ?? null : null,
+      }))
     },
   })
 }

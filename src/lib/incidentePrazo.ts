@@ -1,31 +1,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Prazo (SLA) de resolução dos incidentes.
 //
-// Fonte única do mapa urgência → prazo padrão e do cálculo de atraso. Usado na
+// Conversões de data do prazo e cálculo de atraso (o mapa prioridade → dias
+// úteis mora em incidentePrioridade.ts). Usado na
 // sugestão ao criar/editar um incidente, no selo "vence em / vencido" da
 // listagem e no calendário da aba Agenda de Tarefas.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { prazoResolucaoSugerido } from '@/lib/incidentePrioridade'
+
 const DIA_MS = 86_400_000
 
-/** Dias padrão até o prazo, por urgência. Espelha o backfill da migration
- *  20260746_incidentes_prazo.sql — manter os dois em sincronia. */
-export const PRAZO_PADRAO_DIAS: Record<string, number> = {
-  Alta: 1,
-  Crítico: 1,
-  Crítica: 1,
-  Média: 3,
-  Baixa: 7,
-}
-
-const DIAS_FALLBACK = 3
-
-/** Data-limite sugerida a partir da urgência, contada de `base` (agora por padrão). */
+/** Data-limite sugerida a partir da prioridade: fim do N-ésimo dia útil após
+ *  `base` (Urgente 1 · Alta 2 · Média 5 · Baixa 10 — ver incidentePrioridade.ts,
+ *  que espelha incidente_prazo_resolucao() do banco). */
 export function prazoSugerido(urgency: string, base: Date = new Date()): Date {
-  const dias = PRAZO_PADRAO_DIAS[urgency] ?? DIAS_FALLBACK
-  const d = new Date(base)
-  d.setDate(d.getDate() + dias)
-  return d
+  const [y, m, d] = prazoResolucaoSugerido(urgency, base).split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
 
 /** "YYYY-MM-DD" no fuso local (evita o −1 dia que toISOString() causaria em UTC). */

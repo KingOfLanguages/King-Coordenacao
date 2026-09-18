@@ -111,7 +111,7 @@ const SILENCIO_LABEL: Record<string, string> = {
 
 const URGENCIA_CLASSE: Record<string, string> = {
   Baixa: '', Média: 'ktm-registro--alta', Alta: 'ktm-registro--critica',
-  Crítico: 'ktm-registro--critica', Crítica: 'ktm-registro--critica',
+  Urgente: 'ktm-registro--critica', Crítico: 'ktm-registro--critica', Crítica: 'ktm-registro--critica',
 }
 
 // ─── Utilidades ──────────────────────────────────────────────────────────────

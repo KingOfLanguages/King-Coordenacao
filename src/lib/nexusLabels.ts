@@ -7,22 +7,28 @@ export const urgenciaChip: Record<string, string> = {
   Baixa: 'bg-urg-lowBg text-urg-lowFg',
   Média: 'bg-urg-medBg text-urg-medFg',
   Alta:  'bg-urg-highBg text-urg-highFg',
+  Urgente: 'bg-urg-critBg text-urg-critFg',
+  // Legado: "Crítico" virou Urgente em 2026-09-18; o app do TI ainda escreve "Crítica".
   Crítico: 'bg-urg-critBg text-urg-critFg',
+  Crítica: 'bg-urg-critBg text-urg-critFg',
 }
 
 export const urgenciaBorda: Record<string, string> = {
   Baixa: 'border-urg-lowFg/40',
   Média: 'border-urg-medFg/40',
   Alta:  'border-urg-highFg/40',
+  Urgente: 'border-urg-critFg/50',
   Crítico: 'border-urg-critFg/50',
 }
 
-/** Explicação curta de cada nível de urgência — usada no tooltip da badge. */
+/** Explicação curta de cada nível — usada no tooltip da badge. O critério
+ *  completo (e os prazos) mora em src/lib/incidentePrioridade.ts. */
 export const URGENCIA_EXPLICACAO: Record<string, string> = {
-  Baixa: 'Pode aguardar — sem impacto imediato no professor ou aluno.',
-  Média: 'Precisa de atenção nos próximos dias.',
-  Alta: 'Impacta professor/aluno agora — priorizar o quanto antes.',
-  Crítico: 'Risco grave ou urgente — tratar imediatamente.',
+  Baixa: 'Pode esperar: acompanhamento, organização ou melhoria.',
+  Média: 'Precisa de atenção, mas não impede ninguém agora.',
+  Alta: 'Afeta professor ou aluno nos próximos dias. Alguém precisa agir hoje.',
+  Urgente: 'Alguém está impedido agora. Tratar imediatamente.',
+  Crítico: 'Alguém está impedido agora. Tratar imediatamente.',
 }
 
 /** Rótulo do estado de atendimento do TI (aba Plataforma). */

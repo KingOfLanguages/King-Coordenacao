@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils'
 
 const URG_DOT: Record<string, string> = {
   Baixa: 'bg-urg-lowFg', Média: 'bg-urg-medFg', Alta: 'bg-urg-highFg',
-  Crítico: 'bg-urg-critFg', Crítica: 'bg-urg-critFg',
+  Urgente: 'bg-urg-critFg', Crítico: 'bg-urg-critFg', Crítica: 'bg-urg-critFg',
 }
 
 const TOM_ICON: Record<Tom, typeof CircleCheck> = {

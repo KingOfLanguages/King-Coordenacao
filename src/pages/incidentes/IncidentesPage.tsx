@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, Trash2, Clock, UserCheck, CircleDot, Hand, Undo2, Pencil, Ticket, ScanSearch, CalendarClock } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, ListOrdered, Trash2, UserCheck, Hand, Undo2, Pencil, Ticket, ScanSearch, Clock, Eye, EyeOff, BarChart3, Hourglass } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  useIncidentes, useReabrirIncidente, useAssumirIncidente, useLargarIncidente, useAtualizarTiStatus,
+  useIncidentes, useReabrirIncidente, useAssumirIncidente, useLargarIncidente, useAtualizarTiStatus, useCienteInforme,
   statusChamado, natureza as naturezaDe, abaDoIncidente, categoriasVisiveis,
   CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA,
   type Incidente, type StatusChamado, type Aba, type TiStatus,
@@ -16,25 +16,25 @@ import { EditarIncidenteDialog } from '@/components/incidentes/EditarIncidenteDi
 import { ResolverIncidenteDialog } from '@/components/incidentes/ResolverIncidenteDialog'
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
-import { urgenciaChip, URGENCIA_EXPLICACAO, tiStatusLabel } from '@/lib/nexusLabels'
-import { statusPrazo } from '@/lib/incidentePrazo'
+import { DesempenhoPrioridade } from '@/components/incidentes/DesempenhoPrioridade'
+import { tiStatusLabel } from '@/lib/nexusLabels'
+import {
+  PRIORIDADES, PRIORIDADE_META, normalizarPrioridade, metaPrioridade, estadoPrazo, estaAtrasado,
+  compararPorPrioridade, type Prioridade, type EstadoPrazo,
+} from '@/lib/incidentePrioridade'
 import { rotuloAluno } from '@/lib/incidenteRelato'
 import { atributosChamadoTi } from '@/lib/chamadoTi'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
+import { useAgora } from '@/hooks/useAgora'
 import { canEditIncidente, podeVerCategoriasCoordOnly } from '@/lib/permissions'
 
-type FiltroStatus = 'ativos' | 'aberto' | 'em_andamento' | 'concluido' | 'todos'
-type FiltroUrgencia = 'todas' | 'Baixa' | 'Média' | 'Alta' | 'Crítico'
-type Ordem = 'novo' | 'antigo'
-
-const URG_BAR: Record<string, string> = {
-  Baixa: 'bg-urg-lowFg',
-  Média: 'bg-urg-medFg',
-  Alta:  'bg-urg-highFg',
-  Crítico: 'bg-urg-critFg',
-}
+/** "fila" = desafios não concluídos. Informe tem visão própria: não entra na
+ *  fila (não tem resolução) — antes, 326 deles enchiam a lista de ativos. */
+type FiltroStatus = 'fila' | 'aberto' | 'em_andamento' | 'informes' | 'concluido' | 'todos'
+type FiltroUrgencia = 'todas' | Prioridade
+type Ordem = 'prioridade' | 'novo' | 'antigo'
 
 const ABAS: [Aba, string][] = [
   ['professor', 'Professor'],
@@ -60,12 +60,20 @@ const ACAO_DESTAQUE: Record<'info' | 'ok', string> = {
 }
 
 const FILTROS_STATUS: [FiltroStatus, string][] = [
-  ['ativos', 'Ativos'],
-  ['aberto', 'Em aberto'],
+  ['fila', 'Fila'],
+  ['aberto', 'Ninguém assumiu'],
   ['em_andamento', 'Em andamento'],
+  ['informes', 'Informes'],
   ['concluido', 'Concluídos'],
   ['todos', 'Todos'],
 ]
+
+const ORDEM_LABEL: Record<Ordem, string> = {
+  prioridade: 'Por prioridade',
+  novo: 'Mais recentes',
+  antigo: 'Mais antigos',
+}
+const PROXIMA_ORDEM: Record<Ordem, Ordem> = { prioridade: 'novo', novo: 'antigo', antigo: 'prioridade' }
 
 function tempoRelativo(iso: string): string {
   const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
@@ -90,6 +98,34 @@ function diasResolucao(i: { created_at: string; resolved: boolean; resolved_at: 
   return (new Date(i.resolved_at).getTime() - new Date(i.created_at).getTime()) / 86_400_000
 }
 
+function dataHoraFmt(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+/** Chip do relógio do chamado: vencido em vermelho; perto de vencer em âmbar. */
+function ChipPrazo({ estado, i }: { estado: EstadoPrazo; i: Incidente }) {
+  const perto = estado.etapa === 'primeira_acao'
+    ? estado.restanteMs < 60 * 60_000
+    : estado.restanteMs < 24 * 3_600_000
+  const alvo = estado.etapa === 'primeira_acao' ? i.prazo_primeira_acao : i.prazo_resolucao
+  return (
+    <span
+      title={`${estado.etapa === 'primeira_acao' ? 'Prazo para alguém assumir' : 'Prazo de resolução'}: ${alvo ? dataHoraFmt(alvo) : '—'}`}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums',
+        estado.vencido
+          ? 'bg-urg-critBg text-urg-critFg'
+          : perto
+            ? 'bg-urg-medBg text-urg-medFg'
+            : 'bg-surface-subtle text-ink-secondary',
+      )}
+    >
+      {estado.etapa === 'primeira_acao' ? <Hourglass className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+      {estado.rotulo}
+    </span>
+  )
+}
+
 export function IncidentesPage() {
   const { profile } = useAuth()
   const podeEditar = canEditIncidente(profile)
@@ -99,6 +135,9 @@ export function IncidentesPage() {
   const assumir = useAssumirIncidente()
   const largar = useLargarIncidente()
   const atualizarTiStatus = useAtualizarTiStatus()
+  const ciente = useCienteInforme()
+  // Relógio de 1 min: mantém "assumir em 40min" e o placar de atrasados em dia com a tela aberta.
+  const agora = useAgora()
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [resolverAlvo, setResolverAlvo] = useState<Incidente | null>(null)
@@ -107,6 +146,7 @@ export function IncidentesPage() {
   const [detalheClick, setDetalheClick] = useState<Incidente | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const [aba, setAba] = useState<Aba>('professor')
+  const [verDesempenho, setVerDesempenho] = useState(false)
 
   // Deep-link: /incidentes?incidente=<id> abre o detalhe daquele incidente.
   // Derivado em render (sem setState em efeito): o alvo é o que o usuário clicou
@@ -126,11 +166,12 @@ export function IncidentesPage() {
   }
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<string>('todas')
-  const [status, setStatus] = useState<FiltroStatus>('ativos')
+  const [status, setStatus] = useState<FiltroStatus>('fila')
   const [urgenciaFiltro, setUrgenciaFiltro] = useState<FiltroUrgencia>('todas')
   const [professorFiltro, setProfessorFiltro] = useState<string>('todos')
-  const [ordem, setOrdem] = useState<Ordem>('novo')
+  const [ordem, setOrdem] = useState<Ordem>('prioridade')
   const [soMeus, setSoMeus] = useState(false)
+  const [soAtrasados, setSoAtrasados] = useState(false)
 
   const porAba = useMemo(
     () => incidentes.filter(i => abaDoIncidente(i) === aba),
@@ -148,31 +189,40 @@ export function IncidentesPage() {
     return [...mapa.entries()].sort((a, b) => a[1].localeCompare(b[1]))
   }, [porAba])
 
-  const temposResolucao = porAba
-    .map(diasResolucao)
-    .filter((d): d is number => d !== null)
-  const tempoMedioResolucao = temposResolucao.length
-    ? temposResolucao.reduce((a, b) => a + b, 0) / temposResolucao.length
-    : null
-
-  const stats = {
-    aberto: porAba.filter(i => statusChamado(i) === 'aberto').length,
-    emAndamento: porAba.filter(i => statusChamado(i) === 'em_andamento').length,
-    concluidos: porAba.filter(i => i.resolved).length,
-    tempoMedioResolucao,
-  }
+  // ── Placar: só a fila (desafios não concluídos) da aba ──────────────────────
+  const placar = useMemo(() => {
+    const fila = porAba.filter(i => naturezaDe(i) === 'desafio' && !i.resolved)
+    const porNivel = Object.fromEntries(PRIORIDADES.map(p => [p, { total: 0, atrasados: 0 }])) as
+      Record<Prioridade, { total: number; atrasados: number }>
+    let semAcao = 0, semAcaoVencida = 0, atrasados = 0
+    for (const i of fila) {
+      const n = porNivel[normalizarPrioridade(i.urgency)]
+      n.total++
+      const atr = estaAtrasado(i, agora)
+      if (atr) { n.atrasados++; atrasados++ }
+      if (!i.primeira_acao_em && !i.assumido_por) {
+        semAcao++
+        if (i.prazo_primeira_acao && new Date(i.prazo_primeira_acao).getTime() < agora) semAcaoVencida++
+      }
+    }
+    const informesNovos = porAba.filter(i => naturezaDe(i) === 'informe' && !i.ciente_em).length
+    return { porNivel, semAcao, semAcaoVencida, atrasados, informesNovos }
+  }, [porAba, agora])
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     const lista = porAba.filter(i => {
+      const informe = naturezaDe(i) === 'informe'
       if (soMeus && i.created_by !== profile?.id) return false
       const st = statusChamado(i)
-      if (status === 'ativos' && st === 'concluido') return false
-      if (status === 'aberto' && st !== 'aberto') return false
-      if (status === 'em_andamento' && st !== 'em_andamento') return false
-      if (status === 'concluido' && st !== 'concluido') return false
+      if (status === 'fila' && (informe || i.resolved)) return false
+      if (status === 'aberto' && (informe || st !== 'aberto')) return false
+      if (status === 'em_andamento' && (informe || st !== 'em_andamento')) return false
+      if (status === 'informes' && !informe) return false
+      if (status === 'concluido' && (informe || !i.resolved)) return false
+      if (soAtrasados && !estaAtrasado(i, agora)) return false
       if (categoria !== 'todas' && i.problem_type !== categoria) return false
-      if (urgenciaFiltro !== 'todas' && i.urgency !== urgenciaFiltro) return false
+      if (urgenciaFiltro !== 'todas' && normalizarPrioridade(i.urgency) !== urgenciaFiltro) return false
       if (professorFiltro !== 'todos' && i.professor_id !== professorFiltro) return false
       if (termo && !(
         i.teacher_name.toLowerCase().includes(termo) ||
@@ -186,14 +236,30 @@ export function IncidentesPage() {
       )) return false
       return true
     })
+    if (ordem === 'prioridade') {
+      // Informes: os ainda não lidos primeiro, depois a importância, depois o mais novo.
+      if (status === 'informes') {
+        return [...lista].sort((a, b) =>
+          (a.ciente_em ? 1 : 0) - (b.ciente_em ? 1 : 0) ||
+          metaPrioridade(b.urgency).peso - metaPrioridade(a.urgency).peso ||
+          b.created_at.localeCompare(a.created_at))
+      }
+      return [...lista].sort((a, b) => compararPorPrioridade(a, b, agora))
+    }
     const sinal = ordem === 'novo' ? -1 : 1
     return [...lista].sort((a, b) => sinal * a.created_at.localeCompare(b.created_at))
-  }, [porAba, busca, categoria, status, urgenciaFiltro, professorFiltro, ordem, soMeus, profile?.id])
+  }, [porAba, busca, categoria, status, urgenciaFiltro, professorFiltro, ordem, soMeus, soAtrasados, profile?.id, agora])
 
   function trocarAba(novaAba: Aba) {
     setAba(novaAba)
     setCategoria('todas')
     setProfessorFiltro('todos')
+  }
+
+  /** Card do placar: filtra a fila por aquele nível (clicar de novo desfaz). */
+  function filtrarNivel(p: Prioridade) {
+    setStatus('fila')
+    setUrgenciaFiltro(f => (f === p ? 'todas' : p))
   }
 
   return (
@@ -208,13 +274,24 @@ export function IncidentesPage() {
             {aba === 'plataforma' && 'Bugs e melhorias reportados ao TI.'}
           </p>
         </div>
-        <Button
-          size="sm"
-          className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
-          onClick={() => setNovoAberto(true)}
-        >
-          <Plus className="h-3.5 w-3.5" />Novo Incidente
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className={cn('btn-press gap-1.5 border-line', verDesempenho && 'bg-surface-subtle')}
+            onClick={() => setVerDesempenho(v => !v)}
+            aria-pressed={verDesempenho}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />Desempenho
+          </Button>
+          <Button
+            size="sm"
+            className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
+            onClick={() => setNovoAberto(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />Novo Incidente
+          </Button>
+        </div>
       </header>
 
       <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
@@ -232,37 +309,46 @@ export function IncidentesPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {verDesempenho && <DesempenhoPrioridade incidentes={porAba} aba={aba} />}
+
+      {/* Placar da fila: quanto tem em cada nível e quanto disso já venceu. */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {PRIORIDADES.map(p => {
+          const n = placar.porNivel[p]
+          const ativo = status === 'fila' && urgenciaFiltro === p
+          return (
+            <button
+              key={p}
+              onClick={() => filtrarNivel(p)}
+              aria-pressed={ativo}
+              className={cn(
+                'card-surface relative overflow-hidden p-4 pl-5 text-left transition-all hover:shadow-sm',
+                ativo && 'ring-1 ring-ink',
+              )}
+            >
+              <span className={cn('absolute inset-y-0 left-0 w-1', PRIORIDADE_META[p].cor)} />
+              <p className="text-[11px] font-medium text-ink-muted">{p}</p>
+              <p className="text-2xl font-semibold text-ink tabular-nums">{n.total}</p>
+              <p className={cn('text-[11px] mt-0.5 tabular-nums', n.atrasados ? 'text-urg-critFg font-medium' : 'text-ink-subtle')}>
+                {n.atrasados ? `${n.atrasados} atrasado${n.atrasados > 1 ? 's' : ''}` : 'nenhum atrasado'}
+              </p>
+            </button>
+          )
+        })}
         <button
-          onClick={() => setStatus('aberto')}
-          className={cn('card-surface p-4 text-left transition-all hover:shadow-sm', status === 'aberto' && 'ring-1 ring-urg-medFg/40')}
+          onClick={() => { setStatus(s => (s === 'aberto' ? 'fila' : 'aberto')); setUrgenciaFiltro('todas') }}
+          aria-pressed={status === 'aberto'}
+          className={cn(
+            'card-surface p-4 text-left transition-all hover:shadow-sm col-span-2 md:col-span-1',
+            status === 'aberto' && 'ring-1 ring-ink',
+          )}
         >
-          <p className="text-[11px] text-urg-medFg flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Em aberto</p>
-          <p className="text-2xl font-semibold text-urg-medFg tabular-nums">{stats.aberto}</p>
-        </button>
-        <button
-          onClick={() => setStatus('em_andamento')}
-          className={cn('card-surface p-4 text-left transition-all hover:shadow-sm', status === 'em_andamento' && 'ring-1 ring-accentBlue/40')}
-        >
-          <p className="text-[11px] text-accentBlue flex items-center gap-1"><CircleDot className="h-3 w-3" />Em andamento</p>
-          <p className="text-2xl font-semibold text-accentBlue tabular-nums">{stats.emAndamento}</p>
-        </button>
-        <button
-          onClick={() => setStatus('concluido')}
-          className={cn('card-surface p-4 text-left transition-all hover:shadow-sm', status === 'concluido' && 'ring-1 ring-urg-lowFg/40')}
-        >
-          <p className="text-[11px] text-urg-lowFg flex items-center gap-1"><CheckCircle className="h-3 w-3" />Concluídos</p>
-          <p className="text-2xl font-semibold text-urg-lowFg tabular-nums">{stats.concluidos}</p>
-        </button>
-        <div className="card-surface p-4">
-          <p className="text-[11px] text-ink-muted flex items-center gap-1"><Clock className="h-3 w-3" />Tempo médio de resolução</p>
-          <p className="text-2xl font-semibold text-ink tabular-nums">
-            {stats.tempoMedioResolucao === null ? '—' : fmtDuracao(stats.tempoMedioResolucao)}
+          <p className="text-[11px] font-medium text-ink-muted flex items-center gap-1"><Hourglass className="h-3 w-3" />Ninguém assumiu</p>
+          <p className="text-2xl font-semibold text-ink tabular-nums">{placar.semAcao}</p>
+          <p className={cn('text-[11px] mt-0.5 tabular-nums', placar.semAcaoVencida ? 'text-urg-critFg font-medium' : 'text-ink-subtle')}>
+            {placar.semAcaoVencida ? `${placar.semAcaoVencida} fora do prazo` : 'todos dentro do prazo'}
           </p>
-          <p className="text-[10px] text-ink-subtle mt-0.5">
-            {stats.concluidos > 0 ? `${stats.concluidos} concluído${stats.concluidos !== 1 ? 's' : ''}` : 'nada concluído ainda'}
-          </p>
-        </div>
+        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -300,15 +386,12 @@ export function IncidentesPage() {
           </Select>
         )}
         <Select value={urgenciaFiltro} onValueChange={v => setUrgenciaFiltro(v as FiltroUrgencia)}>
-          <SelectTrigger className="h-9 w-[150px] text-[12px] bg-surface-canvas border-line text-ink">
+          <SelectTrigger className="h-9 w-[160px] text-[12px] bg-surface-canvas border-line text-ink">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-surface-canvas border-line text-ink">
-            <SelectItem value="todas">Todas as urgências</SelectItem>
-            <SelectItem value="Baixa">Baixa</SelectItem>
-            <SelectItem value="Média">Média</SelectItem>
-            <SelectItem value="Alta">Alta</SelectItem>
-            <SelectItem value="Crítico">Crítico</SelectItem>
+            <SelectItem value="todas">Todas as prioridades</SelectItem>
+            {PRIORIDADES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1">
@@ -322,16 +405,33 @@ export function IncidentesPage() {
               )}
             >
               {label}
+              {value === 'informes' && placar.informesNovos > 0 && (
+                <span className="ml-1 rounded-full bg-accentBlue px-1.5 text-[10px] font-semibold text-white tabular-nums">
+                  {placar.informesNovos}
+                </span>
+              )}
             </button>
           ))}
         </div>
         <button
-          onClick={() => setOrdem(o => (o === 'novo' ? 'antigo' : 'novo'))}
+          onClick={() => setSoAtrasados(v => !v)}
+          aria-pressed={soAtrasados}
+          className={cn(
+            'btn-press flex items-center gap-1.5 h-9 px-3 rounded-full text-[12px] font-medium transition-colors',
+            soAtrasados ? 'bg-urg-critFg text-white' : 'text-ink-secondary bg-surface-subtle hover:text-ink',
+          )}
+          title="Mostrar só o que passou do prazo de 1ª ação ou de resolução"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Atrasados{placar.atrasados > 0 && <span className="tabular-nums">· {placar.atrasados}</span>}
+        </button>
+        <button
+          onClick={() => setOrdem(o => PROXIMA_ORDEM[o])}
           className="btn-press flex items-center gap-1.5 h-9 px-3 rounded-full text-[12px] font-medium text-ink-secondary bg-surface-subtle hover:text-ink transition-colors"
           title="Alternar ordenação"
         >
-          {ordem === 'novo' ? <ArrowDownNarrowWide className="h-3.5 w-3.5" /> : <ArrowUpNarrowWide className="h-3.5 w-3.5" />}
-          {ordem === 'novo' ? 'Mais recentes' : 'Mais antigos'}
+          {ordem === 'prioridade' ? <ListOrdered className="h-3.5 w-3.5" /> : ordem === 'novo' ? <ArrowDownNarrowWide className="h-3.5 w-3.5" /> : <ArrowUpNarrowWide className="h-3.5 w-3.5" />}
+          {ORDEM_LABEL[ordem]}
         </button>
         <button
           onClick={() => setSoMeus(v => !v)}
@@ -352,7 +452,9 @@ export function IncidentesPage() {
         <div className="flex h-48 items-center justify-center text-ink-muted text-[13px]">Carregando…</div>
       ) : filtrados.length === 0 ? (
         <div className="card-surface p-8 text-center">
-          <p className="text-[13px] text-ink-muted">Nenhum incidente encontrado.</p>
+          <p className="text-[13px] text-ink-muted">
+            {status === 'fila' && !soAtrasados && urgenciaFiltro === 'todas' ? 'Fila vazia: nenhum chamado aberto nesta aba.' : 'Nenhum incidente encontrado.'}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
@@ -361,15 +463,18 @@ export function IncidentesPage() {
             const meta = STATUS_META[st]
             const isInforme = naturezaDe(i) === 'informe'
             const isPlataforma = abaDoIncidente(i) === 'plataforma'
-            const urgenciaAlta = i.urgency === 'Alta' || i.urgency === 'Crítico'
+            const nivel = normalizarPrioridade(i.urgency)
+            const nivelMeta = PRIORIDADE_META[nivel]
+            const urgente = nivel === 'Urgente' && !i.resolved && !isInforme
             // Os hooks de mutação são compartilhados pela lista inteira: sem
             // comparar o id, um clique em "Assumir" desabilitaria a linha toda.
             const assumindo  = assumir.isPending && assumir.variables?.id === i.id
             const largando   = largar.isPending && largar.variables?.id === i.id
             const reabrindo  = reabrir.isPending && reabrir.variables?.id === i.id
             const mudandoTi  = atualizarTiStatus.isPending && atualizarTiStatus.variables?.id === i.id
-            // Informe não tem fluxo de resolução → não mostra prazo.
-            const sp = isInforme ? null : statusPrazo(i.prazo_resolucao, i.resolved)
+            const marcandoCiente = ciente.isPending && ciente.variables?.id === i.id
+            // Informe não tem fluxo de resolução → não tem relógio.
+            const relogio = estadoPrazo(i, agora)
             return (
             <div
               key={i.id}
@@ -379,24 +484,29 @@ export function IncidentesPage() {
               onClick={() => setDetalheClick(i)}
               onKeyDown={e => { if (e.key === 'Enter') setDetalheClick(i) }}
               className={cn(
-                'flex gap-2.5 rounded-lg border border-line bg-surface-canvas px-3 py-2.5 items-start transition-colors hover:bg-surface-subtle/40 cursor-pointer',
-                i.urgency === 'Crítico' && 'ring-1 ring-urg-critFg/30',
+                'flex gap-2.5 rounded-lg border bg-surface-canvas px-3 py-2.5 items-start transition-colors hover:bg-surface-subtle/40 cursor-pointer',
+                // Urgente: destaque fixo (a borda na cor do nível). Piscar cansava
+                // o olho e, com 44 itens assim, ninguém mais via.
+                urgente ? 'border-urg-critFg' : 'border-line',
               )}
             >
               <div className={cn(
                 'w-[3px] self-stretch rounded-full flex-shrink-0',
-                URG_BAR[i.urgency] ?? 'bg-ink-subtle',
-                i.urgency === 'Crítico' && 'animate-pulse',
+                isInforme ? 'bg-ink-subtle' : nivelMeta.cor,
               )} />
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[10.5px] font-medium', meta.chip)}>
-                    {meta.label}
-                  </span>
-                  {isInforme && (
-                    <span className="inline-flex items-center rounded-full bg-surface-muted text-ink-muted px-1.5 py-0.5 text-[10.5px] font-medium">
-                      Informe
+                  {isInforme ? (
+                    <span className={cn(
+                      'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
+                      i.ciente_em ? 'bg-surface-muted text-ink-muted' : 'bg-accentBlue text-white',
+                    )}>
+                      {i.ciente_em ? 'Informe' : 'Informe novo'}
+                    </span>
+                  ) : (
+                    <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[10.5px] font-medium', meta.chip)}>
+                      {meta.label}
                     </span>
                   )}
                   {isPlataforma && i.ti_status && (
@@ -417,32 +527,26 @@ export function IncidentesPage() {
                   <span className="inline-flex items-center rounded-full bg-surface-subtle text-ink-secondary px-1.5 py-0.5 text-[10.5px] font-medium">
                     {i.problem_type}
                   </span>
-                  {sp && !i.resolved && (
-                    <span
-                      title="Prazo de resolução"
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
-                        sp.atrasado
-                          ? 'bg-urg-critBg text-urg-critFg'
-                          : sp.diasRestantes <= 1
-                            ? 'bg-urg-medBg text-urg-medFg'
-                            : 'bg-surface-subtle text-ink-secondary',
-                      )}
-                    >
-                      <CalendarClock className="h-3 w-3" />{sp.label}
-                    </span>
-                  )}
+                  {relogio && <ChipPrazo estado={relogio} i={i} />}
                 </div>
+                {urgente && i.urgencia_justificativa && (
+                  <p className="text-[12px] text-urg-critFg mt-1 truncate" title={i.urgencia_justificativa}>
+                    <AlertTriangle className="inline h-3 w-3 -mt-0.5 mr-1" />{i.urgencia_justificativa}
+                  </p>
+                )}
                 <p className="text-[12.5px] text-ink-secondary mt-1 truncate" title={i.description}>{i.description}</p>
                 <p className="text-[10.5px] text-ink-muted mt-1">
                   {i.coordinator} · {tempoRelativo(i.created_at)}
                   {i.responsavel_nome && (
                     <span> · resp. {i.responsavel_nome}</span>
                   )}
-                  {st === 'em_andamento' && i.assumido_por_nome && (
+                  {st === 'em_andamento' && !isInforme && i.assumido_por_nome && (
                     <span className="text-accentBlue"> · sendo resolvido por {i.assumido_por_nome}</span>
                   )}
-                  {st === 'concluido' && (() => {
+                  {isInforme && i.ciente_em && (
+                    <span> · lido{i.ciente_por_nome ? ` por ${i.ciente_por_nome}` : ''} {tempoRelativo(i.ciente_em)}</span>
+                  )}
+                  {st === 'concluido' && !isInforme && (() => {
                     const d = diasResolucao(i)
                     const por = i.assumido_por_nome ? ` por ${i.assumido_por_nome}` : ''
                     return d !== null
@@ -473,14 +577,19 @@ export function IncidentesPage() {
                   <TooltipTrigger asChild>
                     <span className={cn(
                       'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium cursor-help',
-                      urgenciaChip[i.urgency] ?? 'bg-surface-subtle text-ink-secondary',
+                      nivelMeta.chip,
                     )}>
-                      {urgenciaAlta && <AlertTriangle className="h-3 w-3" />}
-                      {i.urgency}
+                      {(nivel === 'Urgente' || nivel === 'Alta') && <AlertTriangle className="h-3 w-3" />}
+                      {nivel}
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent onClick={e => e.stopPropagation()}>
-                    {URGENCIA_EXPLICACAO[i.urgency] ?? 'Nível de urgência do chamado.'}
+                  <TooltipContent onClick={e => e.stopPropagation()} className="max-w-xs">
+                    {isInforme ? nivelMeta.importancia : (
+                      <>
+                        {nivelMeta.criterio}
+                        <br />Assumir {nivelMeta.primeiraAcao} · resolver {nivelMeta.resolucao}.
+                      </>
+                    )}
                   </TooltipContent>
                 </Tooltip>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -491,6 +600,21 @@ export function IncidentesPage() {
                   <span data-ktm-chamado-slot="" className="contents" />
                   {podeEditar && (
                     <>
+                    {isInforme && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={i.ciente_em ? undefined : ACAO_DESTAQUE.info}
+                        disabled={marcandoCiente}
+                        onClick={() => ciente.mutate(
+                          { id: i.id, ciente: !i.ciente_em },
+                          { onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao marcar o informe.') },
+                        )}
+                        title={i.ciente_em ? 'Voltar a marcar como novo' : 'Marcar como lido'}
+                      >
+                        {i.ciente_em ? <><EyeOff />Marcar como novo</> : <><Eye />Ciente</>}
+                      </Button>
+                    )}
                     {isPlataforma && (
                       <Button
                         size="sm"

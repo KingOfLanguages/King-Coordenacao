@@ -139,8 +139,9 @@ function capado(valor: number, teto: number): number {
   return Math.min(valor, teto)
 }
 
-/** Peso por urgência do chamado. O app do TI escreve "Crítica"; o KTM, "Crítico". */
+/** Peso por urgência do chamado. O app do TI escreve "Crítica"; o KTM, "Urgente" (era "Crítico" até 2026-09-18). */
 const PESO_URGENCIA: Record<string, number> = {
+  'Urgente': P_URG_CRITICA,
   'Crítico': P_URG_CRITICA,
   'Crítica': P_URG_CRITICA,
   'Alta': P_URG_ALTA,

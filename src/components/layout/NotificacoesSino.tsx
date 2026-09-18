@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Bell, AlertTriangle, Hand, CheckCircle2, FileText, UserCog } from 'lucide-react'
+import { Bell, AlertTriangle, Hand, CheckCircle2, FileText, UserCog, Hourglass, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   useNotificacoes, useMarcarNotificacaoLida, useMarcarTodasLidas,
@@ -17,6 +17,8 @@ const ICONE: Record<string, typeof Bell> = {
   incidente_critico:   AlertTriangle,
   incidente_assumido:  Hand,
   incidente_concluido: CheckCircle2,
+  incidente_sem_acao:  Hourglass,
+  incidente_atrasado:  Clock,
   transferencia_atrasada: UserCog,
 }
 
@@ -25,6 +27,8 @@ const COR: Record<string, string> = {
   incidente_critico:   'text-urg-critFg',
   incidente_assumido:  'text-accentBlue',
   incidente_concluido: 'text-urg-lowFg',
+  incidente_sem_acao:  'text-urg-critFg',
+  incidente_atrasado:  'text-urg-critFg',
   transferencia_atrasada: 'text-urg-critFg',
 }
 
