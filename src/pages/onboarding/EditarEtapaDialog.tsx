@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { videoEmbed } from '@/lib/videoEmbed'
+import { useColarImagens } from '@/hooks/useColarImagens'
 import { BlocoView } from '@/pages/welcomePath/Blocos'
 import { CALLOUT_VARIANTES, varianteDoCallout } from '@/pages/welcomePath/callout'
 import {
@@ -137,6 +138,7 @@ function EditorImagem({
   const [enviando, setEnviando] = useState(false)
   const [arrastando, setArrastando] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const raizRef = useRef<HTMLDivElement>(null)
 
   async function enviar(file: File | null | undefined) {
     if (!file) return
@@ -151,8 +153,15 @@ function EditorImagem({
     }
   }
 
+  // Ctrl+V com o bloco em foco ou sob o mouse: o print vira a imagem do bloco
+  // (troca a atual, como o botão "Trocar"). Zona = o cartão do bloco inteiro.
+  useColarImagens(
+    () => raizRef.current?.parentElement ?? null,
+    files => { if (!enviando) enviar(files[0]) },
+  )
+
   return (
-    <div className="space-y-2">
+    <div ref={raizRef} className="space-y-2">
       {bloco.url ? (
         <div className="flex items-start gap-3">
           <img src={bloco.url} alt="" className="h-20 w-20 flex-shrink-0 rounded-lg border border-line object-cover" />
@@ -190,7 +199,7 @@ function EditorImagem({
             <>
               <ImagePlus className="h-5 w-5 text-ink-muted" />
               <span className="text-[12px] font-medium text-ink-secondary">Enviar imagem</span>
-              <span className="text-[10.5px] text-ink-subtle">arraste aqui ou clique · PNG, JPG, WEBP, GIF</span>
+              <span className="text-[10.5px] text-ink-subtle">arraste, clique ou cole com Ctrl+V · PNG, JPG, WEBP, GIF</span>
             </>
           )}
         </button>
@@ -343,15 +352,16 @@ function EditorGaleria({
   patch: (campos: Partial<BlocoAdmin>) => void
 }) {
   const [enviando, setEnviando] = useState(false)
+  const raizRef = useRef<HTMLDivElement>(null)
   const imagens = imagensDaGaleria(bloco.meta)
 
   function gravar(next: GaleriaImagem[]) {
     patch({ meta: { ...bloco.meta, imagens: next } })
   }
 
-  async function enviar(files: FileList | null) {
+  async function enviar(files: FileList | File[] | null) {
     const lista = Array.from(files ?? []).filter(f => f.type.startsWith('image/'))
-    if (!lista.length) return
+    if (!lista.length || enviando) return
     setEnviando(true)
     try {
       const urls = await Promise.all(lista.map(uploadImagemWelcomePath))
@@ -362,6 +372,9 @@ function EditorGaleria({
       setEnviando(false)
     }
   }
+
+  // Print colado entra no fim da galeria. Zona = o cartão do bloco inteiro.
+  useColarImagens(() => raizRef.current?.parentElement ?? null, enviar)
 
   function mover(i: number, dir: -1 | 1) {
     const j = i + dir
@@ -408,7 +421,7 @@ function EditorGaleria({
         accept="image/png,image/jpeg,image/webp,image/gif" multiple enviando={enviando} onArquivos={enviar}
         icone={ImagePlus}
         titulo={imagens.length ? 'Adicionar mais imagens' : 'Enviar imagens'}
-        hint="arraste aqui ou clique · várias de uma vez"
+        hint="arraste, clique ou cole com Ctrl+V · várias de uma vez"
       />
 
       <label className="flex items-center gap-2 text-[12px] text-ink-secondary">

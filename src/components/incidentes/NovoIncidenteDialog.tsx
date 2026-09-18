@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useProfessoresAtivos } from '@/hooks/useProfessores'
+import { useColarImagens } from '@/hooks/useColarImagens'
 import {
   useCriarIncidente, useAlunosDoProfessor, useBuscarAlunos, uploadImagemIncidente, categoriasVisiveis,
   CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META,
@@ -100,7 +101,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const previews = useMemo(() => imagens.map(f => URL.createObjectURL(f)), [imagens])
   useEffect(() => () => { previews.forEach(URL.revokeObjectURL) }, [previews])
 
-  function addImagens(files: FileList | null) {
+  function addImagens(files: FileList | File[] | null) {
     if (!files) return
     const novas = Array.from(files).filter(f => f.type.startsWith('image/'))
     if (!novas.length) return
@@ -110,6 +111,10 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
       return combinado
     })
   }
+  // Print colado com Ctrl+V entra direto na lista, sem salvar arquivo antes.
+  // Só enquanto o diálogo está aberto — fechado, a página de incidentes não cola nada.
+  useColarImagens(() => document.body, addImagens, open)
+
   function removeImagem(idx: number) {
     setImagens(prev => prev.filter((_, i) => i !== idx))
   }
@@ -569,7 +574,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
           </div>
 
           <div className="space-y-1.5">
-            <Label className="label-micro">Imagens (opcional · até {MAX_IMAGENS})</Label>
+            <Label className="label-micro">Imagens (opcional · até {MAX_IMAGENS} · cole com Ctrl+V)</Label>
             <div className="flex flex-wrap gap-2">
               {imagens.map((f, i) => (
                 <div key={i} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-line">

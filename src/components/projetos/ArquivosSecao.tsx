@@ -5,6 +5,7 @@ import {
   useAnexosProjeto, useEnviarAnexo, useExcluirAnexo, limiteDoArquivo,
   MAX_ARQUIVOS_SECAO, type AnexoProjeto,
 } from '@/hooks/useProjetos'
+import { useColarImagens } from '@/hooks/useColarImagens'
 import { ehImagem, fmtTamanho, type ProjetoSecao } from '@/lib/projetos'
 import { cn } from '@/lib/utils'
 
@@ -31,35 +32,44 @@ export function ArquivosSecao({ projetoId, secao, podeEditar, rotulo }: Props) {
   const enviar   = useEnviarAnexo()
   const excluir  = useExcluirAnexo()
   const inputRef = useRef<HTMLInputElement>(null)
+  const raizRef  = useRef<HTMLDivElement>(null)
   const [ampliada, setAmpliada] = useState<AnexoProjeto | null>(null)
 
   const arquivos = todos.filter(a => a.secao === secao)
   const cheio = arquivos.length >= MAX_ARQUIVOS_SECAO
 
-  async function escolher(files: FileList | null) {
-    const file = files?.[0]
-    if (!file) return
-    const limite = limiteDoArquivo(file)
-    if (!limite.ok) {
-      toast.error(limite.erro!)
-      if (inputRef.current) inputRef.current.value = ''
-      return
-    }
-    try {
-      await enviar.mutateAsync({ projetoId, file, secao })
-      toast.success('Arquivo anexado.')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não deu para enviar o arquivo.')
-    } finally {
-      if (inputRef.current) inputRef.current.value = ''
+  async function escolher(files: FileList | File[] | null) {
+    const lista = Array.from(files ?? [])
+    if (inputRef.current) inputRef.current.value = ''
+    if (!lista.length) return
+    if (enviar.isPending) { toast.warning('Espere o envio atual terminar.'); return }
+
+    const vagas = MAX_ARQUIVOS_SECAO - arquivos.length
+    if (vagas <= 0) { toast.warning(`Limite de ${MAX_ARQUIVOS_SECAO} arquivos nesta parte.`); return }
+    if (lista.length > vagas) toast.warning(`Só cabem mais ${vagas} arquivo(s) nesta parte.`)
+
+    for (const file of lista.slice(0, vagas)) {
+      const limite = limiteDoArquivo(file)
+      if (!limite.ok) { toast.error(limite.erro!); continue }
+      try {
+        await enviar.mutateAsync({ projetoId, file, secao })
+        toast.success('Arquivo anexado.')
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Não deu para enviar o arquivo.')
+      }
     }
   }
+
+  // A zona do Ctrl+V é a seção inteira onde o componente está (o pai: a Secao
+  // da ficha ou o Campo do assistente) — é no texto dela que a pessoa está
+  // quando cola o print, não no botão de anexar.
+  useColarImagens(() => raizRef.current?.parentElement ?? null, escolher, podeEditar)
 
   if (isLoading) return <div className="h-9 animate-pulse rounded-lg bg-surface-subtle/50" />
   if (!podeEditar && arquivos.length === 0) return null
 
   return (
-    <div className="space-y-2">
+    <div ref={raizRef} className="space-y-2">
       {arquivos.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {arquivos.map(a => (
@@ -129,6 +139,9 @@ export function ArquivosSecao({ projetoId, secao, podeEditar, rotulo }: Props) {
               ? `Limite de ${MAX_ARQUIVOS_SECAO} arquivos nesta parte`
               : enviar.isPending ? 'Enviando…' : (rotulo ?? 'Anexar imagem ou PDF')}
           </button>
+          {!cheio && !enviar.isPending && (
+            <span className="ml-2 text-[10.5px] text-ink-subtle">ou cole um print com Ctrl+V</span>
+          )}
         </>
       )}
 
