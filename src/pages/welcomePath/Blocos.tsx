@@ -209,6 +209,10 @@ function BlocoEmbed({ bloco }: { bloco: BlocoEtapa }) {
   const [altura, setAltura] = useState(() => embedAltura(bloco.meta))
   const { resolvedTheme } = useTheme()
   const tema = resolvedTheme === 'dark' ? 'dark' : 'light'
+  // O tema da URL é o do PRIMEIRO quadro e fica congelado: se a URL mudasse com
+  // o tema, trocar claro/escuro recarregaria o iframe e apagaria a simulação
+  // do professor. As trocas seguintes vão só pela mensagem abaixo.
+  const [temaInicial] = useState(tema)
 
   useEffect(() => {
     function aoReceber(e: MessageEvent) {
@@ -239,11 +243,17 @@ function BlocoEmbed({ bloco }: { bloco: BlocoEtapa }) {
       )}
       <iframe
         ref={ref}
-        src={`${src}${src.includes('?') ? '&' : '?'}tema=${tema}`}
+        // `v` = build: URL nova a cada deploy. Sem ela, quem abriu a página
+        // quando o header ainda era DENY continuava bloqueado — o arquivo não
+        // mudou, a Vercel respondia 304 e o navegador reusava o header velho.
+        src={`${src}${src.includes('?') ? '&' : '?'}tema=${temaInicial}&v=${__BUILD_ID__}`}
         title={bloco.titulo ?? 'Conteúdo interativo da etapa'}
         loading="lazy"
         sandbox="allow-scripts"
         scrolling="no"
+        // Reenvia o tema ao terminar de carregar: se ele trocou enquanto o
+        // iframe carregava, a mensagem do efeito se perdeu e a URL está velha.
+        onLoad={() => ref.current?.contentWindow?.postMessage({ tipo: 'ktm-tema', tema }, '*')}
         style={{ height: altura }}
         className="w-full border-0 bg-transparent"
       />

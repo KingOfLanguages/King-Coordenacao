@@ -11,6 +11,16 @@ export default defineConfig({
   optimizeDeps: {
     entries: ['index.html', 'src/**/*.{ts,tsx}'],
   },
+  // Identificador do build, para quebrar cache de arquivo de public/ que o app
+  // referencia por URL fixa (hoje: as páginas do bloco `embed`). Sem isso, um
+  // header que muda sem o arquivo mudar nunca chega ao navegador: o ETag é o
+  // mesmo, a Vercel responde 304 e ele segue com os headers antigos guardados.
+  // Na Vercel é o commit; local, o horário do start.
+  define: {
+    __BUILD_ID__: JSON.stringify(
+      process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? String(Date.now()),
+    ),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
