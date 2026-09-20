@@ -1,35 +1,11 @@
 import { Button } from '@/components/ui/button'
-import { Check, X, ShieldCheck, Mail, CalendarDays } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Check, X, Mail, CalendarDays } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useAprovacoesPendentes, type Aprovacao } from '@/hooks/useAprovacoes'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
-interface Aprovacao {
-  id: string
-  email: string
-  nome: string
-  role_solicitada: string
-  status: string
-  created_at: string
-  user_id: string
-}
-
-function useAprovacoesPendentes() {
-  return useQuery({
-    queryKey: ['aprovacoes', 'pendentes'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pending_approvals')
-        .select('*')
-        .eq('status', 'pendente')
-        .order('created_at')
-      if (error) throw error
-      return data as Aprovacao[]
-    },
-  })
-}
-
-export function AprovacoesPage() {
+export function AprovacoesPendentes() {
   const queryClient = useQueryClient()
   const { data: aprovacoes, isLoading } = useAprovacoesPendentes()
 
@@ -65,21 +41,11 @@ export function AprovacoesPage() {
   const total = aprovacoes?.length ?? 0
 
   return (
-    <div className="px-6 py-6 max-w-3xl mx-auto space-y-5">
-      <header className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Aprovações de acesso</h1>
-          <p className="text-[13px] text-ink-muted">
-            <span className="tabular-nums text-ink-secondary font-medium">{total}</span>{' '}
-            solicitaç{total === 1 ? 'ão' : 'ões'} pendente{total === 1 ? '' : 's'}
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-2 rounded-full bg-urg-medBg px-3 py-1 text-[11px] font-medium text-urg-medFg">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Admin
-        </span>
-      </header>
-
+    <div className="max-w-3xl space-y-5">
+      <p className="text-[13px] text-ink-muted">
+        <span className="tabular-nums text-ink-secondary font-medium">{total}</span>{' '}
+        solicitaç{total === 1 ? 'ão' : 'ões'} pendente{total === 1 ? '' : 's'}
+      </p>
       {isLoading ? (
         <div className="card-surface p-12 text-center text-[13px] text-ink-muted">Carregando…</div>
       ) : total === 0 ? (

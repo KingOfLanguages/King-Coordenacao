@@ -29,7 +29,7 @@ const NAV: NavNode[] = [
   { kind: 'group', label: 'Reuniões',       pageKeys: ['reunioes-dia', 'agendas', 'emails'] },
   { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'confiabilidade', 'onboarding', 'suporte-reunioes'] },
   { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'pendencias', 'mes-analise', 'retorno-pausa', 'transferencias'] },
-  { kind: 'group', label: 'Incidentes',     pageKeys: ['incidentes', 'alunos'] },
+  { kind: 'link', pageKey: 'incidentes' },
   { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral', 'retencao'] },
   { kind: 'link', pageKey: 'minha-area' },
   { kind: 'link', pageKey: 'convocacoes' },
@@ -41,7 +41,6 @@ const groupAdmin: NavGroupEntry = {
   type: 'group',
   label: 'Administração',
   items: [
-    { to: '/admin/aprovacoes', label: 'Aprovações' },
     { to: '/admin/usuarios', label: 'Usuários' },
     { to: '/admin/configuracoes', label: 'Configurações' },
   ],

@@ -62,55 +62,6 @@ export interface SilencioEpisodio {
   aberto_em: string
 }
 
-export function useSilencioFila() {
-  return useQuery({
-    queryKey: ['silencio-fila'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('acompanhamento_silencio')
-        .select(`
-          professor_id, status, dias_pendente, dias_pico, aulas_pendentes, qtd_alunos, severidade_nx,
-          data_mais_antiga, msg_resolucao, msg_saida_alunos, reuniao_solicitada,
-          precisa_mes_analise, precisa_mes_analise_em, aberto_em,
-          professor:professores!professor_id (
-            nome, status,
-            grupo:grupos!grupo_id (id, nome),
-            coordenador:profiles!coordenador_id (nome)
-          )
-        `)
-        .order('dias_pendente', { ascending: false })
-      if (error) throw error
-
-      return (data ?? []).map((r): SilencioEpisodio => {
-        const prof  = Array.isArray(r.professor) ? r.professor[0] : r.professor
-        const grupo = prof && (Array.isArray(prof.grupo) ? prof.grupo[0] : prof.grupo)
-        const coord = prof && (Array.isArray(prof.coordenador) ? prof.coordenador[0] : prof.coordenador)
-        return {
-          professor_id: r.professor_id,
-          nome: prof?.nome ?? '—',
-          professor_status: prof?.status ?? 'ativo',
-          grupo_id: grupo?.id ?? null,
-          grupo_nome: grupo?.nome ?? null,
-          coordenador_nome: coord?.nome ?? null,
-          status: r.status as SilencioStatus,
-          dias_pendente: r.dias_pendente,
-          dias_pico: r.dias_pico,
-          aulas_pendentes: r.aulas_pendentes,
-          qtd_alunos: r.qtd_alunos,
-          severidade_nx: r.severidade_nx,
-          data_mais_antiga: r.data_mais_antiga,
-          msg_resolucao: r.msg_resolucao,
-          msg_saida_alunos: r.msg_saida_alunos,
-          reuniao_solicitada: r.reuniao_solicitada,
-          precisa_mes_analise: r.precisa_mes_analise ?? false,
-          precisa_mes_analise_em: r.precisa_mes_analise_em ?? null,
-          aberto_em: r.aberto_em,
-        }
-      })
-    },
-  })
-}
-
 // Marca a mensagem do estágio como enviada E grava o informe (silencio_mensagem_log),
 // de forma atômica, via RPC.
 export function useRegistrarMensagemPendencia() {

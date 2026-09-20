@@ -1,15 +1,14 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import { useIncidentes, type Incidente } from '@/hooks/useIncidentes'
 import { dataInputValue, statusPrazo } from '@/lib/incidentePrazo'
 import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Agenda de incidentes — calendário mensal posicionando cada incidente pelo
-// prazo de resolução (fallback: data de criação). Cor por urgência/atraso.
-// Clique num item abre o detalhe em /incidentes?incidente=<id> (deep-link já
-// suportado pela IncidentesPage).
+// Calendário de incidentes — cada chamado no dia do prazo de resolução
+// (fallback: data de criação). Cor por prioridade; vencido em vermelho.
+// Morava na tela de Tarefas (aba "Agenda"); desde 2026-09 é a visão
+// "Calendário" dentro de Incidentes. Informe não entra: não tem prazo.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -38,9 +37,14 @@ function tomIncidente(i: Incidente): string {
   }
 }
 
-export function AgendaIncidentesTab() {
-  const navigate = useNavigate()
-  const { data: incidentes = [], isLoading } = useIncidentes()
+export function CalendarioIncidentes({ onAbrir, onVerLista }: {
+  /** Clique num chamado: abre o detalhe. */
+  onAbrir: (id: string) => void
+  /** "+ N mais" num dia cheio: volta para a lista. */
+  onVerLista: () => void
+}) {
+  const { data: todos = [], isLoading } = useIncidentes()
+  const incidentes = useMemo(() => todos.filter(i => i.natureza !== 'informe'), [todos])
   const hoje = new Date()
   const [mesRef, setMesRef] = useState(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1))
 
@@ -158,7 +162,7 @@ export function AgendaIncidentesTab() {
                     {doDia.slice(0, 3).map(i => (
                       <button
                         key={i.id}
-                        onClick={() => navigate(`/incidentes?incidente=${i.id}`)}
+                        onClick={() => onAbrir(i.id)}
                         title={`${i.teacher_name} · ${i.problem_type}`}
                         className={cn(
                           'btn-press flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-[10.5px] font-medium hover:bg-surface-subtle transition-colors',
@@ -173,7 +177,7 @@ export function AgendaIncidentesTab() {
                     ))}
                     {doDia.length > 3 && (
                       <button
-                        onClick={() => navigate('/incidentes')}
+                        onClick={onVerLista}
                         className="btn-press w-full px-1.5 text-left text-[10px] text-ink-muted hover:text-ink"
                       >
                         + {doDia.length - 3} mais

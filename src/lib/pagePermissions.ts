@@ -79,7 +79,9 @@ export const PAGES: PageDef[] = [
 
   // ── Incidentes ──
   { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Incidentes', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'alunos',          path: '/alunos',         label: 'Reclamações por Aluno', section: 'Incidentes', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  // Era a página /alunos; desde 2026-09 é a visão "Por aluno" dentro de
+  // Incidentes. A chave fica: é ela que guarda os overrides e libera a visão.
+  { key: 'alunos',          path: '/incidentes?visao=alunos', label: 'Incidentes › Por aluno', section: 'Incidentes', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
 
   // ── Links soltos ──
   { key: 'minha-area',      path: '/minha-area',     label: 'Minha Área',           section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

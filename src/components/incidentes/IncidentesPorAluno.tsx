@@ -4,7 +4,14 @@ import { Input } from '@/components/ui/input'
 import { useAcompanhamentoAlunos, type AlunoAgregado } from '@/hooks/useAcompanhamentoAlunos'
 import { cn } from '@/lib/utils'
 
-// Barra de urgência por ocorrência — mesmos tokens da tela de Incidentes.
+// ─────────────────────────────────────────────────────────────────────────────
+// Incidentes agrupados pelo aluno citado — a visão "Por aluno" da tela de
+// Incidentes. Foi a página /alunos ("Reclamações por Aluno") até 2026-09: eram
+// os mesmos incidentes, só agrupados de outro jeito, e merecia estar ao lado da
+// lista em vez de ocupar um item do menu.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Barra de prioridade por ocorrência — mesmos tokens da tela de Incidentes.
 const URG_BAR: Record<string, string> = {
   Baixa: 'bg-urg-lowFg', Média: 'bg-urg-medFg', Alta: 'bg-urg-highFg', Urgente: 'bg-urg-critFg', Crítico: 'bg-urg-critFg',
 }
@@ -13,7 +20,7 @@ function fmtData(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR')
 }
 
-export function AlunosPage() {
+export function IncidentesPorAluno() {
   const { data: alunos = [], isLoading } = useAcompanhamentoAlunos()
 
   const [busca, setBusca] = useState('')
@@ -49,13 +56,10 @@ export function AlunosPage() {
   )
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1200px] mx-auto">
-      <header className="space-y-0.5">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Reclamações por Aluno</h1>
-        <p className="text-[13px] text-ink-muted">
-          Ocorrências agrupadas pelo aluno citado — para enxergar padrões recorrentes.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <p className="text-[13px] text-ink-muted">
+        Ocorrências agrupadas pelo aluno citado — para enxergar padrões recorrentes.
+      </p>
 
       {/* Aviso LGPD */}
       <div className="flex items-start gap-2 rounded-lg border border-line-soft bg-surface-subtle/50 px-3.5 py-2.5">

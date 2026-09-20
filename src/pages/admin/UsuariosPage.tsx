@@ -12,6 +12,10 @@ import type { RoleUsuario } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { AprovacoesPendentes } from '@/components/admin/AprovacoesPendentes'
+import { useAprovacoesPendentes } from '@/hooks/useAprovacoes'
+import { Abas } from '@/components/ui/abas'
+import { useAbaUrl } from '@/hooks/useAbaUrl'
 
 const ROLES: { value: RoleUsuario; label: string }[] = [
   { value: 'admin',         label: 'Admin' },
@@ -40,6 +44,8 @@ export function UsuariosPage() {
   const atualizar = useAtualizarUsuario()
   const excluir   = useExcluirUsuario()
   const [busca, setBusca]           = useState('')
+  const [aba, setAba] = useAbaUrl<'usuarios' | 'aprovacoes'>(['usuarios', 'aprovacoes'], 'usuarios')
+  const { data: pendentes = [] } = useAprovacoesPendentes()
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null) // id do usuário pendente de confirmação
 
   const filtrados = useMemo(() =>
@@ -128,6 +134,17 @@ export function UsuariosPage() {
         </span>
       </header>
 
+      <Abas<'usuarios' | 'aprovacoes'>
+        ariaLabel="Usuários"
+        valor={aba}
+        onChange={setAba}
+        abas={[
+          { id: 'usuarios', label: 'Usuários' },
+          { id: 'aprovacoes', label: 'Aguardando aprovação', n: pendentes.length, alerta: true },
+        ]}
+      />
+
+      {aba === 'aprovacoes' ? <AprovacoesPendentes /> : <>
       {/* Onboarding info */}
       <div className="flex items-start gap-3 rounded-lg border border-accentBlue/20 bg-accentBlue-soft/10 px-4 py-3">
         <Info className="h-4 w-4 text-accentBlue flex-shrink-0 mt-0.5" />
@@ -135,10 +152,10 @@ export function UsuariosPage() {
           <p className="font-medium text-accentBlue">Como adicionar novos membros</p>
           <p>
             Novos usuários se cadastram em <code className="font-mono text-[12px]">/cadastro</code> e
-            aguardam aprovação em{' '}
-            <a href="/admin/aprovacoes" className="underline underline-offset-2 hover:text-accentBlue">
-              Aprovações de acesso
-            </a>
+            aguardam aprovação na aba{' '}
+            <button type="button" onClick={() => setAba('aprovacoes')} className="underline underline-offset-2 hover:text-accentBlue">
+              Aguardando aprovação
+            </button>
             .
           </p>
           <p>
@@ -200,6 +217,7 @@ export function UsuariosPage() {
           </ul>
         </div>
       )}
+      </>}
     </div>
   )
 }

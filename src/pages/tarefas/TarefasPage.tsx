@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   RefreshCw, Plus, Send, Trash2, Search, X, MessageCircle,
@@ -14,7 +14,8 @@ import {
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { useDadosVinculo } from '@/hooks/useReunioesDia'
 import { useIncidentes } from '@/hooks/useIncidentes'
-import { statusPrazo } from '@/lib/incidentePrazo'
+import { estaAtrasado } from '@/lib/incidentePrioridade'
+import { Abas } from '@/components/ui/abas'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -23,7 +24,6 @@ import {
 } from '@/components/ui/select'
 import { cn, whatsappLink } from '@/lib/utils'
 import { TarefasBoard } from '@/components/tarefas/TarefasBoard'
-import { AgendaIncidentesTab } from '@/components/tarefas/AgendaIncidentesTab'
 import { MensagensDoDiaBoard } from '@/components/tarefas/MensagensDoDiaBoard'
 import { useTarefas } from '@/hooks/useTarefas'
 
@@ -76,9 +76,11 @@ function WhatsAppBtn({ tel }: { tel: string | null }) {
   )
 }
 
-type Aba = 'tarefas' | 'reunioes' | 'convocacoes' | 'agenda'
+// "Mensagens do dia" era a aba "Reuniões" — o nome não dizia o que tinha dentro.
+// A antiga aba "Agenda" (prazos de incidente em calendário) foi para Incidentes.
+type Aba = 'tarefas' | 'mensagens' | 'convocacoes'
 
-export function CentralConvocacoesPage() {
+export function TarefasPage() {
   const { data: convocacoes = [], isLoading: loadingConv, isFetching: fetchingConv, refetch: refetchConv } = useConvocacoes()
   const { data: incidentes = [] } = useIncidentes()
   const { data: coordenadores = [] } = useCoordenadores()
@@ -87,7 +89,8 @@ export function CentralConvocacoesPage() {
   const [params] = useSearchParams()
   const abaParam = params.get('aba')
   const [aba, setAba] = useState<Aba>(
-    abaParam === 'reunioes' || abaParam === 'convocacoes' || abaParam === 'agenda' ? abaParam : 'tarefas',
+    abaParam === 'reunioes' || abaParam === 'mensagens' ? 'mensagens'
+      : abaParam === 'convocacoes' ? 'convocacoes' : 'tarefas',
   )
   const [nova, setNova] = useState(false)
 
@@ -101,17 +104,21 @@ export function CentralConvocacoesPage() {
     contato: convocacoes.filter(c => c.etapa === 'pendente_contato').length,
     resposta: convocacoes.filter(c => c.etapa === 'aguardando_resposta').length,
     agendadas: convocacoes.filter(c => c.etapa === 'agendada').length,
-    vencidos: incidentes.filter(i => statusPrazo(i.prazo_resolucao, i.resolved)?.atrasado).length,
+    // Mesma régua da fila de Incidentes: 1ª ação OU resolução vencida.
+    vencidos: incidentes.filter(i => estaAtrasado(i)).length,
   }), [tarefas, convocacoes, incidentes])
 
   const isFetching = fetchingConv
+
+  // Link antigo da aba "Agenda" → calendário dentro de Incidentes.
+  if (abaParam === 'agenda') return <Navigate to="/incidentes?visao=calendario" replace />
 
   return (
     <div className="px-6 py-6 space-y-5 max-w-[1400px] mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Tarefas</h1>
-          <p className="text-[13px] text-ink-muted">Tarefas, mensagens do dia, convocações e a agenda de incidentes num só lugar.</p>
+          <p className="text-[13px] text-ink-muted">Tarefas, mensagens do dia e convocações num só lugar.</p>
         </div>
         <div className="flex items-center gap-2">
           {aba === 'convocacoes' && (
@@ -135,32 +142,28 @@ export function CentralConvocacoesPage() {
         <StatCard cor="text-urg-highFg" bg="bg-urg-highBg" dot="🔴" n={resumo.contato}   label="aguardando contato" />
         <StatCard cor="text-urg-medFg"  bg="bg-urg-medBg"  dot="🟡" n={resumo.resposta}  label="aguardando resposta" />
         <StatCard cor="text-urg-lowFg"  bg="bg-urg-lowBg"  dot="🟢" n={resumo.agendadas} label="reuniões agendadas" />
-        <StatCard cor="text-urg-critFg" bg="bg-urg-critBg" dot="⏰" n={resumo.vencidos} label="incidentes vencidos" />
+        <Link to="/incidentes" className="rounded-xl transition-shadow hover:shadow-sm" title="Abrir a fila de Incidentes">
+          <StatCard cor="text-urg-critFg" bg="bg-urg-critBg" dot="⏰" n={resumo.vencidos} label="incidentes atrasados" />
+        </Link>
       </div>
 
       {/* ── Toggle de fluxo ── */}
-      <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-        {([['tarefas', 'Tarefas'], ['reunioes', 'Reuniões'], ['convocacoes', 'Convocações'], ['agenda', 'Agenda']] as const).map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => setAba(id)}
-            className={cn(
-              'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-              aba === id ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Abas<Aba>
+        ariaLabel="Fluxo"
+        valor={aba}
+        onChange={setAba}
+        abas={[
+          { id: 'tarefas', label: 'Tarefas' },
+          { id: 'mensagens', label: 'Mensagens do dia' },
+          { id: 'convocacoes', label: 'Convocações' },
+        ]}
+      />
 
       {aba === 'tarefas'
         ? <TarefasBoard />
-        : aba === 'reunioes'
+        : aba === 'mensagens'
           ? <MensagensDoDiaBoard />
-          : aba === 'convocacoes'
-            ? <KanbanReunioes convocacoes={convocacoes} loading={loadingConv} coordNome={coordNome} />
-            : <AgendaIncidentesTab />}
+          : <KanbanReunioes convocacoes={convocacoes} loading={loadingConv} coordNome={coordNome} />}
 
       {nova && <NovaConvocacaoDialog onClose={() => setNova(false)} />}
     </div>

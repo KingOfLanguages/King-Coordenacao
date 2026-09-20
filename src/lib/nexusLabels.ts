@@ -21,16 +21,6 @@ export const urgenciaBorda: Record<string, string> = {
   Crítico: 'border-urg-critFg/50',
 }
 
-/** Explicação curta de cada nível — usada no tooltip da badge. O critério
- *  completo (e os prazos) mora em src/lib/incidentePrioridade.ts. */
-export const URGENCIA_EXPLICACAO: Record<string, string> = {
-  Baixa: 'Pode esperar: acompanhamento, organização ou melhoria.',
-  Média: 'Precisa de atenção, mas não impede ninguém agora.',
-  Alta: 'Afeta professor ou aluno nos próximos dias. Alguém precisa agir hoje.',
-  Urgente: 'Alguém está impedido agora. Tratar imediatamente.',
-  Crítico: 'Alguém está impedido agora. Tratar imediatamente.',
-}
-
 /** Rótulo do estado de atendimento do TI (aba Plataforma). */
 export const tiStatusLabel: Record<string, string> = {
   chamado_aberto: 'Chamado aberto',

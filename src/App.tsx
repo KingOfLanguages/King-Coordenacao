@@ -19,14 +19,13 @@ import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
-import { CentralConvocacoesPage } from '@/pages/convocacoes/CentralConvocacoesPage'
+import { TarefasPage } from '@/pages/tarefas/TarefasPage'
+import { Redirecionar } from '@/components/Redirecionar'
 import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
-import { AlunosPage } from '@/pages/alunos/AlunosPage'
 import { ConfiabilidadePage } from '@/pages/comercial/ConfiabilidadePage'
-import { AprovacoesPage } from '@/pages/admin/AprovacoesPage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
@@ -66,7 +65,9 @@ function IndexRedirect() {
   if (loading || permsLoading) return null
   if (!profile) return <Navigate to="/login" replace />
 
-  const ordem = [...LANDING_PRIORITY, ...PAGES.map(p => p.key)]
+  // Só páginas de menu: as chaves que viraram aba de outra tela (nav: false)
+  // apontam para a tela-mãe, que tem permissão própria — cair nelas daria loop.
+  const ordem = [...LANDING_PRIORITY, ...PAGES.filter(p => p.nav).map(p => p.key)]
   for (const key of ordem) {
     if (canView(key)) return <Navigate to={PAGE_BY_KEY[key].path} replace />
   }
@@ -178,11 +179,8 @@ export default function App() {
                   <IncidentesPage />
                 </ProtectedRoute>
               } />
-              <Route path="/alunos" element={
-                <ProtectedRoute page="alunos">
-                  <AlunosPage />
-                </ProtectedRoute>
-              } />
+              {/* "Reclamações por Aluno" virou a visão "Por aluno" de Incidentes. */}
+              <Route path="/alunos" element={<Redirecionar para="/incidentes" params={{ visao: 'alunos' }} />} />
               <Route path="/onboarding" element={
                 <ProtectedRoute page="onboarding">
                   <OnboardingPage />
@@ -214,7 +212,7 @@ export default function App() {
               } />
               <Route path="/convocacoes" element={
                 <ProtectedRoute page="convocacoes">
-                  <CentralConvocacoesPage />
+                  <TarefasPage />
                 </ProtectedRoute>
               } />
               <Route path="/projetos" element={
@@ -230,11 +228,8 @@ export default function App() {
                 </ProtectedRoute>
               } />
               {/* Admin */}
-              <Route path="/admin/aprovacoes" element={
-                <ProtectedRoute admin>
-                  <AprovacoesPage />
-                </ProtectedRoute>
-              } />
+              {/* Aprovações virou a aba "Aguardando aprovação" de Usuários. */}
+              <Route path="/admin/aprovacoes" element={<Redirecionar para="/admin/usuarios" params={{ aba: 'aprovacoes' }} />} />
               <Route path="/admin/usuarios" element={
                 <ProtectedRoute admin>
                   <UsuariosPage />

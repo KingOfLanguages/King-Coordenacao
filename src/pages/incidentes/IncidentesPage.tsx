@@ -17,6 +17,11 @@ import { ResolverIncidenteDialog } from '@/components/incidentes/ResolverInciden
 import { ExcluirIncidenteDialog } from '@/components/incidentes/ExcluirIncidenteDialog'
 import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalheDialog'
 import { DesempenhoPrioridade } from '@/components/incidentes/DesempenhoPrioridade'
+import { CalendarioIncidentes } from '@/components/incidentes/CalendarioIncidentes'
+import { IncidentesPorAluno } from '@/components/incidentes/IncidentesPorAluno'
+import { Abas } from '@/components/ui/abas'
+import { useAbaUrl } from '@/hooks/useAbaUrl'
+import { useCanView } from '@/hooks/usePagePermissions'
 import { tiStatusLabel } from '@/lib/nexusLabels'
 import {
   PRIORIDADES, PRIORIDADE_META, normalizarPrioridade, metaPrioridade, estadoPrazo, estaAtrasado,
@@ -35,6 +40,10 @@ import { canEditIncidente, podeVerCategoriasCoordOnly } from '@/lib/permissions'
 type FiltroStatus = 'fila' | 'aberto' | 'em_andamento' | 'informes' | 'concluido' | 'todos'
 type FiltroUrgencia = 'todas' | Prioridade
 type Ordem = 'prioridade' | 'novo' | 'antigo'
+/** Visões da tela. "Por aluno" era a página /alunos e "Calendário" a aba Agenda
+ *  de Tarefas — os mesmos incidentes, agrupados de outro jeito. */
+type Visao = 'lista' | 'alunos' | 'calendario'
+const VISOES: readonly Visao[] = ['lista', 'alunos', 'calendario']
 
 const ABAS: [Aba, string][] = [
   ['professor', 'Professor'],
@@ -147,6 +156,10 @@ export function IncidentesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [aba, setAba] = useState<Aba>('professor')
   const [verDesempenho, setVerDesempenho] = useState(false)
+  const [visao, setVisao] = useAbaUrl<Visao>(VISOES, 'lista', 'visao')
+  const { canView } = useCanView()
+  // A visão por aluno herda a permissão da antiga página /alunos.
+  const podeVerPorAluno = canView('alunos')
 
   // Deep-link: /incidentes?incidente=<id> abre o detalhe daquele incidente.
   // Derivado em render (sem setState em efeito): o alvo é o que o usuário clicou
@@ -275,7 +288,7 @@ export function IncidentesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
+          {visao === 'lista' && <Button
             size="sm"
             variant="outline"
             className={cn('btn-press gap-1.5 border-line', verDesempenho && 'bg-surface-subtle')}
@@ -283,7 +296,7 @@ export function IncidentesPage() {
             aria-pressed={verDesempenho}
           >
             <BarChart3 className="h-3.5 w-3.5" />Desempenho
-          </Button>
+          </Button>}
           <Button
             size="sm"
             className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
@@ -294,7 +307,8 @@ export function IncidentesPage() {
         </div>
       </header>
 
-      <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+      {visao === 'lista' ? <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
         {ABAS.map(([value, label]) => (
           <button
             key={value}
@@ -307,7 +321,28 @@ export function IncidentesPage() {
             {label} <span className="text-ink-muted tabular-nums">{incidentes.filter(i => abaDoIncidente(i) === value).length}</span>
           </button>
         ))}
+      </div> : <span />}
+        <Abas<Visao>
+          ariaLabel="Visão"
+          valor={visao}
+          onChange={setVisao}
+          abas={[
+            { id: 'lista', label: 'Lista' },
+            ...(podeVerPorAluno ? [{ id: 'alunos' as const, label: 'Por aluno' }] : []),
+            { id: 'calendario', label: 'Calendário' },
+          ]}
+        />
       </div>
+
+      {visao === 'alunos' && podeVerPorAluno && <IncidentesPorAluno />}
+      {visao === 'calendario' && (
+        <CalendarioIncidentes
+          onAbrir={id => { const alvo = incidentes.find(x => x.id === id); if (alvo) setDetalheClick(alvo) }}
+          onVerLista={() => setVisao('lista')}
+        />
+      )}
+
+      {visao === 'lista' && <>
 
       {verDesempenho && <DesempenhoPrioridade incidentes={porAba} aba={aba} />}
 
@@ -710,6 +745,8 @@ export function IncidentesPage() {
           })}
         </div>
       )}
+
+      </>}
 
       <NovoIncidenteDialog open={novoAberto} onOpenChange={setNovoAberto} />
       <EditarIncidenteDialog
