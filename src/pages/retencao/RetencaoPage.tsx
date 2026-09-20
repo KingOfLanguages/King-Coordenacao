@@ -42,18 +42,20 @@ const ATALHOS: [string, () => [string, string]][] = [
   ['Ano', () => [fmt(new Date(hoje.getFullYear(), 0, 1)), fmt(new Date(hoje.getFullYear(), 11, 31))]],
 ]
 
-export function RetencaoPage() {
+/** `embutido`: renderizada como aba de /dashboard (sem título nem margens de página).
+ *  O recorte Professor/Aluno vem de ?turnover= — ?aba= agora é a aba do Dashboard. */
+export function RetencaoPage({ embutido = false }: { embutido?: boolean }) {
   const [params] = useSearchParams()
-  const [aba, setAba] = useState<Aba>(params.get('aba') === 'aluno' ? 'aluno' : 'professor')
+  const [aba, setAba] = useState<Aba>(params.get('turnover') === 'aluno' ? 'aluno' : 'professor')
   const [desde, setDesde] = useState(PADRAO_DESDE)
   const [ate, setAte]     = useState(PADRAO_ATE)
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-5">
+    <div className={embutido ? 'space-y-5' : 'mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-5'}>
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-[19px] font-semibold text-ink tracking-[-0.01em]">Turnover &amp; Retenção</h1>
-          <p className="text-[12.5px] text-ink-muted mt-0.5">
+          {!embutido && <h1 className="text-[19px] font-semibold text-ink tracking-[-0.01em]">Turnover &amp; Retenção</h1>}
+          <p className={cn('text-[12.5px] text-ink-muted', !embutido && 'mt-0.5')}>
             {aba === 'professor'
               ? 'Entrada e saída de professor no período — mesma metodologia da plataforma do King.'
               : 'Saídas de aluno no período, separando churn da escola de troca de professor.'}

@@ -30,7 +30,7 @@ const NAV: NavNode[] = [
   { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'confiabilidade', 'onboarding', 'suporte-reunioes'] },
   { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'pendencias', 'mes-analise', 'retorno-pausa', 'transferencias'] },
   { kind: 'link', pageKey: 'incidentes' },
-  { kind: 'group', label: 'Dashboard',      pageKeys: ['dashboard', 'dashboard-geral', 'retencao'] },
+  { kind: 'link', pageKey: 'dashboard' },
   { kind: 'link', pageKey: 'minha-area' },
   { kind: 'link', pageKey: 'convocacoes' },
   { kind: 'link', pageKey: 'projetos' },
@@ -84,7 +84,7 @@ export function AppLayout() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const openRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
-  const { canView } = useCanView()
+  const { canOpen } = useCanView()
   const isAdmin = profile?.is_admin === true || profile?.role === 'admin'
   const isCoord = profile?.role === 'coordenacao' || isAdmin
 
@@ -94,11 +94,11 @@ export function AppLayout() {
   for (const node of NAV) {
     if (node.kind === 'link') {
       const p = PAGE_BY_KEY[node.pageKey]
-      if (p && canView(p.key)) entries.push({ type: 'link', to: p.path, label: p.label, exact: p.exact })
+      if (p && canOpen(p.key)) entries.push({ type: 'link', to: p.path, label: p.label, exact: p.exact })
     } else {
       const items: NavDropdownItem[] = node.pageKeys
         .map(k => PAGE_BY_KEY[k])
-        .filter(p => p && canView(p.key))
+        .filter(p => p && canOpen(p.key))
         .map(p => ({ to: p.path, label: p.label, exact: p.exact }))
       if (items.length) entries.push({ type: 'group', label: node.label, items })
     }

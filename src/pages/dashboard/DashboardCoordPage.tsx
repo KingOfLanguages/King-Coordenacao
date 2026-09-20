@@ -9,7 +9,8 @@ import {
 
 const DIA = 864e5
 
-export function DashboardCoordPage() {
+/** `embutido`: renderizada como aba de /dashboard (sem título nem margens de página). */
+export function DashboardCoordPage({ embutido = false }: { embutido?: boolean }) {
   const { profile } = useAuth()
   const canSeeAll = profile?.role === 'admin'
     || profile?.role === 'suporte'
@@ -26,10 +27,10 @@ export function DashboardCoordPage() {
   const m = useMemo(() => computar(data), [data])
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1200px] mx-auto">
+    <div className={embutido ? 'space-y-6' : 'px-6 py-6 space-y-6 max-w-[1200px] mx-auto'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Dashboard da Coordenação</h1>
+          {!embutido && <h1 className="text-2xl font-semibold tracking-tight text-ink">Dashboard da Coordenação</h1>}
           <p className="text-[13px] text-ink-muted">
             Acompanhamento de reuniões de <span className="text-ink-secondary font-medium">{coordNome}</span>
           </p>

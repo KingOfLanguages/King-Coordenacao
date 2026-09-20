@@ -31,7 +31,7 @@ function Carregando() {
 
 export function ProtectedRoute({ children, roles, admin, lider, page }: Props) {
   const { session, profile, loading } = useAuth()
-  const { canView, isLoading: permsLoading } = useCanView()
+  const { canOpen, isLoading: permsLoading } = useCanView()
 
   if (loading) return <Carregando />
   if (!session) return <Navigate to="/login" replace />
@@ -40,7 +40,7 @@ export function ProtectedRoute({ children, roles, admin, lider, page }: Props) {
   if (page) {
     if (!profile) return <Navigate to="/login" replace />
     if (permsLoading) return <Carregando />
-    if (!canView(page)) return <Navigate to="/" replace />
+    if (!canOpen(page)) return <Navigate to="/" replace />
     return <>{children}</>
   }
 

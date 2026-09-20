@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'sonner'
@@ -21,6 +21,7 @@ import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { TarefasPage } from '@/pages/tarefas/TarefasPage'
 import { Redirecionar } from '@/components/Redirecionar'
+import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
@@ -28,9 +29,6 @@ import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { ConfiabilidadePage } from '@/pages/comercial/ConfiabilidadePage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
-import { DashboardCoordPage } from '@/pages/dashboard/DashboardCoordPage'
-import { DashboardGeralPage } from '@/pages/dashboard/DashboardGeralPage'
-import { RetencaoPage } from '@/pages/retencao/RetencaoPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { DisparoEmailsPage } from '@/pages/emails/DisparoEmailsPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
@@ -61,7 +59,7 @@ const LANDING_PRIORITY = ['dashboard', 'professores', 'suporte-reunioes', 'convo
 
 function IndexRedirect() {
   const { profile, loading } = useAuth()
-  const { canView, isLoading: permsLoading } = useCanView()
+  const { canOpen, isLoading: permsLoading } = useCanView()
   if (loading || permsLoading) return null
   if (!profile) return <Navigate to="/login" replace />
 
@@ -69,7 +67,7 @@ function IndexRedirect() {
   // apontam para a tela-mãe, que tem permissão própria — cair nelas daria loop.
   const ordem = [...LANDING_PRIORITY, ...PAGES.filter(p => p.nav).map(p => p.key)]
   for (const key of ordem) {
-    if (canView(key)) return <Navigate to={PAGE_BY_KEY[key].path} replace />
+    if (canOpen(key)) return <Navigate to={PAGE_BY_KEY[key].path} replace />
   }
   return (
     <div className="flex min-h-[100dvh] items-center justify-center px-6 text-center">
@@ -78,6 +76,17 @@ function IndexRedirect() {
       </p>
     </div>
   )
+}
+
+// /retencao?aba=aluno → /dashboard?aba=retencao&turnover=aluno: o ?aba= antigo
+// era o recorte Professor/Aluno e agora nomeia a aba do Dashboard.
+function RedirecionarRetencao() {
+  const { search } = useLocation()
+  const q = new URLSearchParams(search)
+  const recorte = q.get('aba')
+  q.set('aba', 'retencao')
+  if (recorte === 'aluno') q.set('turnover', 'aluno')
+  return <Navigate to={`/dashboard?${q.toString()}`} replace />
 }
 
 // Quem já tem sessão não deveria ver o formulário de login/cadastro de novo.
@@ -111,21 +120,14 @@ export default function App() {
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<IndexRedirect />} />
 
+              {/* Dashboard: Coordenação | Geral | Turnover & Retenção numa tela só. */}
               <Route path="/dashboard" element={
                 <ProtectedRoute page="dashboard">
-                  <DashboardCoordPage />
+                  <DashboardPage />
                 </ProtectedRoute>
               } />
-              <Route path="/dashboard/geral" element={
-                <ProtectedRoute page="dashboard-geral">
-                  <DashboardGeralPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/retencao" element={
-                <ProtectedRoute page="retencao">
-                  <RetencaoPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/dashboard/geral" element={<Redirecionar para="/dashboard" params={{ aba: 'geral' }} />} />
+              <Route path="/retencao" element={<RedirecionarRetencao />} />
 
               <Route path="/professores" element={
                 <ProtectedRoute page="professores">

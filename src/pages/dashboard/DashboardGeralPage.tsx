@@ -107,7 +107,8 @@ function SortHeader({
 
 // ─── Página ─────────────────────────────────────────────────────────────────
 
-export function DashboardGeralPage() {
+/** `embutido`: renderizada como aba de /dashboard (sem título nem margens de página). */
+export function DashboardGeralPage({ embutido = false }: { embutido?: boolean }) {
   const { data: rows = [], isLoading } = useDashboardGeralProfessores()
   const { data: trend = [] } = useDashboardGeralScoreTrend()
   const { data: reunioesDatadas = [] } = useDashboardGeralReunioesDatadas()
@@ -347,15 +348,17 @@ export function DashboardGeralPage() {
   )
 
   return (
-    <div className="px-6 py-7 max-w-[1320px] mx-auto">
+    <div className={embutido ? '' : 'px-6 py-7 max-w-[1320px] mx-auto'}>
       {/* ── Topbar: título ── */}
       <div className="mb-4">
+        {!embutido && <>
         <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_0_3px_var(--brand-red-soft)]" />
           Panorama da escola
         </div>
         <h1 className="mt-2 text-[30px] font-bold tracking-tight leading-[1.05] text-ink">Dashboard Geral</h1>
-        <p className="mt-1.5 text-[13px] text-ink-muted">
+        </>}
+        <p className={cn('text-[13px] text-ink-muted', !embutido && 'mt-1.5')}>
           Visão consolidada de <b className="font-semibold text-ink-secondary">{resumo.totalGrupos} {resumo.totalGrupos === 1 ? 'coordenação' : 'coordenações'}</b>
           {' · '}<b className="font-semibold text-ink-secondary tabular-nums">{resumo.professoresAtivos} professores ativos</b>
         </p>

@@ -44,6 +44,11 @@ export interface PageDef {
   exact?: boolean
   /** Acesso padrão, quando não há override no banco. Admin sempre incluído implicitamente. */
   defaultRoles: PermSubject[]
+  /** Chaves de telas que viraram ABAS desta (consolidação de 2026-09). A tela
+   *  abre — no menu e na rota — se a pessoa puder ver ela OU qualquer aba; cada
+   *  aba continua liberada pela própria chave, então os overrides já salvos no
+   *  banco seguem valendo aba por aba. */
+  abas?: string[]
 }
 
 // Ordem aqui = ordem de exibição na tela de Configurações.
@@ -54,9 +59,11 @@ export const PAGES: PageDef[] = [
   { key: 'emails',          path: '/emails',         label: 'Disparo de E-mails',   section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao', 'lider'] },
 
   // ── Dashboard ──
-  { key: 'dashboard',       path: '/dashboard',      label: 'Dashboard da Coordenação', section: 'Dashboard', nav: true, exact: true, defaultRoles: ['coordenacao', 'lider'] },
-  { key: 'dashboard-geral', path: '/dashboard/geral', label: 'Dashboard Geral',     section: 'Dashboard',   nav: true,  defaultRoles: ['coordenacao', 'lider'] },
-  { key: 'retencao',        path: '/retencao',       label: 'Turnover & Retenção',  section: 'Dashboard',   nav: true,  defaultRoles: ['coordenacao', 'lider'] },
+  // Uma tela, três abas (2026-09). 'dashboard' é a aba Coordenação e o item do
+  // menu; as outras duas chaves liberam as próprias abas.
+  { key: 'dashboard',       path: '/dashboard',      label: 'Dashboard',            section: 'Dashboard',   nav: true,  defaultRoles: ['coordenacao', 'lider'], abas: ['dashboard-geral', 'retencao'] },
+  { key: 'dashboard-geral', path: '/dashboard?aba=geral', label: 'Dashboard › Geral', section: 'Dashboard', nav: false, defaultRoles: ['coordenacao', 'lider'] },
+  { key: 'retencao',        path: '/dashboard?aba=retencao', label: 'Dashboard › Turnover & Retenção', section: 'Dashboard', nav: false, defaultRoles: ['coordenacao', 'lider'] },
 
   // ── Professores ──
   { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
@@ -128,4 +135,10 @@ export function canViewPage(profile: Profile | null, key: string, overrides: Per
   if (admin) return true
   const roles = effectiveRoles(key, overrides)
   return roles.some(r => subjects.has(r))
+}
+
+/** Pode abrir a TELA: vê a página em si ou alguma das abas que ela reúne. */
+export function canOpenPage(profile: Profile | null, key: string, overrides: PermOverrides): boolean {
+  if (canViewPage(profile, key, overrides)) return true
+  return (PAGE_BY_KEY[key]?.abas ?? []).some(k => canViewPage(profile, k, overrides))
 }

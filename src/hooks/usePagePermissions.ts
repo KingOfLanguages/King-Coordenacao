@@ -3,7 +3,7 @@ import { useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  canViewPage, normalizeRoles,
+  canViewPage, canOpenPage, normalizeRoles,
   type PermOverrides, type PermSubject,
 } from '@/lib/pagePermissions'
 
@@ -46,7 +46,12 @@ export function useCanView() {
     (key: string) => canViewPage(profile, key, overrides),
     [profile, overrides],
   )
-  return { canView, isLoading, overrides }
+  /** Tela com abas: abre se a pessoa vê a tela ou alguma aba (ver PageDef.abas). */
+  const canOpen = useCallback(
+    (key: string) => canOpenPage(profile, key, overrides),
+    [profile, overrides],
+  )
+  return { canView, canOpen, isLoading, overrides }
 }
 
 /** Salva o override de acesso de uma página (upsert). Apenas admin (garantido por RLS). */
