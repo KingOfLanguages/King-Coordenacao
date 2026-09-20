@@ -29,7 +29,8 @@ function statusPrazo(dataIso: string): { label: string; cls: string; vencido: bo
   return { label: `${30 - dias}d restantes`, cls: 'bg-urg-medBg text-urg-medFg', vencido: false }
 }
 
-export function MesAnalisePage() {
+/** `embutido`: aba de /acompanhamento (sem título nem margens de página). */
+export function MesAnalisePage({ embutido = false }: { embutido?: boolean }) {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const podeEditar = canEdit(profile) // colocar/resolver/reabrir = só coordenação/admin
@@ -109,10 +110,10 @@ export function MesAnalisePage() {
   }
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className={embutido ? 'space-y-6' : 'px-6 py-6 space-y-6 max-w-[1400px] mx-auto'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Mês de Análise</h1>
+          {!embutido && <h1 className="text-2xl font-semibold tracking-tight text-ink">Mês de Análise</h1>}
           <p className="text-[13px] text-ink-muted">Acompanhamento de 30 dias, integrado ao King Nexus.</p>
         </div>
         {podeEditar && (

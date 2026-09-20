@@ -65,7 +65,8 @@ function semanaLabel(iso: string): string {
 
 const zeroContagem = (): Record<Aba, number> => ({ todos: 0, 1: 0, 2: 0, 3: 0 })
 
-export function CentralPendenciasPage() {
+/** `embutido`: aba de /acompanhamento (sem título nem margens de página). */
+export function CentralPendenciasPage({ embutido = false }: { embutido?: boolean }) {
   const { profile } = useAuth()
   const podeAgir = canEdit(profile)
   const { data: fila = [], isLoading, isFetching, refetch } = usePendenciasFila()
@@ -119,10 +120,10 @@ export function CentralPendenciasPage() {
   ]
 
   return (
-    <div className="px-6 py-6 space-y-5 max-w-[1400px] mx-auto">
+    <div className={embutido ? 'space-y-5' : 'px-6 py-6 space-y-5 max-w-[1400px] mx-auto'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Central de Pendências</h1>
+          {!embutido && <h1 className="text-2xl font-semibold tracking-tight text-ink">Central de Pendências</h1>}
           <p className="text-[13px] text-ink-muted">
             <span className="tabular-nums text-ink-secondary font-medium">{kpis.total}</span> professores com pendências
             {' · '}

@@ -56,7 +56,9 @@ export const PAGES: PageDef[] = [
   // ── Reuniões ──
   { key: 'reunioes-dia',    path: '/reunioes-dia',   label: 'Reuniões do Dia',      section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao'] },
   { key: 'agendas',         path: '/admin/agendas',  label: 'Agendas',              section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao'] },
-  { key: 'emails',          path: '/emails',         label: 'Disparo de E-mails',   section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao', 'lider'] },
+  // Era a página /emails; desde 2026-09 é a ação "Enviar e-mail" do Índice de
+  // atenção. A chave segue liberando quem pode disparar.
+  { key: 'emails',          path: '/acompanhamento', label: 'Acompanhamento › Enviar e-mail', section: 'Acompanhamento', nav: false, defaultRoles: ['coordenacao', 'lider'] },
 
   // ── Dashboard ──
   // Uma tela, três abas (2026-09). 'dashboard' é a aba Coordenação e o item do
@@ -75,10 +77,11 @@ export const PAGES: PageDef[] = [
   { key: 'confiabilidade',  path: '/confiabilidade', label: 'Confiabilidade do Professor', section: 'Professores', nav: true, defaultRoles: ['comercial', 'coordenacao', 'lider'] },
 
   // ── Acompanhamento ──
-  // 'acompanhamento' é o Índice de Prioridade; o rótulo evita colidir com o nome do grupo.
-  { key: 'acompanhamento',  path: '/acompanhamento', label: 'Índice de Prioridade', section: 'Acompanhamento', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'pendencias',      path: '/pendencias',     label: 'Central de Pendências', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'mes-analise',     path: '/mes-analise',    label: 'Mês de Análise',       section: 'Acompanhamento', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  // Uma tela, três abas (2026-09). 'acompanhamento' é a aba Índice de atenção e
+  // o item do menu; as outras chaves liberam as próprias abas.
+  { key: 'acompanhamento',  path: '/acompanhamento', label: 'Acompanhamento',       section: 'Acompanhamento', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'], abas: ['pendencias', 'mes-analise', 'emails'] },
+  { key: 'pendencias',      path: '/acompanhamento?aba=pendencias', label: 'Acompanhamento › Pendências do King', section: 'Acompanhamento', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  { key: 'mes-analise',     path: '/acompanhamento?aba=mes-analise', label: 'Acompanhamento › Mês de Análise', section: 'Acompanhamento', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   // A chave continua 'retorno-pausa' de propósito: é ela que indexa os overrides
   // de permissão já salvos no banco — renomear apagaria as configurações atuais.
   { key: 'retorno-pausa',   path: '/pausas',         label: 'Acompanhamento de Pausas', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

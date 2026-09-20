@@ -17,20 +17,17 @@ import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { AcompanhamentoPausasPage } from '@/pages/professores/AcompanhamentoPausasPage'
 import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
-import { CentralPendenciasPage } from '@/pages/pendencias/CentralPendenciasPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { TarefasPage } from '@/pages/tarefas/TarefasPage'
 import { Redirecionar } from '@/components/Redirecionar'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
-import { MesAnalisePage } from '@/pages/mesAnalise/MesAnalisePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { ConfiabilidadePage } from '@/pages/comercial/ConfiabilidadePage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
-import { DisparoEmailsPage } from '@/pages/emails/DisparoEmailsPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
 import { Home as TransferenciaPublicaPage } from '@/pages/transferencias/Home'
@@ -154,28 +151,18 @@ export default function App() {
                   <ReunioesDiaPage />
                 </ProtectedRoute>
               } />
-              <Route path="/emails" element={
-                <ProtectedRoute page="emails">
-                  <DisparoEmailsPage />
-                </ProtectedRoute>
-              } />
+              {/* Disparo de E-mails virou ação do Índice de atenção (seleciona → envia). */}
+              <Route path="/emails" element={<Navigate to="/acompanhamento" replace />} />
+              {/* Acompanhamento: Índice de atenção | Pendências do King | Mês de Análise. */}
               <Route path="/acompanhamento" element={
                 <ProtectedRoute page="acompanhamento">
                   <AcompanhamentoPage />
                 </ProtectedRoute>
               } />
-              <Route path="/pendencias" element={
-                <ProtectedRoute page="pendencias">
-                  <CentralPendenciasPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/pendencias" element={<Redirecionar para="/acompanhamento" params={{ aba: 'pendencias' }} />} />
               {/* Controle de Pendências (local, régua 6/9/12) foi fundido em Acompanhamento — mantém o link antigo vivo. */}
               <Route path="/silencio" element={<Navigate to="/acompanhamento" replace />} />
-              <Route path="/mes-analise" element={
-                <ProtectedRoute page="mes-analise">
-                  <MesAnalisePage />
-                </ProtectedRoute>
-              } />
+              <Route path="/mes-analise" element={<Redirecionar para="/acompanhamento" params={{ aba: 'mes-analise' }} />} />
               <Route path="/incidentes" element={
                 <ProtectedRoute page="incidentes">
                   <IncidentesPage />
