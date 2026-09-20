@@ -21,20 +21,18 @@ import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { TarefasPage } from '@/pages/tarefas/TarefasPage'
 import { Redirecionar } from '@/components/Redirecionar'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
+import { ReunioesPage } from '@/pages/reunioes/ReunioesPage'
 import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { ConfiabilidadePage } from '@/pages/comercial/ConfiabilidadePage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
-import { ReunioesDiaPage } from '@/pages/reunioes/ReunioesDiaPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
 import { Home as TransferenciaPublicaPage } from '@/pages/transferencias/Home'
 import { TransferenciasPage } from '@/pages/transferencias/TransferenciasPage'
 import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
-import { AgendasPage } from '@/pages/admin/AgendasPage'
-import { SuporteReunioesPage } from '@/pages/suporte/SuporteReunioesPage'
 import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
 
 const queryClient = new QueryClient({
@@ -146,11 +144,13 @@ export default function App() {
                   <ObservacaoDetalhePage />
                 </ProtectedRoute>
               } />
-              <Route path="/reunioes-dia" element={
+              {/* Reuniões: Agenda | Buscar por professor | Configurar agendas. */}
+              <Route path="/reunioes" element={
                 <ProtectedRoute page="reunioes-dia">
-                  <ReunioesDiaPage />
+                  <ReunioesPage />
                 </ProtectedRoute>
               } />
+              <Route path="/reunioes-dia" element={<Redirecionar para="/reunioes" />} />
               {/* Disparo de E-mails virou ação do Índice de atenção (seleciona → envia). */}
               <Route path="/emails" element={<Navigate to="/acompanhamento" replace />} />
               {/* Acompanhamento: Índice de atenção | Pendências do King | Mês de Análise. */}
@@ -187,11 +187,7 @@ export default function App() {
                   <TransferenciasPage />
                 </ProtectedRoute>
               } />
-              <Route path="/suporte/reunioes" element={
-                <ProtectedRoute page="suporte-reunioes">
-                  <SuporteReunioesPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/suporte/reunioes" element={<Redirecionar para="/reunioes" params={{ aba: 'buscar' }} />} />
               {/* Tarefas foi unificada na Central (/convocacoes) — mantém o link antigo vivo. */}
               <Route path="/tarefas" element={<Navigate to="/convocacoes?aba=tarefas" replace />} />
               <Route path="/minha-area" element={
@@ -229,11 +225,7 @@ export default function App() {
                   <ConfiguracoesPage />
                 </ProtectedRoute>
               } />
-              <Route path="/admin/agendas" element={
-                <ProtectedRoute page="agendas">
-                  <AgendasPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/admin/agendas" element={<Redirecionar para="/reunioes" params={{ aba: 'agendas' }} />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/login" replace />} />

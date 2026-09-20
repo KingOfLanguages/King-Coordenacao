@@ -42,7 +42,8 @@ function labelDia(diaISO: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
 
-export function SuporteReunioesPage() {
+/** `embutido`: aba 'Buscar por professor' de /reunioes (sem título nem margens de página). */
+export function SuporteReunioesPage({ embutido = false }: { embutido?: boolean }) {
   const [input, setInput]   = useState('')
   const [termo, setTermo]   = useState('')
   const [dia, setDia]       = useState(() => paraInputDate(new Date()))
@@ -62,12 +63,12 @@ export function SuporteReunioesPage() {
   const { data: resultados = [], isLoading, isFetching } = buscando ? busca : doDia
 
   return (
-    <div className="px-6 py-6 max-w-[1200px] mx-auto space-y-6">
+    <div className={embutido ? 'space-y-6' : 'px-6 py-6 max-w-[1200px] mx-auto space-y-6'}>
       <header className="space-y-0.5">
-        <div className="flex items-center gap-2">
+        {!embutido && <div className="flex items-center gap-2">
           <LifeBuoy className="h-5 w-5 text-ink-secondary" />
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Buscar Reuniões</h1>
-        </div>
+        </div>}
         <p className="text-[13px] text-ink-muted">
           Veja as reuniões do dia ou encontre rapidamente a de um professor específico.
           O coordenador mostrado é o dono da agenda em que a reunião aparece.

@@ -159,7 +159,8 @@ function LegendaStatus() {
 
 // ─── Página ─────────────────────────────────────────────────────────────────
 
-export function ReunioesDiaPage() {
+/** `embutido`: aba Agenda de /reunioes (sem título nem margens de página). */
+export function ReunioesDiaPage({ embutido = false }: { embutido?: boolean }) {
   const { profile } = useAuth()
   const canSeeAll = profile?.role === 'admin'
     || profile?.role === 'suporte'
@@ -228,10 +229,10 @@ export function ReunioesDiaPage() {
   }, [modo, dataRef, intervalo])
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1200px] mx-auto">
+    <div className={embutido ? 'space-y-6' : 'px-6 py-6 space-y-6 max-w-[1200px] mx-auto'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Reuniões</h1>
+          {!embutido && <h1 className="text-2xl font-semibold tracking-tight text-ink">Reuniões</h1>}
 
           {subaba === 'agenda' ? (
             <div className="flex items-center gap-1.5">

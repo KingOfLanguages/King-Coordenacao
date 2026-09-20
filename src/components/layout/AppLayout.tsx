@@ -26,8 +26,8 @@ const NAV: NavNode[] = [
   // "Professores" agrupa cadastro, Onboarding e Buscar Reuniões. Pendências, Mês de
   // Análise e Pausas foram pro grupo "Acompanhamento"; Incidentes e Reclamações
   // por Aluno pro grupo "Incidentes". Tarefas (ex-Central) segue como link de topo.
-  { kind: 'group', label: 'Reuniões',       pageKeys: ['reunioes-dia', 'agendas'] },
-  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'confiabilidade', 'onboarding', 'suporte-reunioes'] },
+  { kind: 'link', pageKey: 'reunioes-dia' },
+  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'confiabilidade', 'onboarding'] },
   { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'retorno-pausa', 'transferencias'] },
   { kind: 'link', pageKey: 'incidentes' },
   { kind: 'link', pageKey: 'dashboard' },

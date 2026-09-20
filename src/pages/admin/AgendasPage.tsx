@@ -42,17 +42,20 @@ function linkValido(s: string | null | undefined): boolean {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function AgendasPage() {
+/** `embutido`: aba 'Configurar agendas' de /reunioes (sem título nem margens de página). */
+export function AgendasPage({ embutido = false }: { embutido?: boolean }) {
   const { data: agendas, isLoading } = useAgendas()
 
   return (
-    <div className="px-6 py-6 max-w-[1100px] mx-auto space-y-6 animate-fade-up">
+    <div className={embutido ? 'space-y-6 max-w-[1100px]' : 'px-6 py-6 max-w-[1100px] mx-auto space-y-6 animate-fade-up'}>
       <header className="space-y-1">
+        {!embutido && <>
         <span className="label-micro flex items-center gap-1.5 text-accentBlue">
           <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
           Portal de agendamento
         </span>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Agendas</h1>
+        </>}
         <p className="text-[13px] text-ink-muted">
           Reuniões em grupo recorrentes que professores reservam sozinhos, sem login.
         </p>

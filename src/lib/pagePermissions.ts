@@ -54,8 +54,10 @@ export interface PageDef {
 // Ordem aqui = ordem de exibição na tela de Configurações.
 export const PAGES: PageDef[] = [
   // ── Reuniões ──
-  { key: 'reunioes-dia',    path: '/reunioes-dia',   label: 'Reuniões do Dia',      section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao'] },
-  { key: 'agendas',         path: '/admin/agendas',  label: 'Agendas',              section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao'] },
+  // Uma tela, três abas (2026-09). 'reunioes-dia' é a aba Agenda e o item do
+  // menu; 'suporte-reunioes' libera a busca e 'agendas' a configuração.
+  { key: 'reunioes-dia',    path: '/reunioes',       label: 'Reuniões',             section: 'Reuniões',    nav: true,  defaultRoles: ['coordenacao'], abas: ['suporte-reunioes', 'agendas'] },
+  { key: 'agendas',         path: '/reunioes?aba=agendas', label: 'Reuniões › Configurar agendas', section: 'Reuniões', nav: false, defaultRoles: ['coordenacao'] },
   // Era a página /emails; desde 2026-09 é a ação "Enviar e-mail" do Índice de
   // atenção. A chave segue liberando quem pode disparar.
   { key: 'emails',          path: '/acompanhamento', label: 'Acompanhamento › Enviar e-mail', section: 'Acompanhamento', nav: false, defaultRoles: ['coordenacao', 'lider'] },
@@ -70,7 +72,7 @@ export const PAGES: PageDef[] = [
   // ── Professores ──
   { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'onboarding',      path: '/onboarding',     label: 'Onboarding',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
-  { key: 'suporte-reunioes', path: '/suporte/reunioes', label: 'Buscar Reuniões',   section: 'Professores', nav: true,  defaultRoles: ['suporte'] },
+  { key: 'suporte-reunioes', path: '/reunioes?aba=buscar', label: 'Reuniões › Buscar por professor', section: 'Reuniões', nav: false, defaultRoles: ['suporte'] },
   // Tela do setor Comercial ("esse teacher é confiável?"). É a ÚNICA página do
   // cargo comercial — mexer aqui tira o chão dele; coordenação/líder ganham junto
   // porque a mesma leitura serve pra decidir alocação.
