@@ -268,14 +268,16 @@ async function buscarFeedbacks(professorId: string): Promise<FeedbacksJanela> {
 const CATEGORIAS_PLATAFORMA = new Set(['Bugs', 'Melhorias', 'Plataforma'])
 
 /** Tudo que está em aberto sobre o professor FORA do King: pausa, transferência,
- *  convocação, tarefa, silêncio, onboarding, trilha, mensagem do dia e e-mail.
+ *  convocação, tarefa, onboarding, trilha, mensagem do dia e e-mail. (A pendência
+ *  de lançamento vem da fila do King, em buscarPendencia — a régua local de
+ *  "silêncio" foi aposentada em 2026-09 e deixou de aparecer aqui.)
  *  Cada consulta é independente e falha em silêncio (RLS de cargo pode barrar
  *  qualquer uma delas — quem não enxerga a fila simplesmente não vê o bloco). */
 async function buscarSituacao(professorId: string, incidenteIds: string[]): Promise<SituacaoResumo> {
   const hojeISO = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD local
 
   const [
-    pausaRes, transfRes, convocRes, tarefasRes, silencioRes,
+    pausaRes, transfRes, convocRes, tarefasRes,
     onboardingRes, wpProgressoRes, wpEtapasRes, contatoRes, emailRes,
   ] = await Promise.all([
     supabase
@@ -308,11 +310,6 @@ async function buscarSituacao(professorId: string, incidenteIds: string[]): Prom
           .order('created_at', { ascending: false })
           .limit(5)
       : Promise.resolve({ data: [] }),
-    supabase
-      .from('acompanhamento_silencio')
-      .select('status, dias_pendente, dias_pico, aulas_pendentes, qtd_alunos, precisa_mes_analise, reuniao_solicitada, aberto_em')
-      .eq('professor_id', professorId)
-      .maybeSingle(),
     supabase
       .from('onboarding_professores')
       .select('data_inicio, dias, observacao, tag_texto, tag_cor')
@@ -356,7 +353,6 @@ async function buscarSituacao(professorId: string, incidenteIds: string[]): Prom
     transferencias: transfRes.data ?? [],
     convocacoes: convocRes.data ?? [],
     tarefas: tarefasRes.data ?? [],
-    silencio: silencioRes.data ?? null,
     onboarding: onboardingRes.data ?? null,
     welcomePath,
     contatoHoje: contatoRes.data?.[0] ? { enviado: contatoRes.data[0].enviado } : null,

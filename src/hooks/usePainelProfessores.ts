@@ -1,26 +1,34 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import {
   calcularPrioridade, nivelPrioridade, INFORME_JANELA, REINCIDENCIA_MIN,
   type NivelPrioridade,
 } from '@/lib/prioridade'
-import type { SilencioStatus } from '@/hooks/useSilencio'
+import { usePendenciasFila, type EstagioNum, type PendenciaFila } from '@/hooks/usePendencias'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Painel unificado de Acompanhamento — junta, por professor ATIVO:
-//   • score + pendências + elegibilidade   → professor_acompanhamento
-//   • estágio da régua de pendência         → acompanhamento_silencio
+// Painel do Índice de atenção — junta, por professor ATIVO:
+//   • score + elegibilidade                 → professor_acompanhamento
+//   • pendências de lançamento e o estágio  → fila do King (/api/PendenciaLancamento),
+//                                             a MESMA da aba Pendências do King
 //   • última reunião realizada              → professores.data_ultima_reuniao
 //   • informes recentes (sinal)             → nexus_incidents (natureza='informe')
-// e calcula o Índice de Prioridade (src/lib/prioridade.ts).
+// e calcula o Índice (src/lib/prioridade.ts).
 //
-// Substitui as duas telas antigas (Acompanhamento + Controle de Pendências),
-// que consultavam essas mesmas fontes separadamente. Todas as consultas são
-// SELECT já liberado a autenticados via RLS.
+// Uma régua só (2026-09): até aqui o Índice usava a régua local 6/9/12 dias
+// (acompanhamento_silencio) e a aba Pendências a do King (2/3/5 dias) — o mesmo
+// professor aparecia em estágios diferentes nas duas abas. A local foi aposentada.
+//
+// A parte local e a fila do King são duas consultas separadas de propósito: se a
+// API do King cair, o Índice continua de pé com a última contagem do sync
+// (professor_acompanhamento) e avisa que a régua está indisponível.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface PainelProfessor {
   professor_id: string
+  /** ID do professor no King — é por ele que a fila de pendências casa. */
+  kms_id: number | null
   nome: string
   email: string | null
   grupo_id: string | null
@@ -39,12 +47,13 @@ export interface PainelProfessor {
   dias_sem_reuniao: number | null     // null ⇒ nunca teve reunião registrada
 
   aulas_pendentes_qtd: number
-  dias_pendente: number               // 0 quando não há pendência
+  dias_pendente: number               // dias sem lançar; 0 quando não há pendência
 
-  // Episódio de pendência (régua), quando houver.
-  silencio_status: SilencioStatus | null
-  precisa_mes_analise: boolean
-  contatado: boolean                  // mensagem do estágio atual já marcada
+  // Régua de pendência do King, quando o professor está na fila.
+  estagio: EstagioNum | null          // 1 Lembrete · 2 Bloqueio · 3 Reunião
+  agenda_bloqueada: boolean           // bloqueio aplicado pelo motor do King
+  regularizado: boolean               // lançou o que devia; sai da fila no próximo ciclo
+  contatado: boolean                  // mensagem do estágio atual já registrada
   qtd_alunos: number | null
 
   // Informes como sinal (últimos INFORME_JANELA dias).
@@ -59,27 +68,6 @@ export interface PainelProfessor {
   // Índice de Prioridade.
   prioridade: number
   nivel: NivelPrioridade
-}
-
-interface SilencioLinha {
-  professor_id: string
-  status: SilencioStatus
-  precisa_mes_analise: boolean | null
-  qtd_alunos: number | null
-  aulas_pendentes: number
-  msg_resolucao: boolean
-  msg_saida_alunos: boolean
-  reuniao_solicitada: boolean
-}
-
-/** A mensagem do estágio atual já foi marcada como enviada? */
-function contatadoDe(s: SilencioLinha): boolean {
-  switch (s.status) {
-    case 'alerta':      return s.msg_resolucao
-    case 'aviso_saida': return s.msg_saida_alunos
-    case 'reuniao':     return s.reuniao_solicitada
-    default:            return false
-  }
 }
 
 /** Dias corridos desde a aula pendente mais antiga (compat. com CURRENT_DATE − data). */
@@ -113,16 +101,67 @@ function ehReincidente(agg: InformeAgg): boolean {
   return false
 }
 
+/** Linha local, antes de juntar a régua do King. */
+type PainelBase = Omit<PainelProfessor,
+  'estagio' | 'agenda_bloqueada' | 'regularizado' | 'contatado' | 'qtd_alunos' | 'prioridade' | 'nivel'>
+
+/** Mescla a régua do King na linha local e calcula o Índice. `fila` null = API
+ *  indisponível: pendências ficam com a contagem do sync (professor_acompanhamento). */
+function mesclar(base: PainelBase, porKms: Map<number, PendenciaFila> | null): PainelProfessor {
+  const pend = porKms && base.kms_id != null ? porKms.get(base.kms_id) ?? null : null
+  const qtd  = porKms ? (pend?.aulasPendentes ?? 0) : base.aulas_pendentes_qtd
+  const dias = porKms ? (pend?.dias ?? 0) : base.dias_pendente
+  const prioridade = calcularPrioridade(
+    base.score_atual, qtd, dias, base.informes_recentes, base.informe_reincidente, base.pausa_vencida_dias,
+  )
+  return {
+    ...base,
+    aulas_pendentes_qtd: qtd,
+    dias_pendente: dias,
+    estagio: pend?.estagio ?? null,
+    agenda_bloqueada: pend?.agendaBloqueada ?? false,
+    regularizado: pend?.regularizado ?? false,
+    contatado: !!pend && pend.ultimaMensagemEm != null && pend.ultimaMensagemEstagio === pend.estagio,
+    qtd_alunos: pend?.qtdAlunos ?? null,
+    prioridade,
+    nivel: nivelPrioridade(prioridade),
+  }
+}
+
+/**
+ * Linhas do Índice de atenção. Devolve o formato de um useQuery (`data`,
+ * `isLoading`) mais `reguaIndisponivel`, para a tela avisar quando a fila do
+ * King não respondeu.
+ */
 export function usePainelProfessores() {
+  const base = usePainelBase()
+  const fila = usePendenciasFila()
+  const reguaIndisponivel = fila.isError
+
+  const data = useMemo(() => {
+    if (!base.data) return undefined
+    if (!fila.data && !reguaIndisponivel) return undefined
+    const porKms = fila.data ? new Map(fila.data.map(p => [p.id_Professor, p])) : null
+    return base.data.map(b => mesclar(b, porKms))
+  }, [base.data, fila.data, reguaIndisponivel])
+
+  return {
+    data,
+    isLoading: base.isLoading || (fila.isLoading && !reguaIndisponivel),
+    reguaIndisponivel,
+  }
+}
+
+function usePainelBase() {
   return useQuery({
     queryKey: ['painel-professores'],
-    queryFn: async (): Promise<PainelProfessor[]> => {
+    queryFn: async (): Promise<PainelBase[]> => {
       const desdeInformes = new Date(Date.now() - INFORME_JANELA * 86_400_000).toISOString()
-      const [profRes, silRes, infRes] = await Promise.all([
+      const [profRes, infRes] = await Promise.all([
         supabase
           .from('professores')
           .select(`
-            id, nome, email, data_ultima_reuniao,
+            id, kms_id, nome, email, data_ultima_reuniao,
             grupo:grupos!grupo_id (id, nome),
             coordenador:profiles!coordenador_id (nome),
             status,
@@ -138,12 +177,6 @@ export function usePainelProfessores() {
           .in('status', ['ativo', 'pausa'])
           .order('nome'),
         supabase
-          .from('acompanhamento_silencio')
-          .select(`
-            professor_id, status, precisa_mes_analise, qtd_alunos, aulas_pendentes,
-            msg_resolucao, msg_saida_alunos, reuniao_solicitada
-          `),
-        supabase
           .from('nexus_incidents')
           .select('professor_id, problem_type')
           .eq('natureza', 'informe')
@@ -151,11 +184,7 @@ export function usePainelProfessores() {
           .gte('created_at', desdeInformes),
       ])
       if (profRes.error) throw profRes.error
-      if (silRes.error) throw silRes.error
       if (infRes.error) throw infRes.error
-
-      const silencioPor = new Map<string, SilencioLinha>()
-      for (const s of (silRes.data ?? []) as SilencioLinha[]) silencioPor.set(s.professor_id, s)
 
       const informesPor = new Map<string, InformeAgg>()
       for (const row of (infRes.data ?? []) as { professor_id: string; problem_type: string }[]) {
@@ -178,7 +207,7 @@ export function usePainelProfessores() {
         return venceu ? { dias, dataFim: vigente.data_fim } : null
       }
 
-      return (profRes.data ?? []).flatMap((p): PainelProfessor[] => {
+      return (profRes.data ?? []).flatMap((p): PainelBase[] => {
         const pausaVencida = pausaVencidaDe(p.pausas as PausaEmbutida[] | null)
 
         // Pausado só entra no painel quando o contato de encerramento venceu.
@@ -189,8 +218,6 @@ export function usePainelProfessores() {
           : p.professor_acompanhamento
         const grupo = Array.isArray(p.grupo) ? p.grupo[0] : p.grupo
         const coord = Array.isArray(p.coordenador) ? p.coordenador[0] : p.coordenador
-
-        const sil = silencioPor.get(p.id)
 
         const qtd  = acomp?.aulas_pendentes_qtd ?? 0
         const dias = diasDesde(acomp?.aulas_pendentes_data_mais_antiga as string | null | undefined)
@@ -210,12 +237,11 @@ export function usePainelProfessores() {
         const informesRecentes = inf?.total ?? 0
         const informeReincidente = inf ? ehReincidente(inf) : false
 
-        const prioridade = calcularPrioridade(
-          score, qtd, dias, informesRecentes, informeReincidente, pausaVencida?.dias ?? null,
-        )
+        const kms = Number((p as { kms_id?: string | null }).kms_id)
 
         return [{
           professor_id: p.id,
+          kms_id: Number.isFinite(kms) && kms > 0 ? kms : null,
           nome: p.nome,
           email: (p as { email?: string | null }).email ?? null,
           grupo_id: grupo?.id ?? null,
@@ -227,18 +253,13 @@ export function usePainelProfessores() {
           reuniao_status: acomp?.reuniao_status ?? null,
           data_ultima_reuniao: ultimaReuniao,
           dias_sem_reuniao: diasSemReuniao,
+          // Contagem do sync: só vale se a fila do King não responder (ver mesclar).
           aulas_pendentes_qtd: qtd,
           dias_pendente: dias,
-          silencio_status: sil?.status ?? null,
-          precisa_mes_analise: sil?.precisa_mes_analise ?? false,
-          contatado: sil ? contatadoDe(sil) : false,
-          qtd_alunos: sil?.qtd_alunos ?? null,
           informes_recentes: informesRecentes,
           informe_reincidente: informeReincidente,
           pausa_vencida_dias: pausaVencida?.dias ?? null,
           pausa_data_fim: pausaVencida?.dataFim ?? null,
-          prioridade,
-          nivel: nivelPrioridade(prioridade),
         }]
       })
     },

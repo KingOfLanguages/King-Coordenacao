@@ -2,18 +2,15 @@ import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-} from 'recharts'
-import {
   Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Copy, Check, Star, X, Ban, CheckCircle2, ChevronDown, FileText,
-  PauseCircle, Mail, Users,
+  PauseCircle, Mail, Users, Lock, WifiOff,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { usePainelProfessores, type PainelProfessor } from '@/hooks/usePainelProfessores'
-import { useRegistrarMensagemPendencia, statusChip, useSilencioSnapshotGeral, SILENCIO_LIMIARES } from '@/hooks/useSilencio'
+import { useRegistrarMensagem, type EstagioNum } from '@/hooks/usePendencias'
 import { useProblemasAbertos, type ProfessorComProblema } from '@/hooks/useObservacoes'
-import { ESTAGIOS, mensagemPendencia } from '@/lib/pendenciasMensagens'
+import { ESTAGIO, ORDEM_ESTAGIOS, mensagemDoEstagio } from '@/lib/centralPendencias'
 import { scoreVisual } from '@/lib/score'
 import { SCORE_BUCKETS, bucketFor } from '@/hooks/useDashboardGeral'
 import { NIVEIS_ORDEM, nivelInfo, INFORME_JANELA } from '@/lib/prioridade'
@@ -34,6 +31,10 @@ import { PainelEmail } from '@/components/acompanhamento/PainelEmail'
 // Desde 2026-09 é também daqui que sai e-mail: a antiga página /emails
 // repetia esta mesma lista com os mesmos filtros. Marca os professores, abre o
 // painel lateral e envia.
+//
+// Régua de pendência: a do King (1 Lembrete · 2 Bloqueio · 3 Reunião), a mesma
+// da aba Pendências. A régua local 6/9/12 foi aposentada; "Marcar enviada" grava
+// no registro do King, então a mensagem aparece nas duas abas.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // "Acompanhamento" aqui = reunião com a coordenação marcada como REALIZADA.
@@ -57,7 +58,7 @@ interface Filtros {
   faixaScore: string     // 'todos' | rótulo de bucket
   minPendencias: string  // '0' = qualquer
   minDias: string        // '0' = qualquer
-  silStatus: string      // 'todos' | 'sem' | SilencioStatus
+  silStatus: string      // 'todos' | 'sem' | '1' | '2' | '3' (estágio do King)
   bloqueado: string      // 'todos' | 'sim' | 'nao'
   recente: string        // 'todos' | 'com' (≤30d) | 'sem' (30+ d) | '7' | '14' | '60' | 'nunca'
   ordenarPor: OrdenarPor
@@ -77,7 +78,7 @@ const QUICK_PRED: Record<QuickId, (r: PainelProfessor) => boolean> = {
   score_baixo:    r => r.score_atual != null && r.score_atual < 600,
   pendencias:     r => r.aulas_pendentes_qtd > 0,
   bloqueados:     r => r.elegivel_alocacao === false,
-  acompanhamento: r => r.silencio_status != null,
+  acompanhamento: r => r.estagio != null,
   informes:       r => r.informes_recentes > 0,
 }
 
@@ -85,20 +86,17 @@ const MIN_PEND_OPTS = [
   { value: '0', label: 'Qualquer' }, { value: '1', label: '≥ 1' },
   { value: '3', label: '≥ 3' }, { value: '5', label: '≥ 5' }, { value: '10', label: '≥ 10' },
 ]
+// Cortes nos dias em que a régua do King muda de estágio (2, 3, 5).
 const MIN_DIAS_OPTS = [
-  { value: '0', label: 'Qualquer' }, { value: '6', label: '≥ 6 dias' },
-  { value: '9', label: '≥ 9 dias' }, { value: '12', label: '≥ 12 dias' }, { value: '20', label: '≥ 20 dias' },
+  { value: '0', label: 'Qualquer' }, { value: '2', label: '≥ 2 dias' },
+  { value: '3', label: '≥ 3 dias' }, { value: '5', label: '≥ 5 dias' }, { value: '10', label: '≥ 10 dias' },
 ]
 const SIL_OPTS = [
   { value: 'todos', label: 'Qualquer' }, { value: 'sem', label: 'Sem pendência' },
-  { value: 'alerta', label: ESTAGIOS.alerta.titulo },
-  { value: 'aviso_saida', label: ESTAGIOS.aviso_saida.titulo },
-  { value: 'reuniao', label: ESTAGIOS.reuniao.titulo },
+  ...ORDEM_ESTAGIOS.map(n => ({ value: String(n), label: `${n}. ${ESTAGIO[n].titulo}` })),
 ]
-
-const diasCls: Record<string, string> = {
-  alerta: 'text-urg-medFg', aviso_saida: 'text-urg-highFg', reuniao: 'text-urg-highFg',
-}
+/** Favoritos salvos antes da régua única usavam os estágios locais. */
+const ESTAGIO_LEGADO: Record<string, string> = { alerta: '1', aviso_saida: '2', reuniao: '3' }
 
 function dataCurta(iso: string | null): string {
   if (!iso) return '—'
@@ -132,8 +130,9 @@ function aplicarFiltros(rows: PainelProfessor[], f: Filtros): PainelProfessor[] 
     if (r.aulas_pendentes_qtd < minP) return false
     if (r.dias_pendente < minD) return false
     if (f.silStatus !== 'todos') {
-      if (f.silStatus === 'sem') { if (r.silencio_status != null) return false }
-      else if (r.silencio_status !== f.silStatus) return false
+      const alvo = ESTAGIO_LEGADO[f.silStatus] ?? f.silStatus
+      if (alvo === 'sem') { if (r.estagio != null) return false }
+      else if (String(r.estagio) !== alvo) return false
     }
     if (f.bloqueado === 'sim' && r.elegivel_alocacao !== false) return false
     if (f.bloqueado === 'nao' && r.elegivel_alocacao === false) return false
@@ -185,7 +184,7 @@ function construirGrupos(rows: PainelProfessor[], modo: AgruparPor): Grupo[] {
     } else if (modo === 'coordenador') {
       chave = r.coordenador_nome ?? '—'; label = r.coordenador_nome ?? 'Sem coordenador'; ordem = 0
     } else {
-      if (r.silencio_status) { chave = r.silencio_status; label = ESTAGIOS[r.silencio_status].titulo; ordem = ESTAGIOS[r.silencio_status].n }
+      if (r.estagio) { chave = String(r.estagio); label = `${r.estagio}. ${ESTAGIO[r.estagio].titulo}`; ordem = r.estagio }
       else { chave = 'sem'; label = 'Sem pendência'; ordem = 99 }
     }
     const g = mapa.get(chave) ?? { chave, label, ordem, rows: [] }
@@ -205,7 +204,7 @@ export function IndiceAtencao() {
   const podeEmail = canView('emails') && (canEdit(profile) || profile?.is_lider === true)
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [painelEmail, setPainelEmail] = useState(false)
-  const { data: rows = [], isLoading } = usePainelProfessores()
+  const { data: rows = [], isLoading, reguaIndisponivel } = usePainelProfessores()
   const { data: grupos = [] } = useGrupos()
   const { favoritos, adicionar, remover } = useFiltrosFavoritos<Filtros>(profile?.id)
 
@@ -220,7 +219,7 @@ export function IndiceAtencao() {
       { id: 'pendencias'     as QuickId, label: 'Com pendências',         valor: rows.filter(QUICK_PRED.pendencias).length,                       tone: 'med'     as const },
       { id: undefined,                   label: 'Aulas pendentes (total)', valor: totalAulas,                                                     tone: 'neutral' as const },
       { id: 'bloqueados'     as QuickId, label: 'Bloqueados p/ alunos',   valor: rows.filter(QUICK_PRED.bloqueados).length,                       tone: 'high'    as const },
-      { id: 'acompanhamento' as QuickId, label: 'Em acompanhamento',      valor: rows.filter(QUICK_PRED.acompanhamento).length,                   tone: 'neutral' as const },
+      { id: 'acompanhamento' as QuickId, label: 'Na régua de pendência',  valor: rows.filter(QUICK_PRED.acompanhamento).length,                   tone: 'neutral' as const },
       { id: 'informes'       as QuickId, label: `Com informes (${INFORME_JANELA}d)`, valor: rows.filter(QUICK_PRED.informes).length,               tone: 'med'     as const },
     ]
   }, [rows])
@@ -263,7 +262,18 @@ export function IndiceAtencao() {
     <div className="space-y-5">
       <p className="text-[13px] text-ink-muted -mt-1">
         Painel de gestão dos professores — ordenado automaticamente pelos casos que pedem mais atenção.
+        Pendências e estágio vêm da régua do King, a mesma da aba Pendências.
       </p>
+
+      {reguaIndisponivel && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-aviso-warnBd bg-aviso-warnBg px-3.5 py-2.5">
+          <WifiOff className="h-4 w-4 flex-shrink-0 mt-0.5 text-aviso-warnFg" />
+          <p className="text-[12.5px] leading-snug text-aviso-warnFg">
+            A régua de pendências do King não respondeu agora. As pendências mostradas são a última contagem do
+            sync, sem estágio — e as mensagens não podem ser registradas até a régua voltar.
+          </p>
+        </div>
+      )}
 
       {/* ── 1. Cards de resumo ── */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-8">
@@ -310,7 +320,7 @@ export function IndiceAtencao() {
           />
           <FiltroSelect valor={f.minPendencias} onChange={v => setF(s => ({ ...s, minPendencias: v }))} opcoes={MIN_PEND_OPTS} prefixo="Pendências" />
           <FiltroSelect valor={f.minDias} onChange={v => setF(s => ({ ...s, minDias: v }))} opcoes={MIN_DIAS_OPTS} prefixo="Dias" />
-          <FiltroSelect valor={f.silStatus} onChange={v => setF(s => ({ ...s, silStatus: v }))} opcoes={SIL_OPTS} prefixo="Status" />
+          <FiltroSelect valor={ESTAGIO_LEGADO[f.silStatus] ?? f.silStatus} onChange={v => setF(s => ({ ...s, silStatus: v }))} opcoes={SIL_OPTS} prefixo="Estágio" />
           <FiltroSelect
             valor={f.bloqueado}
             onChange={v => setF(s => ({ ...s, bloqueado: v }))}
@@ -336,7 +346,7 @@ export function IndiceAtencao() {
               { value: 'nenhum', label: 'Sem agrupamento' },
               { value: 'nivel', label: 'Agrupar: atenção' },
               { value: 'coordenador', label: 'Agrupar: coordenador' },
-              { value: 'silStatus', label: 'Agrupar: status' },
+              { value: 'silStatus', label: 'Agrupar: estágio' },
             ]}
           />
 
@@ -502,11 +512,9 @@ export function IndiceAtencao() {
   )
 }
 
-// ─── Contexto secundário: gráfico semanal + problemas abertos ─────────────────
-
-function semanaLabel(iso: string): string {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-}
+// ─── Contexto secundário: problemas abertos ─────────────────────────────────────
+// O gráfico "Pendências por semana" saiu com a régua local (vinha do snapshot
+// semanal dela). A evolução de cada professor está na aba Pendências do King.
 
 function ContextoSecundario() {
   const [aberto, setAberto] = useState(false)
@@ -518,46 +526,15 @@ function ContextoSecundario() {
         className="btn-press inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-secondary hover:text-ink transition-colors"
       >
         <ChevronDown className={cn('h-4 w-4 transition-transform', aberto && 'rotate-180')} />
-        {aberto ? 'Ocultar contexto' : 'Mostrar contexto (evolução + problemas abertos)'}
+        {aberto ? 'Ocultar problemas abertos' : 'Mostrar problemas abertos'}
       </button>
 
       {aberto && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-          <PendenciasSemanaChart />
+        <div className="max-w-md">
           <ProblemasAbertosPanel />
         </div>
       )}
     </div>
-  )
-}
-
-function PendenciasSemanaChart() {
-  const { data: serieGeral = [] } = useSilencioSnapshotGeral()
-  const chartData = serieGeral.map(s => ({ label: semanaLabel(s.semana), pendencias: s.total_pendencias }))
-
-  return (
-    <section className="card-surface p-4 space-y-3 min-w-0">
-      <div className="flex items-center justify-between">
-        <h2 className="label-micro">Pendências por semana (todos os professores)</h2>
-        {chartData.length <= 1 && <span className="text-[11px] text-ink-subtle">os pontos acumulam a cada semana</span>}
-      </div>
-      {chartData.length === 0 ? (
-        <p className="text-[12px] text-ink-muted py-6 text-center">Ainda sem dados de snapshot.</p>
-      ) : (
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={chartData} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.35} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-            <Tooltip />
-            <Line type="monotone" dataKey="pendencias" stroke="var(--accent-blue)" strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
-      <p className="text-[11px] text-ink-subtle leading-relaxed">
-        O sinal do KMS só marca pendência após ~1 semana, então ninguém aparece com menos de {SILENCIO_LIMIARES.alerta} dias.
-      </p>
-    </section>
   )
 }
 
@@ -700,13 +677,13 @@ function PainelRow({ r, podeAgir, selecao }: {
   /** Presente quando quem vê pode enviar e-mail. */
   selecao?: { marcado: boolean; alternar: () => void }
 }) {
-  const registrar = useRegistrarMensagemPendencia()
+  const registrar = useRegistrarMensagem()
   const [copiado, setCopiado] = useState(false)
   const score = scoreVisual(r.score_atual)
   const critica = r.nivel.id === 'critica'
 
-  const temEpisodio = r.silencio_status != null
-  const mensagem = temEpisodio ? mensagemPendencia(r.silencio_status!, r.nome, r.aulas_pendentes_qtd) : ''
+  const estagio: EstagioNum | null = r.estagio
+  const mensagem = estagio ? mensagemDoEstagio(estagio, r.nome, r.aulas_pendentes_qtd) : ''
 
   async function handleCopiar() {
     try {
@@ -719,11 +696,13 @@ function PainelRow({ r, podeAgir, selecao }: {
     }
   }
 
+  // Grava no registro do King (o mesmo da aba Pendências): a mensagem passa a
+  // constar nas duas abas e na régua que o King usa para escalar.
   async function handleMarcar() {
-    if (!r.silencio_status) return
+    if (!estagio || r.kms_id == null) return
     try {
-      await registrar.mutateAsync({ professorId: r.professor_id, estagio: r.silencio_status, texto: mensagem })
-      toast.success(`${r.nome}: ${ESTAGIOS[r.silencio_status].n}ª mensagem registrada.`)
+      await registrar.mutateAsync({ id_Professor: r.kms_id, estagio, texto: mensagem })
+      toast.success(`${r.nome}: ${estagio}ª mensagem registrada.`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao registrar mensagem.')
     }
@@ -751,9 +730,9 @@ function PainelRow({ r, podeAgir, selecao }: {
           <Link to={`/professores/${r.professor_id}`} className="text-ink font-medium hover:text-accentBlue hover:underline">
             {r.nome}
           </Link>
-          {r.precisa_mes_analise && (
+          {estagio === 3 && !r.regularizado && (
             <span
-              title="Chegou à 3ª etapa sem regularizar — recomendação de Mês de Análise."
+              title="Na 3ª etapa da régua do King (Reunião) sem regularizar — avaliar Mês de Análise."
               className="inline-flex items-center gap-1 rounded-full bg-urg-highBg text-urg-highFg px-2 py-0.5 text-[10.5px] font-medium"
             >
               <AlertTriangle className="h-3 w-3" /> Mês de Análise
@@ -811,7 +790,7 @@ function PainelRow({ r, podeAgir, selecao }: {
       {/* Dias */}
       <td className="px-3 py-2.5 text-center">
         {r.dias_pendente > 0 ? (
-          <span className={cn('tabular-nums font-semibold', r.silencio_status ? diasCls[r.silencio_status] : 'text-ink-secondary')}>
+          <span className={cn('tabular-nums font-semibold', estagio ? ESTAGIO[estagio].dias : 'text-ink-secondary')}>
             {r.dias_pendente}
           </span>
         ) : <span className="text-ink-muted">—</span>}
@@ -850,18 +829,28 @@ function PainelRow({ r, podeAgir, selecao }: {
       {/* Status do acompanhamento + bloqueio */}
       <td className="px-3 py-2.5">
         <div className="flex flex-col items-start gap-1">
-          {r.silencio_status ? (
-            <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-medium', statusChip[r.silencio_status])}>
-              {ESTAGIOS[r.silencio_status].titulo}
+          {estagio ? (
+            <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-medium', ESTAGIO[estagio].chip)}>
+              {estagio}. {ESTAGIO[estagio].titulo}
             </span>
           ) : <span className="text-[11px] text-ink-muted">Sem pendência</span>}
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {r.contatado && (
               <span className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg text-urg-lowFg px-2 py-0.5 text-[10px] font-medium">
                 <Check className="h-2.5 w-2.5" /> contatado
               </span>
             )}
-            {r.elegivel_alocacao === false && (
+            {r.regularizado && (
+              <span title="Lançou o que devia — sai da régua no próximo ciclo do King." className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg text-urg-lowFg px-2 py-0.5 text-[10px] font-medium">
+                <CheckCircle2 className="h-2.5 w-2.5" /> regularizou
+              </span>
+            )}
+            {r.agenda_bloqueada && (
+              <span title="Agenda bloqueada pela régua do King. Liberar: aba Pendências do King." className="inline-flex items-center gap-1 rounded-full bg-urg-highBg text-urg-highFg px-2 py-0.5 text-[10px] font-medium">
+                <Lock className="h-2.5 w-2.5" /> agenda bloqueada
+              </span>
+            )}
+            {r.elegivel_alocacao === false && !r.agenda_bloqueada && (
               <span title="Bloqueado para receber novos alunos" className="inline-flex items-center gap-1 rounded-full bg-urg-highBg text-urg-highFg px-2 py-0.5 text-[10px] font-medium">
                 <Ban className="h-2.5 w-2.5" /> bloqueado
               </span>
@@ -873,7 +862,7 @@ function PainelRow({ r, podeAgir, selecao }: {
       {/* Ações */}
       <td className="px-3 py-2.5">
         <div className="flex items-center justify-end gap-2">
-          {temEpisodio ? (
+          {estagio ? (
             <>
               <button
                 onClick={handleCopiar}
@@ -882,13 +871,13 @@ function PainelRow({ r, podeAgir, selecao }: {
                 {copiado ? <Check className="h-3.5 w-3.5 text-urg-lowFg" /> : <Copy className="h-3.5 w-3.5" />}
                 {copiado ? 'Copiado' : 'Copiar'}
               </button>
-              {podeAgir && !r.contatado && (
+              {podeAgir && !r.contatado && r.kms_id != null && (
                 <button
                   onClick={handleMarcar}
                   disabled={registrar.isPending}
                   className="btn-press px-3 py-1.5 text-[11.5px] font-medium rounded-md bg-urg-lowBg text-urg-lowFg hover:opacity-80 transition-opacity disabled:opacity-50 whitespace-nowrap"
                 >
-                  {registrar.isPending ? 'Salvando…' : ESTAGIOS[r.silencio_status!].botao}
+                  {registrar.isPending ? 'Salvando…' : ESTAGIO[estagio].botao}
                 </button>
               )}
             </>

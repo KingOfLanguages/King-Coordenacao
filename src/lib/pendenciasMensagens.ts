@@ -1,27 +1,14 @@
-import type { SilencioStatus } from '@/hooks/useSilencio'
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Mensagens-padrão do Controle de Pendências, por estágio. O botão "Copiar" na
-// tela usa mensagemPendencia() para gerar o texto já personalizado (nome do
-// professor + nº de aulas pendentes). Processo gradativo: cada professor recebe
-// só a mensagem do estágio em que está.
+// Os 3 textos-padrão de pendência de lançamento (1ª, 2ª e 3ª mensagem),
+// idênticos aos do guia da API do King. Quem escolhe qual usar é o estágio da
+// régua do King — ver mensagemDoEstagio() em centralPendencias.ts. A régua local
+// (6/9/12 dias) que dava nome a esses modelos foi aposentada em 2026-09.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface EstagioInfo {
-  n: 1 | 2 | 3
-  titulo: string   // título do filtro / rótulo do estágio
-  botao: string    // rótulo do botão "marcar enviada"
-}
+/** Qual dos 3 textos: 1ª mensagem (lembrete), 2ª (bloqueio), 3ª (reunião). */
+export type ModeloMensagem = 'alerta' | 'aviso_saida' | 'reuniao'
 
-export const ESTAGIOS: Record<SilencioStatus, EstagioInfo> = {
-  alerta:      { n: 1, titulo: 'Alerta inicial',      botao: 'Marcar 1ª mensagem enviada' },
-  aviso_saida: { n: 2, titulo: 'Reforço',             botao: 'Marcar 2ª mensagem enviada' },
-  reuniao:     { n: 3, titulo: 'Aplicação da medida', botao: 'Marcar 3ª mensagem enviada' },
-}
-
-export const ORDEM_ESTAGIOS: SilencioStatus[] = ['alerta', 'aviso_saida', 'reuniao']
-
-export function mensagemPendencia(status: SilencioStatus, nome: string, aulasPendentes: number): string {
+export function mensagemPendencia(status: ModeloMensagem, nome: string, aulasPendentes: number): string {
   switch (status) {
     case 'alerta':
       return `Olá, ${nome}! Tudo bem?

@@ -298,18 +298,6 @@ export interface TarefaResumo {
   created_at: string
 }
 
-/** Episódio de silêncio aberto (Central de Pendências / régua do King). */
-export interface SilencioResumo {
-  status: string
-  dias_pendente: number | null
-  dias_pico: number | null
-  aulas_pendentes: number | null
-  qtd_alunos: number | null
-  precisa_mes_analise: boolean | null
-  reuniao_solicitada: boolean | null
-  aberto_em: string | null
-}
-
 /** Acompanhamento dos primeiros dias (página /onboarding). */
 export interface OnboardingResumo {
   data_inicio: string | null
@@ -342,7 +330,6 @@ export interface SituacaoResumo {
   transferencias: TransferenciaResumo[]
   convocacoes: ConvocacaoResumo[]
   tarefas: TarefaResumo[]
-  silencio: SilencioResumo | null
   onboarding: OnboardingResumo | null
   welcomePath: WelcomePathResumo | null
   /** Está na lista de Mensagens do Dia de hoje? (e se já foi contatado) */

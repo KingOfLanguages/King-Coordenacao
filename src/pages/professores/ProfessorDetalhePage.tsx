@@ -29,7 +29,6 @@ import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { ObservacaoSnapshotDetalhe } from '@/components/professores/ObservacaoSnapshotDetalhe'
-import { SilencioProfessorCard } from '@/components/professores/SilencioProfessorCard'
 import { TransferenciasProfessorSection } from '@/components/professores/TransferenciasProfessorSection'
 import { EditarReuniaoProfessorDialog } from '@/components/professores/EditarReuniaoProfessorDialog'
 import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirReuniaoProfessorDialog'
@@ -516,7 +515,6 @@ export function ProfessorDetalhePage() {
       {aba === 'alunos' && id && <TransferenciasProfessorSection professorId={id} />}
 
       {/* ── Silêncio (aulas não lançadas) ── */}
-      {aba === 'pendencias' && id && <SilencioProfessorCard professorId={id} />}
 
       {/* ── Pendências de Lançamento (motor do King: recorrência + bloqueios + mensagens) ── */}
       {aba === 'pendencias' && kmsNum !== null && <PendenciasLancamentoSection kmsId={kmsNum} />}

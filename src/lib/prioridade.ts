@@ -20,7 +20,11 @@ const SCORE_EXP  = 1.8    // >1 → só scores muito baixos disparam forte
 const SCORE_K    = 100    // amplitude do peso de score
 
 // Pendência: interação multiplicativa qtd × dias — só pesa forte quando as duas sobem.
-const DIAS_REF = 12       // referência de dias (≈ 3º estágio da régua de pendências)
+// Referência = 3º estágio da régua do King (Reunião, 5+ dias sem lançar). Era 12,
+// o 3º estágio da régua local 6/9/12 aposentada em 2026-09 — com a régua única, um
+// professor em "Reunião" com ~10 aulas pendentes chega em Crítica, como a própria
+// régua do King trata esse estágio (risco de encerramento).
+const DIAS_REF = 5
 const QTD_REF  = 10       // referência de quantidade de aulas pendentes
 const PEND_K   = 100      // amplitude do peso de pendência
 

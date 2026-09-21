@@ -105,10 +105,6 @@ const ETAPA_CONVOCACAO_LABEL: Record<string, string> = {
   agendada: 'Agendada', realizada: 'Realizada',
 }
 
-const SILENCIO_LABEL: Record<string, string> = {
-  alerta: 'Alerta', aviso_saida: 'Aviso de saída de alunos', reuniao: 'Reunião solicitada',
-}
-
 const URGENCIA_CLASSE: Record<string, string> = {
   Baixa: '', Média: 'ktm-registro--alta', Alta: 'ktm-registro--critica',
   Urgente: 'ktm-registro--critica', Crítico: 'ktm-registro--critica', Crítica: 'ktm-registro--critica',
@@ -718,7 +714,7 @@ function LinhaSituacao({ titulo, chip, tom, detalhe, atrasoMs = 0 }: {
 function contarSituacao(s: SituacaoResumo): number {
   const pausa = s.pausa && !s.pausa.encerrada_em && (s.pausa.status !== 'concluida' || s.pausa.ativada_em) ? 1 : 0
   const transf = s.transferencias.filter(t => t.status === 'pendente' || t.status === 'em_atendimento').length
-  return pausa + transf + s.convocacoes.length + s.tarefas.length + (s.silencio ? 1 : 0)
+  return pausa + transf + s.convocacoes.length + s.tarefas.length
 }
 
 function SituacaoAba({ s }: { s: SituacaoResumo }) {
@@ -729,7 +725,7 @@ function SituacaoAba({ s }: { s: SituacaoResumo }) {
   const diasOnboarding = s.onboarding?.dias?.filter(Boolean).length ?? 0
 
   const nada = !pausa && !transf.length && !s.convocacoes.length && !s.tarefas.length
-    && !s.silencio && !s.onboarding && !s.welcomePath && !s.contatoHoje && !s.ultimoEmail
+    && !s.onboarding && !s.welcomePath && !s.contatoHoje && !s.ultimoEmail
 
   if (nada) return <p className="ktm-vazio ktm-entra">Nada em aberto sobre este professor.<br />Sem pausa, transferência, convocação ou tarefa.</p>
 
@@ -738,7 +734,7 @@ function SituacaoAba({ s }: { s: SituacaoResumo }) {
 
   return (
     <>
-      {(pausa || transf.length > 0 || s.convocacoes.length > 0 || s.tarefas.length > 0 || s.silencio) && (
+      {(pausa || transf.length > 0 || s.convocacoes.length > 0 || s.tarefas.length > 0) && (
         <Cartao rotulo="Em aberto" style={atraso(0)}>
           <ul className="ktm-lista ktm-lista--esp">
             {pausa && (
@@ -791,19 +787,6 @@ function SituacaoAba({ s }: { s: SituacaoResumo }) {
               />
             )}
 
-            {s.silencio && (
-              <LinhaSituacao
-                titulo="Silêncio (pendências)" atrasoMs={passo()}
-                chip={SILENCIO_LABEL[s.silencio.status] ?? s.silencio.status}
-                tom={s.silencio.status === 'alerta' ? 'ambar' : 'vermelho'}
-                detalhe={<>
-                  {s.silencio.dias_pendente != null && <>{s.silencio.dias_pendente} dia(s) sem lançar</>}
-                  {s.silencio.aulas_pendentes != null && <> · {s.silencio.aulas_pendentes} aula(s)</>}
-                  {s.silencio.qtd_alunos != null && <> · {s.silencio.qtd_alunos} aluno(s)</>}
-                  {s.silencio.precisa_mes_analise && <strong style={{ color: 'var(--vermelho)' }}> · pede Mês de Análise</strong>}
-                </>}
-              />
-            )}
           </ul>
         </Cartao>
       )}
