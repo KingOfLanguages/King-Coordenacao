@@ -29,6 +29,7 @@ import { AnotacaoInternaButton } from '@/components/reunioes/AnotacaoInternaButt
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { scoreVisual } from '@/lib/score'
 import { toast } from 'sonner'
+import { Abas } from '@/components/ui/abas'
 
 type DadosVinculo = ReturnType<typeof useDadosVinculo>['data']
 type Modo = 'dia' | 'semana' | 'mes'
@@ -366,66 +367,30 @@ export function ReunioesDiaPage({ embutido = false }: { embutido?: boolean }) {
 // ─── Alternador Dia / Semana / Mês ──────────────────────────────────────────
 
 function ModoToggle({ modo, onChange }: { modo: Modo; onChange: (m: Modo) => void }) {
-  const opcoes: { value: Modo; label: string }[] = [
-    { value: 'dia',    label: 'Dia' },
-    { value: 'semana', label: 'Semana' },
-    { value: 'mes',    label: 'Mês' },
-  ]
   return (
-    <div className="inline-flex items-center rounded-lg border border-line bg-surface-subtle/60 p-0.5">
-      {opcoes.map(o => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={cn(
-            'btn-press rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors',
-            modo === o.value
-              ? 'bg-surface-canvas text-ink shadow-sm'
-              : 'text-ink-muted hover:text-ink-secondary',
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <Abas<Modo>
+      ariaLabel="Período"
+      tamanho="sm"
+      valor={modo}
+      onChange={onChange}
+      abas={[{ id: 'dia', label: 'Dia' }, { id: 'semana', label: 'Semana' }, { id: 'mes', label: 'Mês' }]}
+    />
   )
 }
-
-// ─── Sub-abas (Agenda / Pendentes de lançamento) ──────────────────────────────
 
 function SubabaToggle({ subaba, onChange, pendentes }: {
   subaba: Subaba; onChange: (s: Subaba) => void; pendentes: number
 }) {
-  const opcoes: { id: Subaba; label: string; badge?: number }[] = [
-    { id: 'agenda',    label: 'Agenda' },
-    { id: 'pendentes', label: 'Pendentes de lançamento', badge: pendentes },
-  ]
   return (
-    <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-      {opcoes.map(o => {
-        const ativa = subaba === o.id
-        return (
-          <button
-            key={o.id}
-            onClick={() => onChange(o.id)}
-            className={cn(
-              'btn-press inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-              ativa ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-            )}
-          >
-            {o.label}
-            {o.badge != null && o.badge > 0 && (
-              <span className={cn(
-                'inline-flex items-center justify-center rounded-full px-1.5 h-[18px] min-w-[18px] text-[10.5px] font-semibold tabular-nums',
-                'bg-urg-medBg text-urg-medFg',
-              )}>
-                {o.badge}
-              </span>
-            )}
-          </button>
-        )
-      })}
-    </div>
+    <Abas<Subaba>
+      ariaLabel="Agenda"
+      valor={subaba}
+      onChange={onChange}
+      abas={[
+        { id: 'agenda', label: 'Agenda' },
+        { id: 'pendentes', label: 'Pendentes de lançamento', n: pendentes, alerta: true },
+      ]}
+    />
   )
 }
 

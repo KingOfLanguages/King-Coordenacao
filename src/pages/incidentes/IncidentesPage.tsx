@@ -312,20 +312,14 @@ export function IncidentesPage() {
       </header>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-      {visao === 'lista' ? <div className="flex items-center gap-1 rounded-full bg-surface-subtle p-1 w-fit">
-        {ABAS.map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => trocarAba(value)}
-            className={cn(
-              'btn-press px-4 py-1.5 rounded-full text-[12.5px] font-medium transition-all duration-200',
-              aba === value ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-            )}
-          >
-            {label} <span className="text-ink-muted tabular-nums">{incidentes.filter(i => abaDoIncidente(i) === value).length}</span>
-          </button>
-        ))}
-      </div> : <span />}
+      {visao === 'lista' ? (
+        <Abas<Aba>
+          ariaLabel="Tipo de incidente"
+          valor={aba}
+          onChange={trocarAba}
+          abas={ABAS.map(([value, label]) => ({ id: value, label, n: incidentes.filter(i => abaDoIncidente(i) === value).length }))}
+        />
+      ) : <span />}
         <Abas<Visao>
           ariaLabel="Visão"
           valor={visao}
@@ -433,25 +427,15 @@ export function IncidentesPage() {
             {PRIORIDADES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1">
-          {FILTROS_STATUS.map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setStatus(value)}
-              className={cn(
-                'btn-press px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors',
-                status === value ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-              )}
-            >
-              {label}
-              {value === 'informes' && placar.informesNovos > 0 && (
-                <span className="ml-1 rounded-full bg-accentBlue px-1.5 text-[10px] font-semibold text-white tabular-nums">
-                  {placar.informesNovos}
-                </span>
-              )}
-            </button>
+        <Abas<FiltroStatus>
+          ariaLabel="Situação"
+          tamanho="sm"
+          valor={status}
+          onChange={setStatus}
+          abas={FILTROS_STATUS.map(([value, label]) => (
+            value === 'informes' ? { id: value, label, n: placar.informesNovos, alerta: true } : { id: value, label }
           ))}
-        </div>
+        />
         <button
           onClick={() => setSoAtrasados(v => !v)}
           aria-pressed={soAtrasados}

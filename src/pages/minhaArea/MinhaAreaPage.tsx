@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { NotebookPen, Lock, User, Users2, Search, Trash2, FolderKanban, CircleHelp, Plus, Pin, PinOff, StickyNote } from 'lucide-react'
+import { NotebookPen, Lock, User, Users2, Search, Trash2, FolderKanban, Plus, Pin, PinOff, StickyNote } from 'lucide-react'
 import {
   useMinhasAnotacoes,
   useCriarAnotacaoAvulsa,
@@ -13,6 +13,7 @@ import { useMeusProjetos } from '@/hooks/useProjetos'
 import { MeusProjetosPanel } from '@/components/projetos/MeusProjetosPanel'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { Abas } from '@/components/ui/abas'
 
 type Aba = 'anotacoes' | 'projetos'
 
@@ -51,28 +52,16 @@ export function MinhaAreaPage() {
         </p>
       </header>
 
-      <div className="flex items-center gap-1 rounded-lg border border-line bg-surface-canvas p-1 w-fit">
-        {([
-          { key: 'anotacoes', label: 'Anotações', icone: <NotebookPen className="h-3.5 w-3.5" />, n: 0 },
-          { key: 'projetos',  label: 'Projetos',  icone: <FolderKanban className="h-3.5 w-3.5" />, n: pedidosAbertos.length },
-        ] as { key: Aba; label: string; icone: React.ReactNode; n: number }[]).map(t => (
-          <button
-            key={t.key}
-            onClick={() => setAba(t.key)}
-            className={cn(
-              'btn-press inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors',
-              aba === t.key ? 'bg-surface-subtle text-ink' : 'text-ink-muted hover:text-ink',
-            )}
-          >
-            {t.icone}{t.label}
-            {t.n > 0 && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-aviso-warnBg px-1.5 py-0.5 text-[10px] font-semibold text-aviso-warnFg">
-                <CircleHelp className="h-2.5 w-2.5" />{t.n}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Abas<Aba>
+        ariaLabel="Minha Área"
+        valor={aba}
+        onChange={setAba}
+        abas={[
+          { id: 'anotacoes', label: 'Anotações', icone: NotebookPen },
+          // Contador = pedidos de informação da liderança esperando resposta.
+          { id: 'projetos', label: 'Projetos', icone: FolderKanban, n: pedidosAbertos.length || undefined, alerta: true },
+        ]}
+      />
 
       {aba === 'projetos' ? <MeusProjetosPanel /> : <>
 

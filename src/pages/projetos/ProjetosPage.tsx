@@ -17,6 +17,7 @@ import {
   FAIXA_PRAZO_CLS, itensFicha, prazoProjeto, fmtData,
 } from '@/lib/projetos'
 import { cn } from '@/lib/utils'
+import { Abas } from '@/components/ui/abas'
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
@@ -106,21 +107,12 @@ export function ProjetosPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 rounded-lg border border-line bg-surface-canvas p-1">
-          {abas.map(a => (
-            <button
-              key={a.key}
-              onClick={() => setAba(a.key)}
-              className={cn(
-                'btn-press rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors',
-                aba === a.key ? 'bg-surface-subtle text-ink' : 'text-ink-muted hover:text-ink',
-              )}
-            >
-              {a.label}
-              <span className="ml-1.5 tabular-nums text-ink-subtle">{a.n}</span>
-            </button>
-          ))}
-        </div>
+        <Abas<Aba>
+          ariaLabel="Projetos"
+          valor={aba}
+          onChange={setAba}
+          abas={abas.map(a => ({ id: a.key, label: a.label, n: a.n }))}
+        />
 
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />

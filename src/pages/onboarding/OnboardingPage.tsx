@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { GraduationCap, MessageSquare, Route, PencilRuler } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { MensagensTab } from './MensagensTab'
 import { WelcomePathTab } from './WelcomePathTab'
 import { ConteudoTab } from './ConteudoTab'
+import { Abas } from '@/components/ui/abas'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Onboarding de professores — os dois acompanhamentos do mesmo recém-chegado,
@@ -45,23 +45,12 @@ export function OnboardingPage() {
         </div>
       </header>
 
-      <nav className="flex items-center gap-1 border-b border-line-soft">
-        {abas.map(a => (
-          <button
-            key={a.id}
-            onClick={() => setAba(a.id)}
-            className={cn(
-              'btn-press -mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors',
-              aba === a.id
-                ? 'border-ink text-ink'
-                : 'border-transparent text-ink-muted hover:text-ink-secondary',
-            )}
-          >
-            <a.icone className="h-4 w-4" />
-            {a.label}
-          </button>
-        ))}
-      </nav>
+      <Abas<Aba>
+        ariaLabel="Onboarding"
+        valor={aba}
+        onChange={setAba}
+        abas={abas.map(a => ({ id: a.id, label: a.label, icone: a.icone }))}
+      />
 
       {aba === 'mensagens' && <MensagensTab />}
       {aba === 'trilha'    && <WelcomePathTab />}

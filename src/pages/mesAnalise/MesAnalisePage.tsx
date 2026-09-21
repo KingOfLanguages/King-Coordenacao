@@ -16,6 +16,7 @@ import { nivelLabel, nivelChip } from '@/lib/nexusLabels'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
+import { Abas } from '@/components/ui/abas'
 
 type Aba = 'pendentes' | 'concluidos' | 'sugestoes'
 
@@ -161,24 +162,17 @@ export function MesAnalisePage({ embutido = false }: { embutido?: boolean }) {
       )}
 
       {/* Abas */}
-      <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-        {([
-          ['pendentes', `Pendentes (${pendentes.length})`],
-          ['concluidos', `Concluídos (${concluidos.length})`],
-          ['sugestoes', `Sugestões (${sugestoesData?.sugestoes.length ?? 0})`],
-        ] as [Aba, string][]).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setAba(value)}
-            className={cn(
-              'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-              aba === value ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Abas<Aba>
+        ariaLabel="Mês de Análise"
+        tamanho="sm"
+        valor={aba}
+        onChange={setAba}
+        abas={[
+          { id: 'pendentes', label: 'Pendentes', n: pendentes.length },
+          { id: 'concluidos', label: 'Concluídos', n: concluidos.length },
+          { id: 'sugestoes', label: 'Sugestões', n: sugestoesData?.sugestoes.length ?? 0 },
+        ]}
+      />
 
       {aba !== 'sugestoes' && (
         <div className="relative w-64">

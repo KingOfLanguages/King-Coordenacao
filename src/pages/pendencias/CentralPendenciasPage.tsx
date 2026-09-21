@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { cn, whatsappLink } from '@/lib/utils'
+import { Abas } from '@/components/ui/abas'
 
 type Aba = 'todos' | EstagioNum
 type Vista = 'fila' | 'bloqueadas'
@@ -151,51 +152,28 @@ export function CentralPendenciasPage({ embutido = false }: { embutido?: boolean
       </header>
 
       {/* ── Alternância: fila operacional × board de agendas bloqueadas ── */}
-      <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-        {([['fila', 'Fila'], ['bloqueadas', 'Agendas bloqueadas']] as const).map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => setVista(v)}
-            className={cn(
-              'btn-press inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-              vista === v ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-            )}
-          >
-            {label}
-            {v === 'bloqueadas' && kpis.bloqueados > 0 && (
-              <span className="tabular-nums text-[11px] rounded-full bg-urg-highBg text-urg-highFg px-1.5 py-px">{kpis.bloqueados}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Abas<'fila' | 'bloqueadas'>
+        ariaLabel="Vista"
+        tamanho="sm"
+        valor={vista}
+        onChange={setVista}
+        abas={[
+          { id: 'fila', label: 'Fila' },
+          { id: 'bloqueadas', label: 'Agendas bloqueadas', n: kpis.bloqueados, alerta: true },
+        ]}
+      />
 
       {vista === 'fila' ? (
       <>
       {/* ── Controles: abas (estágios) + filtros ── */}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-wrap items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-          {abas.map(a => {
-            const ativa = aba === a.id
-            return (
-              <button
-                key={String(a.id)}
-                onClick={() => setAba(a.id)}
-                className={cn(
-                  'btn-press inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-                  ativa ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-                )}
-              >
-                {a.label}
-                <span className={cn(
-                  'tabular-nums text-[11px] rounded-full px-1.5 py-px',
-                  ativa ? 'bg-accentBlue-soft text-accentBlue' : 'bg-surface-canvas text-ink-muted',
-                )}>
-                  {contagem[a.id]}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+        <Abas<string>
+          ariaLabel="Estágio"
+          tamanho="sm"
+          valor={String(aba)}
+          onChange={id => setAba((abas.find(a => String(a.id) === id)?.id ?? aba) as Aba)}
+          abas={abas.map(a => ({ id: String(a.id), label: a.label, n: contagem[a.id] }))}
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full sm:w-52">

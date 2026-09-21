@@ -19,6 +19,7 @@ import { TarefaDetalheDialog } from '@/components/tarefas/TarefaDetalheDialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { Abas } from '@/components/ui/abas'
 
 const TIME_LABEL: Record<TarefaTime, string> = { coordenacao: 'Coordenação', suporte: 'Suporte' }
 
@@ -156,34 +157,23 @@ export function TarefasBoard() {
 
       {/* Controles: vista + escopo */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1">
-          {([['quadro', 'Quadro', <LayoutGrid key="q" className="h-3.5 w-3.5" />], ['lista', 'Lista', <ListIcon key="l" className="h-3.5 w-3.5" />]] as [Vista, string, React.ReactNode][]).map(([v, l, icon]) => (
-            <button
-              key={v}
-              onClick={() => setVista(v)}
-              className={cn(
-                'btn-press flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors',
-                vista === v ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-              )}
-            >
-              {icon}{l}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1">
-          {([['minhas', 'Minhas'], ['para_mim', 'Recebidas'], ['criadas', 'Criadas'], ['todas', 'Todas']] as [Escopo, string][]).map(([v, l]) => (
-            <button
-              key={v}
-              onClick={() => setEscopo(v)}
-              className={cn(
-                'btn-press px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors',
-                escopo === v ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-              )}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
+        <Abas<Vista>
+          ariaLabel="Vista"
+          tamanho="sm"
+          valor={vista}
+          onChange={setVista}
+          abas={[{ id: 'quadro', label: 'Quadro', icone: LayoutGrid }, { id: 'lista', label: 'Lista', icone: ListIcon }]}
+        />
+        <Abas<Escopo>
+          ariaLabel="De quem"
+          tamanho="sm"
+          valor={escopo}
+          onChange={setEscopo}
+          abas={[
+            { id: 'minhas', label: 'Minhas' }, { id: 'para_mim', label: 'Recebidas' },
+            { id: 'criadas', label: 'Criadas' }, { id: 'todas', label: 'Todas' },
+          ]}
+        />
       </div>
 
       {isLoading ? (

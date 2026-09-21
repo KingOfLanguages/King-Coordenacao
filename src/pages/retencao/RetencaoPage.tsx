@@ -4,6 +4,7 @@ import { TurnoverProfessorTab } from './TurnoverProfessorTab'
 import { RetencaoAlunoTab } from './RetencaoAlunoTab'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { Abas } from '@/components/ui/abas'
 
 // Duas medidas que a coordenação confundia porque dividiam a mesma página:
 //
@@ -74,20 +75,13 @@ export function RetencaoPage({ embutido = false }: { embutido?: boolean }) {
       </header>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-1 bg-surface-subtle rounded-full p-1 w-fit">
-          {([['professor', 'Professor'], ['aluno', 'Aluno']] as const).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setAba(id)}
-              className={cn(
-                'btn-press px-3.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-                aba === id ? 'bg-surface-canvas text-ink shadow-sm' : 'text-ink-secondary hover:text-ink',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Abas<Aba>
+          ariaLabel="Turnover de"
+          tamanho="sm"
+          valor={aba}
+          onChange={setAba}
+          abas={[{ id: 'professor', label: 'Professor' }, { id: 'aluno', label: 'Aluno' }]}
+        />
         <div className="flex items-center gap-1.5">
           {ATALHOS.map(([label, calc]) => {
             const [d, a] = calc()

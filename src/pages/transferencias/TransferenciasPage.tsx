@@ -36,6 +36,7 @@ import { PORTAL_BASE_URL } from '@/lib/portal'
 import { dataBR } from '@/lib/formato'
 import { cn, whatsappLink } from '@/lib/utils'
 import { toast } from 'sonner'
+import { Abas } from '@/components/ui/abas'
 
 const ORDEM_FAIXAS: FaixaTransferencia[] = ['atrasada', 'vence_hoje', 'no_prazo']
 
@@ -159,26 +160,16 @@ export function TransferenciasPage({ embutido = false }: { embutido?: boolean })
       <CardLinkPublico />
 
       {/* Abas */}
-      <div className="flex items-center gap-1 border-b border-line">
-        {([
-          { key: 'fila' as const,      label: 'Fila',      qtd: filaFiltrada.length },
-          { key: 'historico' as const, label: 'Histórico', qtd: historicoFiltrado.length },
-        ]).map(t => (
-          <button
-            key={t.key}
-            onClick={() => setAba(t.key)}
-            className={cn(
-              'btn-press -mb-px border-b-2 px-3 py-2 text-[13px] font-medium transition-colors',
-              aba === t.key
-                ? 'border-ink text-ink'
-                : 'border-transparent text-ink-muted hover:text-ink-secondary',
-            )}
-          >
-            {t.label}
-            <span className="ml-1.5 tabular-nums text-[11.5px] text-ink-muted">{t.qtd}</span>
-          </button>
-        ))}
-      </div>
+      <Abas<Aba>
+        ariaLabel="Transferências"
+        tamanho="sm"
+        valor={aba}
+        onChange={setAba}
+        abas={[
+          { id: 'fila', label: 'Fila', n: filaFiltrada.length },
+          { id: 'historico', label: 'Histórico', n: historicoFiltrado.length },
+        ]}
+      />
 
       {aba === 'fila' ? (
         isLoading ? (
