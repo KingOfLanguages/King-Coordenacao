@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   useAtualizarIncidente, useAlunosDoProfessor, abaDoIncidente, categoriasVisiveis, natureza as naturezaDe,
-  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META,
+  CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META, DESCRICAO_CATEGORIA,
   type Incidente, type Natureza,
 } from '@/hooks/useIncidentes'
 import { useAuth } from '@/contexts/AuthContext'
@@ -209,6 +209,9 @@ export function EditarIncidenteDialog({ open, onOpenChange, incidente }: Props) 
                   ))}
                 </SelectContent>
               </Select>
+              {DESCRICAO_CATEGORIA[categoria] && (
+                <p className="text-[11px] text-ink-subtle">{DESCRICAO_CATEGORIA[categoria]}</p>
+              )}
             </div>
 
             <SeletorPrioridade

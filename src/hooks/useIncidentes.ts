@@ -92,6 +92,12 @@ export const CATEGORIAS_PROFESSOR = [
   'Problemas graves de professores',
 ] as const
 
+/** O que a categoria quer dizer, quando o nome sozinho engana. Aparece como
+ *  ajuda embaixo do seletor de categoria. */
+export const DESCRICAO_CATEGORIA: Record<string, string> = {
+  'No-show': 'O professor faltou à 1ª aula do aluno.',
+}
+
 /** Categorias gerais — questões administrativas/operacionais que não dependem de um professor específico. */
 export const CATEGORIAS_GERAL = [
   'Questões administrativas',

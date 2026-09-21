@@ -100,7 +100,7 @@ export function metaPrioridade(valor: string | null | undefined): MetaPrioridade
  * Nenhuma categoria sugere Urgente: urgência é do caso, não do tipo.
  */
 const SUGESTAO_POR_CATEGORIA: Record<string, Prioridade> = {
-  'No-show': 'Alta',
+  'No-show': 'Alta',            // o professor faltou à 1ª aula do aluno
   'Erros de lançamento': 'Média',
   'Reclamação': 'Alta',
   'Muitas faltas': 'Média',

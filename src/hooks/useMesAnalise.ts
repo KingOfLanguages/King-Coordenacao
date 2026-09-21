@@ -38,12 +38,19 @@ export function useMesAnaliseIncidentes() {
 
 // ─── Sugestões automáticas (mesma lógica do Nexus, agrupada por professor_id) ─
 
+// "No-show" = o professor faltou à 1ª aula do aluno. O KTM grava "No-show" e o
+// Nexus gravava "No-Show": até 2026-09 só a grafia do Nexus entrava aqui, e os
+// no-shows registrados na plataforma ficavam fora das sugestões (e do peso 2).
+// As duas grafias contam como o mesmo tipo.
+const TIPO_CANONICO: Record<string, string> = { 'No-Show': 'No-show' }
+function tipoCanonico(tipo: string): string { return TIPO_CANONICO[tipo] ?? tipo }
+
 export const MES_ANALISE_TRIGGER_TYPES = [
-  'No-Show', 'Muitas pendências', 'Muitas faltas', 'Reclamação', 'Profissionalismo', 'Organização',
+  'No-show', 'No-Show', 'Muitas pendências', 'Muitas faltas', 'Reclamação', 'Profissionalismo', 'Organização',
 ] as const
 
-const TYPE_WEIGHTS: Record<string, number> = { 'No-Show': 2, 'Reclamação': 2 }
-function pesoPorTipo(tipo: string): number { return TYPE_WEIGHTS[tipo] ?? 1 }
+const TYPE_WEIGHTS: Record<string, number> = { 'No-show': 2, 'Reclamação': 2 }
+function pesoPorTipo(tipo: string): number { return TYPE_WEIGHTS[tipoCanonico(tipo)] ?? 1 }
 
 export type MesAnaliseNivel = 'critico' | 'alerta' | 'observacao'
 
@@ -108,7 +115,10 @@ export function useMesAnaliseSugestoes() {
         if (!nivel) continue
 
         const porTipoMap = new Map<string, number>()
-        for (const i of lista) porTipoMap.set(i.problem_type, (porTipoMap.get(i.problem_type) ?? 0) + 1)
+        for (const i of lista) {
+          const tipo = tipoCanonico(i.problem_type)
+          porTipoMap.set(tipo, (porTipoMap.get(tipo) ?? 0) + 1)
+        }
         const porTipo = [...porTipoMap.entries()]
           .map(([tipo, quantidade]) => ({ tipo, quantidade }))
           .sort((a, b) => b.quantidade - a.quantidade)

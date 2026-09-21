@@ -386,8 +386,8 @@ function SugestoesTab({
         <h3 className="label-micro">Sobre esta sugestão</h3>
         <p className="text-[12.5px] text-ink-muted leading-relaxed">
           Professores que concentram incidentes que podem indicar necessidade de Mês de Análise. Contam só os
-          tipos <span className="text-ink font-medium">{MES_ANALISE_TRIGGER_TYPES.join(', ')}</span>.{' '}
-          <span className="text-ink">No-Show e Reclamação contam em dobro</span> no cálculo do score. Professores
+          tipos <span className="text-ink font-medium">{MES_ANALISE_TRIGGER_TYPES.filter(t => t !== 'No-Show').join(', ')}</span>.{' '}
+          <span className="text-ink">No-show (falta do professor na 1ª aula) e Reclamação contam em dobro</span> no cálculo do score. Professores
           já em Mês de Análise não aparecem aqui.
           {semIdentificacao > 0 && (
             <> Existem <strong className="text-ink">{semIdentificacao}</strong> ocorrência(s) desse tipo sem professor

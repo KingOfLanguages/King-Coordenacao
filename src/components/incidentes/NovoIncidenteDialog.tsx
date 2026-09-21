@@ -11,7 +11,7 @@ import { useColarImagens } from '@/hooks/useColarImagens'
 import { SeletorPrioridade } from '@/components/incidentes/SeletorPrioridade'
 import { sugestaoPorCategoria, type Prioridade } from '@/lib/incidentePrioridade'
 import {
-  useCriarIncidente, useAlunosDoProfessor, useBuscarAlunos, uploadImagemIncidente, categoriasVisiveis,
+  useCriarIncidente, useAlunosDoProfessor, useBuscarAlunos, uploadImagemIncidente, categoriasVisiveis, DESCRICAO_CATEGORIA,
   CATEGORIAS_PROFESSOR, CATEGORIAS_GERAL, CATEGORIAS_PLATAFORMA, NATUREZA_META,
   type Aba, type Natureza,
 } from '@/hooks/useIncidentes'
@@ -507,6 +507,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
                 ))}
               </SelectContent>
             </Select>
+            {DESCRICAO_CATEGORIA[categoria] && (
+              <p className="text-[11px] text-ink-subtle">{DESCRICAO_CATEGORIA[categoria]}</p>
+            )}
           </div>
 
           <SeletorPrioridade
