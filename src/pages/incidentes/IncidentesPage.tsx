@@ -179,7 +179,11 @@ export function IncidentesPage() {
   }
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<string>('todas')
-  const [status, setStatus] = useState<FiltroStatus>('fila')
+  // ?status= permite chegar direto numa visão (ex.: "Hoje" → informes novos).
+  const [status, setStatus] = useState<FiltroStatus>(() => {
+    const s = searchParams.get('status')
+    return FILTROS_STATUS.some(([v]) => v === s) ? (s as FiltroStatus) : 'fila'
+  })
   const [urgenciaFiltro, setUrgenciaFiltro] = useState<FiltroUrgencia>('todas')
   const [professorFiltro, setProfessorFiltro] = useState<string>('todos')
   const [ordem, setOrdem] = useState<Ordem>('prioridade')

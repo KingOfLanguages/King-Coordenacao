@@ -22,6 +22,7 @@ import { Redirecionar } from '@/components/Redirecionar'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ReunioesPage } from '@/pages/reunioes/ReunioesPage'
 import { SolicitacoesPage } from '@/pages/solicitacoes/SolicitacoesPage'
+import { HojePage } from '@/pages/hoje/HojePage'
 import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
@@ -47,9 +48,10 @@ const queryClient = new QueryClient({
 })
 
 // Home: manda o usuário pra primeira página que ele pode ver, segundo o controle
-// de acesso configurável. Prioriza Dashboard, depois Professores, depois o resto —
-// assim ninguém cai numa rota bloqueada (o que causaria loop de redirect).
-const LANDING_PRIORITY = ['dashboard', 'professores', 'suporte-reunioes', 'convocacoes', 'confiabilidade']
+// de acesso configurável. Prioriza "Hoje" (o que pede ação no dia), depois
+// Dashboard, Professores e o resto — assim ninguém cai numa rota bloqueada (o
+// que causaria loop de redirect).
+const LANDING_PRIORITY = ['hoje', 'dashboard', 'professores', 'suporte-reunioes', 'convocacoes', 'confiabilidade']
 
 function IndexRedirect() {
   const { profile, loading } = useAuth()
@@ -113,6 +115,13 @@ export default function App() {
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<IndexRedirect />} />
+
+              {/* Hoje: o que pede ação no dia, com link direto para agir. */}
+              <Route path="/hoje" element={
+                <ProtectedRoute page="hoje">
+                  <HojePage />
+                </ProtectedRoute>
+              } />
 
               {/* Dashboard: Coordenação | Geral | Turnover & Retenção numa tela só. */}
               <Route path="/dashboard" element={

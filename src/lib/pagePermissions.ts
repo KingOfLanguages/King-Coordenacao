@@ -53,6 +53,10 @@ export interface PageDef {
 
 // Ordem aqui = ordem de exibição na tela de Configurações.
 export const PAGES: PageDef[] = [
+  // Tela de entrada (2026-09): o que pede ação no dia. Cada card dela respeita a
+  // permissão da tela de origem, então liberar "Hoje" não abre nada a mais.
+  { key: 'hoje',            path: '/hoje',           label: 'Hoje',                 section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+
   // ── Reuniões ──
   // Uma tela, três abas (2026-09). 'reunioes-dia' é a aba Agenda e o item do
   // menu; 'suporte-reunioes' libera a busca e 'agendas' a configuração.

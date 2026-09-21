@@ -23,9 +23,10 @@ type NavNode =
   | { kind: 'group'; label: string; pageKeys: string[] }
 
 const NAV: NavNode[] = [
-  // Consolidação de 2026-09: de 20 entradas (fora Administração) para 11. Telas irmãs viraram
+  // Consolidação de 2026-09: de 20 entradas (fora Administração) para 11 (+ Hoje). Telas irmãs viraram
   // ABAS de uma tela só (ver PageDef.abas em pagePermissions) — o menu mostra a
   // tela se a pessoa puder ver qualquer uma das abas dela.
+  { kind: 'link', pageKey: 'hoje' },             // o que pede ação no dia
   { kind: 'link', pageKey: 'reunioes-dia' },     // Agenda | Buscar | Configurar agendas
   { kind: 'link', pageKey: 'acompanhamento' },   // Índice de atenção | Pendências | Mês de Análise
   { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'confiabilidade'] },
