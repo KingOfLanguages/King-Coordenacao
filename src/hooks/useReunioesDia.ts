@@ -49,16 +49,38 @@ export function isReuniaoGrupo(r: ReuniaoCard): boolean {
   return r.participantes.length > 1
 }
 
-/** Fonte única de "pendente de lançamento": a reunião já passou da data e ainda
- *  não foi lançada — interna não concluída/cancelada, ou 1:1/grupo com algum
- *  participante ainda `pendente` (inclui reunião sem vínculo, que também precisa
- *  de tratamento). É o mesmo critério do status visual "atrasada". */
-export function isPendenteLancamento(r: ReuniaoCard, agora: Date = new Date()): boolean {
+/** Corte do "pendente de lançamento": só conta reunião de 1º/08/2026 em diante.
+ *
+ *  Decisão da coordenação (2026-09-21). Antes disso havia ~1.445 reuniões sem
+ *  lançamento (1.375 participações + internas + sem vínculo), quase todas de
+ *  abril a junho, vindas da importação do Google Agenda antes de a plataforma
+ *  estar em uso — nunca seriam lançadas e afogavam a aba de pendentes. Elas
+ *  continuam no banco como estão (marcar "cancelada" diria que não
+ *  aconteceram); só deixam de contar. Na agenda aparecem como "Não lançada". */
+export const LANCAMENTO_CONTA_DESDE = new Date(2026, 7, 1)
+
+/** Passou da data e ainda não foi lançada — sem olhar o corte. */
+function semLancamento(r: ReuniaoCard, agora: Date): boolean {
   if (new Date(r.data) >= agora) return false
   if (r.tipo_reuniao === 'interna') return r.status !== 'concluida' && r.status !== 'cancelada'
   const parts = r.participantes
   if (parts.length === 0) return r.status !== 'concluida'
   return parts.some(p => p.status === 'pendente')
+}
+
+/** Fonte única de "pendente de lançamento": a reunião já passou da data e ainda
+ *  não foi lançada — interna não concluída/cancelada, ou 1:1/grupo com algum
+ *  participante ainda `pendente` (inclui reunião sem vínculo, que também precisa
+ *  de tratamento) — E é de LANCAMENTO_CONTA_DESDE em diante. É o mesmo critério
+ *  do status visual "atrasada". */
+export function isPendenteLancamento(r: ReuniaoCard, agora: Date = new Date()): boolean {
+  if (new Date(r.data) < LANCAMENTO_CONTA_DESDE) return false
+  return semLancamento(r, agora)
+}
+
+/** Ficou sem lançamento, mas é anterior ao corte: não conta como pendente. */
+export function isNaoLancadaAntesDoCorte(r: ReuniaoCard, agora: Date = new Date()): boolean {
+  return new Date(r.data) < LANCAMENTO_CONTA_DESDE && semLancamento(r, agora)
 }
 
 /** Encontro extra a pedido do professor — não conta como acompanhamento. */
@@ -241,6 +263,8 @@ export function useReunioesPendentes(coordId: string | null, lookbackDias = 180)
       const agora = new Date()
       const inicio = new Date(agora)
       inicio.setDate(inicio.getDate() - lookbackDias)
+      // Nada antes do corte conta — não precisa nem buscar.
+      if (inicio < LANCAMENTO_CONTA_DESDE) inicio.setTime(LANCAMENTO_CONTA_DESDE.getTime())
       const janela = await fetchReunioes(coordId!, inicio.toISOString(), agora.toISOString())
       return janela.filter(r => isPendenteLancamento(r, agora))
     },

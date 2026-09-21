@@ -18,7 +18,7 @@ import {
   useReunioesPeriodo, useReunioesPendentes, useDadosVinculo, useVincularProfessor,
   useConfirmarParticipacao, useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna,
   usePerfisPorEmail, useDesvincularProfessor, useConfirmarReuniaoGrupo, sugerirVinculos,
-  isReuniaoGrupo, isPendenteLancamento, ehReuniaoDeDuvida, useDefinirNaturezaReuniao,
+  isReuniaoGrupo, isPendenteLancamento, isNaoLancadaAntesDoCorte, ehReuniaoDeDuvida, useDefinirNaturezaReuniao,
   type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo, type NaturezaReuniao,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
@@ -92,7 +92,7 @@ const PX_POR_HORA       = 52
 
 // ─── Status visual das reuniões (feito / a fazer / atrasada) ──────────────────
 
-type EventoStatus = 'realizada' | 'a_fazer' | 'atrasada' | 'cancelada'
+type EventoStatus = 'realizada' | 'a_fazer' | 'atrasada' | 'nao_lancada' | 'cancelada'
 
 const STATUS_VISUAL: Record<EventoStatus, {
   label: string; dot: string; bar: string; blocoBg: string; blocoText: string; chip: string
@@ -100,6 +100,8 @@ const STATUS_VISUAL: Record<EventoStatus, {
   realizada: { label: 'Realizada',     dot: 'bg-urg-lowFg',  bar: 'bg-urg-lowFg',  blocoBg: 'bg-urg-lowBg',       blocoText: 'text-urg-lowFg',  chip: 'bg-urg-lowBg text-urg-lowFg' },
   a_fazer:   { label: 'A fazer',       dot: 'bg-accentBlue', bar: 'bg-accentBlue', blocoBg: 'bg-accentBlue-soft', blocoText: 'text-accentBlue', chip: 'bg-accentBlue-soft text-accentBlue' },
   atrasada:  { label: 'Atrasada',      dot: 'bg-urg-medFg',  bar: 'bg-urg-medFg',  blocoBg: 'bg-urg-medBg',       blocoText: 'text-urg-medFg',  chip: 'bg-urg-medBg text-urg-medFg' },
+  // Sem lançamento, mas de antes de 1º/08/2026: não conta como pendente (ver LANCAMENTO_CONTA_DESDE).
+  nao_lancada: { label: 'Não lançada', dot: 'bg-ink-subtle', bar: 'bg-ink-subtle', blocoBg: 'bg-surface-subtle',  blocoText: 'text-ink-muted',  chip: 'bg-surface-subtle text-ink-muted' },
   cancelada: { label: 'Não realizada', dot: 'bg-ink-subtle', bar: 'bg-ink-subtle', blocoBg: 'bg-surface-subtle',  blocoText: 'text-ink-muted',  chip: 'bg-surface-subtle text-ink-muted' },
 }
 
@@ -108,6 +110,8 @@ function statusReuniao(r: ReuniaoCard): EventoStatus {
   // "Atrasada" (= pendente de lançamento) tem uma fonte única de verdade, para
   // a aba de pendências e o status visual nunca divergirem.
   if (isPendenteLancamento(r)) return 'atrasada'
+  // Antes do corte de lançamento: não é "atrasada" nem "a fazer".
+  if (isNaoLancadaAntesDoCorte(r)) return 'nao_lancada'
 
   if (r.tipo_reuniao === 'interna') {
     if (r.status === 'cancelada') return 'cancelada'
