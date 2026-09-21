@@ -102,14 +102,18 @@ export const PAGES: PageDef[] = [
   // Incidentes. A chave fica: é ela que guarda os overrides e libera a visão.
   { key: 'alunos',          path: '/incidentes?visao=alunos', label: 'Incidentes › Por aluno', section: 'Incidentes', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
 
-  // ── Links soltos ──
-  { key: 'minha-area',      path: '/minha-area',     label: 'Minha Área',           section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  // 'convocacoes' é a rota da página; o rótulo é "Tarefas" (o /tarefas antigo redireciona pra cá).
-  { key: 'convocacoes',     path: '/convocacoes',    label: 'Tarefas',              section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
+  // ── Minha Área ──
+  // Uma tela, duas abas (2026-09): "Para fazer" e "Projetos". Juntou Tarefas,
+  // Projetos e a Minha Área antiga. 'minha-area' libera a tela e as anotações;
+  // as outras duas chaves seguem liberando cada parte, então os overrides já
+  // salvos no banco continuam valendo.
+  { key: 'minha-area',      path: '/minha-area',     label: 'Minha Área',           section: 'Minha Área',  nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'], abas: ['convocacoes', 'projetos'] },
+  // Era a tela Tarefas (/convocacoes): hoje libera as tarefas e as Mensagens do dia da lista Para fazer.
+  { key: 'convocacoes',     path: '/minha-area',     label: 'Minha Área › Tarefas e mensagens do dia', section: 'Minha Área', nav: false, defaultRoles: ['coordenacao', 'suporte'] },
   // Controle de projetos da King. Coordenação e Suporte (ao professor) sugerem;
   // 'lider' entra explícito porque é quem aprova — e um líder de outro setor
   // (ex.: Suporte ao Aluno) precisa enxergar a fila de aprovação.
-  { key: 'projetos',        path: '/projetos',       label: 'Projetos',             section: '',            nav: true,  defaultRoles: ['coordenacao', 'suporte', 'lider'] },
+  { key: 'projetos',        path: '/minha-area?aba=projetos', label: 'Minha Área › Projetos', section: 'Minha Área', nav: false, defaultRoles: ['coordenacao', 'suporte', 'lider'] },
 ]
 
 export const PAGE_BY_KEY: Record<string, PageDef> = Object.fromEntries(PAGES.map(p => [p.key, p]))

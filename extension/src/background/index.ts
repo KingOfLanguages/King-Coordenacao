@@ -277,7 +277,7 @@ async function buscarSituacao(professorId: string, incidenteIds: string[]): Prom
   const hojeISO = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD local
 
   const [
-    pausaRes, transfRes, convocRes, tarefasRes,
+    pausaRes, transfRes, tarefasRes,
     onboardingRes, wpProgressoRes, wpEtapasRes, contatoRes, emailRes,
   ] = await Promise.all([
     supabase
@@ -293,13 +293,6 @@ async function buscarSituacao(professorId: string, incidenteIds: string[]): Prom
       .eq('professor_id', professorId)
       .order('created_at', { ascending: false })
       .limit(6),
-    supabase
-      .from('convocacoes')
-      .select('id, origem, motivo, etapa, ultima_mensagem_em, created_at')
-      .eq('professor_id', professorId)
-      .neq('etapa', 'realizada')
-      .order('created_at', { ascending: false })
-      .limit(4),
     // tarefas não tem professor_id — o vínculo é pelo incidente que a originou.
     incidenteIds.length
       ? supabase
@@ -351,7 +344,9 @@ async function buscarSituacao(professorId: string, incidenteIds: string[]): Prom
   return {
     pausa: pausaRes.data?.[0] ?? null,
     transferencias: transfRes.data ?? [],
-    convocacoes: convocRes.data ?? [],
+    // O fluxo de convocações foi desligado em 2026-09-21 (migration 20260786):
+    // as abertas que sobraram nunca vão andar, então não viram pendência aqui.
+    convocacoes: [],
     tarefas: tarefasRes.data ?? [],
     onboarding: onboardingRes.data ?? null,
     welcomePath,

@@ -260,9 +260,10 @@ function normalizarIncidente(row: unknown): Incidente {
 
 /** Todos os incidentes — com ou sem professor vinculado ("desafios"). Mês de
  *  Análise fica de fora, já tem fluxo e tela própria (ver useMesAnalise.ts). */
-export function useIncidentes() {
+export function useIncidentes(enabled = true) {
   return useQuery({
     queryKey: ['incidentes'],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('nexus_incidents')

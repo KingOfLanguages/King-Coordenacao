@@ -17,6 +17,9 @@ export interface Tarefa {
   concluido_por: string | null
   /** Incidente que originou a tarefa (fluxo "assumir desafio"). NULL = tarefa avulsa. */
   incidente_id: string | null
+  /** "Para quando" (YYYY-MM-DD), opcional. A de fim de pausa nasce com a data de
+   *  retorno. Ordena a lista Para fazer da Minha Área. */
+  prazo: string | null
   created_at: string
   criador?: { id: string; nome: string } | null
   responsavel?: { id: string; nome: string } | null
@@ -25,7 +28,7 @@ export interface Tarefa {
 
 const SELECT_TAREFA = `
   id, titulo, descricao, criado_por, atribuido_a, atribuido_time,
-  status, concluido_em, concluido_por, incidente_id, created_at,
+  status, concluido_em, concluido_por, incidente_id, prazo, created_at,
   criador:profiles!criado_por (id, nome),
   responsavel:profiles!atribuido_a (id, nome),
   concluidor:profiles!concluido_por (id, nome)
@@ -46,9 +49,10 @@ function normalizar(row: Record<string, unknown>): Tarefa {
 }
 
 /** Todas as tarefas visíveis ao usuário (a RLS já filtra por criador/destino/time/admin). */
-export function useTarefas() {
+export function useTarefas(enabled = true) {
   return useQuery({
     queryKey: ['tarefas'],
+    enabled,
     queryFn: async (): Promise<Tarefa[]> => {
       const { data, error } = await supabase
         .from('tarefas')
@@ -91,6 +95,7 @@ export interface NovaTarefaInput {
   descricao?: string | null
   atribuido_a?: string | null
   atribuido_time?: TarefaTime | null
+  prazo?: string | null
 }
 
 export function useCriarTarefa() {
@@ -105,6 +110,7 @@ export function useCriarTarefa() {
         criado_por: profile.id,
         atribuido_a: input.atribuido_a ?? null,
         atribuido_time: input.atribuido_time ?? null,
+        prazo: input.prazo || null,
         status: 'aberto',
       })
       if (error) throw error

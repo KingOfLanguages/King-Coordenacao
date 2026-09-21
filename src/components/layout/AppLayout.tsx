@@ -23,19 +23,17 @@ type NavNode =
   | { kind: 'group'; label: string; pageKeys: string[] }
 
 const NAV: NavNode[] = [
-  // Consolidação de 2026-09: de 20 entradas (fora Administração) para 11 (+ Hoje). Telas irmãs viraram
+  // Consolidação de 2026-09: de 20 entradas (fora Administração) para 9 (+ Hoje). Telas irmãs viraram
   // ABAS de uma tela só (ver PageDef.abas em pagePermissions) — o menu mostra a
   // tela se a pessoa puder ver qualquer uma das abas dela.
-  { kind: 'link', pageKey: 'hoje' },             // o que pede ação no dia
+  { kind: 'link', pageKey: 'hoje' },             // o que pede ação no dia (radar do time)
+  { kind: 'link', pageKey: 'minha-area' },       // Para fazer | Projetos (era Tarefas + Projetos + Minha Área)
   { kind: 'link', pageKey: 'reunioes-dia' },     // Agenda | Buscar | Configurar agendas
   { kind: 'link', pageKey: 'acompanhamento' },   // Índice de atenção | Pendências | Mês de Análise
   { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'confiabilidade'] },
   { kind: 'link', pageKey: 'retorno-pausa' },    // Solicitações: Pausas | Transferências
   { kind: 'link', pageKey: 'incidentes' },       // Lista | Por aluno | Calendário
-  { kind: 'link', pageKey: 'convocacoes' },      // Tarefas
   { kind: 'link', pageKey: 'dashboard' },        // Coordenação | Geral | Turnover & Retenção
-  { kind: 'link', pageKey: 'projetos' },
-  { kind: 'link', pageKey: 'minha-area' },
 ]
 
 // Administração continua fixo em admin (não é configurável, pra não travar o admin).

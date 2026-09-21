@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, ClipboardList, Hourglass, Inbox, Lock, MessageCircle,
+  AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, ClipboardList, Hourglass, Inbox, Lock,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -10,9 +10,7 @@ import { useIncidentes, natureza as naturezaDe } from '@/hooks/useIncidentes'
 import { usePendenciasFila } from '@/hooks/usePendencias'
 import { usePausasFila } from '@/hooks/usePausas'
 import { useTransferenciasFila, prazoAtendimento } from '@/hooks/useTransferencias'
-import { useTarefas } from '@/hooks/useTarefas'
-import { useConvocacoes } from '@/hooks/useConvocacoes'
-import { useContatosHoje } from '@/hooks/useContatosDia'
+import { useParaFazer } from '@/hooks/useParaFazer'
 import { useReunioesPeriodo, useReunioesPendentes, isReuniaoGrupo } from '@/hooks/useReunioesDia'
 import { compararPorPrioridade, estaAtrasado, estadoPrazo, normalizarPrioridade } from '@/lib/incidentePrioridade'
 import { ESTAGIO } from '@/lib/centralPendencias'
@@ -20,8 +18,9 @@ import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hoje — a tela de entrada. Junta, num lugar só, o que pede ação no dia:
-// incidentes urgentes/atrasados, a lista de mensagens, as reuniões, a régua de
-// pendências do King, os pedidos de pausa e transferência e as tarefas. Antes,
+// incidentes urgentes/atrasados, as reuniões, a régua de pendências do King, os
+// pedidos de pausa e transferência e o resumo da Minha Área (tarefas e
+// Mensagens do dia). Antes,
 // ver isso tudo exigia abrir quatro ou cinco telas toda manhã.
 //
 // Não é um painel de números: cada card mostra os poucos itens que precisam de
@@ -148,28 +147,6 @@ export function CardIncidentes({ meuId }: { meuId: string | null }) {
   )
 }
 
-// ── Mensagens do dia ────────────────────────────────────────────────────────
-
-export function CardMensagens({ meuId }: { meuId: string }) {
-  const { data: contatos = [], isLoading } = useContatosHoje(meuId)
-  const pendentes = contatos.filter(c => !c.enviado)
-  return (
-    <Cartao
-      titulo="Mensagens do dia" icone={MessageCircle} carregando={isLoading}
-      numero={pendentes.length}
-      legenda={`para enviar · ${contatos.length - pendentes.length} de ${contatos.length} feitas`}
-      vazio={contatos.length ? 'Lista de hoje concluída.' : 'Sem lista para hoje.'}
-      link="/convocacoes?aba=mensagens" rotuloLink="Abrir a lista"
-      itens={pendentes.map(c => ({
-        chave: c.id,
-        texto: c.professor?.nome ?? '—',
-        detalhe: c.estagio ? `${c.estagio}. ${ESTAGIO[c.estagio].titulo}` : undefined,
-        alerta: c.estagio === 3,
-      }))}
-    />
-  )
-}
-
 // ── Reuniões de hoje ────────────────────────────────────────────────────────
 
 function inicioDoDia(): Date { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
@@ -289,23 +266,29 @@ export function CardSolicitacoes({ vePausas, veTransf }: { vePausas: boolean; ve
   )
 }
 
-// ── Tarefas e convocações ───────────────────────────────────────────────────
+// ── Minha Área ──────────────────────────────────────────────────────────────
+// Um cartão só para o que é da pessoa (tarefas, fim de pausa, desafio
+// assumido, perguntas de projeto, Mensagens do dia) — mesmo hook da lista
+// Para fazer, então o número bate com o da Minha Área.
 
-export function CardTarefas({ meuId }: { meuId: string | null }) {
-  const { data: tarefas = [], isLoading: l1 } = useTarefas()
-  const { data: convocacoes = [], isLoading: l2 } = useConvocacoes()
-  const minhas = tarefas.filter(t => t.status !== 'concluido' && t.atribuido_a === meuId)
-  const aContatar = convocacoes.filter(c => c.etapa === 'pendente_contato' && (!c.coordenador_id || c.coordenador_id === meuId))
+export function CardMinhaArea({ veTarefas, veProjetos, veMensagens }: { veTarefas: boolean; veProjetos: boolean; veMensagens: boolean }) {
+  const d = useParaFazer({ tarefas: veTarefas, projetos: veProjetos, mensagens: veMensagens })
+  const { pendentes, total } = d.mensagens
   return (
     <Cartao
-      titulo="Tarefas e convocações" icone={ClipboardList} carregando={l1 || l2}
-      numero={minhas.length + aContatar.length}
-      legenda={`${minhas.length} tarefa${minhas.length === 1 ? '' : 's'} com você · ${aContatar.length} convocaç${aContatar.length === 1 ? 'ão' : 'ões'} para contatar`}
-      vazio="Nada atribuído a você."
-      link="/convocacoes" rotuloLink="Abrir tarefas"
+      titulo="Minha Área" icone={ClipboardList} carregando={d.isLoading}
+      numero={d.total}
+      alerta={d.atrasados > 0}
+      legenda={d.atrasados > 0 ? `para fazer · ${d.atrasados} atrasado${d.atrasados === 1 ? '' : 's'}` : 'para fazer'}
+      vazio="Nada pendente com você."
+      link="/minha-area" rotuloLink="Abrir"
       itens={[
-        ...aContatar.map(c => ({ chave: `c-${c.id}`, texto: `Convocar · ${c.professor_nome}`, detalhe: c.motivo ?? undefined, to: '/convocacoes?aba=convocacoes' })),
-        ...minhas.map(t => ({ chave: `t-${t.id}`, texto: t.titulo, to: '/convocacoes' })),
+        ...(pendentes > 0 ? [{
+          chave: 'mensagens', texto: 'Mensagens do dia', detalhe: `${total - pendentes} de ${total} enviadas`, to: '/minha-area',
+        }] : []),
+        ...d.itens.map(i => ({
+          chave: i.chave, texto: i.titulo, detalhe: i.prazoRotulo ?? undefined, alerta: i.grupo === 'atrasado', to: '/minha-area',
+        })),
       ]}
     />
   )
@@ -342,11 +325,16 @@ export function HojePage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {canView('incidentes') && <CardIncidentes meuId={meuId} />}
-        {temAgendaPropria && meuId && canView('convocacoes') && <CardMensagens meuId={meuId} />}
         {temAgendaPropria && meuId && canView('reunioes-dia') && <CardReunioes meuId={meuId} />}
         {canView('pendencias') && <CardPendencias />}
         {(vePausas || veTransf) && <CardSolicitacoes vePausas={vePausas} veTransf={veTransf} />}
-        {canView('convocacoes') && <CardTarefas meuId={meuId} />}
+        {(canView('convocacoes') || canView('projetos')) && (
+          <CardMinhaArea
+            veTarefas={canView('convocacoes')}
+            veProjetos={canView('projetos')}
+            veMensagens={temAgendaPropria && canView('convocacoes')}
+          />
+        )}
       </div>
     </div>
   )

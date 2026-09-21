@@ -98,7 +98,7 @@ export function ProjetoDetalhePage() {
     return (
       <div className="mx-auto max-w-[1100px] px-6 py-16 text-center">
         <p className="text-[13px] text-ink-secondary">Projeto não encontrado ou fora do seu acesso.</p>
-        <Link to="/projetos" className="mt-3 inline-block text-[12.5px] text-accentBlue hover:underline">
+        <Link to="/minha-area?aba=projetos" className="mt-3 inline-block text-[12.5px] text-accentBlue hover:underline">
           Voltar para Projetos
         </Link>
       </div>
@@ -226,7 +226,7 @@ export function ProjetoDetalhePage() {
     try {
       await excluir.mutateAsync(projeto!.id)
       toast.success('Projeto excluído.')
-      navigate('/projetos')
+      navigate('/minha-area?aba=projetos')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao excluir.')
     }
@@ -246,7 +246,7 @@ export function ProjetoDetalhePage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-5 px-6 py-6">
       <Link
-        to="/projetos"
+        to="/minha-area?aba=projetos"
         className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Projetos

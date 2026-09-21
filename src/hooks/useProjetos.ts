@@ -142,9 +142,10 @@ const SELECT_PEDIDO = `
 // ─── Consultas ───────────────────────────────────────────────────────────────
 
 /** Todos os projetos visíveis (a RLS esconde rascunho dos outros). */
-export function useProjetos() {
+export function useProjetos(enabled = true) {
   return useQuery({
     queryKey: ['projetos'],
+    enabled,
     queryFn: async (): Promise<Projeto[]> => {
       const { data, error } = await supabase
         .from('projetos')
@@ -235,9 +236,10 @@ export function useLinksProjeto(projetoId: string | null | undefined) {
 
 /** Pedidos de informação de TODOS os projetos — contam pendência no cabeçalho
  *  e montam a conversa dentro da ficha. */
-export function usePedidosInfo() {
+export function usePedidosInfo(enabled = true) {
   return useQuery({
     queryKey: ['projetos', 'pedidos-info'],
+    enabled,
     queryFn: async (): Promise<PedidoInfo[]> => {
       const { data, error } = await supabase
         .from('projeto_pedidos_info')
@@ -289,11 +291,11 @@ export function useContagemEtapas() {
 
 /** O que a Minha Área mostra: meus projetos (sugeridos ou sob minha
  *  responsabilidade), meus rascunhos e as perguntas esperando resposta minha. */
-export function useMeusProjetos() {
+export function useMeusProjetos(enabled = true) {
   const { profile } = useAuth()
   const meuId = profile?.id ?? null
-  const projetos = useProjetos()
-  const pedidos = usePedidosInfo()
+  const projetos = useProjetos(enabled)
+  const pedidos = usePedidosInfo(enabled)
 
   const meus = (projetos.data ?? []).filter(
     p => p.criado_por === meuId || p.responsavel_id === meuId,

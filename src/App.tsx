@@ -17,13 +17,11 @@ import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
 import { ObservacaoRedirect } from '@/pages/observacoes/ObservacaoRedirect'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
-import { TarefasPage } from '@/pages/tarefas/TarefasPage'
 import { Redirecionar } from '@/components/Redirecionar'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ReunioesPage } from '@/pages/reunioes/ReunioesPage'
 import { SolicitacoesPage } from '@/pages/solicitacoes/SolicitacoesPage'
 import { HojePage } from '@/pages/hoje/HojePage'
-import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
 import { ConfiabilidadePage } from '@/pages/comercial/ConfiabilidadePage'
@@ -51,7 +49,7 @@ const queryClient = new QueryClient({
 // de acesso configurável. Prioriza "Hoje" (o que pede ação no dia), depois
 // Dashboard, Professores e o resto — assim ninguém cai numa rota bloqueada (o
 // que causaria loop de redirect).
-const LANDING_PRIORITY = ['hoje', 'dashboard', 'professores', 'suporte-reunioes', 'convocacoes', 'confiabilidade']
+const LANDING_PRIORITY = ['hoje', 'dashboard', 'professores', 'suporte-reunioes', 'minha-area', 'confiabilidade']
 
 function IndexRedirect() {
   const { profile, loading } = useAuth()
@@ -195,23 +193,16 @@ export default function App() {
               {/* O aviso de transferência atrasada aponta para /transferencias?pedido=<id>. */}
               <Route path="/transferencias" element={<Redirecionar para="/solicitacoes" params={{ aba: 'transferencias' }} />} />
               <Route path="/suporte/reunioes" element={<Redirecionar para="/reunioes" params={{ aba: 'buscar' }} />} />
-              {/* Tarefas foi unificada na Central (/convocacoes) — mantém o link antigo vivo. */}
-              <Route path="/tarefas" element={<Navigate to="/convocacoes?aba=tarefas" replace />} />
+              {/* Minha Área: Para fazer | Projetos (2026-09). Juntou Tarefas
+                  (/convocacoes, antes /tarefas) e Projetos — os links antigos redirecionam. */}
               <Route path="/minha-area" element={
                 <ProtectedRoute page="minha-area">
                   <MinhaAreaPage />
                 </ProtectedRoute>
               } />
-              <Route path="/convocacoes" element={
-                <ProtectedRoute page="convocacoes">
-                  <TarefasPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/projetos" element={
-                <ProtectedRoute page="projetos">
-                  <ProjetosPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/tarefas" element={<Redirecionar para="/minha-area" />} />
+              <Route path="/convocacoes" element={<Redirecionar para="/minha-area" />} />
+              <Route path="/projetos" element={<Redirecionar para="/minha-area" params={{ aba: 'projetos' }} />} />
               {/* A ficha completa tem página própria: o sino e o chamado do TI
                   apontam direto pra ela. */}
               <Route path="/projetos/:id" element={

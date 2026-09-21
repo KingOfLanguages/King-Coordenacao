@@ -18,6 +18,7 @@ import {
 } from '@/lib/projetos'
 import { cn } from '@/lib/utils'
 import { Abas } from '@/components/ui/abas'
+import { useAuth } from '@/contexts/AuthContext'
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
@@ -26,8 +27,13 @@ type Aba = 'aprovacao' | 'andamento' | 'encerrados' | 'rascunhos'
 type Contagens = Map<string, { total: number; feitas: number }>
 
 /** Controle de projetos da King: da sugestão à entrega. Coordenação e Suporte
- *  sugerem, a liderança aprova e acompanha as fases. */
+ *  sugerem, a liderança aprova e acompanha as fases. Desde 2026-09 é a aba
+ *  Projetos da Minha Área (a rota /projetos redireciona para lá); "Só os meus"
+ *  substitui o painel de projetos que a Minha Área tinha, e as perguntas da
+ *  liderança foram para a lista Para fazer. */
 export function ProjetosPage() {
+  const { profile } = useAuth()
+  const meuId = profile?.id ?? null
   const { data: projetos = [], isLoading } = useProjetos()
   const { data: pedidos = [] } = usePedidosInfo()
   const { data: contagem = new Map() as Contagens } = useContagemEtapas()
@@ -36,6 +42,7 @@ export function ProjetosPage() {
 
   const [aba, setAba]   = useState<Aba>('aprovacao')
   const [busca, setBusca] = useState('')
+  const [soMeus, setSoMeus] = useState(false)
   const [novo, setNovo] = useState(false)
   const [continuando, setContinuando] = useState<string | null>(null)
 
@@ -50,14 +57,15 @@ export function ProjetosPage() {
 
   const filtrados = useMemo(() => {
     const q = norm(busca)
-    if (!q) return projetos
-    return projetos.filter(p =>
+    const base = soMeus ? projetos.filter(p => p.criado_por === meuId || p.responsavel_id === meuId) : projetos
+    if (!q) return base
+    return base.filter(p =>
       norm([
         p.titulo, p.descricao, p.objetivo ?? '', p.resultado_esperado ?? '',
         nomes.get(p.criado_por ?? '') ?? '',
       ].join(' ')).includes(q),
     )
-  }, [projetos, busca, nomes])
+  }, [projetos, busca, nomes, soMeus, meuId])
 
   // Rascunho é do autor: a RLS já só devolve os meus.
   const rascunhos  = filtrados.filter(p => p.status === 'rascunho')
@@ -78,22 +86,15 @@ export function ProjetosPage() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5 px-6 py-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-0.5">
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-ink">
-            <FolderKanban className="h-5 w-5 text-accentBlue" />
-            Projetos da King
-          </h1>
-          <p className="max-w-2xl text-[13px] text-ink-muted">
-            Sugestões do time, aprovação da liderança e acompanhamento até a entrega. A ficha vai
-            completa — é o que o TI precisa para executar sem perguntar nada.
-          </p>
-        </div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-2xl text-[13px] text-ink-muted">
+          Sugestões do time, aprovação da liderança e acompanhamento até a entrega.
+        </p>
         <Button onClick={() => setNovo(true)}>
           <Plus /> Sugerir projeto
         </Button>
-      </header>
+      </div>
 
       {/* Faixa de números — sem card dentro de card, só divisórias. */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4">
@@ -109,19 +110,34 @@ export function ProjetosPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Abas<Aba>
           ariaLabel="Projetos"
+          tamanho="sm"
           valor={aba}
           onChange={setAba}
           abas={abas.map(a => ({ id: a.key, label: a.label, n: a.n }))}
         />
 
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
-          <Input
-            placeholder="Buscar projeto…"
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            className="h-9 border-line bg-surface-canvas pl-9"
-          />
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setSoMeus(v => !v)}
+            aria-pressed={soMeus}
+            title="Os que você sugeriu ou conduz"
+            className={cn(
+              'btn-press h-9 whitespace-nowrap rounded-full border px-3 text-[12.5px] font-medium transition-colors',
+              soMeus ? 'border-accentBlue bg-accentBlue-soft text-accentBlue' : 'border-line text-ink-secondary hover:text-ink',
+            )}
+          >
+            Só os meus
+          </button>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
+            <Input
+              placeholder="Buscar projeto…"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              className="h-9 border-line bg-surface-canvas pl-9"
+            />
+          </div>
         </div>
       </div>
 

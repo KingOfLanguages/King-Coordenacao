@@ -1,300 +1,63 @@
-import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
-import { NotebookPen, Lock, User, Users2, Search, Trash2, FolderKanban, Plus, Pin, PinOff, StickyNote } from 'lucide-react'
-import {
-  useMinhasAnotacoes,
-  useCriarAnotacaoAvulsa,
-  useEditarAnotacao,
-  useFixarAnotacao,
-  type MinhaAnotacaoItem,
-} from '@/hooks/useAnotacoesInternas'
-import { useMeusProjetos } from '@/hooks/useProjetos'
-import { MeusProjetosPanel } from '@/components/projetos/MeusProjetosPanel'
-import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
-import { Abas } from '@/components/ui/abas'
+import { Abas, type AbaDef } from '@/components/ui/abas'
+import { useAbaUrl } from '@/hooks/useAbaUrl'
+import { useCanView } from '@/hooks/usePagePermissions'
+import { useAuth } from '@/contexts/AuthContext'
+import { useParaFazer } from '@/hooks/useParaFazer'
+import { ParaFazer } from '@/components/minhaArea/ParaFazer'
+import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 
-type Aba = 'anotacoes' | 'projetos'
+// ─────────────────────────────────────────────────────────────────────────────
+// Minha Área — o que está na minha mão ao longo do dia. Até 2026-09 eram três
+// itens de menu com nove abas no total:
+//   Tarefas     (/convocacoes) Tarefas | Mensagens do dia | Convocações
+//   Projetos    (/projetos)    Aguardando | Em andamento | Encerrados | Rascunhos
+//   Minha Área  (/minha-area)  Anotações | Projetos
+// Agora: "Para fazer" (uma lista por prazo, com as Mensagens do dia no topo e
+// as anotações ao lado) e "Projetos" (o quadro de sempre). O kanban de
+// Convocações saiu: 209 de 212 estavam paradas em "aguardando contato".
+//
+// A tela Hoje segue sendo o radar do time; a Minha Área é o que é MEU.
+// Cada parte continua liberada pela própria chave de permissão
+// ('minha-area' = anotações, 'convocacoes' = tarefas e mensagens, 'projetos').
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Espaço pessoal: as anotações privadas (de reunião ou avulsas) e os projetos que a
-// pessoa sugeriu — inclusive os pedidos de informação que a liderança mandou e
-// que estão esperando resposta dela (o sino aponta pra cá).
+type Aba = 'fazer' | 'projetos'
+
 export function MinhaAreaPage() {
-  const { data: anotacoes = [], isLoading } = useMinhasAnotacoes()
-  const { pedidosAbertos } = useMeusProjetos()
-  const [params] = useSearchParams()
-  const [aba, setAba] = useState<Aba>(params.get('aba') === 'projetos' ? 'projetos' : 'anotacoes')
-  const [busca, setBusca] = useState('')
+  const { profile } = useAuth()
+  const { canView } = useCanView()
 
-  const lista = useMemo(() => {
-    const q = busca.trim().toLowerCase()
-    if (!q) return anotacoes
-    return anotacoes.filter(a => {
-      const ctx = `${a.texto} ${a.reuniao?.titulo ?? ''} ${(a.reuniao?.professores ?? []).join(' ')}`.toLowerCase()
-      return ctx.includes(q)
-    })
-  }, [anotacoes, busca])
+  const veAnotacoes = canView('minha-area')
+  const veTarefas = canView('convocacoes')
+  const veProjetos = canView('projetos')
+  // Mensagens do dia e agenda são pessoais: só quem tem a própria lista.
+  const veMensagens = veTarefas && (profile?.role === 'coordenacao' || profile?.role === 'admin')
 
-  // Fixadas em cima, o resto embaixo — a divisão só aparece quando existe nota fixada.
-  const fixadas = useMemo(() => lista.filter(a => a.fixada), [lista])
-  const soltas = useMemo(() => lista.filter(a => !a.fixada), [lista])
+  const { total } = useParaFazer({ tarefas: veTarefas, projetos: veProjetos, mensagens: veMensagens })
+
+  const abas: AbaDef<Aba>[] = [
+    ...(veAnotacoes || veTarefas || veProjetos ? [{ id: 'fazer' as const, label: 'Para fazer', n: total || undefined, alerta: true }] : []),
+    ...(veProjetos ? [{ id: 'projetos' as const, label: 'Projetos' }] : []),
+  ]
+  const ids = abas.map(a => a.id)
+  const [aba, setAba] = useAbaUrl<Aba>(ids, 'fazer')
 
   return (
-    <div className="px-6 py-6 space-y-5 max-w-[900px] mx-auto">
-      <header className="space-y-0.5">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Minha Área</h1>
-        <p className="flex items-center gap-1.5 text-[13px] text-ink-muted">
-          <Lock className="h-3.5 w-3.5" />
-          {aba === 'anotacoes'
-            ? 'Suas anotações — de reunião ou escritas aqui, visíveis só para você.'
-            : 'Os projetos que você sugeriu e o que a liderança está perguntando.'}
-        </p>
+    <div className="px-6 py-6 max-w-[1320px] mx-auto space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-0.5">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Minha Área</h1>
+          <p className="text-[13px] text-ink-muted">
+            {aba === 'fazer' ? 'O que está com você, do mais urgente ao que pode esperar.' : 'Projetos da King, da sugestão à entrega.'}
+          </p>
+        </div>
+        {abas.length > 1 && <Abas<Aba> ariaLabel="Minha Área" valor={aba} onChange={setAba} abas={abas} />}
       </header>
 
-      <Abas<Aba>
-        ariaLabel="Minha Área"
-        valor={aba}
-        onChange={setAba}
-        abas={[
-          { id: 'anotacoes', label: 'Anotações', icone: NotebookPen },
-          // Contador = pedidos de informação da liderança esperando resposta.
-          { id: 'projetos', label: 'Projetos', icone: FolderKanban, n: pedidosAbertos.length || undefined, alerta: true },
-        ]}
-      />
-
-      {aba === 'projetos' ? <MeusProjetosPanel /> : <>
-
-      <NovaAnotacao />
-
-      <div className="relative w-full sm:w-72">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted" />
-        <Input
-          placeholder="Buscar nas anotações…"
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          className="pl-9 h-9 bg-surface-canvas border-line"
-        />
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="card-surface p-4 h-24 animate-pulse bg-surface-subtle/50" />
-          ))}
-        </div>
-      ) : lista.length === 0 ? (
-        <div className="card-surface flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <NotebookPen className="h-7 w-7 text-ink-subtle" />
-          <p className="text-[13px] text-ink-secondary font-medium">
-            {busca ? 'Nenhuma anotação encontrada.' : 'Você ainda não escreveu anotações.'}
-          </p>
-          <p className="text-[12px] text-ink-muted max-w-xs">
-            Escreva uma aqui em cima, ou abra uma reunião em Reuniões e use o botão de anotações.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {fixadas.length > 0 && (
-            <section className="space-y-3">
-              <TituloSecao icone={<Pin className="h-3.5 w-3.5" />} texto="Fixadas" n={fixadas.length} />
-              {fixadas.map(a => <AnotacaoCard key={a.id} item={a} />)}
-            </section>
-          )}
-          {soltas.length > 0 && (
-            <section className="space-y-3">
-              {fixadas.length > 0 && (
-                <TituloSecao icone={<NotebookPen className="h-3.5 w-3.5" />} texto="Outras" n={soltas.length} />
-              )}
-              {soltas.map(a => <AnotacaoCard key={a.id} item={a} />)}
-            </section>
-          )}
-        </div>
+      {aba === 'fazer' && (
+        <ParaFazer veTarefas={veTarefas} veProjetos={veProjetos} veMensagens={veMensagens} veAnotacoes={veAnotacoes} />
       )}
-
-      </>}
-    </div>
-  )
-}
-
-function fmtData(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-}
-
-function TituloSecao({ icone, texto, n }: { icone: React.ReactNode; texto: string; n: number }) {
-  return (
-    <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-      {icone}{texto}
-      <span className="text-ink-subtle tabular-nums font-normal normal-case tracking-normal">({n})</span>
-    </h2>
-  )
-}
-
-// Nota escrita aqui mesmo, sem reunião nenhuma por trás.
-function NovaAnotacao() {
-  const criar = useCriarAnotacaoAvulsa()
-  const [aberto, setAberto] = useState(false)
-  const [texto, setTexto] = useState('')
-
-  function fechar() {
-    setTexto('')
-    setAberto(false)
-  }
-
-  async function handleSalvar() {
-    try {
-      await criar.mutateAsync(texto)
-      toast.success('Anotação criada.')
-      fechar()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao criar anotação.')
-    }
-  }
-
-  if (!aberto) {
-    return (
-      <button
-        onClick={() => setAberto(true)}
-        className="btn-press card-surface flex w-full items-center gap-2 px-4 py-3 text-left text-[13px] text-ink-muted transition-colors hover:text-ink-secondary"
-      >
-        <Plus className="h-4 w-4 text-accentBlue" />
-        Escrever uma anotação…
-      </button>
-    )
-  }
-
-  return (
-    <div className="card-surface p-4 space-y-2.5">
-      <p className="flex items-center gap-1.5 text-[11.5px] text-ink-muted">
-        <Lock className="h-3 w-3" /> Só você vê esta anotação.
-      </p>
-      <textarea
-        value={texto}
-        onChange={e => setTexto(e.target.value)}
-        rows={4}
-        autoFocus
-        placeholder="O que você quer registrar?"
-        className="w-full resize-y rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-accentBlue"
-      />
-      <div className="flex items-center justify-end gap-2">
-        <button onClick={fechar} className="btn-press text-[12px] text-ink-secondary hover:text-ink">
-          Cancelar
-        </button>
-        <button
-          onClick={handleSalvar}
-          disabled={criar.isPending || !texto.trim()}
-          className="btn-press rounded-md bg-accentBlue px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accentBlue-hov disabled:opacity-50"
-        >
-          {criar.isPending ? 'Salvando…' : 'Salvar'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function AnotacaoCard({ item }: { item: MinhaAnotacaoItem }) {
-  const editar = useEditarAnotacao()
-  const fixar = useFixarAnotacao()
-  const [editando, setEditando] = useState(false)
-  const [texto, setTexto] = useState(item.texto)
-
-  const r = item.reuniao
-  const avulsa = !r
-  const contexto = r
-    ? (r.professores.length ? r.professores.join(', ') : r.titulo || 'Reunião interna')
-    : 'Anotação pessoal'
-
-  async function handleSalvar() {
-    try {
-      await editar.mutateAsync({ id: item.id, texto })
-      toast.success(texto.trim() ? 'Anotação atualizada.' : 'Anotação removida.')
-      setEditando(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar.')
-    }
-  }
-
-  async function handleFixar() {
-    try {
-      await fixar.mutateAsync({ id: item.id, fixada: !item.fixada })
-      toast.success(item.fixada ? 'Anotação desafixada.' : 'Anotação fixada no topo.')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao fixar.')
-    }
-  }
-
-  return (
-    <div className={cn('card-surface p-4 space-y-2.5', item.fixada && 'border-accentBlue/40')}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={cn(
-            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium',
-            avulsa || r?.tipo_reuniao === 'interna'
-              ? 'bg-surface-subtle text-ink-secondary'
-              : 'bg-accentBlue-soft text-accentBlue',
-          )}>
-            {avulsa
-              ? <><StickyNote className="h-3 w-3" />Pessoal</>
-              : r?.tipo_reuniao === 'interna'
-                ? <><Users2 className="h-3 w-3" />Interna</>
-                : <><User className="h-3 w-3" />Professor</>}
-          </span>
-          <span className="text-[13px] font-medium text-ink truncate">{contexto}</span>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[11px] text-ink-muted tabular-nums">
-            {fmtData(r ? r.data : item.updated_at)}
-          </span>
-          <button
-            onClick={handleFixar}
-            disabled={fixar.isPending}
-            title={item.fixada ? 'Desafixar' : 'Fixar no topo'}
-            className={cn(
-              'btn-press flex h-7 w-7 items-center justify-center rounded-full disabled:opacity-50',
-              item.fixada
-                ? 'text-accentBlue bg-accentBlue-soft'
-                : 'text-ink-muted hover:bg-surface-subtle hover:text-ink',
-            )}
-          >
-            {item.fixada ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-      </div>
-
-      {editando ? (
-        <div className="space-y-2">
-          <textarea
-            value={texto}
-            onChange={e => setTexto(e.target.value)}
-            rows={4}
-            className="w-full resize-y rounded-md border border-line bg-surface-canvas px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-accentBlue"
-          />
-          <div className="flex items-center justify-end gap-2">
-            <button onClick={() => { setTexto(item.texto); setEditando(false) }} className="btn-press text-[12px] text-ink-secondary hover:text-ink">
-              Cancelar
-            </button>
-            <button
-              onClick={handleSalvar}
-              disabled={editar.isPending}
-              className="btn-press rounded-md bg-accentBlue px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accentBlue-hov disabled:opacity-50"
-            >
-              {editar.isPending ? 'Salvando…' : 'Salvar'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="group flex items-start justify-between gap-3">
-          <p className="text-[13px] text-ink-secondary leading-relaxed whitespace-pre-wrap">{item.texto}</p>
-          <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => setEditando(true)} title="Editar" className="btn-press flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-surface-subtle hover:text-ink">
-              <NotebookPen className="h-3.5 w-3.5" />
-            </button>
-            <button onClick={() => { setTexto(''); setEditando(true) }} title="Apagar" className="btn-press flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-urg-highBg hover:text-urg-highFg">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {aba === 'projetos' && <ProjetosPage />}
     </div>
   )
 }

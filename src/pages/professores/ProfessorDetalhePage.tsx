@@ -1296,7 +1296,6 @@ function SituacaoSection({ situacao }: { situacao: ProfessorSituacao }) {
   const [expandido, setExpandido] = useState(false)
 
   const pausaVigente     = situacao.pausas.find(p => p.ativada_em && !p.encerrada_em) ?? null
-  const convocAbertas    = situacao.convocacoes.filter(c => c.etapa !== 'realizada')
   const tarefasAbertas   = situacao.tarefas.filter(t => t.status !== 'concluido')
   const onboarding       = situacao.onboarding
   const wp               = situacao.welcomePath
@@ -1336,16 +1335,14 @@ function SituacaoSection({ situacao }: { situacao: ProfessorSituacao }) {
           )}
         </div>
 
-        {/* Convocações */}
+        {/* Convocações — fluxo desligado em 2026-09-21; fica só o histórico. */}
         <div className="bg-surface-canvas p-3.5 space-y-1">
           <p className="text-[11px] text-ink-muted">Convocações</p>
-          <p className={cn('text-[13px] tabular-nums', convocAbertas.length > 0 ? 'text-urg-highFg font-medium' : 'text-ink')}>
-            {convocAbertas.length > 0 ? `${convocAbertas.length} em aberto` : 'Nenhuma em aberto'}
+          <p className="text-[13px] tabular-nums text-ink">
+            {situacao.convocacoes.length > 0 ? `${situacao.convocacoes.length} no histórico` : 'Nenhuma'}
           </p>
           {situacao.convocacoes.length > 0 && (
-            <p className="text-[11px] text-ink-subtle tabular-nums">
-              {situacao.convocacoes.length} no histórico
-            </p>
+            <p className="text-[11px] text-ink-subtle">Fluxo encerrado em 21/09/2026</p>
           )}
         </div>
 
@@ -1455,10 +1452,7 @@ function SituacaoSection({ situacao }: { situacao: ProfessorSituacao }) {
                         {new Date(c.created_at).toLocaleDateString('pt-BR')}
                       </span>
                     </div>
-                    <p className={cn(
-                      'text-[11px]',
-                      c.etapa === 'realizada' ? 'text-ink-subtle' : 'text-urg-medFg font-medium',
-                    )}>
+                    <p className="text-[11px] text-ink-subtle">
                       {ETAPA_LABEL[c.etapa as EtapaConvocacao] ?? c.etapa}
                     </p>
                     {c.motivo && <p className="text-[11px] text-ink-muted leading-relaxed">{c.motivo}</p>}

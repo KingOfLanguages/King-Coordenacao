@@ -165,6 +165,8 @@ function useAcaoPausa<TInput>(rpc: string, args: (input: TInput) => Record<strin
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pausas'] })
       qc.invalidateQueries({ queryKey: ['professores'] })
+      // Encerrar a pausa conclui a tarefa "Encerrar pausa" (20260786).
+      qc.invalidateQueries({ queryKey: ['tarefas'] })
     },
   })
 }

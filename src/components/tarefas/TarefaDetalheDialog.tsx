@@ -88,6 +88,9 @@ export function TarefaDetalheDialog({ open, onOpenChange, tarefa, podeMover, onM
                     : <>Sem responsável</>}
               </span>
               <span className="flex items-center gap-1.5"><CalendarClock className="h-3.5 w-3.5" />Criada em {dataFmt(tarefa.created_at)}</span>
+              {tarefa.prazo && (
+                <span className="flex items-center gap-1.5"><CalendarClock className="h-3.5 w-3.5" />Para {tarefa.prazo.split('-').reverse().join('/')}</span>
+              )}
               {tarefa.status === 'concluido' && tarefa.concluido_em && (
                 <span className="flex items-center gap-1.5 text-urg-lowFg">
                   <CheckCircle2 className="h-3.5 w-3.5" />Concluída em {dataFmt(tarefa.concluido_em)}
