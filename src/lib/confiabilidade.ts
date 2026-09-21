@@ -187,7 +187,7 @@ export function diagnosticar(e: EntradaConfiabilidade): Diagnostico {
     const graves = desafios.filter(i => PESO_URGENCIA[i.urgency])
     alertas.push({
       chave: 'urgencia',
-      titulo: `${graves.length} de urgência alta ou crítica`,
+      titulo: `${graves.length} de prioridade alta ou urgente`,
       detalhe: graves.map(i => `${i.problem_type} (${i.urgency})`).join(' · '),
       peso: capado(pesoUrgencia, CAP_URGENCIA),
       tom: 'crit',

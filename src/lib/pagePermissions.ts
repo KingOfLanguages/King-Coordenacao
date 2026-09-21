@@ -86,8 +86,11 @@ export const PAGES: PageDef[] = [
   { key: 'mes-analise',     path: '/acompanhamento?aba=mes-analise', label: 'Acompanhamento › Mês de Análise', section: 'Acompanhamento', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   // A chave continua 'retorno-pausa' de propósito: é ela que indexa os overrides
   // de permissão já salvos no banco — renomear apagaria as configurações atuais.
-  { key: 'retorno-pausa',   path: '/pausas',         label: 'Acompanhamento de Pausas', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'transferencias',  path: '/transferencias', label: 'Transferências de Aluno', section: 'Acompanhamento', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  // Uma tela, duas abas (2026-09): "Solicitações" dos professores. A chave
+  // 'retorno-pausa' é a aba Pausas e o item do menu; 'transferencias' libera a
+  // própria aba.
+  { key: 'retorno-pausa',   path: '/solicitacoes',   label: 'Solicitações',         section: 'Solicitações', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'], abas: ['transferencias'] },
+  { key: 'transferencias',  path: '/solicitacoes?aba=transferencias', label: 'Solicitações › Transferências', section: 'Solicitações', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
 
   // ── Incidentes ──
   { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Incidentes', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

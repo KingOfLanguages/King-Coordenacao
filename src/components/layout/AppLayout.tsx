@@ -23,17 +23,18 @@ type NavNode =
   | { kind: 'group'; label: string; pageKeys: string[] }
 
 const NAV: NavNode[] = [
-  // "Professores" agrupa cadastro, Onboarding e Buscar Reuniões. Pendências, Mês de
-  // Análise e Pausas foram pro grupo "Acompanhamento"; Incidentes e Reclamações
-  // por Aluno pro grupo "Incidentes". Tarefas (ex-Central) segue como link de topo.
-  { kind: 'link', pageKey: 'reunioes-dia' },
-  { kind: 'group', label: 'Professores',    pageKeys: ['professores', 'confiabilidade', 'onboarding'] },
-  { kind: 'group', label: 'Acompanhamento', pageKeys: ['acompanhamento', 'retorno-pausa', 'transferencias'] },
-  { kind: 'link', pageKey: 'incidentes' },
-  { kind: 'link', pageKey: 'dashboard' },
-  { kind: 'link', pageKey: 'minha-area' },
-  { kind: 'link', pageKey: 'convocacoes' },
+  // Consolidação de 2026-09: de 20 entradas (fora Administração) para 11. Telas irmãs viraram
+  // ABAS de uma tela só (ver PageDef.abas em pagePermissions) — o menu mostra a
+  // tela se a pessoa puder ver qualquer uma das abas dela.
+  { kind: 'link', pageKey: 'reunioes-dia' },     // Agenda | Buscar | Configurar agendas
+  { kind: 'link', pageKey: 'acompanhamento' },   // Índice de atenção | Pendências | Mês de Análise
+  { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'confiabilidade'] },
+  { kind: 'link', pageKey: 'retorno-pausa' },    // Solicitações: Pausas | Transferências
+  { kind: 'link', pageKey: 'incidentes' },       // Lista | Por aluno | Calendário
+  { kind: 'link', pageKey: 'convocacoes' },      // Tarefas
+  { kind: 'link', pageKey: 'dashboard' },        // Coordenação | Geral | Turnover & Retenção
   { kind: 'link', pageKey: 'projetos' },
+  { kind: 'link', pageKey: 'minha-area' },
 ]
 
 // Administração continua fixo em admin (não é configurável, pra não travar o admin).

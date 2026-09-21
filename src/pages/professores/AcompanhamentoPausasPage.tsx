@@ -49,7 +49,8 @@ function resolverPerfil(ref: { nome: string } | { nome: string }[] | null | unde
   return r?.nome ?? null
 }
 
-export function AcompanhamentoPausasPage() {
+/** `embutido`: aba de /solicitacoes (sem título nem margens de página). */
+export function AcompanhamentoPausasPage({ embutido = false }: { embutido?: boolean }) {
   const { profile } = useAuth()
   const podeEncerrar = canEdit(profile)   // encerrar pausa é exclusivo da coordenação
   const navigate = useNavigate()
@@ -96,10 +97,10 @@ export function AcompanhamentoPausasPage() {
   const contatosVencidos = vigentesFiltradas.filter(p => diasAte(p.data_fim) <= 0).length
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className={embutido ? 'space-y-6' : 'px-6 py-6 space-y-6 max-w-[1400px] mx-auto'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Acompanhamento de Pausas</h1>
+          {!embutido && <h1 className="text-2xl font-semibold tracking-tight text-ink">Acompanhamento de Pausas</h1>}
           <p className="text-[13px] text-ink-muted">
             <span className="tabular-nums text-ink-secondary font-medium">{filaFiltrada.length}</span> na fila
             {atrasadas > 0 && (

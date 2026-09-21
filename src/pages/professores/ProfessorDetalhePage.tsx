@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
   CalendarDays, Clock, DollarSign, Users, User, MapPin, GraduationCap,
@@ -47,6 +47,9 @@ import { ORIGEM_LABEL, ETAPAS_CONVOCACAO, type OrigemConvocacao, type EtapaConvo
 import { urgenciaChip, urgenciaBorda, nivelLabel, nivelChip, statusEscalonamento } from '@/lib/nexusLabels'
 import { labelTipo, dotTipo, borderTipo, chipTipo } from '@/lib/observacaoLabels'
 import type { StatusProfessor } from '@/types'
+import { Abas } from '@/components/ui/abas'
+import { useAbaUrl } from '@/hooks/useAbaUrl'
+import { VereditoConfiabilidade } from '@/components/professores/VereditoConfiabilidade'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +109,12 @@ const FILTROS: { value: ObsFiltro; label: string }[] = [
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// A ficha tinha 11 blocos empilhados numa página só (1.800 linhas de rolagem).
+// Em 2026-09 virou abas; o cabeçalho (nome, contadores, grupo, ações) fica
+// sempre visível em cima.
+type AbaProfessor = 'geral' | 'reunioes' | 'alunos' | 'pendencias' | 'ocorrencias'
+const ABAS_PROFESSOR: readonly AbaProfessor[] = ['geral', 'reunioes', 'alunos', 'pendencias', 'ocorrencias']
+
 export function ProfessorDetalhePage() {
   const { id }     = useParams<{ id: string }>()
   const navigate   = useNavigate()
@@ -136,6 +145,7 @@ export function ProfessorDetalhePage() {
   const [excluirReuniaoAlvo, setExcluirReuniaoAlvo] = useState<string | null>(null)
   const [obsExpandidas, setObsExpandidas] = useState<Set<string>>(new Set())
   const [reunioesExpandidas, setReunioesExpandidas] = useState(false)
+  const [aba, setAba] = useAbaUrl<AbaProfessor>(ABAS_PROFESSOR, 'geral')
 
   // Deriva do que useNexusDados já busca — sem query extra.
   const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === MES_ANALISE_PROBLEM_TYPE && !i.resolved) ?? null
@@ -455,8 +465,24 @@ export function ProfessorDetalhePage() {
         </div>
       </div>
 
+      <Abas<AbaProfessor>
+        ariaLabel="Ficha do professor"
+        valor={aba}
+        onChange={setAba}
+        abas={[
+          { id: 'geral', label: 'Visão geral' },
+          { id: 'reunioes', label: 'Reuniões e observações', n: reunioes.length + observacoes.length },
+          { id: 'alunos', label: 'Alunos', n: alunosCount },
+          { id: 'pendencias', label: 'Pendências' },
+          { id: 'ocorrencias', label: 'Ocorrências', n: nexusData?.incidentes.length ?? 0 },
+        ]}
+      />
+
+      {/* ── Visão geral: veredito + acompanhamento do King + situação no KTM ── */}
+      {aba === 'geral' && <VereditoConfiabilidade professorId={professor.id} />}
+
       {/* ── Acompanhamento (API KMS) ── */}
-      {acompanhamentoData?.acompanhamento && (
+      {aba === 'geral' && acompanhamentoData?.acompanhamento && (
         <AcompanhamentoSection
           acompanhamento={acompanhamentoData.acompanhamento}
           historico={acompanhamentoData.historico}
@@ -466,34 +492,43 @@ export function ProfessorDetalhePage() {
       )}
 
       {/* ── Permanência do aluno com o professor ── */}
-      {temPermanencia && (
+      {aba === 'alunos' && temPermanencia && (
         <PermanenciaSection permanencia={permanencia} />
       )}
 
       {/* ── Alunos vinculados (KMS) ── */}
-      {acompanhamentoData?.alunos && acompanhamentoData.alunos.length > 0 && (
+      {aba === 'alunos' && acompanhamentoData?.alunos && acompanhamentoData.alunos.length > 0 && (
         <AlunosKmsSection alunos={acompanhamentoData.alunos} />
       )}
 
       {/* ── Ciclo de vida do aluno (saídas — retenção/churn) ── */}
-      {acompanhamentoData?.ciclo && acompanhamentoData.ciclo.length > 0 && (
+      {aba === 'alunos' && acompanhamentoData?.ciclo && acompanhamentoData.ciclo.length > 0 && (
         <CicloVidaSection ciclo={acompanhamentoData.ciclo} />
+      )}
+      {aba === 'alunos' && !temPermanencia && alunosCount === 0 && !(acompanhamentoData?.ciclo?.length) && (
+        <div className="card-surface p-8 text-center text-[13px] text-ink-muted">Nenhum aluno vinculado a este professor no King.</div>
       )}
 
       {/* ── Situação no KTM: pausa, convocação, tarefa, onboarding, trilha, e-mail ── */}
-      {situacao && <SituacaoSection situacao={situacao} />}
+      {aba === 'geral' && situacao && <SituacaoSection situacao={situacao} />}
 
       {/* ── Transferências de aluno pedidas por ele (some quando não há nenhuma) ── */}
-      {id && <TransferenciasProfessorSection professorId={id} />}
+      {aba === 'alunos' && id && <TransferenciasProfessorSection professorId={id} />}
 
       {/* ── Silêncio (aulas não lançadas) ── */}
-      {id && <SilencioProfessorCard professorId={id} />}
+      {aba === 'pendencias' && id && <SilencioProfessorCard professorId={id} />}
 
       {/* ── Pendências de Lançamento (motor do King: recorrência + bloqueios + mensagens) ── */}
-      {kmsNum !== null && <PendenciasLancamentoSection kmsId={kmsNum} />}
+      {aba === 'pendencias' && kmsNum !== null && <PendenciasLancamentoSection kmsId={kmsNum} />}
+      {aba === 'pendencias' && kmsNum === null && (
+        <div className="card-surface p-8 text-center text-[13px] text-ink-muted">Professor sem ID do King: não dá para buscar o histórico de pendências.</div>
+      )}
 
       {/* ── Ocorrências (King Nexus) ── */}
-      {nexusData && (nexusData.incidentes.length > 0 || nexusData.tracking || nexusData.alertas.length > 0) && (
+      {aba === 'ocorrencias' && !(nexusData && (nexusData.incidentes.length > 0 || nexusData.tracking || nexusData.alertas.length > 0)) && (
+        <div className="card-surface p-8 text-center text-[13px] text-ink-muted">Nenhuma ocorrência registrada para este professor.</div>
+      )}
+      {aba === 'ocorrencias' && nexusData && (nexusData.incidentes.length > 0 || nexusData.tracking || nexusData.alertas.length > 0) && (
         <NexusSection
           incidentes={nexusData.incidentes}
           tracking={nexusData.tracking}
@@ -503,8 +538,8 @@ export function ProfessorDetalhePage() {
         />
       )}
 
-      {/* ── Main grid ── */}
-      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+      {/* ── Reuniões e observações ── */}
+      {aba === 'reunioes' && <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
         {/* Reuniões */}
         <section className="card-surface p-5 space-y-3 self-start">
           <h2 className="label-micro">Reuniões ({reunioes.length})</h2>
@@ -641,24 +676,14 @@ export function ProfessorDetalhePage() {
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      {temSnapshot ? (
-                        <Link
-                          to={`/observacoes/${o.id}`}
-                          className={cn(
-                            'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium hover:opacity-80 transition-opacity',
-                            chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
-                          )}
-                        >
-                          {labelTipo[o.tipo] ?? o.tipo}
-                        </Link>
-                      ) : (
-                        <span className={cn(
-                          'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium',
-                          chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
-                        )}>
-                          {labelTipo[o.tipo] ?? o.tipo}
-                        </span>
-                      )}
+                      {/* O chip levava a /observacoes/:id, que repetia este mesmo card
+                          (texto, resolver e contexto). O contexto abre aqui embaixo. */}
+                      <span className={cn(
+                        'inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium',
+                        chipTipo[o.tipo] ?? 'bg-surface-subtle text-ink-muted',
+                      )}>
+                        {labelTipo[o.tipo] ?? o.tipo}
+                      </span>
                       <div className="flex items-center gap-2 text-[11px] text-ink-subtle tabular-nums">
                         {autor && <span className="text-ink-muted">{autor}</span>}
                         <span>{new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
@@ -709,7 +734,7 @@ export function ProfessorDetalhePage() {
             </ul>
           )}
         </div>
-      </div>
+      </div>}
 
       <NovaObservacaoDialog
         open={obsAberta}

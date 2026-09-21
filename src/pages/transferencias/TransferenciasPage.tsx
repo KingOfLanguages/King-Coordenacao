@@ -60,7 +60,8 @@ function resolverPerfil(ref: { nome: string } | { nome: string }[] | null | unde
 
 type Aba = 'fila' | 'historico'
 
-export function TransferenciasPage() {
+/** `embutido`: aba de /solicitacoes (sem título nem margens de página). */
+export function TransferenciasPage({ embutido = false }: { embutido?: boolean }) {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const [aba, setAba] = useState<Aba>('fila')
@@ -125,10 +126,10 @@ export function TransferenciasPage() {
     || profile?.is_admin === true || profile?.role === 'admin'
 
   return (
-    <div className="px-6 py-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className={embutido ? 'space-y-6' : 'px-6 py-6 space-y-6 max-w-[1400px] mx-auto'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Transferências de Aluno</h1>
+          {!embutido && <h1 className="text-2xl font-semibold tracking-tight text-ink">Transferências de Aluno</h1>}
           <p className="text-[13px] text-ink-muted">
             <span className="tabular-nums text-ink-secondary font-medium">{filaFiltrada.length}</span>{' '}
             {filaFiltrada.length === 1 ? 'pendente' : 'pendentes'}
@@ -205,7 +206,9 @@ export function TransferenciasPage() {
                       pedido={pedido}
                       prazo={prazo}
                       destacado={pedido.id === destaque}
-                      onLimparDestaque={() => setParams({}, { replace: true })}
+                      // Tira só o ?pedido=: apagar tudo levaria junto o ?aba= da
+                      // tela de Solicitações e voltaria para a aba Pausas.
+                      onLimparDestaque={() => setParams(p => { const n = new URLSearchParams(p); n.delete('pedido'); return n }, { replace: true })}
                       onVerPerfil={() => pedido.professor && navigate(`/professores/${pedido.professor.id}`)}
                     />
                   ))}

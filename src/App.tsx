@@ -14,14 +14,14 @@ import { RedefinirSenha } from '@/pages/RedefinirSenha'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { ProfessoresPage } from '@/pages/professores/ProfessoresPage'
 import { ProfessorDetalhePage } from '@/pages/professores/ProfessorDetalhePage'
-import { AcompanhamentoPausasPage } from '@/pages/professores/AcompanhamentoPausasPage'
-import { ObservacaoDetalhePage } from '@/pages/observacoes/ObservacaoDetalhePage'
+import { ObservacaoRedirect } from '@/pages/observacoes/ObservacaoRedirect'
 import { AcompanhamentoPage } from '@/pages/acompanhamento/AcompanhamentoPage'
 import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { TarefasPage } from '@/pages/tarefas/TarefasPage'
 import { Redirecionar } from '@/components/Redirecionar'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ReunioesPage } from '@/pages/reunioes/ReunioesPage'
+import { SolicitacoesPage } from '@/pages/solicitacoes/SolicitacoesPage'
 import { ProjetosPage } from '@/pages/projetos/ProjetosPage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
@@ -31,7 +31,6 @@ import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
 import { Home as TransferenciaPublicaPage } from '@/pages/transferencias/Home'
-import { TransferenciasPage } from '@/pages/transferencias/TransferenciasPage'
 import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
 import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
 
@@ -141,7 +140,7 @@ export default function App() {
               } />
               <Route path="/observacoes/:id" element={
                 <ProtectedRoute page="professores">
-                  <ObservacaoDetalhePage />
+                  <ObservacaoRedirect />
                 </ProtectedRoute>
               } />
               {/* Reuniões: Agenda | Buscar por professor | Configurar agendas. */}
@@ -175,18 +174,17 @@ export default function App() {
                   <OnboardingPage />
                 </ProtectedRoute>
               } />
-              <Route path="/pausas" element={
+              {/* Solicitações dos professores: Pausas | Transferências (mesmo fluxo
+                  formulário público → fila → assumir → concluir). */}
+              <Route path="/solicitacoes" element={
                 <ProtectedRoute page="retorno-pausa">
-                  <AcompanhamentoPausasPage />
+                  <SolicitacoesPage />
                 </ProtectedRoute>
               } />
-              {/* "Retorno de Pausa" virou "Acompanhamento de Pausas" — links antigos seguem valendo. */}
-              <Route path="/retorno-pausa" element={<Navigate to="/pausas" replace />} />
-              <Route path="/transferencias" element={
-                <ProtectedRoute page="transferencias">
-                  <TransferenciasPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/pausas" element={<Redirecionar para="/solicitacoes" params={{ aba: 'pausas' }} />} />
+              <Route path="/retorno-pausa" element={<Redirecionar para="/solicitacoes" params={{ aba: 'pausas' }} />} />
+              {/* O aviso de transferência atrasada aponta para /transferencias?pedido=<id>. */}
+              <Route path="/transferencias" element={<Redirecionar para="/solicitacoes" params={{ aba: 'transferencias' }} />} />
               <Route path="/suporte/reunioes" element={<Redirecionar para="/reunioes" params={{ aba: 'buscar' }} />} />
               {/* Tarefas foi unificada na Central (/convocacoes) — mantém o link antigo vivo. */}
               <Route path="/tarefas" element={<Navigate to="/convocacoes?aba=tarefas" replace />} />
