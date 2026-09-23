@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, ListOrdered, Trash2, UserCheck, Hand, Undo2, Pencil, Ticket, ScanSearch, Clock, Eye, EyeOff, BarChart3, Hourglass } from 'lucide-react'
+import { Search, Plus, AlertTriangle, CheckCircle, GraduationCap, ArrowDownNarrowWide, ArrowUpNarrowWide, ListOrdered, Trash2, UserCheck, Hand, Undo2, Pencil, Ticket, ScanSearch, Clock, Eye, EyeOff, BarChart3, Hourglass, ChevronLeft, ChevronRight, CalendarRange } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -19,6 +19,7 @@ import { IncidenteDetalheDialog } from '@/components/incidentes/IncidenteDetalhe
 import { DesempenhoPrioridade } from '@/components/incidentes/DesempenhoPrioridade'
 import { CalendarioIncidentes } from '@/components/incidentes/CalendarioIncidentes'
 import { IncidentesPorAluno } from '@/components/incidentes/IncidentesPorAluno'
+import { ResumoSemana } from '@/components/incidentes/ResumoSemana'
 import { Abas } from '@/components/ui/abas'
 import { useAbaUrl } from '@/hooks/useAbaUrl'
 import { useCanView } from '@/hooks/usePagePermissions'
@@ -29,6 +30,7 @@ import {
 } from '@/lib/incidentePrioridade'
 import { rotuloAluno } from '@/lib/incidenteRelato'
 import { atributosChamadoTi } from '@/lib/chamadoTi'
+import { inicioSemanaKing, somarSemanas, dentroDaSemana, rotuloSemanaKing, chaveSemana, semanaDaChave } from '@/lib/semanaKing'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -182,13 +184,34 @@ export function IncidentesPage() {
   // ?status= permite chegar direto numa visão (ex.: "Hoje" → informes novos).
   const [status, setStatus] = useState<FiltroStatus>(() => {
     const s = searchParams.get('status')
-    return FILTROS_STATUS.some(([v]) => v === s) ? (s as FiltroStatus) : 'fila'
+    if (FILTROS_STATUS.some(([v]) => v === s)) return s as FiltroStatus
+    // Link de semana (?semana=) abre mostrando tudo o que entrou, não só a fila.
+    return searchParams.get('semana') ? 'todos' : 'fila'
   })
   const [urgenciaFiltro, setUrgenciaFiltro] = useState<FiltroUrgencia>('todas')
   const [professorFiltro, setProfessorFiltro] = useState<string>('todos')
   const [ordem, setOrdem] = useState<Ordem>('prioridade')
   const [soMeus, setSoMeus] = useState(false)
   const [soAtrasados, setSoAtrasados] = useState(false)
+  // Recorte por semana da King (quarta → terça). null = sem recorte (fila de hoje).
+  // Fica na URL (?semana=AAAA-MM-DD) para dar para mandar o link da semana.
+  const semana = useMemo(() => semanaDaChave(searchParams.get('semana')), [searchParams])
+  const semanaAtual = inicioSemanaKing(new Date(agora))
+  const ehSemanaAtual = semana?.getTime() === semanaAtual.getTime()
+
+  function irParaSemana(inicio: Date | null) {
+    const p = new URLSearchParams(searchParams)
+    if (inicio) p.set('semana', chaveSemana(inicio))
+    else p.delete('semana')
+    setSearchParams(p, { replace: true })
+  }
+
+  function ligarSemana(ligar: boolean) {
+    irParaSemana(ligar ? semanaAtual : null)
+    // A fila esconde os concluídos — na semana o que interessa é tudo o que entrou.
+    setStatus(ligar ? 'todos' : 'fila')
+    setUrgenciaFiltro('todas')
+  }
 
   const porAba = useMemo(
     () => incidentes.filter(i => abaDoIncidente(i) === aba),
@@ -231,6 +254,8 @@ export function IncidentesPage() {
     const lista = porAba.filter(i => {
       const informe = naturezaDe(i) === 'informe'
       if (soMeus && i.created_by !== profile?.id) return false
+      // Na semana: conta o que foi registrado nela; em "Concluídos", o que foi fechado nela.
+      if (semana && !dentroDaSemana(status === 'concluido' ? i.resolved_at : i.created_at, semana)) return false
       const st = statusChamado(i)
       if (status === 'fila' && (informe || i.resolved)) return false
       if (status === 'aberto' && (informe || st !== 'aberto')) return false
@@ -265,7 +290,7 @@ export function IncidentesPage() {
     }
     const sinal = ordem === 'novo' ? -1 : 1
     return [...lista].sort((a, b) => sinal * a.created_at.localeCompare(b.created_at))
-  }, [porAba, busca, categoria, status, urgenciaFiltro, professorFiltro, ordem, soMeus, soAtrasados, profile?.id, agora])
+  }, [porAba, busca, categoria, status, urgenciaFiltro, professorFiltro, ordem, soMeus, soAtrasados, profile?.id, agora, semana])
 
   function trocarAba(novaAba: Aba) {
     setAba(novaAba)
@@ -344,7 +369,62 @@ export function IncidentesPage() {
 
       {verDesempenho && <DesempenhoPrioridade incidentes={porAba} aba={aba} />}
 
-      {/* Placar da fila: quanto tem em cada nível e quanto disso já venceu. */}
+      {/* Período: fila de hoje ou uma semana da King (quarta → terça). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Abas<'tudo' | 'semana'>
+          ariaLabel="Período"
+          tamanho="sm"
+          valor={semana ? 'semana' : 'tudo'}
+          onChange={v => ligarSemana(v === 'semana')}
+          abas={[{ id: 'tudo', label: 'Fila de hoje' }, { id: 'semana', label: 'Por semana' }]}
+        />
+        {semana && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => irParaSemana(somarSemanas(semana, -1))}
+              className="btn-press rounded-md p-1 text-ink-muted hover:bg-surface-subtle hover:text-ink"
+              aria-label="Semana anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="inline-flex min-w-[170px] items-center justify-center gap-1.5 text-[12.5px] font-medium text-ink tabular-nums">
+              <CalendarRange className="h-3.5 w-3.5 text-ink-muted" />
+              {rotuloSemanaKing(semana)}
+            </span>
+            <button
+              onClick={() => irParaSemana(somarSemanas(semana, 1))}
+              disabled={ehSemanaAtual || semana > semanaAtual}
+              className="btn-press rounded-md p-1 text-ink-muted hover:bg-surface-subtle hover:text-ink disabled:opacity-30"
+              aria-label="Próxima semana"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            {!ehSemanaAtual && (
+              <button
+                onClick={() => irParaSemana(semanaAtual)}
+                className="btn-press ml-1 rounded-full bg-surface-subtle px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary hover:text-ink"
+              >
+                Semana atual
+              </button>
+            )}
+            {ehSemanaAtual && <span className="ml-1 text-[11px] text-ink-subtle">semana em andamento</span>}
+          </div>
+        )}
+      </div>
+
+      {semana ? (
+        <ResumoSemana
+          incidentes={porAba}
+          inicio={semana}
+          aba={aba}
+          agora={agora}
+          categoriaAtiva={categoria}
+          professorAtivo={professorFiltro}
+          onCategoria={setCategoria}
+          onProfessor={setProfessorFiltro}
+        />
+      ) : (
+      /* Placar da fila: quanto tem em cada nível e quanto disso já venceu. */
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {PRIORIDADES.map(p => {
           const n = placar.porNivel[p]
@@ -383,6 +463,7 @@ export function IncidentesPage() {
           </p>
         </button>
       </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-72">
@@ -476,7 +557,7 @@ export function IncidentesPage() {
       ) : filtrados.length === 0 ? (
         <div className="card-surface p-8 text-center">
           <p className="text-[13px] text-ink-muted">
-            {status === 'fila' && !soAtrasados && urgenciaFiltro === 'todas' ? 'Fila vazia: nenhum chamado aberto nesta aba.' : 'Nenhum incidente encontrado.'}
+            {semana ? 'Nenhum incidente nesta semana com esses filtros.' : status === 'fila' && !soAtrasados && urgenciaFiltro === 'todas' ? 'Fila vazia: nenhum chamado aberto nesta aba.' : 'Nenhum incidente encontrado.'}
           </p>
         </div>
       ) : (
