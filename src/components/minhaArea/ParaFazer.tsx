@@ -26,6 +26,7 @@ import { NovaTarefaDialog } from '@/components/tarefas/NovaTarefaDialog'
 import { ResolverDesafioDialog } from '@/components/tarefas/ResolverDesafioDialog'
 import { MensagensDoDia } from './MensagensDoDia'
 import { Anotacoes, ID_NOVA_ANOTACAO } from './Anotacoes'
+import { LinksUteis } from './LinksUteis'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Para fazer — o miolo da Minha Área. Uma lista só, agrupada pelo prazo, em que
@@ -33,6 +34,7 @@ import { Anotacoes, ID_NOVA_ANOTACAO } from './Anotacoes'
 // desafio, responder a pergunta). Substitui o quadro Aberto/Em andamento/
 // Concluído de Tarefas: das 36 tarefas até 2026-09, só 1 foi escrita à mão — o
 // resto o sistema criou, e cada tipo já tem a sua ação própria.
+// Na coluna ao lado: os Links úteis (para todo mundo) e as Anotações.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ICONE: Record<TipoItem, LucideIcon> = {
@@ -128,7 +130,7 @@ export function ParaFazer({ veTarefas, veProjetos, veMensagens, veAnotacoes }: P
   const vazio = !dados.isLoading && dados.itens.length === 0
 
   return (
-    <div className={cn('grid items-start gap-6', veAnotacoes && 'lg:grid-cols-[minmax(0,1fr)_300px]')}>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           {veTarefas ? (
@@ -213,7 +215,10 @@ export function ParaFazer({ veTarefas, veProjetos, veMensagens, veAnotacoes }: P
         )}
       </div>
 
-      {veAnotacoes && <Anotacoes />}
+      <div className="space-y-6">
+        <LinksUteis />
+        {veAnotacoes && <Anotacoes />}
+      </div>
 
       {novaTarefa && <NovaTarefaDialog onClose={() => setNovaTarefa(false)} />}
 
