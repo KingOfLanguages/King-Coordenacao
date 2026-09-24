@@ -801,6 +801,35 @@ export const CSS = `
   to   { opacity: 1; transform: translate3d(0, 0, 0);    filter: blur(0); }
 }
 
+/* ── Aviso da presença automática (com Desfazer) ──────────────────────── */
+.ktm-aviso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 12px 0;
+  padding: 9px 8px 9px 12px;
+  border-radius: 13px;
+  border: 1px solid rgba(70, 214, 143, 0.28);
+  background: var(--verde-bg);
+  font-size: 12px;
+  color: var(--ink);
+}
+.ktm-aviso-txt { flex: 1; min-width: 0; }
+
+/* Mesmo aviso com o painel minimizado: solto ao lado do botão flutuante. */
+.ktm.ktm-aviso-solto {
+  top: 64px;
+  left: 72px;
+  width: 340px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px 10px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+}
+.ktm.ktm-aviso-solto::before { content: none; }
+
 /* ── Botão flutuante (painel minimizado) ──────────────────────────────── */
 .ktm-fab {
   position: fixed;

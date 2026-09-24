@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../shared/supabase'
 import { CSS } from '../content/estilos'
+import { lerPresencaAutomatica, gravarPresencaAutomatica } from '../shared/preferencias'
 
 // Popup da barra do navegador — mesma linguagem visual do painel do Meet.
 // Reaproveita a folha de estilo do painel (./content/estilos) em vez de manter
@@ -58,6 +59,15 @@ export function Popup() {
   const [senha, setSenha]     = useState('')
   const [erro, setErro]       = useState('')
   const [loading, setLoading] = useState(false)
+  const [presencaAuto, setPresencaAuto] = useState(false)
+
+  useEffect(() => { lerPresencaAutomatica().then(setPresencaAuto) }, [])
+
+  async function alternarPresencaAuto() {
+    const nova = !presencaAuto
+    setPresencaAuto(nova)
+    try { await gravarPresencaAutomatica(nova) } catch { setPresencaAuto(!nova) }
+  }
 
   useEffect(() => {
     let vivo = true
@@ -117,6 +127,21 @@ export function Popup() {
               <p className="ktm-txt-2" style={{ margin: '12px 0 0' }}>
                 Entre numa chamada do Google Meet — o painel do professor aparece automaticamente.
               </p>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 13, paddingTop: 12, borderTop: '1px solid var(--fio)' }}>
+                <button className={`ktm-check${presencaAuto ? ' ktm-check--on' : ''}`} onClick={alternarPresencaAuto}
+                        aria-pressed={presencaAuto} title={presencaAuto ? 'Desligar' : 'Ligar'}>
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3.5 8.5 6.5 11.5 12.5 5" fill="none" stroke="currentColor"
+                          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <div>
+                  <p className="ktm-txt" style={{ fontWeight: 600 }}>Presença automática</p>
+                  <p className="ktm-txt-3">
+                    Marca a reunião 1:1 como realizada depois de 3 min com o professor na chamada. Dá pra desfazer no painel.
+                  </p>
+                </div>
+              </div>
               <button onClick={handleLogout} className="ktm-btn ktm-btn--bloco" style={{ marginTop: 13 }}>Sair</button>
             </section>
           ) : (

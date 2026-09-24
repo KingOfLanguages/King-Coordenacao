@@ -12,7 +12,7 @@ import { ranquear, JANELA_DIAS as JANELA_RANKING } from '../../../src/lib/rankin
 import type {
   MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, ReuniaoHistoricoItem, ReuniaoHojeInfo,
   PendenciaResumo, SituacaoResumo, ConfiabilidadeResumo, PrioridadeResumo, NexusOcorrencia,
-  WelcomePathResumo, SinalResumo, FeedbacksJanela, FeedbackEvento,
+  WelcomePathResumo, SinalResumo, FeedbacksJanela, FeedbackEvento, MotivoIdentificacao, OrigemConfirmacao,
 } from '../shared/types'
 
 const PROBLEM_TYPE_MES_ANALISE = 'Mês de análise'
@@ -42,20 +42,43 @@ function limitesDeHoje(): { inicio: string; fim: string } {
   return { inicio: inicio.toISOString(), fim: fim.toISOString() }
 }
 
-/** Participação (reuniao_professores) de hoje para este professor, se existir — mesma tabela
- * usada por Reuniões do Dia na plataforma web, então o que a extensão grava aparece lá também. */
-async function buscarReuniaoHoje(professorId: string): Promise<ReuniaoHojeInfo | null> {
-  const { inicio, fim } = limitesDeHoje()
-  const { data } = await supabase
-    .from('reuniao_professores')
-    .select('id, reuniao_id, status, numero, observacao, reuniao:reunioes!reuniao_id!inner (data)')
-    .eq('professor_id', professorId)
-    .gte('reuniao.data', inicio)
-    .lte('reuniao.data', fim)
-    .order('created_at', { ascending: false })
-    .limit(1)
+/** Coluna que ainda não existe no banco: 42703 no select, PGRST204 no update/insert.
+ *  Acontece quando a extensão nova roda antes da migration que criou a coluna. */
+function colunaInexistente(error: { code?: string } | null): boolean {
+  return error?.code === '42703' || error?.code === 'PGRST204'
+}
 
-  const row = data?.[0]
+type LinhaReuniaoHoje = {
+  id: string; reuniao_id: string | null; status: ReuniaoHojeInfo['status']
+  numero: number | null; observacao: string | null
+  confirmacao_origem?: ReuniaoHojeInfo['confirmacao_origem']
+}
+
+const SELECT_REUNIAO_HOJE = 'id, reuniao_id, status, numero, observacao, confirmacao_origem, reuniao:reunioes!reuniao_id!inner (data)'
+/** O mesmo sem confirmacao_origem (migration 20260789): sem a coluna, o painel perderia a reunião do dia inteira. */
+const SELECT_REUNIAO_HOJE_LEGADO = 'id, reuniao_id, status, numero, observacao, reuniao:reunioes!reuniao_id!inner (data)'
+
+/** Participação (reuniao_professores) de hoje para este professor, se existir — mesma tabela
+ * usada por Reuniões do Dia na plataforma web, então o que a extensão grava aparece lá também.
+ * `reuniaoId` fixa a reunião quando ela já é conhecida (veio do link do Meet) — o professor
+ * pode ter mais de uma reunião no dia. */
+async function buscarReuniaoHoje(professorId: string, reuniaoId?: string): Promise<ReuniaoHojeInfo | null> {
+  const { inicio, fim } = limitesDeHoje()
+  const consultar = (select: string) => {
+    let q = supabase
+      .from('reuniao_professores')
+      .select(select)
+      .eq('professor_id', professorId)
+      .gte('reuniao.data', inicio)
+      .lte('reuniao.data', fim)
+    if (reuniaoId) q = q.eq('reuniao_id', reuniaoId)
+    return q.order('created_at', { ascending: false }).limit(1)
+  }
+
+  let res = await consultar(SELECT_REUNIAO_HOJE)
+  if (colunaInexistente(res.error)) res = await consultar(SELECT_REUNIAO_HOJE_LEGADO)
+
+  const row = (res.data as unknown as LinhaReuniaoHoje[] | null)?.[0]
   if (!row) return null
 
   // Se reunião tem múltiplos participantes, é do tipo 'grupo'
@@ -85,13 +108,14 @@ async function buscarReuniaoHoje(professorId: string): Promise<ReuniaoHojeInfo |
 
   return {
     participanteId: row.id,
-    reuniao_id: row.reuniao_id,
+    reuniao_id: row.reuniao_id ?? undefined,
     tipo_reuniao: tipoReuniao,
     status: row.status,
     numero: row.numero,
     observacao: row.observacao,
     participantes,
     anotacaoInterna: row.reuniao_id ? await buscarAnotacaoInterna(row.reuniao_id) : '',
+    confirmacao_origem: row.confirmacao_origem ?? null,
   }
 }
 
@@ -457,8 +481,9 @@ function montarPrioridade(
 /** Busca todas as infos relevantes do professor (perfil, acompanhamento, reuniões, observações). */
 async function montarResultado(
   professorId: string,
-  motivo: 'email' | 'nome',
+  motivo: MotivoIdentificacao,
   confianca: number | null = null,
+  reuniaoId?: string,
 ): Promise<ProfessorEncontrado | null> {
   const [
     profRes, acompRes, historicoRes, totalRes, obsRes, obsAbertasRes, negativos90Res, reuniaoHoje,
@@ -492,12 +517,15 @@ async function montarResultado(
       .eq('professor_id', professorId)
       .order('created_at', { ascending: false })
       .limit(5),
+    // As ocorrências abertas vêm inteiras (não só a contagem): a lista pós-reunião
+    // oferece concluir cada uma, e `obsRes` traz só as 5 observações mais recentes.
     supabase
       .from('observacoes')
-      .select('id', { count: 'exact', head: true })
+      .select('id, tipo, texto, created_at, resolvido')
       .eq('professor_id', professorId)
       .eq('tipo', 'ocorrencia')
-      .eq('resolvido', false),
+      .eq('resolvido', false)
+      .order('created_at', { ascending: false }),
     // Feedbacks negativos na janela de 90 dias — entram no veredito de confiabilidade.
     supabase
       .from('observacoes')
@@ -505,7 +533,7 @@ async function montarResultado(
       .eq('professor_id', professorId)
       .eq('tipo', 'feedback_negativo')
       .gte('created_at', inicioJanela().toISOString()),
-    buscarReuniaoHoje(professorId),
+    buscarReuniaoHoje(professorId, reuniaoId),
     // UMA consulta de incidentes serve a tudo: lista do painel, contagem de abertos,
     // Mês de Análise, veredito de confiabilidade (90d) e as tarefas ligadas a eles.
     supabase
@@ -616,9 +644,14 @@ async function montarResultado(
     totalReunioesRealizadas: totalRes.count ?? 0,
     reuniaoHoje,
     observacoes: obsRes.data ?? [],
-    observacoesAbertasTotal: obsAbertasRes.count ?? 0,
+    observacoesAbertasTotal: obsAbertasRes.data?.length ?? 0,
+    ocorrenciasKtmAbertas: obsAbertasRes.data ?? [],
     nexus: {
       ocorrencias: incidentes.slice(0, 5),
+      // Informe é só registro (sem fluxo de resolução) e Mês de Análise tem o
+      // próprio cartão — nenhum dos dois entra na lista do "Concluir".
+      chamadosAbertos: incidentes.filter(i =>
+        !i.resolved && i.natureza !== 'informe' && i.problem_type !== PROBLEM_TYPE_MES_ANALISE),
       ocorrenciasAbertasTotal: incidentes.filter(i => !i.resolved).length,
       tracking: nexusTrackingRes.data?.[0] ?? null,
       alertas: nexusAlertasRes.data ?? [],
@@ -743,6 +776,57 @@ async function handleBuscarProfessor(nomes: string[], emails: string[]): Promise
   }
 
   return { ok: true, resultado: null }
+}
+
+/** Código de sala do Meet: três grupos de letras (abc-defg-hij). */
+const CODIGO_MEET = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/
+
+/** Até quanto antes/depois da hora marcada uma reunião ainda "é esta chamada". Um
+ *  link fixo de agenda serve a várias reuniões no mesmo dia, então ganha a mais
+ *  próxima de agora — e fora da janela não vale nenhuma (a sala pode estar sendo
+ *  usada para uma conversa avulsa, que cai no reconhecimento pelo nome). */
+const JANELA_AGENDA_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Identificação pela AGENDA: o link do Meet da aba aberta contra `reunioes.meet_link`
+ * de hoje (gravado pelo daily-import e pelo create-booking). É a única via que não
+ * depende de adivinhar: o Meet quase nunca mostra o e-mail do convidado, e o nome
+ * exibido é o que o professor quiser.
+ */
+async function handleBuscarPorMeet(codigo: string, nomes: string[]): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+  if (!CODIGO_MEET.test(codigo)) return { ok: true, resultado: null }
+
+  const { inicio, fim } = limitesDeHoje()
+  const { data } = await supabase
+    .from('reunioes')
+    .select('id, data, participacoes:reuniao_professores (professor_id, professor:professores!professor_id (nome))')
+    .ilike('meet_link', `%${codigo}%`)
+    .gte('data', inicio)
+    .lte('data', fim)
+
+  type Participacao = { professor_id: string | null; professor: { nome: string } | { nome: string }[] | null }
+  const agora = Date.now()
+  const reuniao = ((data ?? []) as unknown as { id: string; data: string; participacoes: Participacao[] }[])
+    .filter(r => r.participacoes.some(p => p.professor_id))
+    .map(r => ({ ...r, distancia: Math.abs(new Date(r.data).getTime() - agora) }))
+    .filter(r => r.distancia <= JANELA_AGENDA_MS)
+    .sort((a, b) => a.distancia - b.distancia)[0]
+  if (!reuniao) return { ok: true, resultado: null }
+
+  // Em grupo, abre quem mais se parece com alguém da chamada; o resto do grupo
+  // aparece na presença e no ranking do mesmo jeito.
+  const candidatos = reuniao.participacoes
+    .filter((p): p is Participacao & { professor_id: string } => !!p.professor_id)
+    .map(p => {
+      const prof = Array.isArray(p.professor) ? p.professor[0] : p.professor
+      return { id: p.professor_id, afinidade: nomes.length && prof?.nome ? confiancaMatch(nomes, prof.nome) : 0 }
+    })
+    .sort((a, b) => b.afinidade - a.afinidade)
+
+  const resultado = await montarResultado(candidatos[0].id, 'agenda', null, reuniao.id)
+  return { ok: true, resultado }
 }
 
 /**
@@ -1044,6 +1128,7 @@ async function handleCriarReuniaoAgora(professorId: string): Promise<RespostaDoB
  * superfícies não divergirem na numeração. */
 async function handleConfirmarReuniao(
   participanteId: string, professorId: string, aconteceu: boolean, observacao: string,
+  origem: OrigemConfirmacao = 'manual', presencaDetectadaEm?: string,
 ): Promise<RespostaDoBackground> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return { ok: false, erro: 'Não autenticado.' }
@@ -1073,34 +1158,96 @@ async function handleConfirmarReuniao(
     numero = oficiais.length + 1
   }
 
-  const { data: atualizado, error } = await supabase
+  const base = {
+    status:         aconteceu ? 'realizada' : 'cancelada',
+    observacao:     observacao.trim() || null,
+    numero,
+    confirmado_em:  new Date().toISOString(),
+    confirmado_por: session.user.id,
+  }
+  // Só confirma o que ainda está pendente: com dois coordenadores na chamada, ou a
+  // confirmação automática chegando junto com um clique, a segunda vira no-op em
+  // vez de gravar outra vez e numerar a reunião em dobro.
+  const atualizar = (campos: Record<string, unknown>) => supabase
     .from('reuniao_professores')
-    .update({
-      status:         aconteceu ? 'realizada' : 'cancelada',
-      observacao:     observacao.trim() || null,
-      numero,
-      confirmado_em:  new Date().toISOString(),
-      confirmado_por: session.user.id,
-    })
+    .update(campos)
     .eq('id', participanteId)
+    .eq('status', 'pendente')
     .select('id, status, numero, observacao')
-    .single()
-  if (error || !atualizado) return { ok: false, erro: error?.message ?? 'Erro ao confirmar reunião.' }
+    .maybeSingle()
 
-  if (aconteceu && !ehDuvida) {
+  let res = await atualizar({
+    ...base,
+    confirmacao_origem:    origem,
+    presenca_detectada_em: origem === 'automatica' ? presencaDetectadaEm ?? null : null,
+  })
+  // Banco sem a migration 20260789: confirma mesmo assim, só sem o rastro da origem.
+  if (colunaInexistente(res.error)) res = await atualizar(base)
+  if (res.error) return { ok: false, erro: res.error.message }
+  const atualizado = res.data
+
+  if (atualizado && aconteceu && !ehDuvida) {
     await supabase.from('professores').update({ data_ultima_reuniao: new Date().toISOString() }).eq('id', professorId)
   }
 
   // Re-lê a participação inteira: devolver só os campos do update apagaria
-  // reuniao_id, participantes do grupo e a anotação interna do painel.
+  // reuniao_id, participantes do grupo e a anotação interna do painel. Também é o
+  // que mostra o estado real quando outra pessoa confirmou antes (update vazio).
   const completa = await buscarReuniaoHoje(professorId)
+  if (completa) return { ok: true, reuniaoHoje: completa }
+  if (!atualizado) return { ok: false, erro: 'Esta reunião não está mais pendente.' }
   return {
     ok: true,
-    reuniaoHoje: completa ?? {
+    reuniaoHoje: {
       participanteId: atualizado.id, status: atualizado.status,
       numero: atualizado.numero, observacao: atualizado.observacao, anotacaoInterna: '',
     },
   }
+}
+
+/** Desfaz uma confirmação AUTOMÁTICA (volta para pendente). A manual não se desfaz
+ *  por aqui — o filtro por confirmacao_origem é a trava, não o botão do painel. */
+async function handleDesfazerConfirmacao(participanteId: string, professorId: string): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+
+  const { data: desfeita, error } = await supabase
+    .from('reuniao_professores')
+    .update({
+      status: 'pendente', numero: null, confirmado_em: null, confirmado_por: null,
+      confirmacao_origem: null, presenca_detectada_em: null,
+    })
+    .eq('id', participanteId)
+    .eq('status', 'realizada')
+    .eq('confirmacao_origem', 'automatica')
+    .select('id')
+    .maybeSingle()
+  if (error) return { ok: false, erro: error.message }
+  if (!desfeita) return { ok: false, erro: 'Só dá para desfazer a presença marcada automaticamente.' }
+
+  // A confirmação tinha empurrado data_ultima_reuniao para hoje. Volta para a
+  // realizada anterior (fora as de dúvida, que não contam) — sem nenhuma, fica
+  // como está em vez de apagar uma data que pode ter vindo de outro lugar.
+  type Anterior = { confirmado_em: string | null; reuniao: { data: string; natureza: string | null } | { data: string; natureza: string | null }[] | null }
+  const { data: anteriores } = await supabase
+    .from('reuniao_professores')
+    .select('confirmado_em, reuniao:reunioes!inner(data, natureza)')
+    .eq('professor_id', professorId)
+    .eq('status', 'realizada')
+  const ultima = ((anteriores ?? []) as unknown as Anterior[])
+    .map(a => {
+      const r = Array.isArray(a.reuniao) ? a.reuniao[0] : a.reuniao
+      return r?.natureza === 'duvida' ? null : (a.confirmado_em ?? r?.data ?? null)
+    })
+    .filter((d): d is string => !!d)
+    .sort()
+    .pop()
+  if (ultima) await supabase.from('professores').update({ data_ultima_reuniao: ultima }).eq('id', professorId)
+
+  const completa = await buscarReuniaoHoje(professorId)
+  return completa
+    ? { ok: true, reuniaoHoje: completa }
+    : { ok: false, erro: 'Presença desfeita, mas não consegui recarregar a reunião.' }
 }
 
 /** Edita só o texto da observação, sem mudar status (ex: professor já confirmado antes). */
@@ -1205,6 +1352,53 @@ async function handleResolverObservacao(
   return resultado ? { ok: true, resultado } : { ok: false, erro: 'Professor não encontrado após atualizar.' }
 }
 
+/**
+ * Conclui chamados (nexus_incidents) e ocorrências do KTM (observacoes) de uma vez —
+ * o botão "Concluir" de um chamado e a lista pós-reunião passam por aqui.
+ *
+ * O chamado é gravado igual a useResolverIncidente na web (update direto, mesma
+ * RLS; os gatilhos do banco cuidam das tarefas ligadas). Duas travas no próprio
+ * update: só conclui o que ainda está aberto e nunca um chamado que está com a
+ * TI (ti_status) — esse fecha do lado de lá.
+ */
+async function handleConcluirPendencias(
+  professorId: string, chamados: { id: string; solucao: string }[], ocorrencias: string[],
+): Promise<RespostaDoBackground> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return { ok: false, erro: 'Não autenticado.' }
+  if (chamados.some(c => !c.solucao.trim())) return { ok: false, erro: 'Escreva a solução do chamado.' }
+  if (!chamados.length && !ocorrencias.length) return { ok: false, erro: 'Nada selecionado.' }
+
+  const agora = new Date().toISOString()
+  const resultados = await Promise.all([
+    ...chamados.map(c => supabase
+      .from('nexus_incidents')
+      .update({ resolved: true, resolved_at: agora, solution: c.solucao.trim() })
+      .eq('id', c.id)
+      .eq('resolved', false)
+      .is('ti_status', null)
+      .select('id')),
+    ...ocorrencias.map(id => supabase
+      .from('observacoes')
+      .update({ resolvido: true, resolvido_em: agora })
+      .eq('id', id)
+      .eq('resolvido', false)
+      .select('id')),
+  ])
+  // Update sem linha = já estava concluído, está com a TI ou a RLS barrou.
+  const falhas = resultados.filter(r => r.error || !r.data?.length).length
+
+  const resultado = await montarResultado(professorId, 'nome')
+  if (!resultado) return { ok: false, erro: 'Professor não encontrado após atualizar.' }
+  return {
+    ok: true,
+    resultado,
+    aviso: falhas
+      ? `${falhas} de ${resultados.length} não foram concluídos (já estavam fechados, com a TI ou sem permissão).`
+      : undefined,
+  }
+}
+
 /** Confirma presença de múltiplos professores em reunião de grupo.
  *  Usa a RPC confirmar_reuniao_grupo — a MESMA da plataforma web — para que a
  *  numeração do monitoramento (`numero`) e o "não compareceu" fiquem consistentes
@@ -1239,6 +1433,8 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
           sendResponse(await handleObterSessao()); break
         case 'BUSCAR_PROFESSOR':
           sendResponse(await handleBuscarProfessor(msg.nomes, msg.emails)); break
+        case 'BUSCAR_POR_MEET':
+          sendResponse(await handleBuscarPorMeet(msg.codigo, msg.nomes)); break
         case 'BUSCAR_PROFESSOR_POR_TEXTO':
           sendResponse(await handleBuscarPorTexto(msg.texto)); break
         case 'RANKEAR_GRUPO':
@@ -1255,7 +1451,11 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
         case 'CRIAR_REUNIAO_AGORA':
           sendResponse(await handleCriarReuniaoAgora(msg.professorId)); break
         case 'CONFIRMAR_REUNIAO':
-          sendResponse(await handleConfirmarReuniao(msg.participanteId, msg.professorId, msg.aconteceu, msg.observacao)); break
+          sendResponse(await handleConfirmarReuniao(
+            msg.participanteId, msg.professorId, msg.aconteceu, msg.observacao, msg.origem, msg.presencaDetectadaEm,
+          )); break
+        case 'DESFAZER_CONFIRMACAO':
+          sendResponse(await handleDesfazerConfirmacao(msg.participanteId, msg.professorId)); break
         case 'SALVAR_OBSERVACAO_REUNIAO':
           sendResponse(await handleSalvarObservacaoReuniao(msg.participanteId, msg.observacao)); break
         case 'SALVAR_ANOTACAO_INTERNA':
@@ -1266,6 +1466,8 @@ chrome.runtime.onMessage.addListener((msg: MensagemParaBackground, _sender, send
           sendResponse(await handleResolverMesAnalise(msg.professorId, msg.incidentId, msg.resultado)); break
         case 'RESOLVER_OBSERVACAO':
           sendResponse(await handleResolverObservacao(msg.professorId, msg.id, msg.resolvido)); break
+        case 'CONCLUIR_PENDENCIAS':
+          sendResponse(await handleConcluirPendencias(msg.professorId, msg.chamados, msg.ocorrencias)); break
         case 'CONFIRMAR_GRUPO':
           sendResponse(await handleConfirmarGrupo(msg.reuniaoId, msg.presentesIds, msg.observacao, msg.professorId)); break
         case 'LIBERAR_AGENDA':

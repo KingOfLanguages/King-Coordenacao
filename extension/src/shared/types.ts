@@ -193,7 +193,11 @@ export interface ReuniaoHojeInfo {
   participantes?: ParticipanteReuniao[]  // Preenchido só se tipo_reuniao='grupo'
   /** Minha anotação PRIVADA desta reunião (reuniao_anotacoes_internas, RLS dono-apenas). */
   anotacaoInterna: string
+  /** Como foi confirmada (migration 20260789). 'automatica' habilita o Desfazer. */
+  confirmacao_origem?: OrigemConfirmacao | null
 }
+
+export type OrigemConfirmacao = 'manual' | 'automatica'
 
 export interface ObservacaoResumo {
   id: string
@@ -246,6 +250,9 @@ export interface NexusAlertaResumo {
 
 export interface NexusResumo {
   ocorrencias: NexusOcorrencia[]
+  /** TODOS os chamados em aberto (natureza desafio, fora Mês de Análise) — `ocorrencias`
+   *  traz só os 5 mais recentes e esconderia um chamado antigo ainda aberto. */
+  chamadosAbertos: NexusOcorrencia[]
   ocorrenciasAbertasTotal: number
   tracking: NexusTrackingResumo | null
   alertas: NexusAlertaResumo[]
@@ -366,6 +373,8 @@ export interface ProfessorEncontrado {
   reuniaoHoje: ReuniaoHojeInfo | null
   observacoes: ObservacaoResumo[]
   observacoesAbertasTotal: number
+  /** Ocorrências do KTM (observacoes tipo=ocorrencia) ainda abertas — base da lista pós-reunião. */
+  ocorrenciasKtmAbertas: ObservacaoResumo[]
   nexus: NexusResumo
   mesAnalise: MesAnaliseResumo | null
   /** Pendência de lançamento aberta na fila do King, se houver (habilita o desbloqueio). */
@@ -389,10 +398,13 @@ export interface ProfessorEncontrado {
   prioridade: PrioridadeResumo
   /** id do professor no King (kms_id) — necessário pra ação de liberar agenda. */
   kmsId: number | null
-  motivo: 'email' | 'nome'
+  /** Como o professor foi reconhecido. 'agenda' = pelo link do Meet salvo na reunião do dia. */
+  motivo: MotivoIdentificacao
   /** Confiança do match automático por nome (0..1). null quando identificado por e-mail ou escolhido à mão. */
   confianca: number | null
 }
+
+export type MotivoIdentificacao = 'agenda' | 'email' | 'nome'
 
 export interface SessaoArmazenada {
   nome: string
@@ -405,6 +417,9 @@ export type SugestaoProfessor = { id: string; nome: string; score: number }
 
 export type MensagemParaBackground =
   | { tipo: 'BUSCAR_PROFESSOR'; nomes: string[]; emails: string[] }
+  /** Código da sala do Meet (abc-defg-hij) → reunião de hoje com esse link. `nomes`
+   *  desempata qual professor abrir quando a reunião é em grupo. */
+  | { tipo: 'BUSCAR_POR_MEET'; codigo: string; nomes: string[] }
   | { tipo: 'BUSCAR_PROFESSOR_POR_TEXTO'; texto: string }
   | { tipo: 'RANKEAR_GRUPO'; nomes: string[]; emails: string[]; reuniaoId?: string }
   | { tipo: 'CARREGAR_PROFESSOR'; professorId: string }
@@ -412,13 +427,27 @@ export type MensagemParaBackground =
   | { tipo: 'LOGIN'; email: string; senha: string }
   | { tipo: 'LOGOUT' }
   | { tipo: 'CRIAR_REUNIAO_AGORA'; professorId: string }
-  | { tipo: 'CONFIRMAR_REUNIAO'; participanteId: string; professorId: string; aconteceu: boolean; observacao: string }
+  | {
+      tipo: 'CONFIRMAR_REUNIAO'; participanteId: string; professorId: string; aconteceu: boolean; observacao: string
+      /** Padrão 'manual'. 'automatica' vem da presença detectada na chamada. */
+      origem?: OrigemConfirmacao
+      /** Só na automática: quando o professor foi visto na chamada pela primeira vez (ISO). */
+      presencaDetectadaEm?: string
+    }
+  /** Volta para pendente uma confirmação AUTOMÁTICA (o servidor recusa a manual). */
+  | { tipo: 'DESFAZER_CONFIRMACAO'; participanteId: string; professorId: string }
   | { tipo: 'SALVAR_OBSERVACAO_REUNIAO'; participanteId: string; observacao: string }
   | { tipo: 'SALVAR_ANOTACAO_INTERNA'; reuniaoId: string; participanteId: string; texto: string }
   | { tipo: 'CONFIRMAR_GRUPO'; reuniaoId: string; presentesIds: string[]; observacao: string; professorId: string }
   | { tipo: 'COLOCAR_MES_ANALISE'; professorId: string; descricao: string; urgencia?: string }
   | { tipo: 'RESOLVER_MES_ANALISE'; professorId: string; incidentId: string; resultado: string }
   | { tipo: 'RESOLVER_OBSERVACAO'; professorId: string; id: string; resolvido: boolean }
+  /** Conclui de uma vez chamados (com solução) e ocorrências do KTM. Um chamado só = botão Concluir. */
+  | {
+      tipo: 'CONCLUIR_PENDENCIAS'; professorId: string
+      chamados: { id: string; solucao: string }[]
+      ocorrencias: string[]
+    }
   | { tipo: 'CRIAR_OBSERVACAO'; professorId: string; tipoObs: string; texto: string }
   | {
       tipo: 'ABRIR_INCIDENTE'; professorId: string; problemType: string; urgency: string; description: string
@@ -433,7 +462,11 @@ export type MensagemParaBackground =
     }
   | { tipo: 'LIBERAR_AGENDA'; professorId: string; idProfessor: number }
 
-export type RespostaBuscarProfessor   = { ok: true; resultado: ProfessorEncontrado | null; sugestoes?: SugestaoProfessor[] }
+export type RespostaBuscarProfessor   = {
+  ok: true; resultado: ProfessorEncontrado | null; sugestoes?: SugestaoProfessor[]
+  /** Deu certo em parte (ex.: um dos chamados já estava fechado) — o painel mostra, mas recarrega. */
+  aviso?: string
+}
 export type RespostaRankingGrupo      = { ok: true; ranking: RankingGrupo }
 export type RespostaSessao            = { ok: true; sessao: SessaoArmazenada | null }
 export type RespostaLogin             = { ok: true } | { ok: false; erro: string }

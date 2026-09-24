@@ -84,10 +84,22 @@ Duas restrições que valem manter ao mexer:
 
 ## Como funciona
 
-- **Reconhecimento**: lê os nomes dos participantes visíveis no Meet e
-  compara com os professores cadastrados (mesma lógica de match por nome do
-  `daily-import`). O DOM do Meet não é documentado e muda com frequência —
-  por isso é "melhor esforço", sempre com busca manual como caminho garantido.
+- **Reconhecimento**: primeiro pela **agenda** — o código da sala na URL do Meet
+  é comparado com `reunioes.meet_link` das reuniões de hoje (a mais próxima do
+  horário atual, até 2 h antes/depois). Sem reunião com esse link, cai no e-mail
+  e depois nos nomes dos participantes visíveis (mesma lógica de match por nome
+  do `daily-import`). O DOM do Meet não é documentado e muda com frequência —
+  os seletores ficam todos em `src/content/scrape.ts`, e a busca manual segue
+  como caminho garantido.
+- **Presença automática** (desligada por padrão; liga no popup): numa reunião
+  1:1 pendente, depois de 3 min contínuos com o professor na chamada, marca como
+  realizada com `confirmacao_origem = 'automatica'` e mostra um aviso com
+  **Desfazer**. Em grupo, só pré-marca quem foi reconhecido — a confirmação é do
+  coordenador. Precisa da migration `20260789_reuniao_presenca_automatica`.
+- **Concluir pendências**: botão **Concluir** em cada chamado aberto (aba
+  Registros) e, com a reunião realizada, a lista "Resolveu algo na conversa?"
+  com chamados e ocorrências em aberto. Chamado com a TI (`ti_status`) não
+  conclui por aqui.
 - **Login**: tela própria (não reaproveita a sessão da aba do site), sessão
   guardada em `chrome.storage.local`.
 - **Dados**: mesmo projeto Supabase do app principal, mesmas regras de RLS —
