@@ -35,6 +35,13 @@ dist-ssr
 # NB: public/extension/king-teachertrack-extension.zip continua RASTREADO de
 # propósito — é o pacote que os coordenadores baixam pelo app, não um artefato
 # descartável. Regenerar junto com toda mudança em extension/.
+#
+# ACESSOS.md             mapa de infraestrutura para quem chega no projeto:
+#                        onde mora o quê e como se chega lá. Precisa de linha
+#                        própria porque o `*.local` acima não pega `.md`.
+#                        Não guarda segredo — mas fica fora do repo público
+#                        porque expõe a topografia do ambiente.
 # ─────────────────────────────────────────────────────────────────────────────
 docs/
 extension-chamados.zip
+/ACESSOS.md
