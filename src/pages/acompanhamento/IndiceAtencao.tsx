@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Copy, Check, Star, X, Ban, CheckCircle2, ChevronDown, FileText,
-  PauseCircle, Mail, Users, Lock, WifiOff,
+  PauseCircle, Mail, MailCheck, Users, Lock, WifiOff,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -21,6 +21,9 @@ import { canEdit } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { useCanView } from '@/hooks/usePagePermissions'
 import { PainelEmail } from '@/components/acompanhamento/PainelEmail'
+import {
+  useEmailCarencia, textoCarencia, diaMes, CARENCIA_EMAIL_DIAS, type CarenciaEmail,
+} from '@/hooks/useEnviarEmailMassa'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice de atenção — a aba principal de Acompanhamento. Centro operacional da
@@ -30,7 +33,8 @@ import { PainelEmail } from '@/components/acompanhamento/PainelEmail'
 //
 // Desde 2026-09 é também daqui que sai e-mail: a antiga página /emails
 // repetia esta mesma lista com os mesmos filtros. Marca os professores, abre o
-// painel lateral e envia.
+// painel lateral e envia. Quem recebeu e-mail nos últimos 15 dias não pode ser
+// marcado (carência — migration 20260787).
 //
 // Régua de pendência: a do King (1 Lembrete · 2 Bloqueio · 3 Reunião), a mesma
 // da aba Pendências. A régua local 6/9/12 foi aposentada; "Marcar enviada" grava
@@ -45,6 +49,7 @@ const RECENTE_DIAS = 30
 const SEM_REUNIAO_ATENCAO = 45
 const SEM_REUNIAO_ALERTA  = 60
 const N_COLUNAS = 9
+const SEM_CARENCIA = new Map<string, CarenciaEmail>()
 
 type QuickId = 'todos' | 'critica' | 'score_baixo' | 'pendencias' | 'bloqueados' | 'acompanhamento' | 'informes'
 type OrdenarPor = 'prioridade' | 'score' | 'pendencias' | 'dias' | 'ultimo' | 'nome'
@@ -205,6 +210,7 @@ export function IndiceAtencao() {
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [painelEmail, setPainelEmail] = useState(false)
   const { data: rows = [], isLoading, reguaIndisponivel } = usePainelProfessores()
+  const { data: carencia = SEM_CARENCIA } = useEmailCarencia(podeEmail)
   const { data: grupos = [] } = useGrupos()
   const { favoritos, adicionar, remover } = useFiltrosFavoritos<Filtros>(profile?.id)
 
@@ -232,13 +238,27 @@ export function IndiceAtencao() {
   const nColunas = N_COLUNAS + (podeEmail ? 1 : 0)
 
   // Seleção para e-mail: opera no filtro inteiro, não só no que está na tela.
+  // Apto = tem e-mail e não está em carência (recebeu nos últimos 15 dias).
   const porId = useMemo(() => new Map(rows.map(r => [r.professor_id, r])), [rows])
-  const filtradosComEmail = useMemo(() => ordenados.filter(r => !!r.email), [ordenados])
-  const destinatarios = useMemo(
-    () => [...selecionados].map(id => porId.get(id)).filter((r): r is PainelProfessor => !!r && !!r.email),
-    [selecionados, porId],
+  const filtradosAptos = useMemo(
+    () => ordenados.filter(r => !!r.email && !carencia.has(r.professor_id)),
+    [ordenados, carencia],
   )
-  const selSemEmail = selecionados.size - destinatarios.length
+  const filtradosEmCarencia = useMemo(
+    () => ordenados.filter(r => !!r.email && carencia.has(r.professor_id)).length,
+    [ordenados, carencia],
+  )
+  const destinatarios = useMemo(
+    () => [...selecionados].map(id => porId.get(id))
+      .filter((r): r is PainelProfessor => !!r && !!r.email && !carencia.has(r.professor_id)),
+    [selecionados, porId, carencia],
+  )
+  // Marcado antes de a carência carregar (ou recém-enviado): fica de fora do envio.
+  const selEmCarencia = useMemo(
+    () => [...selecionados].filter(id => !!porId.get(id)?.email && carencia.has(id)).length,
+    [selecionados, porId, carencia],
+  )
+  const selSemEmail = selecionados.size - destinatarios.length - selEmCarencia
   function alternarSelecao(id: string) {
     setSelecionados(s => {
       const n = new Set(s)
@@ -247,7 +267,7 @@ export function IndiceAtencao() {
     })
   }
   function selecionarFiltrados() {
-    setSelecionados(s => new Set([...s, ...filtradosComEmail.map(r => r.professor_id)]))
+    setSelecionados(s => new Set([...s, ...filtradosAptos.map(r => r.professor_id)]))
   }
 
   function salvarFavorito() {
@@ -395,14 +415,23 @@ export function IndiceAtencao() {
         </p>
         {podeEmail && (
           <>
+            {filtradosEmCarencia > 0 && (
+              <span
+                title={`Receberam e-mail nos últimos ${CARENCIA_EMAIL_DIAS} dias — não recebem outro até a carência acabar.`}
+                className="inline-flex items-center gap-1 text-[12px] text-ink-muted tabular-nums"
+              >
+                <MailCheck className="h-3.5 w-3.5" />
+                {filtradosEmCarencia} em carência de e-mail
+              </span>
+            )}
             <button
               type="button"
               onClick={selecionarFiltrados}
-              disabled={filtradosComEmail.length === 0}
+              disabled={filtradosAptos.length === 0}
               className="btn-press inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium text-ink-secondary bg-surface-subtle hover:text-ink transition-colors disabled:opacity-40"
             >
               <Users className="h-3.5 w-3.5" />
-              Selecionar os {filtradosComEmail.length} com e-mail
+              Selecionar os {filtradosAptos.length} com e-mail liberado
             </button>
             {selecionados.size > 0 && (
               <button
@@ -435,8 +464,8 @@ export function IndiceAtencao() {
                 <th className="px-3 py-2.5 w-9">
                   <input
                     type="checkbox"
-                    aria-label="Selecionar todos os filtrados com e-mail"
-                    checked={filtradosComEmail.length > 0 && filtradosComEmail.every(r => selecionados.has(r.professor_id))}
+                    aria-label="Selecionar todos os filtrados com e-mail liberado"
+                    checked={filtradosAptos.length > 0 && filtradosAptos.every(r => selecionados.has(r.professor_id))}
                     onChange={e => (e.target.checked ? selecionarFiltrados() : setSelecionados(new Set()))}
                     className="h-4 w-4 rounded border-line align-middle"
                     style={{ accentColor: 'var(--accent-blue)' }}
@@ -487,7 +516,11 @@ export function IndiceAtencao() {
                     key={r.professor_id}
                     r={r}
                     podeAgir={podeAgir}
-                    selecao={podeEmail ? { marcado: selecionados.has(r.professor_id), alternar: () => alternarSelecao(r.professor_id) } : undefined}
+                    selecao={podeEmail ? {
+                      marcado: selecionados.has(r.professor_id),
+                      alternar: () => alternarSelecao(r.professor_id),
+                      carencia: carencia.get(r.professor_id),
+                    } : undefined}
                   />
                 ))}
               </tbody>
@@ -505,6 +538,7 @@ export function IndiceAtencao() {
           onFechar={() => setPainelEmail(false)}
           destinatarios={destinatarios}
           semEmail={selSemEmail}
+          emCarencia={selEmCarencia}
           onEnviado={() => setSelecionados(new Set())}
         />
       )}
@@ -675,7 +709,7 @@ function PainelRow({ r, podeAgir, selecao }: {
   r: PainelProfessor
   podeAgir: boolean
   /** Presente quando quem vê pode enviar e-mail. */
-  selecao?: { marcado: boolean; alternar: () => void }
+  selecao?: { marcado: boolean; alternar: () => void; carencia?: CarenciaEmail }
 }) {
   const registrar = useRegistrarMensagem()
   const [copiado, setCopiado] = useState(false)
@@ -715,10 +749,10 @@ function PainelRow({ r, podeAgir, selecao }: {
           <input
             type="checkbox"
             checked={selecao.marcado}
-            disabled={!r.email && !selecao.marcado}
+            disabled={(!r.email || !!selecao.carencia) && !selecao.marcado}
             onChange={selecao.alternar}
             aria-label={`Selecionar ${r.nome}`}
-            title={r.email ? undefined : 'Sem e-mail cadastrado'}
+            title={!r.email ? 'Sem e-mail cadastrado' : selecao.carencia ? textoCarencia(selecao.carencia) : undefined}
             className="h-4 w-4 rounded border-line align-middle disabled:cursor-not-allowed"
             style={{ accentColor: 'var(--accent-blue)' }}
           />
@@ -754,6 +788,15 @@ function PainelRow({ r, podeAgir, selecao }: {
               <FileText className="h-3 w-3" />
               {r.informes_recentes} informe{r.informes_recentes > 1 ? 's' : ''}
               {r.informe_reincidente && ' · reincide'}
+            </span>
+          )}
+          {selecao?.carencia && (
+            <span
+              title={textoCarencia(selecao.carencia)}
+              className="inline-flex items-center gap-1 rounded-full bg-surface-subtle text-ink-muted px-2 py-0.5 text-[10.5px] font-medium tabular-nums"
+            >
+              <MailCheck className="h-3 w-3" />
+              e-mail em {diaMes(selecao.carencia.ultimo_envio)}
             </span>
           )}
           {r.pausa_vencida_dias != null && (

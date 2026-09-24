@@ -4,9 +4,10 @@
 // Devolve quantos e-mails o SISTEMA DE DISPARO (a página /emails) já enviou HOJE e
 // quantos ainda cabem, para dar clareza sobre o limite diário auto-imposto (200/dia).
 //
-// IMPORTANTE: conta SÓ os disparos deste sistema (tabela email_disparos, sucesso),
-// não os demais envios da conta Brevo (crons, convites 1-a-1). O limite de 200/dia
-// é do sistema de disparo.
+// IMPORTANTE: conta SÓ os disparos deste sistema (email_disparos, sucesso, origem
+// 'disparo'), não os demais envios da conta Brevo (crons, convites 1-a-1 — que
+// desde 20260787 também gravam em email_disparos, com origem 'mensagens_do_dia').
+// O limite de 200/dia é do sistema de disparo.
 //
 // Aberto a qualquer usuário autenticado (só confere que está logado, sem cargo) —
 // "todos conseguem ver o contador". A leitura usa service role, então o número
@@ -57,6 +58,7 @@ serve(async (req) => {
     .from('email_disparos')
     .select('id', { count: 'exact', head: true })
     .eq('sucesso', true)
+    .eq('origem', 'disparo')
     .gte('created_at', inicioDiaISO)
 
   if (error) {

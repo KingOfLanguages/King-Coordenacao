@@ -17,6 +17,11 @@
 //   - O destino NUNCA vem do client: é resolvido no servidor a partir do
 //     contato_id → professores.email (mesmo campo do send-reminders).
 //
+// Carência de 15 dias (migration 20260787): quem recebeu e-mail nos últimos 15
+// dias não recebe outro — o WhatsApp da mesma linha segue livre. Todo envio
+// daqui grava em email_disparos (origem 'mensagens_do_dia'), que é de onde a
+// carência é contada; fora do limite de 200/dia do sistema de disparo.
+//
 // Secrets: BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME (mesmos das outras fns)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -131,7 +136,7 @@ serve(async (req) => {
   const admin = createClient(url, serviceKey)
   const { data: contato, error: contatoErr } = await admin
     .from('contatos_diarios')
-    .select('id, enviado, professor:professores(nome, email, status)')
+    .select('id, enviado, professor_id, professor:professores(nome, email, status)')
     .eq('id', contatoId)
     .maybeSingle()
 
@@ -154,6 +159,25 @@ serve(async (req) => {
   }
 
   if (!email) return json({ error: 'Este professor não tem e-mail cadastrado.' }, 422)
+
+  // ── 3b. Carência de 15 dias (falha fechada, igual ao enviar-email-massa) ─────
+  const { data: carencia, error: carErr } = await admin
+    .rpc('email_carencia', { p_professor_ids: [contato.professor_id] })
+  if (carErr) {
+    console.error('[enviar-convite-email] erro ao conferir carência:', carErr.message)
+    return json({ error: 'Não consegui conferir o último e-mail deste professor — nada foi enviado. Tente de novo.' }, 503)
+  }
+  const emCarencia = (carencia ?? [])[0] as { ultimo_envio: string; libera_em: string } | undefined
+  if (emCarencia) {
+    const fmt = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+    const recebeu = fmt(new Date(emCarencia.ultimo_envio))
+    const libera  = fmt(new Date(`${emCarencia.libera_em}T12:00:00-03:00`))
+    console.log(`[enviar-convite-email] ⏸ ${nome}: em carência até ${emCarencia.libera_em}`)
+    return json({
+      error: `${nome} recebeu e-mail em ${recebeu}. O próximo e-mail fica liberado em ${libera} — até lá, só pelo WhatsApp.`,
+      libera_em: emCarencia.libera_em,
+    }, 409)
+  }
 
   // ── 4. Envio via Brevo ───────────────────────────────────────────────────────
   const brevoKey = Deno.env.get('BREVO_API_KEY')
@@ -180,7 +204,20 @@ serve(async (req) => {
     return json({ error: 'Falha no envio do e-mail. Tente novamente.', detalhe }, 502)
   }
 
-  // ── 5. Marca o contato do dia como enviado (best-effort) ─────────────────────
+  // ── 5. Registro (best-effort) — é daqui que a carência é contada ─────────────
+  const { error: logErr } = await admin.from('email_disparos').insert({
+    professor_id: contato.professor_id,
+    email,
+    assunto,
+    corpo,
+    tipo:        'convocacao',
+    origem:      'mensagens_do_dia',
+    sucesso:     true,
+    enviado_por: user.id,
+  })
+  if (logErr) console.error('[enviar-convite-email] enviado ok, mas falhou ao registrar em email_disparos:', logErr.message)
+
+  // ── 6. Marca o contato do dia como enviado (best-effort) ─────────────────────
   const { error: markErr } = await admin
     .from('contatos_diarios')
     .update({ enviado: true, enviado_em: new Date().toISOString() })

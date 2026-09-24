@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { toast } from 'sonner'
 import {
-  Mail, Send, X, Check, AlertTriangle, Loader2, Sparkles, PenLine, ChevronDown, MailWarning, History, Gauge,
+  Mail, Send, X, Check, AlertTriangle, Loader2, Sparkles, PenLine, ChevronDown, MailWarning, MailCheck, History, Gauge,
 } from 'lucide-react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import type { PainelProfessor } from '@/hooks/usePainelProfessores'
 import {
-  useEnviarEmailMassa, useHistoricoDisparos, useEmailQuotaHoje,
+  useEnviarEmailMassa, useHistoricoDisparos, useEmailQuotaHoje, diaMes, CARENCIA_EMAIL_DIAS,
   type MensagemAlvo, type RespostaDisparo, type DisparoRegistro, type QuotaHoje,
 } from '@/hooks/useEnviarEmailMassa'
 import {
@@ -53,11 +53,13 @@ interface Props {
   destinatarios: PainelProfessor[]
   /** Selecionados sem e-mail cadastrado (serão ignorados). */
   semEmail: number
+  /** Selecionados em carência de e-mail — receberam nos últimos 15 dias (ignorados). */
+  emCarencia: number
   /** Enviou: o Índice limpa a seleção. */
   onEnviado: () => void
 }
 
-export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, onEnviado }: Props) {
+export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCarencia, onEnviado }: Props) {
   const { profile } = useAuth()
   const { data: quota } = useEmailQuotaHoje()
   const enviar = useEnviarEmailMassa()
@@ -107,10 +109,14 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, onEnvia
       })
       setResultado(res)
       onEnviado()
-      if (res.falhas === 0 && res.sem_email === 0) {
+      const carencia = res.em_carencia ?? 0
+      if (res.falhas === 0 && res.sem_email === 0 && carencia === 0) {
         toast.success(`${res.enviados} e-mail(s) enviado(s).`)
       } else {
-        toast.warning(`${res.enviados} enviado(s), ${res.falhas} falha(s), ${res.sem_email} sem e-mail.`)
+        toast.warning(
+          `${res.enviados} enviado(s), ${res.falhas} falha(s), ${res.sem_email} sem e-mail` +
+          (carencia > 0 ? `, ${carencia} em carência.` : '.'),
+        )
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao disparar e-mails.')
@@ -243,6 +249,12 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, onEnvia
                 {semEmail} selecionado(s) sem e-mail cadastrado — serão ignorados.
               </p>
             )}
+            {emCarencia > 0 && (
+              <p className="flex items-start gap-1.5 text-[11.5px] text-ink-muted">
+                <MailCheck className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                {emCarencia} selecionado(s) receberam e-mail nos últimos {CARENCIA_EMAIL_DIAS} dias — ficam de fora até a carência acabar.
+              </p>
+            )}
 
             <Button
               onClick={() => setConfirmOpen(true)}
@@ -270,6 +282,7 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, onEnvia
               {modo === 'convocacao' ? 'Convocação padrão' : 'Mensagem personalizada'} para{' '}
               <strong className="text-ink">{destinatarios.length}</strong> professor(es) com e-mail.
               {semEmail > 0 && <> {semEmail} sem e-mail serão ignorados.</>}
+              {emCarencia > 0 && <> {emCarencia} em carência ficam de fora.</>}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg bg-surface-subtle p-3 space-y-1">
@@ -362,17 +375,25 @@ function CheckLinha({ checked, onChange, label }: {
 
 function PainelResultado({ resultado, onFechar }: { resultado: RespostaDisparo; onFechar: () => void }) {
   const problemas = resultado.resultados.filter(r => r.status !== 'enviado')
+  // Inativos e carência são raros: só ganham célula quando aconteceram.
+  const celulas = [
+    { label: 'Enviados', valor: resultado.enviados, tone: 'low' as const },
+    { label: 'Falhas', valor: resultado.falhas, tone: resultado.falhas > 0 ? 'high' as const : 'neutral' as const },
+    { label: 'Sem e-mail', valor: resultado.sem_email, tone: resultado.sem_email > 0 ? 'high' as const : 'neutral' as const },
+    ...((resultado.inativos ?? 0) > 0 ? [{ label: 'Inativos', valor: resultado.inativos, tone: 'high' as const }] : []),
+    ...((resultado.em_carencia ?? 0) > 0 ? [{ label: 'Em carência', valor: resultado.em_carencia, tone: 'neutral' as const }] : []),
+  ]
   return (
     <div className="rounded-lg border border-line-soft p-3 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="label-micro flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-urg-lowFg" /> Resultado do último disparo</h2>
         <button type="button" onClick={onFechar} className="btn-press text-ink-muted hover:text-ink" aria-label="Fechar resultado"><X className="h-4 w-4" /></button>
       </div>
-      <div className="grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line-soft bg-line-soft">
-        <MetricCell label="Enviados" valor={resultado.enviados} tone="low" />
-        <MetricCell label="Falhas" valor={resultado.falhas} tone={resultado.falhas > 0 ? 'high' : 'neutral'} />
-        <MetricCell label="Sem e-mail" valor={resultado.sem_email} tone={resultado.sem_email > 0 ? 'high' : 'neutral'} />
-        <MetricCell label="Inativos" valor={resultado.inativos ?? 0} tone={(resultado.inativos ?? 0) > 0 ? 'high' : 'neutral'} />
+      <div
+        className="grid gap-px overflow-hidden rounded-lg border border-line-soft bg-line-soft"
+        style={{ gridTemplateColumns: `repeat(${celulas.length}, minmax(0, 1fr))` }}
+      >
+        {celulas.map(c => <MetricCell key={c.label} label={c.label} valor={c.valor} tone={c.tone} />)}
       </div>
       {problemas.length > 0 && (
         <ul className="space-y-1 max-h-40 overflow-y-auto">
@@ -382,6 +403,7 @@ function PainelResultado({ resultado, onFechar }: { resultado: RespostaDisparo; 
               <span className={cn('flex-shrink-0 text-[11px] font-medium', p.status === 'falha' ? 'text-urg-highFg' : 'text-ink-muted')}>
                 {p.status === 'sem_email' ? 'sem e-mail'
                   : p.status === 'inativo' ? 'não está mais ativo'
+                  : p.status === 'carencia' ? `em carência${p.libera_em ? ` · libera ${diaMes(p.libera_em)}` : ''}`
                   : 'falha'}
               </span>
             </li>

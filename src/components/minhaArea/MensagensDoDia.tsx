@@ -10,6 +10,7 @@ import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { montarMensagemContato, montarAssuntoContato } from '@/lib/mensagemContato'
 import { linkAgendamentoPublico } from '@/lib/portal'
 import { ESTAGIO } from '@/lib/centralPendencias'
+import { useEmailCarencia, textoCarencia } from '@/hooks/useEnviarEmailMassa'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
 import {
@@ -22,6 +23,10 @@ import {
 // na frente). Era a aba "Mensagens do dia" de Tarefas; desde 2026-09 é o bloco
 // do topo da lista Para fazer da Minha Área. Mesmas regras e mesma mensagem;
 // o layout virou linhas, e o bloco se recolhe sozinho quando a lista acaba.
+//
+// Carência de e-mail (15 dias): a lista normal já não traz quem recebeu e-mail
+// nesse prazo; nas linhas de pendência, que continuam entrando, o botão de
+// e-mail fica travado e o WhatsApp segue livre.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function MensagensDoDia() {
@@ -45,6 +50,7 @@ export function MensagensDoDia() {
   const { data: contatos = [], isLoading } = useContatosHoje(podeVerLista ? (coordId || null) : null)
   const marcar = useMarcarContato()
   const enviarConvite = useEnviarConvite()
+  const { data: carencia } = useEmailCarencia(podeVerLista)
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
   const [enviandoId, setEnviandoId] = useState<string | null>(null)
   // null = segue o automático (aberto enquanto falta enviar).
@@ -197,8 +203,12 @@ export function MensagensDoDia() {
                     <button
                       type="button"
                       onClick={() => enviarEmail(c)}
-                      disabled={!c.professor?.email || enviandoId === c.id}
-                      title={c.professor?.email ? `Enviar por e-mail para ${c.professor.email}` : 'Professor sem e-mail cadastrado'}
+                      disabled={!c.professor?.email || carencia?.has(c.professor_id) || enviandoId === c.id}
+                      title={
+                        !c.professor?.email ? 'Professor sem e-mail cadastrado'
+                          : carencia?.has(c.professor_id) ? `${textoCarencia(carencia.get(c.professor_id)!)} Use o WhatsApp.`
+                          : `Enviar por e-mail para ${c.professor.email}`
+                      }
                       aria-label="Enviar por e-mail"
                       className="btn-press flex h-7 w-7 items-center justify-center rounded-md border border-line text-ink-secondary hover:text-ink disabled:opacity-40"
                     >

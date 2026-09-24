@@ -13,7 +13,8 @@ import { supabase } from '@/lib/supabase'
 // 'inativo' = a Edge Function barrou no envio porque o professor já não está
 // ativo/pausado. A lista da tela só traz ativos, mas o status pode virar entre
 // carregar a página e clicar em enviar — quem decide é o servidor.
-export type StatusDisparo = 'enviado' | 'falha' | 'sem_email' | 'inativo'
+// 'carencia' = recebeu e-mail nos últimos 15 dias (ver useEmailCarencia).
+export type StatusDisparo = 'enviado' | 'falha' | 'sem_email' | 'inativo' | 'carencia'
 
 export interface MensagemAlvo {
   professor_id: string
@@ -26,6 +27,8 @@ export interface ResultadoDisparo {
   email: string | null
   status: StatusDisparo
   erro?: string | null
+  /** Só em 'carencia': dia (YYYY-MM-DD) em que volta a poder receber. */
+  libera_em?: string
 }
 
 export interface RespostaDisparo {
@@ -35,6 +38,7 @@ export interface RespostaDisparo {
   falhas: number
   sem_email: number
   inativos: number
+  em_carencia: number
   resultados: ResultadoDisparo[]
 }
 
@@ -70,8 +74,51 @@ export function useEnviarEmailMassa() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-disparos'] })
       queryClient.invalidateQueries({ queryKey: ['email-quota-hoje'] })
+      queryClient.invalidateQueries({ queryKey: ['email-carencia'] })
     },
   })
+}
+
+// ─── Carência de 15 dias ──────────────────────────────────────────────────────
+
+/** Espelha a função email_carencia() do banco (migration 20260787) — aqui só
+ *  para o texto da tela. Quem manda é o banco. */
+export const CARENCIA_EMAIL_DIAS = 15
+
+export interface CarenciaEmail {
+  ultimo_envio: string   // ISO do último e-mail recebido
+  libera_em: string      // YYYY-MM-DD — primeiro dia em que pode receber de novo
+}
+
+/** Professores que receberam e-mail nos últimos 15 dias, por professor_id.
+ *  Tolerante: se a consulta falhar, volta vazio — as Edge Functions barram de
+ *  qualquer jeito, a tela só deixa de avisar antes. */
+export function useEmailCarencia(enabled = true) {
+  return useQuery({
+    queryKey: ['email-carencia'],
+    enabled,
+    queryFn: async (): Promise<Map<string, CarenciaEmail>> => {
+      const { data, error } = await supabase.rpc('email_carencia')
+      if (error) return new Map()
+      return new Map(
+        ((data ?? []) as ({ professor_id: string } & CarenciaEmail)[])
+          .map(c => [c.professor_id, { ultimo_envio: c.ultimo_envio, libera_em: c.libera_em }]),
+      )
+    },
+    staleTime: 60_000,
+  })
+}
+
+/** "21/09" — data curta, para os avisos de carência. */
+export function diaMes(isoOuDia: string): string {
+  // Dia puro (YYYY-MM-DD) vira meio-dia local para não escorregar de fuso.
+  const d = isoOuDia.length === 10 ? new Date(`${isoOuDia}T12:00:00`) : new Date(isoOuDia)
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
+/** Texto único de "por que não dá para mandar e-mail" (tooltip e avisos). */
+export function textoCarencia(c: CarenciaEmail): string {
+  return `Recebeu e-mail em ${diaMes(c.ultimo_envio)}. O próximo fica liberado em ${diaMes(c.libera_em)} (carência de ${CARENCIA_EMAIL_DIAS} dias).`
 }
 
 // ─── Contador diário (limite auto-imposto de 200/dia) ────────────────────────
@@ -113,7 +160,8 @@ export interface DisparoRegistro {
   professor: { nome: string } | { nome: string }[] | null
 }
 
-/** Últimos disparos registrados (best-effort — vazio se a tabela ainda não subiu). */
+/** Últimos disparos do sistema de disparo (best-effort — vazio se a tabela ainda
+ *  não subiu). Os convites 1-a-1 das Mensagens do dia ficam de fora. */
 export function useHistoricoDisparos(limite = 50) {
   return useQuery({
     queryKey: ['email-disparos', limite],
@@ -121,6 +169,7 @@ export function useHistoricoDisparos(limite = 50) {
       const { data, error } = await supabase
         .from('email_disparos')
         .select('id, professor_id, email, assunto, tipo, sucesso, erro, lote_id, created_at, professor:professores(nome)')
+        .eq('origem', 'disparo')
         .order('created_at', { ascending: false })
         .limit(limite)
       // Tabela ausente / sem permissão não deve derrubar a página — só some o painel.

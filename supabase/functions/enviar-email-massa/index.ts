@@ -14,13 +14,17 @@
 //     remetente_nome?: string,
 //     mensagens: { professor_id: uuid, corpo: string }[]
 //   }
-//   Retorna: { lote_id, total, enviados, falhas, sem_email, resultados: [...] }
+//   Retorna: { lote_id, total, enviados, falhas, sem_email, inativos, em_carencia, resultados: [...] }
 //
 // Segurança:
 //   - verify_jwt = true (padrão) → só usuário logado chega aqui.
 //   - Confere o cargo do chamador (admin/coordenacao/líder).
 //   - O e-mail de destino NUNCA vem do client: é resolvido no servidor a partir
 //     do professor_id → professores.email (mesmo campo do send-reminders).
+//
+// Carência de 15 dias (migration 20260787): quem recebeu e-mail nos últimos 15
+// dias fica de fora, nos dois modos — "Personalizada" também é convite na
+// prática. A tela já não deixa selecionar, mas quem decide é este passo.
 //
 // Secrets: BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME (mesmos das outras fns)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,9 +110,20 @@ interface ResultadoDisparo {
   professor_id: string
   nome: string
   email: string | null
-  status: 'enviado' | 'falha' | 'sem_email' | 'inativo'
+  status: 'enviado' | 'falha' | 'sem_email' | 'inativo' | 'carencia'
   erro?: string | null
+  /** Só em 'carencia': dia (YYYY-MM-DD) em que volta a poder receber. */
+  libera_em?: string
 }
+
+/** Hoje + n dias, em São Paulo (YYYY-MM-DD) — mesma conta do email_carencia(). */
+function diaMais(n: number): string {
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const d = new Date(`${hoje}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+const CARENCIA_DIAS = 15   // espelha email_carencia() — só p/ o caso "mesmo e-mail no mesmo lote"
 
 /** Quem ainda recebe e-mail da coordenação. Fora daqui (hoje só 'desligado') o
  *  vínculo com a escola acabou — mandar convocação é constrangedor pra pessoa e
@@ -184,6 +199,19 @@ serve(async (req) => {
     status: p.status as string | null,
   })
 
+  // ── 3b. Carência: quem recebeu e-mail nos últimos 15 dias ────────────────────
+  // Falha fechada: sem saber quem está em carência, não manda nada — mandar
+  // "no escuro" é exatamente o flood que a trava existe para evitar.
+  const { data: carencia, error: carErr } = await admin.rpc('email_carencia', { p_professor_ids: ids })
+  if (carErr) {
+    console.error('[enviar-email-massa] erro ao conferir carência:', carErr.message)
+    return json({ error: 'Não consegui conferir quem recebeu e-mail nos últimos 15 dias — nada foi enviado. Tente de novo.' }, 503)
+  }
+  const liberaPor = new Map<string, string>()
+  for (const c of (carencia ?? []) as { professor_id: string; libera_em: string }[]) {
+    liberaPor.set(c.professor_id, c.libera_em)
+  }
+
   // ── 4. Envio via Brevo (sequencial) ──────────────────────────────────────────
   const brevoKey = Deno.env.get('BREVO_API_KEY')
   if (!brevoKey) return json({ error: 'Envio de e-mail não configurado (BREVO_API_KEY ausente).' }, 503)
@@ -194,6 +222,9 @@ serve(async (req) => {
   const loteId = crypto.randomUUID()
   const resultados: ResultadoDisparo[] = []
   const logRows: Record<string, unknown>[] = []
+  // Dois cadastros com o mesmo endereço são a mesma caixa de entrada: o segundo
+  // deste lote entra em carência como se o e-mail tivesse saído agora.
+  const enderecosDoLote = new Set<string>()
 
   for (const m of mensagens) {
     const prof  = profPor.get(m.professor_id)
@@ -212,6 +243,15 @@ serve(async (req) => {
 
     if (!email) {
       resultados.push({ professor_id: m.professor_id, nome, email: null, status: 'sem_email' })
+      continue
+    }
+
+    // Carência. Sem log: nada foi enviado.
+    const liberaEm = liberaPor.get(m.professor_id)
+      ?? (enderecosDoLote.has(email.toLowerCase()) ? diaMais(CARENCIA_DIAS) : undefined)
+    if (liberaEm) {
+      console.log(`[enviar-email-massa] ⏸ ${nome}: em carência até ${liberaEm}`)
+      resultados.push({ professor_id: m.professor_id, nome, email, status: 'carencia', libera_em: liberaEm })
       continue
     }
 
@@ -242,6 +282,7 @@ serve(async (req) => {
       console.error(`[enviar-email-massa] ✗ ${email}:`, erro)
     }
 
+    if (status === 'enviado') enderecosDoLote.add(email.toLowerCase())
     resultados.push({ professor_id: m.professor_id, nome, email, status, erro })
     logRows.push({
       professor_id: m.professor_id,
@@ -249,6 +290,7 @@ serve(async (req) => {
       assunto,
       corpo: m.corpo,
       tipo,
+      origem: 'disparo',
       sucesso: status === 'enviado',
       erro,
       enviado_por: user.id,
@@ -266,7 +308,8 @@ serve(async (req) => {
   const falhas    = resultados.filter(r => r.status === 'falha').length
   const semEmail  = resultados.filter(r => r.status === 'sem_email').length
   const inativos  = resultados.filter(r => r.status === 'inativo').length
+  const emCarencia = resultados.filter(r => r.status === 'carencia').length
 
-  console.log(`[enviar-email-massa] lote ${loteId}: ${enviados} enviados, ${falhas} falhas, ${semEmail} sem e-mail, ${inativos} inativos`)
-  return json({ lote_id: loteId, total: resultados.length, enviados, falhas, sem_email: semEmail, inativos, resultados })
+  console.log(`[enviar-email-massa] lote ${loteId}: ${enviados} enviados, ${falhas} falhas, ${semEmail} sem e-mail, ${inativos} inativos, ${emCarencia} em carência`)
+  return json({ lote_id: loteId, total: resultados.length, enviados, falhas, sem_email: semEmail, inativos, em_carencia: emCarencia, resultados })
 })
