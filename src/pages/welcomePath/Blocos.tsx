@@ -218,7 +218,15 @@ function BlocoEmbed({ bloco }: { bloco: BlocoEtapa }) {
     function aoReceber(e: MessageEvent) {
       if (e.source !== ref.current?.contentWindow) return
       const d = e.data as { tipo?: unknown; altura?: unknown } | null
-      if (!d || d.tipo !== 'ktm-embed-altura' || typeof d.altura !== 'number') return
+      if (!d) return
+      // A página troca de "tela" inteira (o simulador ao mudar de missão) e o
+      // leitor ficaria parado no meio dela. Só o pai consegue rolar a etapa.
+      if (d.tipo === 'ktm-embed-rolar') {
+        const suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ref.current?.scrollIntoView({ behavior: suave ? 'smooth' : 'auto', block: 'start' })
+        return
+      }
+      if (d.tipo !== 'ktm-embed-altura' || typeof d.altura !== 'number') return
       // Limites largos, só para uma página com bug não esticar a etapa sem fim.
       setAltura(Math.min(8000, Math.max(160, Math.ceil(d.altura))))
     }
@@ -255,7 +263,7 @@ function BlocoEmbed({ bloco }: { bloco: BlocoEtapa }) {
         // iframe carregava, a mensagem do efeito se perdeu e a URL está velha.
         onLoad={() => ref.current?.contentWindow?.postMessage({ tipo: 'ktm-tema', tema }, '*')}
         style={{ height: altura }}
-        className="w-full border-0 bg-transparent"
+        className="w-full scroll-mt-16 border-0 bg-transparent"
       />
       {bloco.conteudo && <p className="text-[12px] text-ink-muted">{bloco.conteudo}</p>}
     </section>

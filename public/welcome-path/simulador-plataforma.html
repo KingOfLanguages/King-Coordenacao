@@ -1,0 +1,1720 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador da plataforma</title>
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Simulador da plataforma do professor — etapa 7 (Encerramento) do Welcome
+     Path, embutido pelo bloco `embed` (ver src/pages/welcomePath/Blocos.tsx).
+
+     Uma cópia de TREINO da plataforma do professor da King (mesmo menu e as
+     mesmas rotas de app.kingmanagementsystem.com.br) e do WhatsApp, com oito
+     missões que atravessam outubro de 2026. Nada sai daqui: não há rede, não
+     há gravação. O gabarito fica neste arquivo de propósito — isto é treino;
+     a nota que conta é a da prova final da etapa, corrigida no servidor.
+
+     As regras vêm do MAPA (Critérios de reposição, Lançamento de aulas,
+     Reposições, Financeiro, Notas fiscais) e da própria trilha. Os tipos de
+     lançamento e os rótulos espelham a API real (typeClass de
+     /api/class-launch): "Presença", "Falta", "Falta com Direito a Reposição -
+     Falta do Aluno", "Falta com Direito a Reposição - Falta do Professor",
+     "Presença na Reposição". O limite de 4 reposições/mês é o de
+     /api/class-launch/replacement-limit.
+
+     Mesma conversa com o pai que a calculadora da etapa 6, mais uma:
+       recebe  { tipo:"ktm-tema", tema:"light"|"dark" }
+       envia   { tipo:"ktm-embed-altura", altura:<px> }
+       envia   { tipo:"ktm-embed-rolar" }   → o pai rola até o topo do iframe
+     A origem aqui é opaca (sandbox sem allow-same-origin): o pai valida por
+     event.source. Sem allow-modals, então nada de alert/confirm.
+
+     Sem localStorage (o sandbox bloqueia): recarregar recomeça o simulador.
+     ───────────────────────────────────────────────────────────────────── -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg-canvas:#ffffff; --bg-subtle:#f3f4f7; --bg-muted:#e8eaef;
+  --fg-primary:#131316; --fg-secondary:#474850; --fg-muted:#71727e; --fg-subtle:#a9abb5;
+  --border-soft:#e6e8ee; --border-default:#d9dce4; --border-strong:#c3c7d1;
+  --accent:#2a5cff; --accent-hov:#1d47d6; --accent-on:#ffffff;
+  --info-bg:#e3ebff; --info-fg:#1c3f9e; --info-bd:#bfd0ff;
+  --ok-bg:#d9f1e3;   --ok-fg:#0e6430;   --ok-bd:#a5d8bd;
+  --hold-bg:#fce6c9; --hold-fg:#894800; --hold-bd:#eec79b;
+  --err-bg:#fde4e2;  --err-fg:#a1231b;  --err-bd:#f4bcb7;
+  --kms-head:#0b1739;
+  --wa-bg:#efeae2; --wa-in:#ffffff; --wa-out:#d9fdd3; --wa-head:#f0f2f5;
+  --wa-text:#111b21; --wa-meta:#667781; --wa-green:#00a884; --wa-name:#0b7a5b;
+  --shadow-card:0 1px 3px 0 rgba(0,0,0,.05);
+  --shadow-win:0 10px 30px -14px rgba(15,23,42,.32);
+}
+:root[data-theme="dark"]{
+  --bg-canvas:#0e1016; --bg-subtle:#161a24; --bg-muted:#1f2432;
+  --fg-primary:#edeef2; --fg-secondary:#bbbdc8; --fg-muted:#8b8e9a; --fg-subtle:#5d606d;
+  --border-soft:#1c2130; --border-default:#262d40; --border-strong:#343c52;
+  --accent:#4f7bff; --accent-hov:#6a8fff;
+  --info-bg:#121f3f; --info-fg:#a8c1ff; --info-bd:#26386d;
+  --ok-bg:#0f2a1d;   --ok-fg:#6ed69a;   --ok-bd:#1e4a34;
+  --hold-bg:#2e1f08; --hold-fg:#f0c274; --hold-bd:#553c12;
+  --err-bg:#341311;  --err-fg:#ff9d95;  --err-bd:#5c211c;
+  --kms-head:#08112b;
+  --wa-bg:#0b141a; --wa-in:#202c33; --wa-out:#005c4b; --wa-head:#1b252c;
+  --wa-text:#e9edef; --wa-meta:#8696a0; --wa-name:#35c89c;
+  --shadow-card:0 1px 3px 0 rgba(0,0,0,.4);
+  --shadow-win:0 10px 30px -14px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html{background:transparent}
+body{
+  margin:0; background:transparent; color:var(--fg-primary);
+  font-family:Geist,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-feature-settings:"rlig","calt","cv11","ss01";
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  font-size:14px; line-height:1.5;
+}
+.wrap{padding:2px 2px 12px}
+h1,h2,h3{margin:0; letter-spacing:-0.02em; text-wrap:balance}
+p{margin:0}
+button{font-family:inherit; font-size:inherit; color:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.num{font-family:"Geist Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+.eyebrow{font-size:10.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-muted)}
+.ic{flex:none; vertical-align:-2px}
+.pg-sub{font-size:12.5px; color:var(--fg-muted)}
+.help{font-size:12px; color:var(--fg-muted); margin-top:5px; line-height:1.5}
+.txt-err{color:var(--err-fg)} .txt-hold{color:var(--hold-fg)}
+
+/* ── botões ── */
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:8px; padding:8px 14px; font:600 13px Geist,sans-serif; border:1px solid var(--border-default); background:var(--bg-canvas); color:var(--fg-primary); cursor:pointer; transition:background .15s,border-color .15s,color .15s; white-space:nowrap}
+.btn:hover{border-color:var(--border-strong)}
+.btn-pri{background:var(--accent); border-color:var(--accent); color:var(--accent-on)}
+.btn-pri:hover{background:var(--accent-hov); border-color:var(--accent-hov)}
+.btn-sm{padding:5px 10px; font-size:12px; border-radius:7px}
+.btn-wa{background:var(--wa-green); border-color:var(--wa-green); color:#fff}
+.btn:disabled,.btn.dis{opacity:.5; cursor:not-allowed}
+.btn-link{background:none; border:0; padding:0; color:var(--accent); font:500 12px Geist,sans-serif; cursor:pointer; text-decoration:underline; text-underline-offset:2px}
+
+/* ── intro e relatório ── */
+.intro,.rel{background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:16px; box-shadow:var(--shadow-card); padding:22px 22px 20px}
+.intro h1,.rel h1{font-size:24px; line-height:1.15; margin:6px 0 8px}
+.intro .sub,.rel .sub{color:var(--fg-secondary); max-width:70ch; line-height:1.6}
+.passos{list-style:none; padding:0; margin:16px 0 0; display:grid; gap:9px}
+.passos li{display:flex; gap:10px; font-size:13.5px; color:var(--fg-secondary); line-height:1.55}
+.passos li .n{width:22px; height:22px; flex:none; border-radius:50%; background:var(--info-bg); color:var(--info-fg); display:grid; place-items:center; font:600 11.5px Geist,sans-serif; margin-top:1px}
+.passos li b{color:var(--fg-primary)}
+.missoes-prev{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:6px; margin:18px 0 18px}
+.missoes-prev div{font-size:12.5px; padding:8px 10px; border:1px solid var(--border-soft); border-radius:9px; background:var(--bg-subtle); color:var(--fg-secondary)}
+.missoes-prev b{font:600 11px "Geist Mono",monospace; color:var(--accent); margin-right:6px}
+.novo{display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border-radius:10px; background:var(--hold-bg); color:var(--hold-fg); border:1px solid var(--hold-bd); font-size:13px; margin-top:16px; line-height:1.55}
+.cta{display:flex; gap:10px; align-items:flex-start; margin-top:18px; padding:13px 15px; border-radius:12px; background:var(--info-bg); color:var(--info-fg); border:1px solid var(--info-bd); font-size:13.5px; line-height:1.55}
+.revisar{margin-top:18px}
+.revisar h2{font-size:15.5px; margin-bottom:8px}
+.revisar li{margin-bottom:8px; font-size:13px; color:var(--fg-secondary); line-height:1.55}
+.revisar li b{color:var(--fg-primary)}
+.stars{display:inline-flex; gap:2px; color:var(--hold-fg)}
+.stars .off{color:var(--border-strong)}
+
+/* ── painel da missão ── */
+.mis{background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:14px; box-shadow:var(--shadow-card); padding:16px 18px; margin-bottom:14px}
+.mis.ok{border-color:var(--ok-bd)}
+.mis-top{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:9px}
+.dots{display:flex; gap:4px}
+.dot{width:20px; height:5px; border-radius:3px; background:var(--bg-muted)}
+.dot.done{background:var(--ok-fg)} .dot.cur{background:var(--accent)}
+.clock{margin-left:auto; display:inline-flex; align-items:center; gap:6px; font:500 12px Geist,sans-serif; color:var(--fg-secondary); background:var(--bg-subtle); border:1px solid var(--border-soft); border-radius:999px; padding:4px 11px}
+.mis h2{font-size:18px; line-height:1.25}
+.story{color:var(--fg-secondary); margin-top:6px; line-height:1.6; max-width:78ch}
+.narr{margin-top:9px; padding:9px 12px; border-left:3px solid var(--accent); background:var(--info-bg); color:var(--info-fg); border-radius:0 9px 9px 0; font-size:13px; line-height:1.55}
+.objs-h{margin-top:14px}
+.objs{list-style:none; margin:7px 0 0; padding:0; display:grid; gap:6px}
+.obj{display:flex; gap:9px; align-items:flex-start; font-size:13.5px; line-height:1.45}
+.obj .ck{width:18px; height:18px; border-radius:5px; border:1.5px solid var(--border-strong); flex:none; display:grid; place-items:center; margin-top:1px}
+.obj.done .ck{background:var(--ok-fg); border-color:var(--ok-fg); color:var(--bg-canvas)}
+.obj.done .tx{color:var(--fg-muted); text-decoration:line-through}
+.obj.cur .tx{font-weight:600}
+.obj.cur .ck{border-color:var(--accent)}
+.mis-foot{display:flex; gap:10px; margin-top:13px; flex-wrap:wrap; align-items:center}
+.pen{font-size:12px; color:var(--err-fg)}
+.dica{margin-top:10px; padding:10px 13px; background:var(--hold-bg); color:var(--hold-fg); border:1px solid var(--hold-bd); border-radius:9px; font-size:13px; line-height:1.55}
+.dica b{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; margin-bottom:3px}
+.fecha{margin-top:13px; background:var(--ok-bg); color:var(--ok-fg); border:1px solid var(--ok-bd); border-radius:11px; padding:13px 15px}
+.fecha-h{display:flex; align-items:center; gap:7px; font-weight:600; margin-bottom:5px}
+.fecha-h .pts{margin-left:auto; font-size:12.5px}
+.fecha p{line-height:1.6; font-size:13.5px}
+.fecha-f{display:flex; align-items:center; gap:10px; margin-top:11px; flex-wrap:wrap}
+.fecha-f .btn{margin-left:auto}
+.ref{font-size:11.5px; font-weight:500; border:1px solid currentColor; border-radius:999px; padding:2px 9px; opacity:.85}
+
+/* ── janela do navegador ── */
+.win{border:1px solid var(--border-default); border-radius:13px; overflow:hidden; background:var(--bg-canvas); box-shadow:var(--shadow-win)}
+.win-bar{display:flex; align-items:flex-end; gap:3px; padding:8px 10px 0; background:var(--bg-muted); overflow-x:auto}
+.lights{display:flex; gap:6px; margin:0 8px 11px 2px}
+.lights i{width:10px; height:10px; border-radius:50%; background:var(--border-strong)}
+.tab{display:flex; align-items:center; gap:7px; padding:8px 14px; border-radius:9px 9px 0 0; font:500 12.5px Geist,sans-serif; color:var(--fg-muted); background:transparent; border:0; cursor:pointer; white-space:nowrap}
+.tab:hover{color:var(--fg-primary)}
+.tab[aria-selected="true"]{background:var(--bg-canvas); color:var(--fg-primary)}
+.fav{width:16px; height:16px; border-radius:4px; display:grid; place-items:center; font:700 9.5px Geist,sans-serif; color:#fff}
+.fav-k{background:var(--kms-head)} .fav-w{background:var(--wa-green)}
+.win-url{display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--border-soft); background:var(--bg-canvas)}
+.url{flex:1; min-width:0; display:flex; align-items:center; gap:6px; font:12px "Geist Mono",monospace; color:var(--fg-muted); background:var(--bg-subtle); border-radius:999px; padding:5px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.sim-tag{font:600 10px Geist,sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--hold-fg); background:var(--hold-bg); border:1px solid var(--hold-bd); border-radius:5px; padding:2px 7px}
+
+/* ── plataforma ── */
+.kms-head{display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--kms-head); color:#fff}
+.kms-logo{font:700 15px Geist,sans-serif; letter-spacing:-.01em}
+.kms-tag{font-size:11.5px; opacity:.6}
+.kms-user{margin-left:auto; display:flex; align-items:center; gap:10px; opacity:.95}
+.av{width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font:600 11px Geist,sans-serif; background:rgba(255,255,255,.16); color:#fff}
+.kms-body{display:grid; grid-template-columns:176px minmax(0,1fr); min-height:560px}
+.kms-nav{border-right:1px solid var(--border-soft); padding:10px 8px; display:flex; flex-direction:column; gap:2px; background:var(--bg-subtle)}
+.nav-it{display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:8px; border:0; background:none; color:var(--fg-secondary); font:500 13px Geist,sans-serif; text-align:left; cursor:pointer; white-space:nowrap}
+.nav-it:hover{background:var(--bg-muted)}
+.nav-it[aria-current="page"]{background:var(--bg-canvas); color:var(--accent); box-shadow:var(--shadow-card)}
+.nav-it.off{opacity:.55}
+.nb{margin-left:auto; min-width:18px; height:18px; border-radius:9px; background:var(--err-fg); color:var(--bg-canvas); font:600 10.5px Geist,sans-serif; display:grid; place-items:center; padding:0 5px}
+.kms-main{padding:16px 18px 22px; min-width:0}
+.pg-h{display:flex; align-items:flex-end; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; margin-bottom:14px}
+.pg-h h3{font-size:17px}
+.card{display:block; border:1px solid var(--border-soft); border-radius:12px; background:var(--bg-canvas); padding:14px; margin-bottom:12px; text-align:left; width:100%}
+.card-h{font-weight:600; font-size:13.5px; margin-bottom:9px; display:flex; align-items:center; gap:8px}
+.card.destaque{border-color:var(--info-bd); background:var(--info-bg)}
+.card.okc{border-color:var(--ok-bd); background:var(--ok-bg); color:var(--ok-fg)}
+.grid3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:12px}
+.grid3 .card{margin:0}
+.stat{display:flex; flex-direction:column; gap:3px; cursor:default; font:inherit; color:inherit}
+button.stat{cursor:pointer}
+button.stat:hover{border-color:var(--border-strong)}
+.big{font:600 24px "Geist Mono",monospace; line-height:1.15}
+.kv{display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:12.5px; margin:8px 0}
+.kv span{color:var(--fg-muted)}
+.kv b{font-weight:500}
+.ok-line{display:flex; align-items:center; gap:6px; color:var(--ok-fg); font-size:12.5px; font-weight:500}
+.ok-chip{display:inline-flex; align-items:center; gap:5px; color:var(--ok-fg); background:var(--ok-bg); border:1px solid var(--ok-bd); border-radius:999px; padding:2px 9px; font-size:11.5px; font-weight:500}
+.ct-top,.al-top,.rl{display:flex; gap:10px; align-items:center}
+.av2{width:28px; height:28px; border-radius:50%; flex:none; display:grid; place-items:center; font:600 10.5px Geist,sans-serif; color:#fff}
+.av2.lg{width:38px; height:38px; font-size:13px}
+.prox{display:flex; align-items:center; gap:10px; padding:7px 0; border-top:1px solid var(--border-soft); font-size:13px}
+.prox:first-of-type{border-top:0}
+.prox .btn{margin-left:auto}
+.chk{display:flex; align-items:center; gap:9px; padding:6px 0; font-size:13px; color:var(--fg-secondary)}
+.chk i{width:16px; height:16px; border-radius:4px; border:1.5px solid var(--border-strong); flex:none}
+.chk .xp{margin-left:auto; font:500 11.5px "Geist Mono",monospace; color:var(--ok-fg)}
+.vazio{display:flex; align-items:center; gap:8px; padding:26px 16px; justify-content:center; text-align:center; color:var(--fg-muted); border:1px dashed var(--border-default); border-radius:12px; font-size:13px; margin-bottom:12px}
+.off-pg{max-width:52ch; line-height:1.6; color:var(--fg-secondary); font-size:13.5px}
+
+/* subabas */
+.subtabs{display:flex; gap:2px; border-bottom:1px solid var(--border-soft); margin-bottom:14px; overflow-x:auto}
+.subtab{border:0; background:none; padding:8px 12px; font:500 13px Geist,sans-serif; color:var(--fg-muted); border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; margin-bottom:-1px}
+.subtab:hover{color:var(--fg-primary)}
+.subtab[aria-selected="true"]{color:var(--accent); border-bottom-color:var(--accent)}
+.count{display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--bg-muted); color:var(--fg-secondary); font:600 10.5px Geist,sans-serif; margin-left:3px}
+
+/* lançamento */
+.lanc-top{margin-bottom:12px}
+.lanc-date{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.lanc-date input{width:auto}
+.linha{border:1px solid var(--border-soft); border-radius:12px; margin-bottom:10px; background:var(--bg-canvas)}
+.linha.st-lancar{border-color:var(--info-bd)}
+.linha-h{display:flex; align-items:center; gap:9px; padding:10px 12px; flex-wrap:wrap}
+.hora{font:600 12px "Geist Mono",monospace; color:var(--fg-muted); min-width:38px}
+.nome{font-weight:600; font-size:13.5px}
+.tag-repo{font:600 9.5px Geist,sans-serif; letter-spacing:.07em; color:var(--hold-fg); background:var(--hold-bg); border:1px solid var(--hold-bd); border-radius:4px; padding:1px 6px}
+.st{margin-left:auto; font-size:11.5px; font-weight:500; border-radius:999px; padding:2px 9px; border:1px solid; white-space:nowrap}
+.st-ok{color:var(--ok-fg); background:var(--ok-bg); border-color:var(--ok-bd)}
+.st-hold{color:var(--hold-fg); background:var(--hold-bg); border-color:var(--hold-bd)}
+.st-err{color:var(--err-fg); background:var(--err-bg); border-color:var(--err-bd)}
+.st-info{color:var(--info-fg); background:var(--info-bg); border-color:var(--info-bd)}
+.st-mut{color:var(--fg-muted); background:var(--bg-subtle); border-color:var(--border-soft)}
+.linha-info{padding:0 12px 10px 59px; display:flex; flex-direction:column; gap:5px; font-size:12.5px; color:var(--fg-secondary)}
+.linha-f{border-top:1px solid var(--border-soft); padding:13px 12px 14px; display:grid; gap:13px}
+.lb{display:block; font:600 12px Geist,sans-serif; color:var(--fg-secondary); margin-bottom:6px}
+.req{color:var(--err-fg)}
+.seg{display:inline-flex; flex-wrap:wrap; gap:3px; padding:3px; border-radius:9px; background:var(--bg-subtle); border:1px solid var(--border-soft)}
+.seg button{border:0; background:none; padding:6px 11px; border-radius:7px; font:500 12.5px Geist,sans-serif; color:var(--fg-secondary); cursor:pointer}
+.seg button:hover{color:var(--fg-primary)}
+.seg button[aria-checked="true"]{background:var(--bg-canvas); color:var(--fg-primary); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:600}
+:root[data-theme="dark"] .seg button[aria-checked="true"]{background:var(--bg-muted); box-shadow:inset 0 0 0 1px var(--border-strong)}
+.seg button:disabled{opacity:.45; cursor:not-allowed}
+select,input[type=date],textarea{font:13px Geist,sans-serif; color:var(--fg-primary); background:var(--bg-canvas); border:1px solid var(--border-default); border-radius:8px; padding:7px 9px; width:100%; min-width:0}
+input[type=date]{color-scheme:light}
+:root[data-theme="dark"] input[type=date]{color-scheme:dark}
+textarea{min-height:66px; resize:vertical; line-height:1.45}
+.lanc-date input[type=date]{width:auto; flex:none}
+.row3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px}
+.row2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}
+.lim-cheio{color:var(--err-fg)}
+.info-line{display:flex; gap:7px; align-items:flex-start; color:var(--hold-fg); margin:0}
+.anexo{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.file-chip{display:inline-flex; align-items:center; gap:6px; font:500 11.5px "Geist Mono",monospace; background:var(--bg-subtle); border:1px solid var(--border-soft); border-radius:6px; padding:4px 8px; color:var(--fg-secondary); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.savebar{display:flex; justify-content:flex-end; gap:8px; margin-top:4px; flex-wrap:wrap}
+
+/* feedback */
+.fb{border-radius:10px; padding:11px 13px; font-size:13px; margin:10px 0; border:1px solid; display:flex; gap:10px; line-height:1.55; text-align:left}
+.fb b{display:block; margin-bottom:2px}
+.fb-err{background:var(--err-bg); color:var(--err-fg); border-color:var(--err-bd)}
+.fb-ok{background:var(--ok-bg); color:var(--ok-fg); border-color:var(--ok-bd)}
+.fb-info{background:var(--info-bg); color:var(--info-fg); border-color:var(--info-bd)}
+.fb .ic{margin-top:2px}
+
+/* seletor de arquivo */
+.picker{border:1px solid var(--border-default); border-radius:11px; background:var(--bg-subtle); padding:10px; margin-top:9px}
+.pk-h{display:flex; align-items:center; gap:8px; margin-bottom:9px; flex-wrap:wrap}
+.pk-h b{font-size:13px; margin-right:4px}
+.pk-h .fechar{margin-left:auto}
+.pk-tab{border:1px solid var(--border-default); background:var(--bg-canvas); border-radius:7px; padding:4px 10px; font:500 12px Geist,sans-serif; cursor:pointer; color:var(--fg-secondary)}
+.pk-tab[aria-selected="true"]{border-color:var(--accent); color:var(--accent)}
+.files{display:grid; grid-template-columns:repeat(auto-fill,minmax(122px,1fr)); gap:8px}
+.file{border:1px solid var(--border-soft); background:var(--bg-canvas); border-radius:9px; padding:6px; cursor:pointer; text-align:left; font:inherit}
+.file:hover{border-color:var(--accent)}
+.thumb{height:96px; border-radius:6px; overflow:hidden; background:var(--wa-bg); padding:4px; display:flex; flex-direction:column; gap:3px}
+.mini-h{font:600 7.5px Geist,sans-serif; color:var(--wa-text); background:var(--wa-head); margin:-4px -4px 1px; padding:3px 5px}
+.mb{font-size:7px; line-height:1.3; padding:2px 4px; border-radius:3px; max-width:90%; color:var(--wa-text); overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical}
+.mb.in{background:var(--wa-in); align-self:flex-start}
+.mb.out{background:var(--wa-out); align-self:flex-end}
+.thumb-pdf,.thumb-pix{background:var(--bg-subtle); align-items:center; justify-content:center; color:var(--fg-muted); font:600 11px Geist,sans-serif; text-align:center}
+.thumb-pix b{font-size:14px; color:#32bcad}
+.fname{font:500 10.5px "Geist Mono",monospace; margin-top:5px; word-break:break-all; color:var(--fg-secondary); line-height:1.35}
+
+/* histórico do aluno */
+.al-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px}
+.al{border:1px solid var(--border-soft); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:4px; background:var(--bg-canvas)}
+.al.alvo{border-color:var(--info-bd)}
+.al-top b{font-size:13.5px}
+.lv{display:inline-block; font:600 10.5px Geist,sans-serif; border-radius:5px; padding:1px 7px; background:var(--info-bg); color:var(--info-fg); margin-top:2px}
+.lv-sem{background:var(--err-bg); color:var(--err-fg)}
+.d5-row{display:flex; align-items:center; gap:8px; font-size:12px}
+.dots5{display:flex; gap:4px}
+.d5{width:11px; height:11px; border-radius:50%}
+.d5-p{background:#22a35a} .d5-f{background:#d9453b} .d5-r{background:#e2a02b}
+.al-f{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px}
+.nivel-p{border-top:1px solid var(--border-soft); margin-top:8px; padding-top:10px}
+
+/* agenda */
+.wk{display:flex; align-items:center; gap:8px; font-size:12.5px}
+.ag{overflow-x:auto}
+.ag table{border-collapse:separate; border-spacing:3px; width:100%; min-width:470px; table-layout:fixed}
+.ag th{font:600 11px Geist,sans-serif; color:var(--fg-muted); padding:4px 2px; text-align:center}
+.ag th.hoje{color:var(--accent)}
+.ag tbody th{width:44px; text-align:right; padding-right:6px}
+.ag td{height:30px; border-radius:6px; font-size:11px; font-weight:500; padding:3px 6px; background:var(--bg-subtle); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ag td.c-norm{background:var(--ok-bg); color:var(--ok-fg)}
+.ag td.c-repo{background:var(--hold-bg); color:var(--hold-fg)}
+.ag td.c-ocup{background:var(--fg-muted); color:var(--bg-canvas)}
+.ag td.c-fer{background:transparent; border:1px dashed var(--border-strong); color:var(--fg-muted)}
+.fer-l{font-weight:500; color:var(--hold-fg)}
+.legend{display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; font-size:11.5px; color:var(--fg-muted)}
+.legend i{width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:5px}
+
+/* reposições */
+.repo-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+.repo-top p{max-width:56ch}
+.rl{padding:8px 0; border-top:1px solid var(--border-soft); font-size:13px}
+.rl:first-of-type{border-top:0}
+.rl > div{flex:1; min-width:0}
+.rl .fim{margin-left:auto; font-size:11.5px; white-space:nowrap}
+
+/* financeira */
+.est{text-align:right}
+.est b{display:block; font:600 22px "Geist Mono",monospace}
+.tbl-wrap{overflow-x:auto}
+table.t{width:100%; border-collapse:collapse; font-size:12.5px; min-width:500px}
+table.t th{text-align:left; font:600 10.5px Geist,sans-serif; color:var(--fg-muted); text-transform:uppercase; letter-spacing:.05em; padding:7px 8px; border-bottom:1px solid var(--border-soft)}
+table.t td{padding:9px 8px; border-bottom:1px solid var(--border-soft); vertical-align:top}
+table.t tfoot td{border-bottom:0; font-weight:600}
+table.t .r{text-align:right}
+.ck-line{display:flex; gap:8px; align-items:flex-start; font-size:13px; margin:10px 0 2px; cursor:pointer}
+.ck-line input{margin-top:3px; accent-color:var(--accent)}
+
+/* WhatsApp */
+.wa{display:grid; grid-template-columns:240px minmax(0,1fr); min-height:600px}
+.wa-list{border-right:1px solid var(--border-soft); background:var(--bg-canvas)}
+.wa-lh{padding:12px 14px; font:600 15px Geist,sans-serif; background:var(--wa-head); border-bottom:1px solid var(--border-soft)}
+.wa-it{display:flex; gap:10px; padding:10px 12px; border:0; border-bottom:1px solid var(--border-soft); background:none; width:100%; text-align:left; cursor:pointer; align-items:center; font:inherit; color:inherit}
+.wa-it:hover{background:var(--bg-subtle)}
+.wa-it[aria-current="true"]{background:var(--bg-muted)}
+.wa-av{width:38px; height:38px; border-radius:50%; flex:none; display:grid; place-items:center; font:600 13px Geist,sans-serif; color:#fff}
+.wa-av.sm{width:32px; height:32px; font-size:11.5px}
+.wa-tx{min-width:0; flex:1; display:flex; flex-direction:column}
+.wa-r1{display:flex; gap:6px; align-items:baseline}
+.wa-r1 .n{font-weight:600; font-size:13.5px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.wa-r1 .wt{font-size:11px; color:var(--fg-muted); flex:none}
+.wa-tx .p{font-size:12px; color:var(--fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.wa-chat{display:flex; flex-direction:column; background:var(--wa-bg); min-width:0}
+.wa-ch{display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--wa-head); border-bottom:1px solid var(--border-soft)}
+.wa-chn{display:flex; flex-direction:column; min-width:0; flex:1}
+.wa-chn b{font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.wa-chn span{font-size:11.5px; color:var(--fg-muted)}
+.wa-back{display:none; border:0; background:none; cursor:pointer; padding:4px; color:var(--fg-secondary)}
+.wa-msgs{flex:1; padding:12px 16px 14px; display:flex; flex-direction:column; gap:5px}
+.bub{max-width:80%; padding:6px 9px 4px; border-radius:8px; font-size:13.5px; line-height:1.42; box-shadow:0 1px .5px rgba(11,20,26,.13); color:var(--wa-text); white-space:pre-wrap; word-wrap:break-word}
+.bub.in{background:var(--wa-in); align-self:flex-start; border-top-left-radius:2px}
+.bub.out{background:var(--wa-out); align-self:flex-end; border-top-right-radius:2px}
+.bub .t{display:block; text-align:right; font-size:10.5px; color:var(--wa-meta); margin-top:1px}
+.bub .who{font-weight:600; font-size:12px; color:var(--wa-name); display:block}
+.daysep{align-self:center; font-size:11.5px; background:var(--wa-head); color:var(--wa-meta); padding:3px 10px; border-radius:7px; margin:8px 0 4px; box-shadow:0 1px .5px rgba(11,20,26,.1)}
+.wa-comp{padding:10px 12px 12px; background:var(--wa-head); border-top:1px solid var(--border-soft)}
+.wa-chat .fb{margin:8px 12px}
+.comp-h{font-size:12px; font-weight:600; color:var(--fg-secondary); margin-bottom:7px}
+.opts{display:grid; gap:6px}
+.opt{text-align:left; border:1px solid var(--border-default); background:var(--bg-canvas); border-radius:10px; padding:9px 11px; cursor:pointer; font:13px Geist,sans-serif; color:var(--fg-primary); line-height:1.45}
+.opt:hover{border-color:var(--wa-green)}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.pc{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border-default); background:var(--bg-canvas); border-radius:999px; padding:5px 11px; font:500 12.5px Geist,sans-serif; cursor:pointer; color:var(--fg-secondary)}
+.pc[aria-checked="true"]{background:var(--wa-green); border-color:var(--wa-green); color:#fff}
+.preview{margin-top:10px; display:flex; flex-direction:column; background:var(--wa-bg); border-radius:9px; padding:10px}
+.preview .bub{max-width:100%}
+.comp-f{display:flex; justify-content:flex-end; margin-top:9px}
+.wa-off{font-size:12px; color:var(--fg-muted); text-align:center; padding:4px}
+.wa-vazio{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--wa-meta); font-size:13px; padding:40px 16px; text-align:center}
+.toast{margin:8px 12px 0; align-self:center; display:flex; gap:7px; align-items:center; background:var(--bg-canvas); color:var(--fg-secondary); border:1px solid var(--border-soft); border-radius:8px; padding:6px 11px; font-size:12px; box-shadow:var(--shadow-card)}
+.toast b{font-family:"Geist Mono",monospace; font-weight:500}
+
+@media (max-width:640px){
+  .kms-body{grid-template-columns:1fr}
+  .kms-nav{flex-direction:row; overflow-x:auto; border-right:0; border-bottom:1px solid var(--border-soft); padding:6px}
+  .nav-it{padding:7px 10px}
+  .kms-main{padding:14px 12px 18px}
+  .kms-tag{display:none}
+  .grid3{grid-template-columns:1fr}
+  .row3,.row2{grid-template-columns:1fr}
+  .wa{grid-template-columns:1fr; min-height:520px}
+  .wa.has-chat .wa-list{display:none}
+  .wa:not(.has-chat) .wa-chat{display:none}
+  .wa-back{display:block}
+  .lights{display:none}
+  .mis{padding:14px}
+  .intro,.rel{padding:18px 16px}
+  .linha-info{padding-left:12px}
+  .clock{margin-left:0}
+  .bub{max-width:90%}
+}
+@media (prefers-reduced-motion:no-preference){
+  .fb,.narr,.fecha{animation:surge .25s ease}
+  @keyframes surge{from{opacity:0; transform:translateY(-3px)} to{opacity:1; transform:none}}
+}
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<script>
+(function () {
+  "use strict";
+  var app = document.getElementById("app");
+
+  /* ═════════ ícones (traço de 2px, no espírito do lucide) ═════════ */
+  var IC = {
+    home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+    cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+    clip: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+    book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
+    trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+    wallet: '<path d="M20 7H5a2 2 0 0 1 0-4h13v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15V7"/><path d="M16 14h.01"/>',
+    camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/>',
+    clipp: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
+    arrow: '<path d="M5 12h14M13 5l7 7-7 7"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+    img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+    msg: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+    crown: '<path d="m2 4 3 12h14l3-12-6 7-4-7-4 7z"/><path d="M5 20h14"/>',
+    alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
+    star: '<path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>',
+    down: '<path d="M12 5v14M19 12l-7 7-7-7"/>'
+  };
+  function ic(n, s) {
+    s = s || 16;
+    return '<svg class="ic" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[n] + "</svg>";
+  }
+
+  /* ═════════ datas e texto ═════════ */
+  function D(s) { var p = s.split(/[- :]/); return new Date(+p[0], +p[1] - 1, +p[2], +(p[3] || 0), +(p[4] || 0)); }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function ymd(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function hm(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function fmt(d) { return ymd(d) + " " + hm(d); }
+  function dm(d) { return pad(d.getDate()) + "/" + pad(d.getMonth() + 1); }
+  function dmy(s) { var p = s.split("-"); return p[2] + "/" + p[1] + "/" + p[0]; }
+  function hh(s) { var p = s.split(":"); return +p[0] + "h" + (p[1] === "00" ? "" : p[1]); }
+  function addMin(d, m) { return new Date(d.getTime() + m * 60000); }
+  function addDias(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function dia0(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function segundaDe(d) { var x = dia0(d), w = x.getDay(); return ymd(addDias(x, w === 0 ? -6 : 1 - w)); }
+  var DOW = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  var DOW3 = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function quando(d) { return cap(DOW3[d.getDay()]) + ", " + dm(d) + " · " + hh(hm(d)); }
+  function brl(v) { var s = v.toFixed(2).split("."); return "R$ " + s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + s[1]; }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); }
+  function primeiro(n) { return n.split(" ")[0]; }
+  function ini(n) { var p = n.split(" "); return (p[0][0] + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase(); }
+  function fid(k) { return String(k).replace(/[^a-zA-Z0-9]/g, "_"); }
+
+  /* ═════════ dados do mês simulado (outubro de 2026) ═════════ */
+  var NIVEIS = ["A1", "A2", "B1", "B2", "C1", "C2"];
+  // Títulos reais do Now We're Talking (/api/class-launch/livros/{id}/aulas).
+  var AULAS_NWT = {
+    A1: ["Alphabet", "Numbers", "English Common Sounds", "Letters, Numbers, and Sounds", "Verb To Be and Subject Pronouns", "Greetings and Introductions", "Asking About Personal Information", "Starting a Conversation – Saying Hello and Asking Questions", "Days of the Week and Months", "Making Simple Plans for the Week", "Prepositions of Time", "What’s Happening This Week?", "Evaluation", "Simple Present + Adverbs of Frequency", "Talking About Your Daily Routine", "Talking About Hobbies and Free Time", "Listening: Simple Present + Adverbs of Frequency", "WH Questions", "Describing Objects", "Possessive Adjectives", "What, Where, and Whose?", "Countable and Uncountable Nouns + Some / Any", "Talking About Your Favorite Meals", "Ordering Food at a Restaurant", "Hungry or Full?", "Evaluation"],
+    B1: ["Giving and Receiving Constructive Feedback", "Sharing Experiences of Meeting New People", "Look up to, Take in, Call out", "How to Build Relationships with Words", "Describing Objects Characteristics", "What's the Best Gift You've Ever Received?", "Look like, Put together, Hold on to", "The Meaning Inside the Box", "Buying a Car", "Buying/Renting a House", "Move in, Pay off, Settle for", "The Road to Independence", "Evaluation", "Going to The Bank", "Would You Like to Try Skydiving?", "Direct/Reported Speech", "Talking About Banks and Bold Choices", "Talking About Movies and Music", "Buildings, Houses and Architecture", "Relative Clauses", "“What Surprised Me”", "How to Write and Send a Professional Email", "Describing Daily Work Routines and Responsibilities", "Verbs and Prepositions", "Emails, Deadlines, and Daily Wins"]
+  };
+  var ANTIGO = ["Conversation + New Vocab", "Review: Simple Present", "Practicing the 4 areas of English", "Reading intensity", "Comparatives"];
+  function aulasDe(livro, nivel) {
+    if (livro === "antigo") return ANTIGO.map(function (t, i) { return { v: "ant-" + nivel + "-" + (i + 1), r: t }; });
+    var t = AULAS_NWT[nivel];
+    if (t) return t.map(function (x, i) { return { v: nivel + "-" + (i + 1), r: "Aula " + (i + 1) + " - " + x }; });
+    var out = []; for (var i = 1; i <= 25; i++) out.push({ v: nivel + "-" + i, r: "Aula " + i });
+    return out;
+  }
+
+  var SLOTS = ["08:00", "08:30", "12:00", "12:30", "18:30", "19:00", "19:30", "20:00", "20:30"];
+  var BLOQUEIOS = [{ dow: 1, hora: "12:00" }];
+  var FERIADOS = { "2026-10-12": "Nossa Senhora Aparecida", "2026-11-02": "Finados" };
+  var VALOR_AULA = 7.5; // 30 min: R$ 30 por sessão semanal / 4 semanas
+
+  var ALUNOS = {
+    ana:     { id: "ana", nome: "Ana Ribeiro", cor: "#7c3aed", nivel: "B1", modulo: "B1 - parte 1 - Aula 1 até Aula 25", plano: "2 aulas de 30 min", valor: 60, dias: [2, 4], hora: "20:00", inicio: "2025-11-10", usadas: 0, aula: "B1-6", ocup: "Arquiteta", meta: "Viajar sozinha para a Irlanda em dezembro" },
+    bruno:   { id: "bruno", nome: "Bruno Tavares", cor: "#0e7490", nivel: "A2", modulo: "A2 - parte 2 - Aula 26 até Aula 50", plano: "2 aulas de 30 min", valor: 60, dias: [2, 4], hora: "19:00", inicio: "2026-03-02", usadas: 1, aula: "A2-31", ocup: "Analista de TI", meta: "Conduzir reuniões com clientes em inglês" },
+    carla:   { id: "carla", nome: "Carla Mendes", cor: "#be185d", nivel: "A1", modulo: "A1 - parte 1 - Aula 1 até Aula 25", plano: "3 aulas de 30 min", valor: 90, dias: [1, 3, 5], hora: "08:00", inicio: "2026-06-15", usadas: 1, aula: "A1-14", ocup: "Enfermeira", meta: "Passar na entrevista de um hospital internacional" },
+    diego:   { id: "diego", nome: "Diego Arantes", cor: "#c2410c", nivel: "B2", modulo: "B2 - parte 1 - Aula 1 até Aula 25", plano: "3 aulas de 30 min", valor: 90, dias: [2, 3, 5], hora: "18:30", inicio: "2025-08-04", usadas: 4, aula: "B2-12", ocup: "Engenheiro de vendas", meta: "Apresentar resultados para a matriz nos EUA" },
+    eduarda: { id: "eduarda", nome: "Eduarda Lins", cor: "#15803d", nivel: "A2", modulo: "A2 - parte 1 - Aula 1 até Aula 25", plano: "2 aulas de 30 min", valor: 60, dias: [3, 5], hora: "12:00", inicio: "2026-08-10", usadas: 0, aula: "A2-9", ocup: "Estudante de Direito", meta: "Intercâmbio no ano que vem" },
+    felipe:  { id: "felipe", nome: "Felipe Moraes", cor: "#1d4ed8", nivel: null, modulo: null, plano: "2 aulas de 30 min", valor: 60, dias: [1, 3], hora: "19:00", inicio: "2026-10-07", usadas: 0, aula: null, ocup: "Designer de produto", meta: "Atender clientes de fora do Brasil" }
+  };
+  var ORDEM = ["ana", "bruno", "carla", "diego", "eduarda", "felipe"];
+
+  // Faltas com direito já lançadas antes das missões (os números batem com
+  // `usadas`). Qualquer outra aula passada conta como presença lançada.
+  var HIST = {
+    "carla|2026-10-02|reg": "fcr_aluno", "bruno|2026-10-06|reg": "fcr_aluno",
+    "diego|2026-10-06|reg": "fcr_aluno", "diego|2026-10-07|reg": "fcr_aluno",
+    "diego|2026-10-09|reg": "fcr_aluno", "diego|2026-10-13|reg": "fcr_aluno"
+  };
+  var REPOS_INI = [
+    { id: "r-carla-2026-10-02", aluno: "carla", falta: "2026-10-02", motivo: "aluno", agendada: { data: "2026-10-06", hora: "08:00" }, feita: true },
+    { id: "r-bruno-2026-10-06", aluno: "bruno", falta: "2026-10-06", motivo: "aluno", agendada: { data: "2026-10-09", hora: "19:00" }, feita: true },
+    { id: "r-diego-2026-10-06", aluno: "diego", falta: "2026-10-06", motivo: "aluno", agendada: null },
+    { id: "r-diego-2026-10-07", aluno: "diego", falta: "2026-10-07", motivo: "aluno", agendada: null },
+    { id: "r-diego-2026-10-09", aluno: "diego", falta: "2026-10-09", motivo: "aluno", agendada: null },
+    { id: "r-diego-2026-10-13", aluno: "diego", falta: "2026-10-13", motivo: "aluno", agendada: null }
+  ];
+
+  var CHATS = [
+    { id: "coord", nome: "Coordenação King · Professores", grupo: true, cor: "#0b1739" },
+    { id: "felipe", nome: "Felipe Moraes", cor: ALUNOS.felipe.cor },
+    { id: "ana", nome: "Ana Ribeiro", cor: ALUNOS.ana.cor },
+    { id: "bruno", nome: "Bruno Tavares", cor: ALUNOS.bruno.cor },
+    { id: "carla", nome: "Carla Mendes", cor: ALUNOS.carla.cor },
+    { id: "diego", nome: "Diego Arantes", cor: ALUNOS.diego.cor },
+    { id: "eduarda", nome: "Eduarda Lins", cor: ALUNOS.eduarda.cor }
+  ];
+  // Conversas do mês. Só aparece o que já aconteceu no relógio da simulação.
+  var MSGS = [
+    ["c-0110", "coord", "coord", "2026-10-01 09:00", "Bom dia, teachers! 💙 Lembrete do mês: lancem as aulas em até 24h e deem uma olhada nas pendências todos os dias."],
+    ["c-0910", "coord", "coord", "2026-10-09 16:30", "Teachers, segunda-feira (12/10) é feriado nacional — Nossa Senhora Aparecida. Não há aulas nesse dia. Bom feriado! 🇧🇷"],
+    ["carla-0110", "carla", "ele", "2026-10-01 07:00", "Bom dia, teacher! Amanhã (sexta) vou viajar bem cedo com a família e não vou conseguir ir na aula 😕"],
+    ["carla-0110r", "carla", "eu", "2026-10-01 07:30", "Bom dia, Carla! Obrigado por avisar. Fica com direito a reposição: que tal terça (06/10) às 8h?"],
+    ["carla-0110b", "carla", "ele", "2026-10-01 07:34", "Perfeito! 🙏"],
+    ["diego-0210", "diego", "ele", "2026-10-02 20:00", "Teacher, vou viajar a trabalho e não consigo ir nas aulas dos dias 6, 7, 9 e 13/10 😕"],
+    ["diego-0210r", "diego", "eu", "2026-10-02 20:30", "Obrigado por avisar com antecedência, Diego! Ficam com direito a reposição — combinamos os horários quando você voltar. Boa viagem!"],
+    ["bruno-0510", "bruno", "ele", "2026-10-05 10:00", "Teacher, amanhã não vou conseguir ir na aula, tenho uma consulta médica às 19h 😕"],
+    ["bruno-0510r", "bruno", "eu", "2026-10-05 10:15", "Obrigado por avisar com antecedência, Bruno! Essa fica com direito a reposição. Pode ser sexta (09/10) às 19h?"],
+    ["bruno-0510b", "bruno", "ele", "2026-10-05 10:31", "Pode sim! Valeu, teacher 👊"],
+    ["ana-0810", "ana", "ele", "2026-10-08 20:33", "Thank you, teacher! Vou treinar o “hold on to” 😅"],
+    ["edu-0910", "eduarda", "ele", "2026-10-09 12:32", "Thank you, teacher! See you next week 😊"],
+    ["felipe-feriado", "felipe", "eu", "2026-10-09 18:00", "Oi, Felipe! Lembrete: segunda (12/10) é feriado nacional, então não teremos aula. Nos vemos na quarta, às 19h 😊"],
+    ["carla-feriado", "carla", "eu", "2026-10-09 18:05", "Oi, Carla! Lembrete: segunda (12/10) é feriado nacional, então não teremos aula. Nos vemos na quarta, às 8h 😊"],
+    ["felipe-feriado-r", "felipe", "ele", "2026-10-09 18:21", "Beleza, teacher! Bom feriado!"],
+    ["carla-feriado-r", "carla", "ele", "2026-10-09 19:12", "Obrigada por avisar, teacher! Bom feriado!"],
+    ["diego-1210", "diego", "ele", "2026-10-12 10:05", "Teacher, vou ter que viajar de novo 😞 Quarta (14/10) não consigo ir na aula."],
+    ["diego-1210r", "diego", "eu", "2026-10-12 10:20", "Obrigado por avisar, Diego! Só um lembrete: você já usou as 4 reposições de outubro, então essa aula fica sem reposição, tá?"],
+    ["diego-1210b", "diego", "ele", "2026-10-12 10:22", "Entendi, teacher. Sem problemas 👍"],
+    ["carla-1310", "carla", "ele", "2026-10-13 07:40", "Bom dia, teacher! Amanhã cedo vou fazer um exame de sangue e não vou conseguir ir na aula das 8h 😕"],
+    ["carla-1310r", "carla", "eu", "2026-10-13 08:02", "Bom dia, Carla! Obrigado por avisar. Boa sorte no exame 🙏"],
+    ["bruno-1310", "bruno", "ele", "2026-10-13 18:12", "Teacher, surgiu um imprevisto no trabalho e não vou conseguir ir hoje 😕"],
+    ["bruno-1310r", "bruno", "eu", "2026-10-13 18:20", "Tudo bem, Bruno, obrigado por avisar. Nos vemos na quinta!"],
+    ["edu-1410", "eduarda", "eu", "2026-10-14 12:05", "Oi, Eduarda! Estou te esperando na sala 🙂"],
+    ["edu-1410b", "eduarda", "eu", "2026-10-14 12:15", "Eduarda, não consegui falar com você hoje. Se precisar de alguma coisa, é só me chamar por aqui!"],
+    ["ana-1510", "ana", "eu", "2026-10-15 17:02", "Ana, tive uma emergência hoje e não vou conseguir dar a aula das 20h 😞 Ainda hoje te passo um horário de reposição!"],
+    ["ana-1510r", "ana", "ele", "2026-10-15 17:10", "Imagina, teacher! Melhoras 🙏"],
+    ["carla-3010", "carla", "ele", "2026-10-30 08:34", "Obrigada pela conversa de hoje, teacher! Me sinto bem mais preparada para a entrevista 🙌"]
+  ].map(function (m, i) { return { id: m[0], chat: m[1], de: m[2], t: m[3], txt: m[4], o: i }; });
+
+  var TC = {
+    presenca: "Presença", falta: "Falta",
+    fcr_aluno: "Falta com Direito a Reposição - Falta do Aluno",
+    fcr_prof: "Falta com Direito a Reposição - Falta do Professor",
+    presenca_repo: "Presença na Reposição"
+  };
+  var TC_CURTO = { presenca: "Presença", falta: "Falta", fcr_aluno: "Falta c/ direito · aluno", fcr_prof: "Falta c/ direito · professor", presenca_repo: "Presença na reposição" };
+  var TC_COR = { presenca: "st-ok", presenca_repo: "st-ok", falta: "st-err", fcr_aluno: "st-hold", fcr_prof: "st-hold" };
+  var TIPOS_AULA = [
+    { v: "livro", r: "Aula do livro" },
+    { v: "pers_livro", r: "Aula personalizada + aula do livro" },
+    { v: "pers_sem", r: "Aula personalizada sem uso do livro" }
+  ];
+
+  var PECAS = [
+    { id: "nome", ok: true, rot: "Quem é você", txt: "Oi, Felipe! Tudo bem? Aqui é o(a) teacher [seu nome], da King of Languages — vou ser seu professor(a) de inglês 😊" },
+    { id: "data", ok: true, rot: "Data e horário da 1ª aula", txt: "Nossa primeira aula será na quarta-feira, 07/10, às 19h (horário de Brasília)." },
+    { id: "consid", ok: true, rot: "Considerações gerais", txt: "Alguns combinados: pontualidade (começamos e terminamos no horário), tempo de espera na sala e as regras de faltas e reposições — faltas avisadas com pelo menos 24h de antecedência dão direito a reposição." },
+    { id: "plataforma", ok: true, rot: "Como entrar na aula", txt: "Para entrar, é só acessar a sua plataforma do aluno — o link da aula fica lá. Cinco minutinhos antes eu te mando um lembrete!" },
+    { id: "meet", ok: false, rot: "Link direto do Google Meet", txt: "Já deixo aqui o link da nossa sala: meet.google.com/kgx-rtpa-wqe" },
+    { id: "nodia", ok: false, rot: "Como avisar faltas", txt: "Se precisar faltar, é só me avisar no dia, tá bom?" }
+  ];
+  var OPTS = {
+    grupo: [
+      { id: "ok", txt: "Contato com o aluno Felipe Moraes feito ✅ Primeira aula: quarta, 07/10, às 19h." },
+      { id: "vespera", txt: "Aceitei o Felipe na agenda! Vou falar com ele na véspera da primeira aula 😊" }
+    ],
+    lembrete: [
+      { id: "meet", txt: "Oi, Felipe! Segue o link da aula: meet.google.com/kgx-rtpa-wqe" },
+      { id: "plat", txt: "Oi, Felipe! Nossa aula começa em 5 minutinhos 😊 Entre pela sua plataforma do aluno: [link da plataforma do aluno]" },
+      { id: "nada", txt: "(Não mandar nada — ele já sabe o dia e o horário.)" }
+    ]
+  };
+
+  var ARQ_FIXOS = [
+    { id: "f-bruno-antigo", nome: "Print_WhatsApp_Bruno_05-10_10h31.png", tipo: "img", chat: "bruno", ate: "2026-10-05 10:31" },
+    { id: "f-pix", nome: "comprovante_pix_setembro.png", tipo: "img", chat: null },
+    { id: "f-nf-set", nome: "NF_setembro_2026.pdf", tipo: "pdf" },
+    { id: "f-nf-out", nome: "NF_outubro_2026.pdf", tipo: "pdf", desde: "2026-11-06 00:00" }
+  ];
+
+  /* ═════════ mensagens de erro reaproveitadas ═════════ */
+  var OBS_EX = {
+    presenca: 'Diga o que foi trabalhado e como o aluno respondeu. Ex.: "Aula 7 do livro + vídeo sobre a viagem dela. Usou bem put together; travou em hold on to — retomar na próxima."',
+    falta_aluno: 'Registre o que aconteceu: se o aluno avisou, quando e como. Ex.: "Avisou às 18h12 pelo WhatsApp (imprevisto no trabalho), menos de 24h antes: sem direito a reposição. Print anexado."',
+    falta_prof: 'Registre o motivo e o combinado. Ex.: "Falta do professor por emergência. Aluna avisada às 17h; reposição a agendar nesta semana."'
+  };
+  OBS_EX.presenca_repo = OBS_EX.presenca;
+  var GENERICAS = ["aula realizada", "aula dada", "aula normal", "aula ok", "ok", "sem novidades", "tudo certo", "presente", "presenca", "faltou", "falta", "aluno faltou", "aluna faltou", "nao veio", "feriado", "teste", "aula", "reposicao", "reposicao realizada", "falta do professor"];
+  function obsFraca(t) {
+    var n = norm(t);
+    if (!n || GENERICAS.indexOf(n) >= 0) return true;
+    return n.length < 28 || n.split(" ").length < 5;
+  }
+
+  /* ═════════ missões ═════════ */
+  var MISSOES = [
+    {
+      id: "m1", titulo: "Aluno novo na agenda", ref: "Etapas 2 e 3",
+      inicio: "2026-10-05 10:00", abre: { tab: "king", rota: "home" },
+      historia: "Segunda, 05/10, 10h. A equipe de pós-vendas colocou um aluno novo num horário que você deixou aberto, e o contrato já está na Home da plataforma. Faça o que a King espera, do aceite até a coordenação saber que o contato aconteceu.",
+      objetivos: [
+        { id: "aceite", texto: "Conferir e aceitar o contrato do Felipe (Home)",
+          dica: "O card do contrato mostra início, dias e horário. Compare com a sua disponibilidade: segunda e quarta às 19h estão livres.",
+          solucao: "Home › card “Contrato para aceite” › Aceitar contrato.",
+          ok: function () { return S.contrato === "aceito"; } },
+        { id: "apresentacao", texto: "Mandar a mensagem de apresentação ao Felipe (aba WhatsApp)",
+          dica: "Não pode faltar: seu nome, data e horário da 1ª aula (horário de Brasília), as considerações gerais e o lembrete de entrar pela plataforma do aluno.",
+          solucao: "WhatsApp › Felipe › marque Quem é você, Data e horário, Considerações gerais e Como entrar na aula. Deixe de fora o link do Meet e o “avise no dia”. Enviar.",
+          ok: function () { return S.flags.apresentacao; } },
+        { id: "grupo", texto: "Confirmar no grupo da coordenação que o contato foi feito",
+          dica: "O grupo “Coordenação King · Professores” está na lista de conversas do WhatsApp.",
+          solucao: "WhatsApp › Coordenação King · Professores › a mensagem de contato feito, com a data da 1ª aula.",
+          ok: function () { return S.flags.grupo; } }
+      ],
+      fechamento: "Aceite → contato o quanto antes → confirmação no grupo. O aluno só descobre quem é o professor quando você se apresenta, e a coordenação só sabe que o contato aconteceu quando você confirma no grupo. Sem a confirmação, para a King é como se ele não tivesse acontecido."
+    },
+    {
+      id: "m2", titulo: "A primeira aula", ref: "Etapas 3 e 4",
+      inicio: "2026-10-07 18:55", abre: { tab: "whats", chat: "felipe" },
+      historia: "Quarta, 07/10, 18h55. Faltam 5 minutos para a primeira aula do Felipe.",
+      objetivos: [
+        { id: "lembrete", texto: "Mandar o lembrete certo ao Felipe, 5 minutos antes",
+          dica: "O lembrete leva o aluno até a plataforma dele — é por ela que ele entra na mesma sala que você, no Meet premium.",
+          solucao: "WhatsApp › Felipe › a mensagem com o link da plataforma do aluno.",
+          ok: function () { return S.flags.lembrete; } },
+        { id: "nivel", texto: "Registrar o nível do Felipe e liberar o material (Histórico do Aluno)",
+          dica: "Histórico do Aluno › card do Felipe › “Trocar nível e liberar material”. Aluno novo começa pela primeira parte do nível.",
+          solucao: "Nível A2 · Módulo “A2 - parte 1 - Aula 1 até Aula 25” · Salvar.",
+          ok: function () { return S.alunos.felipe.nivel === "A2"; } }
+      ],
+      depois: {
+        lembrete: function () {
+          S.now = D("2026-10-07 19:35");
+          S.msgs.push({ id: "d-felipe-pos", chat: "felipe", de: "ele", t: "2026-10-07 19:32", txt: "Adorei a aula, teacher! Até a próxima 😄", o: 900 });
+          S.narr.push("<b>19h</b> — o Felipe entrou pela plataforma. Nos primeiros 15 minutos vocês se conheceram, você apresentou sua didática e aplicou o nivelamento: <b>resultado A2</b>. Nos outros 15, uma aula prática sobre apresentações pessoais. Agora, registre o nível dele.");
+        }
+      },
+      fechamento: "O lembrete vai 5 minutos antes, com o link da plataforma do aluno; o link direto do Meet só se ele não aparecer nos primeiros 5 minutos. E é o nível registrado que libera o livro na plataforma do aluno — sem isso, ele chega na próxima aula sem material."
+    },
+    {
+      id: "m3", titulo: "Lançar uma presença", ref: "Etapa 5 · Transparência nos lançamentos",
+      inicio: "2026-10-08 20:45", abre: { tab: "king", rota: "aulas", aba: "lancamento" },
+      historia: "Quinta, 08/10, 20h45. Você acabou de dar aula para a Ana (B1). Vocês fizeram a Aula 7 — Look like, Put together, Hold on to, do Now We're Talking, e você trouxe um vídeo curto sobre a viagem dela para a Irlanda. Ela usou bem “put together”, mas travou em “hold on to”. Lance a aula.",
+      alvos: function () {
+        return { "ana|2026-10-08|reg": {
+          tipo: "presenca", tipoAula: "pers_livro", livro: "nwt", nivel: "B1", aula: "B1-7",
+          msgTipo: { _: "A Ana veio e a aula aconteceu: o registro é Presença." },
+          msgTipoAula: "Vocês usaram o livro e você trouxe um vídeo extra sobre a viagem dela: isso é “Aula personalizada + aula do livro”.",
+          msgAula: "A aula que veio preenchida é a última lançada (Aula 6). Hoje vocês fizeram a Aula 7 — atualize, senão o livro da Ana fica no ponto errado e um próximo professor recomeça de onde não devia."
+        } };
+      },
+      objetivos: [
+        { id: "lanc", texto: "Lançar a aula da Ana (Aulas e Reposições › Lançamento de aulas)",
+          dica: "A plataforma já traz o nível e a última aula lançada — atualize para a de hoje. Livro + material extra = aula personalizada + aula do livro. Na observação: o que foi trabalhado e como ela respondeu.",
+          solucao: "Presença · Aula personalizada + aula do livro · Now We're Talking · B1 · Aula 7 · observação com o conteúdo e a dificuldade em “hold on to”.",
+          ok: function () { return !!S.lancados["ana|2026-10-08|reg"]; } }
+      ],
+      fechamento: "Todo lançamento tem observação, e “aula realizada” não conta: ela é o histórico que a coordenação, o suporte e um próximo professor vão ler. Material e aula certos mantêm o livro do aluno no ponto em que ele está."
+    },
+    {
+      id: "m4", titulo: "Feriado nacional", ref: "MAPA · Lançamento de aulas",
+      inicio: "2026-10-12 19:40", abre: { tab: "king", rota: "aulas", aba: "lancamento" },
+      historia: "Segunda, 12/10 — Nossa Senhora Aparecida, feriado nacional. A King não dá aula em feriado nacional, e o dia é pago, desde que lançado do jeito certo. Na sexta você avisou a Carla e o Felipe pelo WhatsApp. Lance as duas aulas de hoje.",
+      alvos: function () {
+        var base = {
+          tipo: "falta_aluno", direito: "sem", feriado: true,
+          msgTipo: { _: "Feriado nacional se lança como Falta do aluno sem direito a reposição, com a observação “Feriado nacional”. É assim que o dia entra no pagamento." },
+          msgDireito: "Feriado não gera reposição: ninguém faltou, a escola não abre. É falta sem direito a reposição, com a observação “Feriado nacional” — e o dia é pago normalmente."
+        };
+        return {
+          "carla|2026-10-12|reg": Object.assign({ print: "carla-feriado" }, base),
+          "felipe|2026-10-12|reg": Object.assign({ print: "felipe-feriado" }, base)
+        };
+      },
+      objetivos: [
+        { id: "lanc", texto: "Lançar as duas aulas de 12/10 (Carla e Felipe)",
+          dica: "Feriado nacional se lança como falta sem direito a reposição, com a observação “Feriado nacional”. Por ser falta sem direito, a plataforma pede o print: use a conversa em que você avisou do feriado.",
+          solucao: "Para cada um: Falta do aluno › Sem direito a reposição › print da conversa do aviso de feriado (tire no WhatsApp) › observação “Feriado nacional”. Salvar.",
+          ok: function () { return !!(S.lancados["carla|2026-10-12|reg"] && S.lancados["felipe|2026-10-12|reg"]); } }
+      ],
+      fechamento: "Feriado nacional = falta sem direito a reposição, com a observação “Feriado nacional” — e o dia é pago. Vale só para feriado nacional: ponto facultativo (como Corpus Christi) e feriado estadual ou municipal têm aula normal."
+    },
+    {
+      id: "m5", titulo: "Falta avisada em cima da hora", ref: "MAPA · Critérios de reposição",
+      inicio: "2026-10-13 19:40", abre: { tab: "whats", chat: "bruno" },
+      historia: "Terça, 13/10, 19h40. A aula do Bruno era às 19h e ele não apareceu — mas mandou mensagem avisando. Demonstre como você faz esse lançamento. Lembre: agora, em toda falta sem direito a reposição, a plataforma pede o print da conversa entre você e o aluno.",
+      alvos: function () {
+        return { "bruno|2026-10-13|reg": {
+          tipo: "falta_aluno", direito: "sem", print: "bruno-1310",
+          msgTipo: {
+            presenca: "O Bruno não veio — não é presença.",
+            falta_prof: "Quem faltou foi o aluno, não você. Falta do professor gera reposição que você teria de dar, e segura o valor da aula até ela acontecer.",
+            _: "O Bruno faltou e avisou: o tipo é Falta do aluno."
+          },
+          msgDireito: "O Bruno avisou às 18h12 para uma aula às 19h — 48 minutos antes. Direito a reposição exige aviso com pelo menos 24h de antecedência. “Imprevisto no trabalho” em cima da hora não gera direito."
+        } };
+      },
+      objetivos: [
+        { id: "lanc", texto: "Lançar a falta do Bruno, com o print da conversa",
+          dica: "Veja no WhatsApp a que horas ele avisou: direito a reposição exige aviso com 24h de antecedência. Tire o print ali mesmo (botão “Tirar print”) e anexe no lançamento.",
+          solucao: "WhatsApp › Bruno › Tirar print. Plataforma › Aulas e Reposições › 13/10 › Bruno: Falta do aluno › Sem direito a reposição › anexe o print de hoje › observação com o horário do aviso. Salvar.",
+          ok: function () { return !!S.lancados["bruno|2026-10-13|reg"]; } }
+      ],
+      fechamento: "Aviso com menos de 24h = falta sem direito a reposição. (Sem aviso, mas com um motivo nobre — uma emergência de saúde, por exemplo — fica a seu critério.) O print mostra quem avisou, o quê e quando: é a sua evidência se o aluno contestar depois."
+    },
+    {
+      id: "m6", titulo: "Três faltas, três casos", ref: "MAPA · Critérios de reposição",
+      inicio: "2026-10-14 21:00", abre: { tab: "whats", chat: null },
+      historia: "Quarta, 14/10, 21h. Três alunos faltaram hoje: Carla (8h), Eduarda (12h) e Diego (18h30). Leia as conversas no WhatsApp e lance cada falta do jeito certo.",
+      alvos: function () {
+        var tipo = { _: "Foi o aluno quem faltou: o tipo é Falta do aluno." };
+        return {
+          "carla|2026-10-14|reg": { tipo: "falta_aluno", direito: "com", msgTipo: tipo,
+            msgDireito: "A Carla avisou na terça às 7h40 para a aula de quarta às 8h: 24h20 de antecedência. Tem direito a reposição — e ainda está em 1 de 4 no mês." },
+          "eduarda|2026-10-14|reg": { tipo: "falta_aluno", direito: "sem", print: "edu-1410", msgTipo: tipo,
+            msgDireito: "A Eduarda não avisou: faltou sem aviso e sem justificativa. Não tem direito a reposição — lance sem direito e anexe o print da sua mensagem tentando contato." },
+          "diego|2026-10-14|reg": { tipo: "falta_aluno", direito: "sem", print: "diego-1210", msgTipo: tipo,
+            msgDireito: "O Diego avisou com antecedência, mas já usou as 4 reposições de outubro. Com o limite do mês atingido, a falta fica sem direito." }
+        };
+      },
+      objetivos: [
+        { id: "lanc", texto: "Lançar as faltas de Carla, Eduarda e Diego",
+          dica: "24h ou mais de antecedência → com direito, até 4 por mês. Sem aviso → sem direito. Limite do mês atingido → sem direito, mesmo avisando. Toda falta sem direito leva print.",
+          solucao: "Carla: com direito (avisou 24h20 antes). Eduarda: sem direito + print da sua mensagem de espera. Diego: sem direito (4 de 4 usadas) + print do aviso dele. Observação nas três. Salvar.",
+          ok: function () { return !!(S.lancados["carla|2026-10-14|reg"] && S.lancados["eduarda|2026-10-14|reg"] && S.lancados["diego|2026-10-14|reg"]); } }
+      ],
+      fechamento: "Com 24h ou mais de aviso, a falta tem direito a reposição, até 4 por mês. Sem aviso, em cima da hora ou com o limite do mês estourado, não tem — e o print vai junto. Quando o aluno some, o print é da sua tentativa de contato."
+    },
+    {
+      id: "m7", titulo: "Quando quem falta é você", ref: "Etapa 5 · MAPA · Reposições",
+      inicio: "2026-10-15 21:00", abre: { tab: "king", rota: "aulas", aba: "lancamento" },
+      historia: "Quinta, 15/10, 21h. Às 17h você teve uma emergência e avisou a Ana que não daria a aula das 20h. Falta do professor gera reposição obrigatória — sem limite e sem prazo para expirar, e é você quem garante que ela aconteça.",
+      alvos: function () {
+        var o = { "ana|2026-10-15|reg": {
+          tipo: "falta_prof",
+          msgTipo: {
+            falta_aluno: "Quem faltou foi você. Lançar como falta do aluno tira da Ana uma reposição que é dela por direito — e lançamento incorreto pode levar ao encerramento da parceria.",
+            _: "A aula não aconteceu porque você não pôde dar: o tipo é Falta do professor."
+          },
+          msgObs: OBS_EX.falta_prof
+        } };
+        var r = repoAna();
+        if (r && r.agendada) o["ana|" + r.agendada.data + "|repo"] = {
+          tipo: "presenca_repo", tipoAula: "livro", livro: "nwt", nivel: "B1", aula: "B1-8",
+          msgTipo: { _: "Esta é a aula de reposição: lance como “Presença na reposição”. É isso que baixa a reposição pendente e libera o valor retido." },
+          msgTipoAula: "Na reposição vocês usaram só o livro: “Aula do livro”.",
+          msgAula: "Na reposição vocês fizeram a Aula 8 — a que veio preenchida (Aula 7) é a última lançada."
+        };
+        return o;
+      },
+      objetivos: [
+        { id: "lanc", texto: "Lançar a aula de hoje da Ana",
+          dica: "Pense em quem faltou.",
+          solucao: "Aulas e Reposições › 15/10 › Ana: Falta do professor › observação com o motivo e o combinado. Salvar.",
+          ok: function () { return !!S.lancados["ana|2026-10-15|reg"]; } },
+        { id: "agendar", texto: "Agendar a reposição da Ana (Aulas e Reposições › Reposições)",
+          dica: "Horário livre, com até 7 dias de antecedência — e nunca colado na aula regular dela, porque isso é extensão de horário.",
+          solucao: "Sexta, 16/10, às 19h — ou outro horário livre até 22/10 que não encoste nas aulas dela de terça e quinta, às 20h.",
+          ok: function () { var r = repoAna(); return !!(r && r.agendada); } },
+        { id: "repo", texto: "Lançar a reposição depois que ela acontecer",
+          dica: "No dia da reposição, a Ana aparece no lançamento com a etiqueta REPOSIÇÃO.",
+          solucao: "Presença na reposição · Aula do livro · Now We're Talking · B1 · Aula 8 · observação. Salvar.",
+          ok: function () { var r = repoAna(); return !!(r && r.agendada && S.lancados["ana|" + r.agendada.data + "|repo"]); } }
+      ],
+      depois: {
+        agendar: function () {
+          var r = repoAna(), ini = D(r.agendada.data + " " + r.agendada.hora);
+          S.now = addMin(ini, 35);
+          S.dataLanc = r.agendada.data;
+          S.narr.push("<b>" + cap(DOW[ini.getDay()]) + ", " + dm(ini) + ", " + hh(r.agendada.hora) + "</b> — a reposição aconteceu. Vocês fizeram a Aula 8 — The Meaning Inside the Box, só com o livro. A Ana foi bem na descrição de objetos, mas ainda confunde “look like” com “like”. Agora, lance.");
+        }
+      },
+      fechamento: "Falta do professor: reposição obrigatória, sem teto e sem prazo para expirar. Agende em horário livre, com até 7 dias de antecedência, sem estender a aula regular — e lance como “Presença na reposição”. No fim, confirme com o aluno quantas reposições ainda restam."
+    },
+    {
+      id: "m8", titulo: "Fechamento do mês", ref: "Etapa 6 · MAPA · Financeiro e Notas fiscais",
+      inicio: "2026-11-01 10:00", abre: { tab: "king", rota: "home" },
+      historia: "Domingo, 01/11. Outubro fechou e o botão de autorizar pagamento já apareceu na Financeira. Só que há uma pendência: na sexta, 30/10, a Carla pediu para treinar a entrevista de emprego dela — vocês conversaram a aula toda, sem abrir o livro — e você esqueceu de lançar.",
+      alvos: function () {
+        return { "carla|2026-10-30|reg": {
+          tipo: "presenca", tipoAula: "pers_sem",
+          msgTipo: { _: "A aula aconteceu: o registro é Presença." },
+          msgTipoAula: "Vocês conversaram a aula toda sobre a entrevista, sem abrir o livro: “Aula personalizada sem uso do livro”."
+        } };
+      },
+      objetivos: [
+        { id: "pend", texto: "Lançar a aula pendente da Carla",
+          dica: "Aulas e Reposições › Pendências.",
+          solucao: "Pendências › Lançar › Presença · Aula personalizada sem uso do livro · observação com o que foi treinado. Salvar.",
+          ok: function () { return !!S.lancados["carla|2026-10-30|reg"]; } },
+        { id: "autorizar", texto: "Conferir o Resumo Consolidado e autorizar o pagamento (Financeira)",
+          dica: "Autorize só com tudo lançado e o resumo conferido. Havendo divergência, a coordenação fica sabendo antes da autorização.",
+          solucao: "Financeira › marque “Conferi meus lançamentos e o Resumo Consolidado” › Autorizar pagamento.",
+          ok: function () { return S.autorizado; } },
+        { id: "nf", texto: "Lançar a nota fiscal de outubro",
+          dica: "Financeira › Notas fiscais. Escolher o arquivo ainda não envia a nota.",
+          solucao: "Escolher arquivo › Documentos › NF_outubro_2026.pdf › Lançar Nota Fiscal.",
+          ok: function () { return S.nfLancada; } }
+      ],
+      depois: {
+        autorizar: function () {
+          S.now = D("2026-11-06 10:00");
+          S.narr.push("<b>Sexta, 06/11</b> — o pagamento de outubro caiu na sua conta. Agora falta a nota fiscal.");
+        }
+      },
+      fechamento: "No fechamento: lance tudo, confira o Resumo Consolidado (o retido é dinheiro seu, só adiado), autorize e, com o pagamento na conta, lance a nota fiscal. Escolher o arquivo não basta — é o “Lançar Nota Fiscal” que envia."
+    }
+  ];
+
+  /* ═════════ estado ═════════ */
+  var S;
+  function novoEstado() {
+    return {
+      m: -1, obj: {}, narr: [], now: D("2026-10-05 10:00"),
+      tab: "king", rota: "home", aba: "lancamento", dataLanc: "2026-10-05", agendaSeg: "2026-10-05",
+      chat: null, fb: null, toast: null, dica: false, verSol: false, dicaUsada: {},
+      contrato: "pendente", flags: { apresentacao: false, grupo: false, lembrete: false },
+      alunos: JSON.parse(JSON.stringify(ALUNOS)),
+      lancados: {}, drafts: {}, prints: [], msgs: [],
+      reposicoes: JSON.parse(JSON.stringify(REPOS_INI)),
+      picker: null, pasta: "img", montagem: {}, repoForm: null,
+      hist: { aberto: null, nivel: "", modulo: "", mais: null },
+      conferi: false, autorizado: false, nfEscolhido: null, nfLancada: false,
+      res: MISSOES.map(function () { return { erros: 0, dicas: 0, revelou: false, pts: 0 }; }),
+      log: [], seq: 0, confirmaReinicio: false
+    };
+  }
+
+  function M() { return S.m >= 0 && S.m < MISSOES.length ? MISSOES[S.m] : null; }
+  function objAtual() {
+    var m = M(); if (!m) return null;
+    for (var i = 0; i < m.objetivos.length; i++) if (!S.obj[m.objetivos[i].id]) return m.objetivos[i];
+    return null;
+  }
+  function feito(id) { return !!S.obj[id]; }
+  function pontos(r) { var p = Math.max(20, 100 - 20 * r.erros - 10 * r.dicas); return r.revelou ? Math.min(p, 30) : p; }
+  function checar() {
+    var m = M(); if (!m) return;
+    for (var i = 0; i < m.objetivos.length; i++) {
+      var o = m.objetivos[i];
+      if (S.obj[o.id]) continue;
+      if (!o.ok()) break; // objetivos são em ordem
+      S.obj[o.id] = true; S.dica = false; S.verSol = false;
+      if (m.depois && m.depois[o.id]) m.depois[o.id]();
+    }
+    if (!objAtual()) S.res[S.m].pts = pontos(S.res[S.m]);
+  }
+  function erro(slot, titulo, texto) {
+    var r = S.res[S.m]; if (r) r.erros++;
+    S.log.push({ m: S.m, titulo: titulo, texto: texto });
+    S.fb = { tipo: "err", slot: slot, titulo: titulo, texto: texto };
+  }
+  function aviso(slot, titulo, texto) { S.fb = { tipo: "info", slot: slot, titulo: titulo, texto: texto }; }
+  function sucesso(slot, titulo, texto) { S.fb = { tipo: "ok", slot: slot, titulo: titulo, texto: texto }; }
+
+  function iniciaMissao(i) {
+    var m = MISSOES[i];
+    S.m = i; S.obj = {}; S.narr = []; S.fb = null; S.toast = null; S.dica = false; S.verSol = false;
+    S.picker = null; S.repoForm = null; S.hist = { aberto: null, nivel: "", modulo: "", mais: null };
+    S.now = D(m.inicio); S.dataLanc = ymd(S.now); S.agendaSeg = segundaDe(S.now);
+    S.tab = m.abre.tab; if (m.abre.rota) S.rota = m.abre.rota; if (m.abre.aba) S.aba = m.abre.aba;
+    S.chat = m.abre.chat === undefined ? S.chat : m.abre.chat;
+    rolarParaTopo();
+  }
+
+  /* ═════════ WhatsApp: conversas e prints ═════════ */
+  function chatDef(id) { for (var i = 0; i < CHATS.length; i++) if (CHATS[i].id === id) return CHATS[i]; return null; }
+  function chatsVisiveis() {
+    return CHATS.filter(function (c) { return c.id !== "felipe" || S.contrato === "aceito"; })
+      .map(function (c) { var ms = mensagens(c.id); return { c: c, ult: ms[ms.length - 1] }; })
+      .sort(function (a, b) { var ta = a.ult ? D(a.ult.t) : 0, tb = b.ult ? D(b.ult.t) : 0; return tb - ta; })
+      .map(function (x) { return x.c; });
+  }
+  function mensagens(chat, ate) {
+    var lim = ate || S.now;
+    return MSGS.concat(S.msgs).filter(function (x) { return x.chat === chat && D(x.t) <= lim; })
+      .sort(function (a, b) { return (D(a.t) - D(b.t)) || (a.o - b.o); });
+  }
+  function addMsg(chat, de, txt, depoisMin) {
+    var t = addMin(S.now, depoisMin || 0);
+    S.seq++;
+    S.msgs.push({ id: "d" + S.seq, chat: chat, de: de, t: fmt(t), txt: txt, o: 1000 + S.seq });
+    if (t > S.now) S.now = t;
+  }
+  function arquivos() {
+    var fixos = ARQ_FIXOS.filter(function (f) { return !f.desde || S.now >= D(f.desde); }).map(function (f) {
+      if (f.chat && !f.msgIds) { var ms = mensagens(f.chat, D(f.ate)); f.msgIds = ms.map(function (x) { return x.id; }); f.preview = ms.slice(-3); }
+      return f;
+    });
+    return S.prints.slice().reverse().concat(fixos);
+  }
+  function arq(id) { var l = arquivos(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+
+  /* ═════════ aulas do dia ═════════ */
+  function alunoAtivo(a, data) {
+    if (a.id === "felipe" && S.contrato !== "aceito") return false;
+    return !a.inicio || data >= a.inicio;
+  }
+  function linhasDoDia(data) {
+    var dow = D(data).getDay(), out = [];
+    ORDEM.forEach(function (id) {
+      var a = S.alunos[id];
+      if (!alunoAtivo(a, data) || a.dias.indexOf(dow) < 0) return;
+      out.push({ key: id + "|" + data + "|reg", aluno: id, data: data, hora: a.hora, repo: false });
+    });
+    S.reposicoes.forEach(function (r) {
+      if (r.agendada && r.agendada.data === data) out.push({ key: r.aluno + "|" + data + "|repo", aluno: r.aluno, data: data, hora: r.agendada.hora, repo: true });
+    });
+    return out.sort(function (x, y) { return x.hora < y.hora ? -1 : x.hora > y.hora ? 1 : 0; });
+  }
+  function linhaPorKey(k) {
+    var p = k.split("|"), l = linhasDoDia(p[1]);
+    for (var i = 0; i < l.length; i++) if (l[i].key === k) return l[i];
+    return null;
+  }
+  function inicioLinha(l) { return D(l.data + " " + l.hora); }
+  function alvoAtual(k) { var m = M(); if (!m || !m.alvos) return null; return m.alvos()[k] || null; }
+  function estadoLinha(l) {
+    if (S.lancados[l.key]) return "lancado";
+    if (inicioLinha(l) > S.now) return "futura";
+    if (alvoAtual(l.key)) return "lancar";
+    return "historico";
+  }
+  function tipoHistorico(l) { return HIST[l.key] || (l.repo ? "presenca_repo" : "presenca"); }
+  function pendencias() {
+    var m = M(); if (!m || !m.alvos) return [];
+    return Object.keys(m.alvos()).map(linhaPorKey).filter(function (l) {
+      return l && estadoLinha(l) === "lancar" && addMin(inicioLinha(l), 24 * 60) < S.now;
+    });
+  }
+  function draftK(k) {
+    var d = S.drafts[k];
+    if (!d) {
+      var a = S.alunos[k.split("|")[0]];
+      d = S.drafts[k] = { tipo: null, direito: null, print: null, tipoAula: null, livro: "nwt", nivel: a.nivel || "", aula: a.aula || "", obs: "" };
+    }
+    return d;
+  }
+  function repoAna() { for (var i = 0; i < S.reposicoes.length; i++) if (S.reposicoes[i].id === "r-ana-2026-10-15") return S.reposicoes[i]; return null; }
+  function repoFeita(r) {
+    if (r.feita) return true;
+    if (!r.agendada) return false;
+    var L = S.lancados[r.aluno + "|" + r.agendada.data + "|repo"];
+    return !!(L && L.tc === "presenca_repo");
+  }
+  function alunoNoHorario(data, hora) {
+    var dow = D(data).getDay();
+    for (var i = 0; i < ORDEM.length; i++) {
+      var a = S.alunos[ORDEM[i]];
+      if (alunoAtivo(a, data) && a.dias.indexOf(dow) >= 0 && a.hora === hora) return a;
+    }
+    return null;
+  }
+  function ocupante(data, hora) {
+    var a = alunoNoHorario(data, hora);
+    if (a) return primeiro(a.nome);
+    for (var i = 0; i < S.reposicoes.length; i++) {
+      var r = S.reposicoes[i];
+      if (r.agendada && r.agendada.data === data && r.agendada.hora === hora) return "reposição de " + primeiro(S.alunos[r.aluno].nome);
+    }
+    var dow = D(data).getDay();
+    if (BLOQUEIOS.some(function (b) { return b.dow === dow && b.hora === hora; })) return "horário ocupado";
+    return null;
+  }
+  // Reposição colada na aula regular do mesmo aluno = extensão de horário.
+  function ehExtensao(id, data, hora) {
+    var a = S.alunos[id], dow = D(data).getDay();
+    if (a.dias.indexOf(dow) < 0) return false;
+    var ini = D(data + " " + a.hora), s = D(data + " " + hora);
+    return +addMin(s, 30) === +ini || +s === +addMin(ini, 30);
+  }
+
+  /* ═════════ validação do lançamento ═════════ */
+  function erroPrint(f, aluno, msgId) {
+    var nome = primeiro(S.alunos[aluno].nome);
+    if (!f) return "Anexe o print da conversa com " + nome + ".";
+    if (!f.chat) return "Esse arquivo não é um print de conversa. Anexe o print do WhatsApp com " + nome + ".";
+    if (f.chat !== aluno) return "Esse print é da conversa com " + chatDef(f.chat).nome + ". O print tem que ser da conversa entre você e " + nome + ".";
+    if (f.msgIds.indexOf(msgId) < 0) return "Esse print é antigo: não mostra a mensagem desta falta. Tire um print novo da conversa com " + nome + " no WhatsApp.";
+    return null;
+  }
+  function valida(l, d, a) {
+    var nome = primeiro(S.alunos[l.aluno].nome);
+    var pres = d.tipo === "presenca" || d.tipo === "presenca_repo";
+    if (!d.tipo) return { req: "Escolha o tipo de registro da aula de " + nome + "." };
+    if (d.tipo === "falta_aluno" && !d.direito) return { req: "Diga se a falta de " + nome + " tem ou não direito a reposição." };
+    if (d.tipo === "falta_aluno" && d.direito === "sem" && !d.print) return { req: "Anexe o print da conversa com " + nome + " — a plataforma pede em toda falta sem direito a reposição." };
+    if (pres && !d.tipoAula) return { req: "Escolha o tipo de aula de " + nome + "." };
+    if (pres && d.tipoAula !== "pers_sem" && !d.aula) return { req: "Escolha a aula do material usada com " + nome + "." };
+    if (!norm(d.obs)) return { req: "Escreva a observação de " + nome + " — todo lançamento tem observação." };
+    if (!a) return null;
+    var T = "Lançamento não salvo · " + nome;
+    if (d.tipo !== a.tipo) return { err: (a.msgTipo && (a.msgTipo[d.tipo] || a.msgTipo._)) || "Tipo de registro errado.", titulo: T };
+    if (a.direito && d.direito !== a.direito) return { err: a.msgDireito, titulo: T };
+    if (a.print) { var e = erroPrint(arq(d.print), l.aluno, a.print); if (e) return { err: e, titulo: T }; }
+    if (a.tipoAula && d.tipoAula !== a.tipoAula) return { err: a.msgTipoAula, titulo: T };
+    if (a.aula && a.tipoAula !== "pers_sem") {
+      if (d.livro !== a.livro) return { err: nome + " usa o Now We're Talking, o material novo da King.", titulo: T };
+      if (d.nivel !== a.nivel) return { err: nome + " é " + a.nivel + ". O nível do lançamento precisa bater com o do aluno.", titulo: T };
+      if (d.aula !== a.aula) return { err: a.msgAula, titulo: T };
+    }
+    if (a.feriado) {
+      if (norm(d.obs).indexOf("feriado") < 0) return { err: "A observação precisa dizer que é feriado: “Feriado nacional”. É por ela que a coordenação reconhece o dia e paga normalmente.", titulo: T };
+    } else if (obsFraca(d.obs)) {
+      return { err: "Observação genérica não é aceita. " + (a.msgObs || OBS_EX[d.tipo]), titulo: T };
+    }
+    return null;
+  }
+  function tcDe(d) {
+    if (d.tipo === "falta_aluno") return d.direito === "com" ? "fcr_aluno" : "falta";
+    if (d.tipo === "falta_prof") return "fcr_prof";
+    return d.tipo;
+  }
+
+  /* ═════════ HTML: peças ═════════ */
+  function fbHTML(slot) {
+    var f = S.fb; if (!f || f.slot !== slot) return "";
+    var icn = f.tipo === "err" ? "alert" : f.tipo === "ok" ? "check" : "info";
+    return '<div class="fb fb-' + f.tipo + '" role="' + (f.tipo === "err" ? "alert" : "status") + '">' + ic(icn, 16) + "<div><b>" + esc(f.titulo) + "</b>" + esc(f.texto) + "</div></div>";
+  }
+  function seg(opts, val, act, k, rotulo) {
+    return '<div class="seg" role="radiogroup" aria-label="' + esc(rotulo) + '">' + opts.map(function (o) {
+      return '<button role="radio" id="g-' + act + "-" + fid(k) + "-" + o.v + '" aria-checked="' + (val === o.v) + '" data-act="' + act + '" data-k="' + esc(k) + '" data-v="' + o.v + '"' + (o.dis ? " disabled" : "") + ">" + esc(o.r) + "</button>";
+    }).join("") + "</div>";
+  }
+  function selHTML(opts, val, campo, k, ph) {
+    var id = "s-" + campo + "-" + fid(k);
+    return { id: id, html: '<select id="' + id + '" data-chg="campo" data-f="' + campo + '" data-k="' + esc(k) + '">' +
+      (ph ? '<option value=""' + (val ? "" : " selected") + ">" + esc(ph) + "</option>" : "") +
+      opts.map(function (o) { return '<option value="' + esc(o.v) + '"' + (o.v === val ? " selected" : "") + (o.dis ? " disabled" : "") + ">" + esc(o.r) + "</option>"; }).join("") + "</select>" };
+  }
+  function fldSel(label, opts, val, campo, k, ph) {
+    var s = selHTML(opts, val, campo, k, ph);
+    return '<div class="fld"><label class="lb" for="' + s.id + '">' + esc(label) + "</label>" + s.html + "</div>";
+  }
+  function fld(label, inner) { return '<div class="fld"><span class="lb">' + label + "</span>" + inner + "</div>"; }
+  function chipTC(tc) { return '<span class="st ' + TC_COR[tc] + '" title="' + esc(TC[tc]) + '">' + TC_CURTO[tc] + "</span>"; }
+
+  function pickerHTML() {
+    var p = S.pasta;
+    var fs = arquivos().filter(function (f) { return p === "img" ? f.tipo === "img" : f.tipo === "pdf"; });
+    var lista = fs.length ? '<div class="files">' + fs.map(function (f) {
+      return '<button class="file" data-act="escolherArq" data-v="' + f.id + '" title="' + esc(f.nome) + '">' + thumb(f) + '<div class="fname">' + esc(f.nome) + "</div></button>";
+    }).join("") + "</div>" : '<p class="help">Nenhum arquivo nesta pasta.' + (p === "img" ? " Os prints que você tira no WhatsApp caem aqui." : "") + "</p>";
+    return '<div class="picker" role="dialog" aria-label="Abrir arquivo"><div class="pk-h"><b>Abrir arquivo</b>' +
+      '<button class="pk-tab" data-act="pasta" data-v="img" aria-selected="' + (p === "img") + '">' + ic("img", 12) + " Imagens</button>" +
+      '<button class="pk-tab" data-act="pasta" data-v="doc" aria-selected="' + (p === "doc") + '">' + ic("file", 12) + " Documentos</button>" +
+      '<button class="btn btn-sm fechar" data-act="fecharPicker">Cancelar</button></div>' + lista + "</div>";
+  }
+  function thumb(f) {
+    if (f.tipo === "pdf") return '<div class="thumb thumb-pdf">' + ic("file", 24) + "<span>PDF</span></div>";
+    if (!f.chat) return '<div class="thumb thumb-pix"><b>pix</b><span>R$ 312,00</span><span>Comprovante</span></div>';
+    var ms = f.preview || [];
+    return '<div class="thumb"><div class="mini-h">' + esc(chatDef(f.chat).nome) + "</div>" + ms.map(function (m) {
+      return '<div class="mb ' + (m.de === "eu" ? "out" : "in") + '">' + esc(m.txt) + "</div>";
+    }).join("") + "</div>";
+  }
+
+  /* ═════════ HTML: intro, missão, relatório ═════════ */
+  function htmlIntro() {
+    return '<section class="intro"><span class="eyebrow">Simulador · plataforma do professor</span>' +
+      "<h1>Um mês de trabalho em 8 missões</h1>" +
+      '<p class="sub">Uma cópia de treino da plataforma do professor e do WhatsApp, com situações reais de outubro: aluno novo, primeira aula, lançamentos, feriado, faltas, reposição e fechamento do mês. Nada daqui vai para a plataforma de verdade.</p>' +
+      '<ol class="passos">' +
+      '<li><span class="n">1</span><span>Leia a situação da missão e faça o que ela pede na janela logo abaixo. As abas <b>King of Languages</b> e <b>WhatsApp</b> funcionam como no dia a dia.</span></li>' +
+      '<li><span class="n">2</span><span>Errou? A plataforma explica a regra e você tenta de novo. Cada missão vale 100 pontos; <b>erros e dicas descontam</b>. Depois de 2 erros, dá para ver a solução.</span></li>' +
+      '<li><span class="n">3</span><span>Leva de 20 a 30 minutos. <b>O progresso não fica salvo</b>: se recarregar a página, o simulador recomeça.</span></li>' +
+      "</ol>" +
+      '<div class="novo">' + ic("alert", 16) + "<span><b>Novo no lançamento de aulas:</b> em toda falta sem direito a reposição, a plataforma agora pede o print da conversa entre você e o aluno. O simulador já funciona assim.</span></div>" +
+      '<div class="missoes-prev">' + MISSOES.map(function (m, i) { return "<div><b>" + pad(i + 1) + "</b>" + esc(m.titulo) + "</div>"; }).join("") + "</div>" +
+      '<button class="btn btn-pri" data-act="comecar" id="btn-comecar">Começar a missão 1 ' + ic("arrow", 14) + "</button></section>";
+  }
+
+  function htmlMissao() {
+    var m = M(), r = S.res[S.m], o = objAtual();
+    var dots = MISSOES.map(function (x, i) { return '<span class="dot ' + (i < S.m ? "done" : i === S.m ? "cur" : "") + '" title="Missão ' + (i + 1) + ": " + esc(x.titulo) + '"></span>'; }).join("");
+    var objs = m.objetivos.map(function (ob) {
+      var st = S.obj[ob.id] ? "done" : o && o.id === ob.id ? "cur" : "";
+      return '<li class="obj ' + st + '"><span class="ck">' + (S.obj[ob.id] ? ic("check", 12) : "") + '</span><span class="tx">' + esc(ob.texto) + "</span></li>";
+    }).join("");
+    var narr = S.narr.map(function (n) { return '<p class="narr">' + n + "</p>"; }).join("");
+    var pe;
+    if (o) {
+      var sol = r.erros >= 2;
+      pe = '<div class="mis-foot">' + (sol
+        ? '<button class="btn btn-sm" data-act="verSol" id="btn-sol" aria-expanded="' + S.verSol + '">' + ic("bulb", 14) + (S.verSol ? " Esconder solução" : " Ver solução") + "</button>"
+        : '<button class="btn btn-sm" data-act="dica" id="btn-dica" aria-expanded="' + S.dica + '">' + ic("bulb", 14) + (S.dica ? " Esconder dica" : " Dica") + "</button>") +
+        (r.erros ? '<span class="pen">' + r.erros + (r.erros > 1 ? " erros" : " erro") + " nesta missão</span>" : "") + "</div>";
+      if (S.verSol) pe += '<div class="dica"><b>Solução</b>' + esc(o.solucao) + "</div>";
+      else if (S.dica) pe += '<div class="dica"><b>Dica</b>' + esc(o.dica) + "</div>";
+    } else {
+      pe = '<div class="fecha" role="status"><div class="fecha-h">' + ic("check", 16) + ' Missão concluída <span class="pts num">' + r.pts + " de 100 pontos</span></div><p>" + esc(m.fechamento) + '</p><div class="fecha-f"><span class="ref">' + esc(m.ref) + '</span><button class="btn btn-pri" data-act="proxima" id="btn-proxima">' + (S.m === MISSOES.length - 1 ? "Ver resultado" : "Próxima missão") + " " + ic("arrow", 14) + "</button></div></div>";
+    }
+    return '<section class="mis' + (o ? "" : " ok") + '" id="missao" aria-live="polite"><div class="mis-top"><div class="dots" aria-hidden="true">' + dots + '</div><span class="eyebrow">Missão ' + (S.m + 1) + " de " + MISSOES.length + '</span><span class="clock" title="Agora, na simulação">' + ic("clock", 13) + " " + quando(S.now) + "</span></div>" +
+      "<h2>" + esc(m.titulo) + '</h2><p class="story">' + esc(m.historia) + "</p>" + narr +
+      '<div class="eyebrow objs-h">Objetivos</div><ul class="objs">' + objs + "</ul>" + pe + "</section>";
+  }
+
+  function htmlRelatorio() {
+    var tot = 0, sem = 0;
+    S.res.forEach(function (r) { tot += r.pts; if (!r.erros && !r.revelou) sem++; });
+    var pct = Math.round(tot / MISSOES.length);
+    var msg = pct >= 85 ? "Você está pronto(a) para a plataforma de verdade." : pct >= 60 ? "Bom caminho — revise os pontos abaixo antes da prova." : "Vale revisar os pontos abaixo e refazer o simulador antes da prova.";
+    var linhas = MISSOES.map(function (m, i) {
+      var r = S.res[i], est = r.pts >= 90 ? 3 : r.pts >= 60 ? 2 : 1, st = "";
+      for (var k = 1; k <= 3; k++) st += '<span class="' + (k <= est ? "" : "off") + '">' + ic("star", 13) + "</span>";
+      return '<tr><td><span class="num">' + pad(i + 1) + "</span> " + esc(m.titulo) + '</td><td><span class="stars" aria-label="' + est + ' de 3 estrelas">' + st + '</span></td><td class="r num">' + r.erros + '</td><td class="r num">' + r.dicas + (r.revelou ? " + solução" : "") + '</td><td class="r num"><b>' + r.pts + "</b></td></tr>";
+    }).join("");
+    // Até dois tropeços por missão: com muitos erros, uma lista corrida só
+    // mostraria as primeiras missões e esconderia o fim do mês.
+    var vistos = {}, porMissao = {}, rev = [];
+    S.log.forEach(function (e) {
+      if (vistos[e.texto] || (porMissao[e.m] || 0) >= 2) return;
+      vistos[e.texto] = 1; porMissao[e.m] = (porMissao[e.m] || 0) + 1; rev.push(e);
+    });
+    var revHTML = rev.length ? '<div class="revisar"><h2>O que revisar</h2><ul>' + rev.map(function (e) {
+      return "<li><b>Missão " + (e.m + 1) + " · " + esc(MISSOES[e.m].titulo) + ".</b> " + esc(e.texto) + "</li>";
+    }).join("") + "</ul></div>" : '<div class="cta" style="background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-bd)">' + ic("check", 16) + "<div>Nenhum erro nas oito missões.</div></div>";
+    var reinicio = S.confirmaReinicio
+      ? '<span class="pg-sub">Recomeçar apaga este resultado.</span><button class="btn" data-act="cancelaReinicio">Cancelar</button><button class="btn btn-pri" data-act="reiniciar" id="btn-reiniciar">Sim, recomeçar</button>'
+      : '<button class="btn" data-act="pedeReinicio" id="btn-pede">' + ic("refresh", 14) + " Refazer o simulador</button>";
+    return '<section class="rel" id="missao"><span class="eyebrow">Simulador concluído</span><h1>Aproveitamento de ' + pct + "%</h1>" +
+      '<p class="sub">' + msg + " " + sem + " de " + MISSOES.length + " missões sem nenhum erro.</p>" +
+      '<div class="tbl-wrap" style="margin-top:14px"><table class="t"><thead><tr><th>Missão</th><th>Resultado</th><th class="r">Erros</th><th class="r">Dicas</th><th class="r">Pontos</th></tr></thead><tbody>' + linhas + "</tbody></table></div>" +
+      revHTML +
+      '<div class="cta">' + ic("down", 16) + "<div><b>Agora, a prova final.</b> Role a página: logo abaixo do simulador estão a revisão rápida e as questões que concluem a trilha.</div></div>" +
+      '<div class="savebar" style="margin-top:14px">' + reinicio + "</div></section>";
+  }
+
+  /* ═════════ HTML: janela ═════════ */
+  var NAV = [
+    { id: "home", rot: "Home", ic: "home", url: "/home" },
+    { id: "agenda", rot: "Agenda do Professor", ic: "cal", url: "/agenda-professor" },
+    { id: "historico", rot: "Histórico do Aluno", ic: "users", url: "/perfil-alunos" },
+    { id: "aulas", rot: "Aulas e Reposições", ic: "clip", url: "/lancamento-aulas" },
+    { id: "materiais", rot: "Materiais", ic: "book", url: "/modules", off: true },
+    { id: "ranking", rot: "Ranking", ic: "trophy", url: "/ranking-ligas", off: true },
+    { id: "financeira", rot: "Financeira", ic: "wallet", url: "/financeira" }
+  ];
+  function rotaURL() {
+    if (S.rota === "aulas") return S.aba === "reposicoes" ? "/reposicoes" : S.aba === "pendencias" ? "/pendencias" : "/lancamento-aulas";
+    for (var i = 0; i < NAV.length; i++) if (NAV[i].id === S.rota) return NAV[i].url;
+    return "/home";
+  }
+  function htmlJanela() {
+    var king = S.tab === "king";
+    return '<div class="win" id="janela"><div class="win-bar" role="tablist" aria-label="Abas do navegador"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>' +
+      '<button class="tab" role="tab" id="tab-king" aria-selected="' + king + '" data-act="tab" data-v="king"><span class="fav fav-k">K</span>King of Languages</button>' +
+      '<button class="tab" role="tab" id="tab-whats" aria-selected="' + !king + '" data-act="tab" data-v="whats"><span class="fav fav-w">' + ic("msg", 10) + "</span>WhatsApp</button></div>" +
+      '<div class="win-url"><span class="url">' + ic("lock", 11) + " " + (king ? "app.kingmanagementsystem.com.br" + rotaURL() : "web.whatsapp.com") + '</span><span class="sim-tag">Treino</span></div>' +
+      (king ? htmlKing() : htmlWhats()) + "</div>";
+  }
+
+  function htmlKing() {
+    var np = pendencias().length;
+    var nav = NAV.map(function (n) {
+      return '<button class="nav-it' + (n.off ? " off" : "") + '" id="nav-' + n.id + '" data-act="rota" data-v="' + n.id + '"' + (S.rota === n.id ? ' aria-current="page"' : "") + ">" + ic(n.ic, 15) + "<span>" + n.rot + "</span>" + (n.id === "aulas" && np ? '<span class="nb">' + np + "</span>" : "") + "</button>";
+    }).join("");
+    var pg = S.rota === "home" ? pgHome() : S.rota === "agenda" ? pgAgenda() : S.rota === "historico" ? pgHist() : S.rota === "aulas" ? pgAulas() : S.rota === "financeira" ? pgFin() : pgOff();
+    return '<div class="kms-head"><span class="kms-logo">King of Languages</span><span class="kms-tag">Plataforma do professor</span><div class="kms-user">' + ic("bell", 16) + '<span class="av">VC</span></div></div>' +
+      '<div class="kms-body"><nav class="kms-nav" aria-label="Menu da plataforma">' + nav + '</nav><main class="kms-main">' + pg + "</main></div>";
+  }
+
+  /* Home */
+  function pgHome() {
+    var h = S.now.getHours(), sauda = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+    var out = '<div class="pg-h"><div><h3>' + sauda + ', teacher!</h3><div class="pg-sub">' + cap(DOW[S.now.getDay()]) + ", " + dmy(ymd(S.now)) + "</div></div></div>";
+    if (S.contrato === "pendente") {
+      out += '<div class="card destaque"><div class="eyebrow" style="color:var(--info-fg)">Contrato para aceite</div>' +
+        '<div class="ct-top" style="margin-top:8px"><span class="av2 lg" style="background:' + ALUNOS.felipe.cor + '">FM</span><div><b>Felipe Moraes</b><div class="pg-sub">Aluno novo na escola</div></div></div>' +
+        '<div class="kv"><span>Plano</span><b>2 aulas de 30 min por semana</b><span>Dias</span><b>Segunda e quarta</b><span>Horário</span><b>19h às 19h30 (Brasília)</b><span>Início</span><b>Quarta, 07/10/2026</b></div>' +
+        '<div class="ok-line">' + ic("check", 13) + " Sua agenda está livre nesses horários</div>" + fbHTML("home") +
+        '<div class="savebar"><button class="btn" data-act="recusar" id="btn-recusar">Recusar</button><button class="btn btn-pri" data-act="aceitar" id="btn-aceitar">Aceitar contrato</button></div></div>';
+    } else out += fbHTML("home");
+    var m = M();
+    if (m && m.id === "m8" && !S.autorizado) out += '<div class="card destaque"><div class="card-h">' + ic("wallet", 15) + " Autorização de pagamento de outubro disponível</div><p class=\"pg-sub\" style=\"color:inherit\">Revise seus lançamentos antes de autorizar.</p><div class=\"savebar\"><button class=\"btn btn-sm\" data-act=\"rota\" data-v=\"financeira\">Ir para a Financeira</button></div></div>";
+    var np = pendencias().length, nr = S.reposicoes.filter(function (r) { return !r.agendada; }).length;
+    out += '<div class="grid3">' +
+      '<button class="card stat" data-act="irAulas" data-v="pendencias"><span class="eyebrow">Pendências de lançamento</span><b class="big' + (np ? " txt-err" : "") + '">' + np + '</b><span class="pg-sub">' + (np ? "Aula sem lançamento há mais de 24h" : "Tudo lançado em dia") + "</span></button>" +
+      '<button class="card stat" data-act="irAulas" data-v="reposicoes"><span class="eyebrow">Reposições a agendar</span><b class="big">' + nr + '</b><span class="pg-sub">Mantenha esse número baixo</span></button>' +
+      '<div class="card stat"><span class="eyebrow">XP · Liga</span><b class="big">1.240</b><span class="pg-sub">Rookie · Liga Bronze</span></div></div>';
+    var prox = linhasDoDia(ymd(S.now)).filter(function (l) { return inicioLinha(l) > S.now; });
+    out += '<div class="card"><div class="card-h">Próximas aulas de hoje</div>' + (prox.length ? prox.map(function (l) {
+      return '<div class="prox"><span class="num">' + hh(l.hora) + "</span><b>" + esc(S.alunos[l.aluno].nome) + "</b>" + (l.repo ? '<span class="tag-repo">REPOSIÇÃO</span>' : "") + '<span class="btn btn-sm dis" aria-disabled="true">Entrar</span></div>';
+    }).join("") : '<p class="pg-sub">Nenhuma aula até o fim do dia.</p>') + "</div>";
+    var ck = [["Lancei todas as aulas", 15], ["Atualizei nível/material dos alunos", 10], ["Verifiquei pendências", 10], ["Mandei mensagem para os alunos que faltaram", 5], ["Incentivei meus alunos a usar a Queen", 5]];
+    out += '<div class="card"><div class="card-h">Checklist do dia</div>' + ck.map(function (c) { return '<div class="chk"><i></i>' + c[0] + '<span class="xp">+' + c[1] + " XP</span></div>"; }).join("") + '<p class="help">Cada item vale XP no ranking. Pendência de lançamento em aberto tira XP todo dia.</p></div>';
+    return out;
+  }
+
+  /* Agenda */
+  function pgAgenda() {
+    var seg0 = D(S.agendaSeg), dias = [0, 1, 2, 3, 4].map(function (i) { return addDias(seg0, i); });
+    var hoje = ymd(S.now);
+    var head = "<tr><th></th>" + dias.map(function (d) { var k = ymd(d); return '<th class="' + (k === hoje ? "hoje" : "") + '">' + DOW3[d.getDay()] + " " + dm(d) + (FERIADOS[k] ? '<br><span class="fer-l">feriado</span>' : "") + "</th>"; }).join("") + "</tr>";
+    var body = SLOTS.map(function (s) {
+      return '<tr><th class="num">' + hh(s) + "</th>" + dias.map(function (d) { var c = celula(ymd(d), s); return '<td class="c-' + c.t + '" title="' + esc(c.txt) + '">' + esc(c.txt) + "</td>"; }).join("") + "</tr>";
+    }).join("");
+    return '<div class="pg-h"><div><h3>Agenda do Professor</h3><div class="pg-sub" style="margin-top:4px"><span class="ok-chip">' + ic("check", 12) + ' Agenda destravada</span></div></div>' +
+      '<div class="wk"><button class="btn btn-sm" data-act="semana" data-v="-7" aria-label="Semana anterior">' + ic("back", 14) + '</button><span class="num">' + dm(dias[0]) + " – " + dm(dias[4]) + '</span><button class="btn btn-sm" data-act="semana" data-v="7" aria-label="Próxima semana">' + ic("arrow", 14) + "</button></div></div>" +
+      '<div class="ag"><table><thead>' + head + "</thead><tbody>" + body + "</tbody></table></div>" +
+      '<div class="legend"><span><i style="background:var(--ok-bg);border:1px solid var(--ok-bd)"></i>Aula normal</span><span><i style="background:var(--hold-bg);border:1px solid var(--hold-bd)"></i>Reposição</span><span><i style="background:var(--fg-muted)"></i>Horário ocupado</span><span><i style="border:1px dashed var(--border-strong)"></i>Feriado nacional</span><span><i style="background:var(--bg-subtle);border:1px solid var(--border-soft)"></i>Livre</span></div>';
+  }
+  function celula(data, hora) {
+    var a = alunoNoHorario(data, hora);
+    if (FERIADOS[data] && a) return { t: "fer", txt: "Feriado" };
+    for (var i = 0; i < S.reposicoes.length; i++) {
+      var r = S.reposicoes[i];
+      if (r.agendada && r.agendada.data === data && r.agendada.hora === hora) return { t: "repo", txt: primeiro(S.alunos[r.aluno].nome) + " · reposição" };
+    }
+    if (a) return { t: "norm", txt: primeiro(a.nome) };
+    var dow = D(data).getDay();
+    if (BLOQUEIOS.some(function (b) { return b.dow === dow && b.hora === hora; })) return { t: "ocup", txt: "Ocupado" };
+    return { t: "livre", txt: "" };
+  }
+
+  /* Histórico do Aluno */
+  function pgHist() {
+    var ids = ORDEM.filter(function (id) { return alunoAtivo(S.alunos[id], "2099-01-01"); });
+    return '<div class="pg-h"><div><h3>Histórico do Aluno</h3><div class="pg-sub">' + ids.length + " alunos na sua agenda</div></div></div>" +
+      '<div class="al-grid">' + ids.map(cardAluno).join("") + "</div>";
+  }
+  function ultimasAulas(id) {
+    var a = S.alunos[id], out = [], d = dia0(S.now), lim = D("2026-09-01");
+    while (d >= lim && out.length < 5) {
+      var k = ymd(d);
+      if (a.inicio && k < a.inicio) break;
+      linhasDoDia(k).reverse().forEach(function (l) {
+        if (l.aluno !== id || out.length >= 5) return;
+        var st = estadoLinha(l);
+        if (st === "lancado") out.push(S.lancados[l.key].tc);
+        else if (st === "historico") out.push(tipoHistorico(l));
+      });
+      d = addDias(d, -1);
+    }
+    return out.reverse().map(function (tc) {
+      var c = tc === "presenca" ? "d5-p" : tc === "presenca_repo" ? "d5-r" : "d5-f";
+      return '<span class="d5 ' + c + '" title="' + esc(TC[tc]) + '"></span>';
+    }).join("") || '<span class="pg-sub">—</span>';
+  }
+  function cardAluno(id) {
+    var a = S.alunos[id], alvo = id === "felipe" && !a.nivel;
+    var h = '<article class="al' + (alvo ? " alvo" : "") + '"><div class="al-top"><span class="av2 lg" style="background:' + a.cor + '">' + ini(a.nome) + "</span><div><b>" + esc(a.nome) + "</b><div>" +
+      (a.nivel ? '<span class="lv">Nível ' + a.nivel + "</span>" : '<span class="lv lv-sem">Sem nível · material bloqueado</span>') + "</div></div></div>" +
+      '<div class="kv"><span>Início na escola</span><b>' + dmy(a.inicio) + "</b><span>Plano</span><b>" + esc(a.plano) + "</b><span>Aulas</span><b>" + a.dias.map(function (x) { return DOW3[x]; }).join(", ") + " · " + hh(a.hora) + "</b>" +
+      (a.modulo ? "<span>Material</span><b>" + esc(a.modulo) + "</b>" : "") + "</div>" +
+      '<div class="d5-row"><span class="pg-sub">Últimas aulas</span><div class="dots5">' + ultimasAulas(id) + "</div></div>" +
+      '<div class="al-f"><button class="btn btn-sm" data-act="mais" data-v="' + id + '" id="mais-' + id + '">' + (S.hist.mais === id ? "Menos informações" : "Mais informações") + "</button>" +
+      '<button class="btn btn-sm' + (alvo ? " btn-pri" : "") + '" data-act="trocarNivel" data-v="' + id + '" id="tn-' + id + '">Trocar nível e liberar material</button></div>';
+    if (S.hist.mais === id) h += '<div class="kv"><span>Ocupação</span><b>' + esc(a.ocup) + "</b><span>Meta</span><b>" + esc(a.meta) + "</b><span>Reposições (out.)</span><b>" + a.usadas + " de 4</b></div>";
+    if (S.hist.aberto === id) {
+      var n = S.hist.nivel, mods = n ? [1, 2, 3].map(function (p) { return { v: n + "-" + p, r: n + " - parte " + p + " - Aula " + (p * 25 - 24) + " até Aula " + p * 25 }; }) : [];
+      h += '<div class="nivel-p"><div class="row2">' + fldSel("Nível atual", NIVEIS.map(function (x) { return { v: x, r: x }; }), n, "hNivel", "h", "Selecione…") +
+        fldSel("Módulo do material", mods, S.hist.modulo, "hModulo", "h", n ? "Selecione…" : "Escolha o nível") + "</div>" +
+        '<div class="savebar" style="margin-top:9px"><button class="btn btn-sm" data-act="fecharNivel">Cancelar</button><button class="btn btn-sm btn-pri" data-act="salvarNivel" id="btn-nivel">Salvar</button></div></div>';
+    }
+    return h + fbHTML("hist-" + id) + "</article>";
+  }
+
+  /* Aulas e Reposições */
+  function pgAulas() {
+    var np = pendencias().length, nr = S.reposicoes.filter(function (r) { return !r.agendada; }).length;
+    var tabs = [["lancamento", "Lançamento de aulas", 0], ["reposicoes", "Reposições", nr], ["pendencias", "Pendências", np]].map(function (t) {
+      return '<button class="subtab" role="tab" id="sub-' + t[0] + '" aria-selected="' + (S.aba === t[0]) + '" data-act="aba" data-v="' + t[0] + '">' + t[1] + (t[2] ? ' <span class="count">' + t[2] + "</span>" : "") + "</button>";
+    }).join("");
+    var corpo = S.aba === "lancamento" ? secLanc() : S.aba === "reposicoes" ? secRepo() : secPend();
+    return '<div class="pg-h"><div><h3>Aulas e Reposições</h3><div class="pg-sub">Lance em até 24h depois da aula. O que passa disso vira pendência.</div></div></div><div class="subtabs" role="tablist">' + tabs + "</div>" + corpo;
+  }
+  function secLanc() {
+    var ls = linhasDoDia(S.dataLanc), d = D(S.dataLanc);
+    var lanc = ls.filter(function (l) { return estadoLinha(l) === "lancar"; });
+    var top = '<div class="lanc-top"><label class="lb" for="dataLanc">Data da aula</label><div class="lanc-date"><input type="date" id="dataLanc" data-chg="dataLanc" value="' + S.dataLanc + '" min="2026-09-01" max="2026-11-30"><button class="btn btn-sm" data-act="hoje">Hoje</button><span class="pg-sub">' + cap(DOW[d.getDay()]) + (FERIADOS[S.dataLanc] ? " · feriado nacional (" + FERIADOS[S.dataLanc] + ")" : "") + "</span></div></div>";
+    if (!ls.length) return top + '<div class="vazio">Nenhuma aula na sua agenda nesta data.</div>' + fbHTML("lanc");
+    return top + ls.map(linhaHTML).join("") + fbHTML("lanc") +
+      (lanc.length ? '<div class="savebar"><button class="btn btn-pri" data-act="salvarLanc" id="btn-salvar">' + ic("check", 14) + " Salvar lançamento</button></div>" : "");
+  }
+  function linhaHTML(l) {
+    var a = S.alunos[l.aluno], st = estadoLinha(l), chip;
+    if (st === "lancado") chip = chipTC(S.lancados[l.key].tc);
+    else if (st === "historico") chip = chipTC(tipoHistorico(l));
+    else if (st === "futura") chip = '<span class="st st-mut">Ainda não aconteceu</span>';
+    else chip = addMin(inicioLinha(l), 24 * 60) < S.now ? '<span class="st st-err">Pendente</span>' : '<span class="st st-info">A lançar</span>';
+    var h = '<div class="linha st-' + st + '"><div class="linha-h"><span class="hora">' + hh(l.hora) + '</span><span class="av2" style="background:' + a.cor + '">' + ini(a.nome) + '</span><span class="nome">' + esc(a.nome) + "</span>" + (l.repo ? '<span class="tag-repo">REPOSIÇÃO</span>' : "") + chip + "</div>";
+    if (st === "lancado") {
+      var L = S.lancados[l.key];
+      h += '<div class="linha-info"><span>' + esc(L.obs) + "</span>" + (L.print ? '<span><span class="file-chip">' + ic("clipp", 11) + " " + esc(L.print) + "</span></span>" : "") + "</div>";
+    }
+    if (st === "lancar") h += formHTML(l);
+    return h + "</div>";
+  }
+  function formHTML(l) {
+    var d = draftK(l.key), a = S.alunos[l.aluno], k = l.key;
+    var tipos = l.repo
+      ? [{ v: "presenca_repo", r: "Presença na reposição" }, { v: "falta_aluno", r: "Falta do aluno" }, { v: "falta_prof", r: "Falta do professor" }]
+      : [{ v: "presenca", r: "Presença" }, { v: "falta_aluno", r: "Falta do aluno" }, { v: "falta_prof", r: "Falta do professor" }];
+    var h = '<div class="linha-f">' + fld("Tipo de registro", seg(tipos, d.tipo, "setTipo", k, "Tipo de registro de " + a.nome));
+    if (d.tipo === "falta_aluno") {
+      var cheio = a.usadas >= 4;
+      h += fld("Direito a reposição", seg([{ v: "com", r: cheio ? "Com direito (limite atingido)" : "Com direito", dis: cheio }, { v: "sem", r: "Sem direito" }], d.direito, "setDir", k, "Direito a reposição") +
+        '<div class="help' + (cheio ? " lim-cheio" : "") + '">Reposições com direito de ' + primeiro(a.nome) + ' em outubro: <b class="num">' + a.usadas + " de 4</b>" + (cheio ? " — limite mensal atingido" : "") + "</div>");
+      if (d.direito === "sem") h += campoPrint(l, d);
+    }
+    if (d.tipo === "falta_prof") h += '<p class="help info-line">' + ic("alert", 14) + " Falta do professor gera reposição obrigatória para o aluno — sem limite e sem prazo para expirar.</p>";
+    if (d.tipo === "presenca" || d.tipo === "presenca_repo") {
+      h += fldSel("Tipo de aula", TIPOS_AULA, d.tipoAula, "tipoAula", k, "Selecione…");
+      if (d.tipoAula !== "pers_sem") {
+        h += '<div class="row3">' + fldSel("Material", [{ v: "nwt", r: "Now We're Talking" }, { v: "antigo", r: "Material Antigo (Beyond Basics/Google Slide/PDF)" }], d.livro, "livro", k) +
+          fldSel("Nível", NIVEIS.map(function (x) { return { v: x, r: x }; }), d.nivel, "nivel", k, "Selecione…") +
+          fldSel("Aula", d.nivel ? aulasDe(d.livro, d.nivel) : [], d.aula, "aula", k, "Selecione…") + "</div>";
+      } else h += '<p class="help" style="margin:0">Aula sem uso do livro: material e aula não se aplicam.</p>';
+    }
+    var ph = d.tipo === "falta_aluno" ? "Se o aluno avisou, quando e como" : d.tipo === "falta_prof" ? "O motivo e o combinado com o aluno" : "O que foi trabalhado, como o aluno respondeu, o que retomar";
+    h += '<div class="fld"><label class="lb" for="obs-' + fid(k) + '">Observação <span class="req">*</span></label><textarea id="obs-' + fid(k) + '" data-inp="obs" data-k="' + esc(k) + '" placeholder="' + ph + '">' + esc(d.obs) + "</textarea></div>";
+    return h + "</div>";
+  }
+  function campoPrint(l, d) {
+    var f = d.print ? arq(d.print) : null, alvo = "print:" + l.key, aberto = S.picker && S.picker.alvo === alvo;
+    return '<div class="fld"><span class="lb">Print da conversa com o aluno <span class="req">*</span></span><div class="anexo">' +
+      (f ? '<span class="file-chip">' + ic("img", 12) + " " + esc(f.nome) + "</span>" : "") +
+      '<button class="btn btn-sm" data-act="abrirPicker" data-v="' + esc(alvo) + '" data-p="img" id="pk-' + fid(l.key) + '">' + ic("clipp", 13) + (f ? " Trocar arquivo" : " Anexar print") + "</button>" +
+      (f ? '<button class="btn-link" data-act="tiraPrint" data-k="' + esc(l.key) + '">Remover</button>' : "") + "</div>" +
+      '<div class="help">Obrigatório em falta sem direito a reposição: a conversa em que o aluno avisou — ou, se ele não avisou, a sua tentativa de contato.</div>' +
+      (aberto ? pickerHTML() : "") + "</div>";
+  }
+  function secRepo() {
+    var pend = S.reposicoes.filter(function (r) { return !r.agendada; });
+    var ag = S.reposicoes.filter(function (r) { return r.agendada && !repoFeita(r); });
+    var fe = S.reposicoes.filter(repoFeita);
+    var out = '<div class="repo-top"><p class="pg-sub">Reposição se agenda em horário livre, com até 7 dias de antecedência. Falta do aluno: prazo de 30 dias corridos. Falta do professor: não expira.</p>' +
+      (S.repoForm ? "" : '<button class="btn btn-pri btn-sm" data-act="repoNovo" id="btn-repo">' + ic("cal", 14) + " Agendar reposição</button>") + "</div>";
+    if (S.repoForm) out += formRepo(); else out += fbHTML("repo");
+    function bloco(tit, lista, vazio) {
+      return '<div class="card"><div class="card-h">' + tit + ' <span class="count">' + lista.length + "</span></div>" + (lista.length ? lista.map(repoLinha).join("") : '<p class="pg-sub">' + vazio + "</p>") + "</div>";
+    }
+    return out + bloco("Pendentes de agendamento", pend, "Nenhuma.") + bloco("Agendadas", ag, "Nenhuma.") + bloco("Realizadas", fe, "Nenhuma.");
+  }
+  function repoLinha(r) {
+    var a = S.alunos[r.aluno], f = D(r.falta), prof = r.motivo === "professor";
+    var fim = repoFeita(r) ? '<span class="fim ok-line">' + ic("check", 12) + " feita</span>"
+      : prof ? '<span class="fim st st-hold">Não expira</span>'
+      : '<span class="fim pg-sub">expira em ' + dm(addDias(f, 30)) + "</span>";
+    return '<div class="rl"><span class="av2" style="background:' + a.cor + '">' + ini(a.nome) + "</span><div><b>" + esc(a.nome) + '</b><div class="pg-sub">Falta de ' + dm(f) + " · " + (prof ? "do professor" : "do aluno") +
+      (r.agendada ? " · " + DOW3[D(r.agendada.data).getDay()] + " " + dm(D(r.agendada.data)) + " às " + hh(r.agendada.hora) : "") + "</div></div>" + fim + "</div>";
+  }
+  function formRepo() {
+    var f = S.repoForm, pend = S.reposicoes.filter(function (r) { return !r.agendada; });
+    var dias = []; for (var i = 1; i <= 15; i++) { var d = addDias(dia0(S.now), i); if (d.getDay() > 0 && d.getDay() < 6) dias.push(d); }
+    var slots = f.data ? SLOTS.map(function (s) { var oc = ocupante(f.data, s); return { v: s, r: hh(s) + (oc ? " — ocupado (" + oc + ")" : " — livre"), dis: !!oc }; }) : [];
+    return '<div class="card"><div class="card-h">Agendar reposição</div><div class="row3">' +
+      fldSel("Aula a ser reposta", pend.map(function (r) { return { v: r.id, r: S.alunos[r.aluno].nome + " · falta de " + dm(D(r.falta)) + (r.motivo === "professor" ? " (do professor)" : "") }; }), f.repo, "repo", "repo", "Selecione…") +
+      fldSel("Dia", dias.map(function (d) { return { v: ymd(d), r: cap(DOW3[d.getDay()]) + ", " + dm(d) }; }), f.data, "data", "repo", "Selecione…") +
+      fldSel("Horário", slots, f.hora, "hora", "repo", f.data ? "Selecione…" : "Escolha o dia") + "</div>" + fbHTML("repo") +
+      '<div class="savebar" style="margin-top:10px"><button class="btn btn-sm" data-act="repoCancelar">Cancelar</button><button class="btn btn-sm btn-pri" data-act="agendar" id="btn-agendar">Agendar</button></div></div>';
+  }
+  function secPend() {
+    var ps = pendencias();
+    if (!ps.length) return '<div class="vazio">' + ic("check", 18) + " Nenhuma pendência. Tudo lançado em dia.</div>";
+    return '<div class="card">' + ps.map(function (l) {
+      var a = S.alunos[l.aluno], d = D(l.data);
+      return '<div class="rl"><span class="av2" style="background:' + a.cor + '">' + ini(a.nome) + "</span><div><b>" + esc(a.nome) + '</b><div class="pg-sub">' + cap(DOW[d.getDay()]) + ", " + dm(d) + " às " + hh(l.hora) + '</div></div><button class="btn btn-sm btn-pri" data-act="irPend" data-v="' + l.data + '">Lançar</button></div>';
+    }).join("") + '</div><p class="help">Pendência em aberto tira XP todo dia — e o acúmulo trava a agenda: você deixa de receber alunos novos até regularizar.</p>';
+  }
+
+  /* Financeira */
+  function resumo() {
+    return ORDEM.filter(function (id) { return alunoAtivo(S.alunos[id], "2026-10-31"); }).map(function (id) {
+      var a = S.alunos[id], base = a.valor, obs = [];
+      if (id === "felipe") { base = a.valor * 7 / 8; obs.push("entrou em 07/10: proporcional (7 de 8 aulas)"); }
+      var doMes = S.reposicoes.filter(function (r) { return r.aluno === id && r.falta.slice(0, 7) === "2026-10"; });
+      var pend = doMes.filter(function (r) { return !repoFeita(r); }), feitas = doMes.length - pend.length;
+      if (pend.length) obs.push(pend.length + (pend.length > 1 ? " reposições pendentes" : " reposição pendente") + " (" + pend.map(function (r) { return dm(D(r.falta)); }).join(", ") + ")");
+      if (feitas) obs.push(feitas + (feitas > 1 ? " reposições feitas: valor liberado" : " reposição feita: valor liberado"));
+      var fer = 0, sem = 0;
+      Object.keys(S.lancados).forEach(function (k) {
+        var p = k.split("|");
+        if (p[0] !== id || p[1].slice(0, 7) !== "2026-10" || S.lancados[k].tc !== "falta") return;
+        if (FERIADOS[p[1]]) fer++; else sem++;
+      });
+      if (fer) obs.push("feriado de 12/10: pago");
+      if (sem) obs.push(sem + (sem > 1 ? " faltas sem direito: não descontam" : " falta sem direito: não desconta"));
+      var ret = pend.length * VALOR_AULA;
+      return { nome: a.nome, plano: a.plano, base: base, ret: ret, final: base - ret, obs: obs.join(" · ") || "plano cheio" };
+    });
+  }
+  function pgFin() {
+    var ls = resumo(), tot = ls.reduce(function (s, x) { return s + x.final; }, 0);
+    var fechou = S.now >= D("2026-11-01 00:00"), pago = S.now >= D("2026-11-06 00:00");
+    var aut;
+    if (!fechou) aut = '<div class="card"><div class="card-h">Autorização de pagamento</div><p class="pg-sub">O botão aparece no dia 1º do mês seguinte, quando o mês fecha. Até lá, o valor é uma previsão.</p></div>';
+    else if (S.autorizado) aut = '<div class="card okc"><div class="card-h" style="margin:0">' + ic("check", 15) + " Pagamento de outubro autorizado · " + brl(tot) + "</div></div>";
+    else aut = '<div class="card destaque"><div class="card-h">Autorizar pagamento · outubro/2026</div><p>Valor a autorizar: <b class="num">' + brl(tot) + "</b></p>" +
+      '<label class="ck-line"><input type="checkbox" id="conferi" data-chg="conferi"' + (S.conferi ? " checked" : "") + "> Conferi meus lançamentos e o Resumo Consolidado</label>" + fbHTML("fin") +
+      '<div class="savebar"><button class="btn btn-pri" data-act="autorizar" id="btn-autorizar">Autorizar pagamento</button></div></div>';
+    var tabela = '<div class="card"><div class="card-h">Resumo consolidado · outubro/2026</div><div class="tbl-wrap"><table class="t"><thead><tr><th>Aluno</th><th>Plano</th><th class="r">Valor</th><th class="r">Retido</th><th class="r">A receber</th></tr></thead><tbody>' +
+      ls.map(function (x) {
+        return "<tr><td><b>" + esc(x.nome) + '</b><div class="pg-sub">' + esc(x.obs) + "</div></td><td>" + esc(x.plano) + '</td><td class="r num">' + brl(x.base) + '</td><td class="r num' + (x.ret ? " txt-hold" : "") + '">' + (x.ret ? "− " + brl(x.ret) : "—") + '</td><td class="r num"><b>' + brl(x.final) + "</b></td></tr>";
+      }).join("") + '</tbody><tfoot><tr><td colspan="4">Total previsto</td><td class="r num">' + brl(tot) + "</td></tr></tfoot></table></div>" +
+      '<p class="help">Retido não é perdido: volta no mês em que a reposição for feita. Falta sem direito não desconta.</p></div>';
+    var nf = '<div class="card"><div class="card-h">Notas fiscais</div>';
+    if (S.nfLancada) nf += '<p class="ok-line">' + ic("check", 13) + " NF_outubro_2026.pdf lançada.</p>" + fbHTML("nf");
+    else if (!pago) nf += '<p class="pg-sub">Emita e lance a nota fiscal assim que o pagamento do mês cair na sua conta.</p>';
+    else {
+      var f = S.nfEscolhido ? arq(S.nfEscolhido) : null;
+      nf += '<p class="pg-sub" style="margin-bottom:9px">Pagamento de outubro recebido. Emita a NFS-e e envie o PDF por aqui.</p><div class="anexo"><button class="btn btn-sm" data-act="abrirPicker" data-v="nf" data-p="doc" id="btn-nf-arq">' + ic("clipp", 13) + ' Escolher arquivo</button><span class="file-chip">' + (f ? esc(f.nome) : "Nenhum arquivo escolhido") + "</span></div>" +
+        (S.picker && S.picker.alvo === "nf" ? pickerHTML() : "") + fbHTML("nf") +
+        '<div class="savebar" style="margin-top:10px"><button class="btn btn-pri" data-act="lancarNF" id="btn-nf">Lançar Nota Fiscal</button></div>';
+    }
+    nf += '<div class="help" style="margin-top:10px">Enviadas: NF_setembro_2026.pdf (05/10)' + (S.nfLancada ? " · NF_outubro_2026.pdf (06/11)" : "") + "</div></div>";
+    return '<div class="pg-h"><div><h3>Financeira</h3><div class="pg-sub">Estimativa, resumo consolidado, autorização e notas fiscais</div></div><div class="est"><span class="eyebrow">' + (fechou ? "Outubro fechado" : "Estimativa de outubro") + '</span><b>' + brl(tot) + "</b></div></div>" + aut + tabela + nf;
+  }
+
+  function pgOff() {
+    var mat = S.rota === "materiais";
+    return '<div class="pg-h"><div><h3>' + (mat ? "Materiais" : "Ranking") + '</h3><div class="pg-sub">' + ic("lock", 12) + " Fora deste treino</div></div></div><p class=\"off-pg\">" + (mat
+      ? "Na plataforma real, aqui fica o Now We're Talking: mais de 440 aulas prontas, por nível, com modo apresentação e as Instruções da Aula. Ao apresentar no Meet, compartilhe só a guia do material — nunca a tela inteira, porque as instruções são só para você."
+      : "Na plataforma real, aqui ficam seu XP, sua patente e sua liga. Você ganha XP lançando as aulas em dia, cumprindo o checklist e com boas avaliações dos alunos; pendência de lançamento em aberto tira XP todo dia.") + "</p>";
+  }
+
+  /* WhatsApp */
+  function htmlWhats() {
+    var c = S.chat;
+    var itens = chatsVisiveis().map(function (ch) {
+      var ms = mensagens(ch.id), u = ms[ms.length - 1];
+      var t = u ? (ymd(D(u.t)) === ymd(S.now) ? hm(D(u.t)) : dm(D(u.t))) : "";
+      return '<button class="wa-it" data-act="chat" data-v="' + ch.id + '" id="wa-' + ch.id + '"' + (c === ch.id ? ' aria-current="true"' : "") + '><span class="wa-av" style="background:' + ch.cor + '">' + (ch.grupo ? ic("crown", 16) : ini(ch.nome)) + '</span><span class="wa-tx"><span class="wa-r1"><span class="n">' + esc(ch.nome) + '</span><span class="wt">' + t + '</span></span><span class="p">' + (u ? esc((u.de === "eu" ? "Você: " : "") + u.txt) : "Nenhuma mensagem ainda") + "</span></span></button>";
+    }).join("");
+    return '<div class="wa' + (c ? " has-chat" : "") + '"><div class="wa-list"><div class="wa-lh">Conversas</div>' + itens + '</div><div class="wa-chat">' +
+      (c ? htmlChat(c) : '<div class="wa-vazio">' + ic("msg", 30) + "<p>Escolha uma conversa na lista.</p></div>") + "</div></div>";
+  }
+  function htmlChat(c) {
+    var ch = chatDef(c), ms = mensagens(c), out = "", dia = "";
+    ms.forEach(function (m) {
+      var d = D(m.t), k = ymd(d);
+      if (k !== dia) { dia = k; out += '<div class="daysep">' + cap(DOW[d.getDay()]) + ", " + dm(d) + "</div>"; }
+      out += '<div class="bub ' + (m.de === "eu" ? "out" : "in") + '">' + (m.de === "coord" ? '<span class="who">Coordenação</span>' : "") + esc(m.txt) + '<span class="t">' + hm(d) + (m.de === "eu" ? " ✓✓" : "") + "</span></div>";
+    });
+    if (!ms.length) out = '<div class="daysep">Nenhuma mensagem ainda</div>';
+    return '<div class="wa-ch"><button class="wa-back" data-act="chat" data-v="" aria-label="Voltar para as conversas">' + ic("back", 18) + '</button><span class="wa-av sm" style="background:' + ch.cor + '">' + (ch.grupo ? ic("crown", 14) : ini(ch.nome)) + '</span><div class="wa-chn"><b>' + esc(ch.nome) + "</b><span>" + (ch.grupo ? "Coordenação e professores" : "online") + '</span></div><button class="btn btn-sm" data-act="print" id="btn-print">' + ic("camera", 14) + " Tirar print</button></div>" +
+      (S.toast ? '<div class="toast" role="status">' + ic("img", 13) + " Print salvo em Imagens: <b>" + esc(S.toast) + "</b></div>" : "") +
+      '<div class="wa-msgs">' + out + "</div>" + fbHTML("wa") + '<div class="wa-comp">' + composer(c) + "</div>";
+  }
+  function composer(c) {
+    var m = M();
+    if (m && m.id === "m1" && c === "felipe" && !S.flags.apresentacao) {
+      var sel = S.montagem;
+      var txt = PECAS.filter(function (p) { return sel[p.id]; }).map(function (p) { return p.txt; }).join("\n\n");
+      return '<div class="comp-h">Monte a mensagem de apresentação — marque o que vai nela:</div><div class="chips" role="group" aria-label="Partes da mensagem">' + PECAS.map(function (p) {
+        return '<button class="pc" role="checkbox" aria-checked="' + !!sel[p.id] + '" data-act="peca" data-v="' + p.id + '" id="pc-' + p.id + '">' + (sel[p.id] ? ic("check", 12) : "") + esc(p.rot) + "</button>";
+      }).join("") + "</div>" + (txt ? '<div class="preview"><div class="bub out">' + esc(txt) + "</div></div>" : "") +
+        '<div class="comp-f"><button class="btn btn-wa" data-act="enviarApres" id="btn-apres">Enviar ' + ic("arrow", 14) + "</button></div>";
+    }
+    if (m && m.id === "m1" && c === "coord" && !S.flags.grupo) return opts("grupo");
+    if (m && m.id === "m2" && c === "felipe" && !S.flags.lembrete) return opts("lembrete");
+    return '<div class="wa-off">Neste treino as mensagens já vêm prontas: aqui você lê as conversas e tira prints.</div>';
+  }
+  function opts(g) {
+    return '<div class="comp-h">Escolha a mensagem:</div><div class="opts">' + OPTS[g].map(function (o) {
+      return '<button class="opt" data-act="enviarOpt" data-g="' + g + '" data-v="' + o.id + '" id="op-' + g + "-" + o.id + '">' + esc(o.txt) + "</button>";
+    }).join("") + "</div>";
+  }
+
+  /* ═════════ ações ═════════ */
+  var A = {};
+  A.comecar = function () { iniciaMissao(0); };
+  A.proxima = function () {
+    if (S.m < MISSOES.length - 1) iniciaMissao(S.m + 1);
+    else { S.m = MISSOES.length; S.fb = null; rolarParaTopo(); }
+  };
+  A.pedeReinicio = function () { S.confirmaReinicio = true; };
+  A.cancelaReinicio = function () { S.confirmaReinicio = false; };
+  A.reiniciar = function () { S = novoEstado(); rolarParaTopo(); };
+  A.dica = function () {
+    var o = objAtual(); if (!o) return;
+    if (!S.dica && !S.dicaUsada[S.m + ":" + o.id]) { S.dicaUsada[S.m + ":" + o.id] = true; S.res[S.m].dicas++; }
+    S.dica = !S.dica;
+  };
+  A.verSol = function () { S.verSol = !S.verSol; if (S.verSol) S.res[S.m].revelou = true; };
+  A.tab = function (d) { S.tab = d.v; S.picker = null; };
+  A.rota = function (d) { S.rota = d.v; S.tab = "king"; S.picker = null; S.repoForm = null; };
+  A.irAulas = function (d) { S.rota = "aulas"; S.aba = d.v; };
+  A.aba = function (d) { S.aba = d.v; S.picker = null; };
+  A.hoje = function () { S.dataLanc = ymd(S.now); S.picker = null; };
+  A.irPend = function (d) { S.aba = "lancamento"; S.dataLanc = d.v; };
+  A.semana = function (d) { S.agendaSeg = ymd(addDias(D(S.agendaSeg), +d.v)); };
+  A.chat = function (d) { S.chat = d.v || null; };
+
+  A.aceitar = function () {
+    S.contrato = "aceito";
+    sucesso("home", "Contrato aceito", "O Felipe entrou na sua agenda. Agora, o contato: ele ainda não sabe quem vai ser o professor dele.");
+  };
+  A.recusar = function () {
+    erro("home", "Por que recusar?", "Você tem os horários livres e consegue começar na data do contrato. Recusar é para quando você não consegue cumprir a data de início, os dias ou o horário — e negar o recebimento tranca a sua agenda até a coordenação destravar.");
+  };
+
+  A.print = function () {
+    var c = S.chat; if (!c) return;
+    var ms = mensagens(c), nome = c === "coord" ? "Coordenacao" : primeiro(chatDef(c).nome);
+    var base = "Print_WhatsApp_" + nome + "_" + dm(S.now).replace("/", "-") + "_" + hh(hm(S.now)), n = base + ".png", i = 2;
+    while (S.prints.some(function (p) { return p.nome === n; })) n = base + "_" + (i++) + ".png";
+    S.seq++;
+    S.prints.push({ id: "p" + S.seq, nome: n, tipo: "img", chat: c, msgIds: ms.map(function (x) { return x.id; }), preview: ms.slice(-3) });
+    S.toast = n;
+  };
+  A.peca = function (d) { S.montagem[d.v] = !S.montagem[d.v]; };
+  A.enviarApres = function () {
+    var m = M(); if (!m || m.id !== "m1" || S.flags.apresentacao) return;
+    var sel = S.montagem, pecas = PECAS.filter(function (p) { return sel[p.id]; });
+    if (!pecas.length) return aviso("wa", "Mensagem vazia", "Marque o que vai na mensagem de apresentação.");
+    if (sel.meet) return erro("wa", "Mensagem não enviada", "O link direto do Meet não vai na apresentação. O aluno entra pela plataforma do aluno, que abre o Meet premium na mesma sala que você. O link direto só vai se ele não aparecer nos primeiros 5 minutos de aula.");
+    if (sel.nodia) return erro("wa", "Mensagem não enviada", "Aviso no dia não dá direito a reposição: a regra é avisar com pelo menos 24h de antecedência. Prometer outra coisa vira acordo — e a sua palavra passa a valer.");
+    var falta = PECAS.filter(function (p) { return p.ok && !sel[p.id]; }).map(function (p) { return p.rot.toLowerCase(); });
+    if (falta.length) return erro("wa", "Faltou informação", "A mensagem de apresentação tem quatro itens obrigatórios: quem é você, data e horário da 1ª aula, considerações gerais e como entrar na aula. Faltou: " + falta.join(", ") + ".");
+    addMsg("felipe", "eu", pecas.map(function (p) { return p.txt; }).join("\n\n"), 1);
+    addMsg("felipe", "ele", "Oi, teacher! Tudo ótimo 😄 Combinado: quarta às 19h estarei lá!", 4);
+    S.flags.apresentacao = true; S.montagem = {};
+    sucesso("wa", "Mensagem enviada", "Contato feito. Falta a coordenação saber.");
+  };
+  A.enviarOpt = function (d) {
+    var m = M(); if (!m) return;
+    if (d.g === "grupo") {
+      if (m.id !== "m1" || S.flags.grupo) return;
+      if (d.v === "vespera") return erro("wa", "Mensagem não enviada", "O contato é o quanto antes: até você se apresentar, o aluno não sabe quem é o professor. E o grupo recebe a confirmação do contato já feito, não a promessa de fazer.");
+      if (!S.flags.apresentacao) return erro("wa", "Ainda não houve contato", "Você ainda não falou com o Felipe. Confirmar no grupo é avisar que o contato aconteceu — primeiro mande a apresentação para ele.");
+      addMsg("coord", "eu", OPTS.grupo[0].txt, 1);
+      addMsg("coord", "coord", "Obrigada, teacher! Registrado 💙", 2);
+      S.flags.grupo = true;
+      sucesso("wa", "Confirmação enviada", "A coordenação já sabe que o Felipe foi contatado.");
+    }
+    if (d.g === "lembrete") {
+      if (m.id !== "m2" || S.flags.lembrete) return;
+      if (d.v === "meet") return erro("wa", "Não é esse", "O link direto do Meet só vai se o aluno não aparecer nos primeiros 5 minutos. O lembrete leva à plataforma do aluno — é por ela que ele entra no Meet premium, na mesma sala que você.");
+      if (d.v === "nada") return erro("wa", "O lembrete faz parte", "O lembrete 5 minutos antes é parte do processo: é por ele que o aluno entra na aula. Sem ele, a chance de desencontro na primeira aula é grande.");
+      addMsg("felipe", "eu", OPTS.lembrete[1].txt, 0);
+      S.flags.lembrete = true;
+      sucesso("wa", "Lembrete enviado", "Hora da aula.");
+    }
+  };
+
+  A.mais = function (d) { S.hist.mais = S.hist.mais === d.v ? null : d.v; };
+  A.trocarNivel = function (d) {
+    var a = S.alunos[d.v];
+    S.hist.aberto = S.hist.aberto === d.v ? null : d.v;
+    S.hist.nivel = a.nivel || ""; S.hist.modulo = a.nivel && a.modulo ? a.nivel + "-" + a.modulo.split("parte ")[1].charAt(0) : "";
+  };
+  A.fecharNivel = function () { S.hist.aberto = null; };
+  A.salvarNivel = function () {
+    var id = S.hist.aberto, slot = "hist-" + id, m = M();
+    if (!S.hist.nivel || !S.hist.modulo) return aviso(slot, "Falta preencher", "Escolha o nível e o módulo do material.");
+    if (id !== "felipe" || !m || m.id !== "m2") { S.hist.aberto = null; return aviso(slot, "Nada a mudar aqui", "Neste treino, a única troca de nível é a do Felipe, depois da primeira aula dele."); }
+    if (!feito("lembrete")) return aviso(slot, "A aula ainda não aconteceu", "O nível sai do nivelamento feito na primeira aula. Mande o lembrete e deixe a aula acontecer primeiro.");
+    if (S.hist.nivel !== "A2") return erro(slot, "Nível errado", "O nivelamento do Felipe deu A2. O nível registrado define o livro que ele vê na plataforma dele.");
+    if (S.hist.modulo !== "A2-1") return erro(slot, "Módulo errado", "Aluno novo começa pela parte 1 do nível. Liberar a parte 2 ou 3 pularia aulas que ele ainda não fez.");
+    var a = S.alunos.felipe;
+    a.nivel = "A2"; a.modulo = "A2 - parte 1 - Aula 1 até Aula 25"; a.aula = "A2-1";
+    S.hist.aberto = null;
+    sucesso(slot, "Nível e material salvos", "Felipe · A2 · parte 1. O livro já aparece na plataforma do aluno.");
+  };
+
+  A.setTipo = function (d) { draftK(d.k).tipo = d.v; if (S.picker && S.picker.alvo === "print:" + d.k) S.picker = null; };
+  A.setDir = function (d) { draftK(d.k).direito = d.v; };
+  A.abrirPicker = function (d) { S.picker = S.picker && S.picker.alvo === d.v ? null : { alvo: d.v }; S.pasta = d.p || "img"; };
+  A.pasta = function (d) { S.pasta = d.v; };
+  A.fecharPicker = function () { S.picker = null; };
+  A.escolherArq = function (d) {
+    if (!S.picker) return;
+    var alvo = S.picker.alvo;
+    if (alvo === "nf") S.nfEscolhido = d.v;
+    else draftK(alvo.slice(6)).print = d.v;
+    S.picker = null;
+  };
+  A.tiraPrint = function (d) { draftK(d.k).print = null; };
+  A.salvarLanc = function () {
+    var ls = linhasDoDia(S.dataLanc).filter(function (l) { return estadoLinha(l) === "lancar"; });
+    if (!ls.length) return;
+    for (var i = 0; i < ls.length; i++) {
+      var v = valida(ls[i], draftK(ls[i].key), alvoAtual(ls[i].key));
+      if (v && v.req) return aviso("lanc", "Falta preencher", v.req);
+      if (v && v.err) return erro("lanc", v.titulo, v.err);
+    }
+    ls.forEach(function (l) {
+      var d = draftK(l.key), tc = tcDe(d), a = S.alunos[l.aluno], f = d.print ? arq(d.print) : null;
+      S.lancados[l.key] = { tc: tc, obs: d.obs.trim(), print: tc === "falta" && f ? f.nome : null };
+      if ((tc === "presenca" || tc === "presenca_repo") && d.tipoAula !== "pers_sem" && d.aula) a.aula = d.aula;
+      if (tc === "fcr_aluno") a.usadas++;
+      if (tc === "fcr_aluno" || tc === "fcr_prof") S.reposicoes.push({ id: "r-" + l.aluno + "-" + l.data, aluno: l.aluno, falta: l.data, motivo: tc === "fcr_prof" ? "professor" : "aluno", agendada: null });
+      delete S.drafts[l.key];
+    });
+    S.picker = null;
+    sucesso("lanc", "Lançamento salvo", ls.length + (ls.length > 1 ? " aulas processadas" : " aula processada") + " · +" + 5 * ls.length + " XP");
+  };
+
+  A.repoNovo = function () { S.repoForm = { repo: "", data: "", hora: "" }; };
+  A.repoCancelar = function () { S.repoForm = null; };
+  A.agendar = function () {
+    var f = S.repoForm, m = M();
+    if (!f.repo || !f.data || !f.hora) return aviso("repo", "Falta preencher", "Escolha a aula a ser reposta, o dia e o horário.");
+    var r = null; S.reposicoes.forEach(function (x) { if (x.id === f.repo) r = x; });
+    if (!m || m.id !== "m7" || feito("agendar") || !feito("lanc")) return aviso("repo", "Fora do treino", "Neste simulador, a reposição a agendar é a da Ana, na missão 7, depois de lançar a falta.");
+    if (r.aluno !== "ana") return aviso("repo", "Essa é de outro aluno", "Agendar a reposição de " + primeiro(S.alunos[r.aluno].nome) + " também seria bom, mas a missão pede a da Ana (falta do professor de 15/10).");
+    var lim = addDias(dia0(S.now), 7);
+    if (D(f.data) > lim) return erro("repo", "Longe demais", "Reposição se agenda com até 7 dias de antecedência — hoje, o mais longe é " + DOW[lim.getDay()] + ", " + dm(lim) + ".");
+    var oc = ocupante(f.data, f.hora);
+    if (oc) return erro("repo", "Horário ocupado", "Esse horário já está tomado (" + oc + "). Reposição precisa de um horário livre na agenda.");
+    if (ehExtensao("ana", f.data, f.hora)) return erro("repo", "Isso é extensão de horário", "Esse horário encosta na aula regular da Ana (" + hh(S.alunos.ana.hora) + "). Colar a reposição na aula dela vira uma aula de 1 hora — e reposição não pode ser feita por extensão de horário. Escolha outro horário livre.");
+    r.agendada = { data: f.data, hora: f.hora };
+    var dd = D(f.data);
+    addMsg("ana", "eu", "Ana, reposição marcada: " + DOW[dd.getDay()] + " (" + dm(dd) + ") às " + hh(f.hora) + ". Até lá! 😊", 1);
+    S.repoForm = null;
+    sucesso("repo", "Reposição agendada", "Ana · " + DOW[dd.getDay()] + ", " + dm(dd) + " às " + hh(f.hora) + ". Já aparece em amarelo na sua agenda.");
+  };
+
+  A.autorizar = function () {
+    var m = M();
+    if (!m || m.id !== "m8") return;
+    if (!S.conferi) return aviso("fin", "Confirme a conferência", "Marque que conferiu seus lançamentos e o Resumo Consolidado.");
+    if (pendencias().length) return erro("fin", "Ainda há aula pendente", "A aula da Carla de 30/10 não foi lançada. Autorize só depois de lançar tudo e conferir o resumo: o valor autorizado é o que será pago. Havendo divergência, avise a coordenação antes de autorizar.");
+    S.autorizado = true;
+    sucesso("fin", "Pagamento autorizado", "O pagamento cai até o 7º dia útil do mês.");
+  };
+  A.lancarNF = function () {
+    if (!S.nfEscolhido) return aviso("nf", "Nenhum arquivo", "Escolha o PDF da nota fiscal primeiro.");
+    var f = arq(S.nfEscolhido);
+    if (f.tipo !== "pdf") return erro("nf", "Arquivo errado", "Esse arquivo é uma imagem. A nota fiscal vai em PDF — o arquivo da NFS-e que você emitiu.");
+    if (f.id === "f-nf-set") return erro("nf", "Nota errada", "Essa é a nota de setembro, que já foi enviada. Agora é a de outubro.");
+    S.nfLancada = true; S.picker = null;
+    sucesso("nf", "Nota fiscal lançada", "NF_outubro_2026.pdf enviada para a King.");
+  };
+
+  var CHG = {
+    dataLanc: function (el) { if (el.value) S.dataLanc = el.value; S.picker = null; },
+    conferi: function (el) { S.conferi = el.checked; },
+    campo: function (el) {
+      var f = el.dataset.f, k = el.dataset.k, v = el.value;
+      if (k === "h") { if (f === "hNivel") { S.hist.nivel = v; S.hist.modulo = ""; } else S.hist.modulo = v; return; }
+      if (k === "repo") { S.repoForm[f] = v; if (f === "data") S.repoForm.hora = ""; return; }
+      var d = draftK(k);
+      if (f === "livro" || f === "nivel") { d[f] = v; d.aula = ""; } else d[f] = v;
+    }
+  };
+
+  /* ═════════ render ═════════ */
+  function render() {
+    var a = document.activeElement, foco = a && a.id ? { id: a.id, s: a.selectionStart, e: a.selectionEnd } : null;
+    var html;
+    if (S.m < 0) html = htmlIntro();
+    else if (S.m >= MISSOES.length) html = htmlRelatorio();
+    else html = htmlMissao() + htmlJanela();
+    app.innerHTML = html;
+    if (foco) {
+      var el = document.getElementById(foco.id);
+      if (el) { el.focus({ preventScroll: true }); try { if (foco.s != null) el.setSelectionRange(foco.s, foco.e); } catch (_) {} }
+    }
+    avisaAltura();
+  }
+
+  app.addEventListener("click", function (e) {
+    var el = e.target.closest("[data-act]");
+    if (!el || el.disabled || !app.contains(el)) return;
+    var fn = A[el.dataset.act]; if (!fn) return;
+    S.fb = null; S.toast = null;
+    fn(el.dataset, el);
+    checar();
+    render();
+  });
+  app.addEventListener("change", function (e) {
+    var el = e.target, h = el.dataset && el.dataset.chg;
+    if (!h || !CHG[h]) return;
+    S.fb = null;
+    CHG[h](el);
+    checar();
+    render();
+  });
+  app.addEventListener("input", function (e) {
+    var el = e.target;
+    if (el.dataset && el.dataset.inp === "obs") draftK(el.dataset.k).obs = el.value;
+  });
+
+  /* ═════════ integração com o KTM ═════════ */
+  var ultimaAltura = 0;
+  function avisaAltura() {
+    var h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+    if (h === ultimaAltura) return;
+    ultimaAltura = h;
+    try { parent.postMessage({ tipo: "ktm-embed-altura", altura: h }, "*"); } catch (_) {}
+  }
+  function rolarParaTopo() {
+    try { parent.postMessage({ tipo: "ktm-embed-rolar" }, "*"); } catch (_) {}
+  }
+  function aplicaTema(t) {
+    if (t !== "dark" && t !== "light") return;
+    document.documentElement.dataset.theme = t;
+    avisaAltura();
+  }
+  var temaUrl = new URLSearchParams(location.search).get("tema");
+  aplicaTema(temaUrl || (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (d && d.tipo === "ktm-tema") aplicaTema(d.tema);
+  });
+  if (window.ResizeObserver) new ResizeObserver(avisaAltura).observe(document.documentElement);
+  window.addEventListener("load", avisaAltura);
+
+  S = novoEstado();
+  render();
+})();
+</script>
+</body>
+</html>

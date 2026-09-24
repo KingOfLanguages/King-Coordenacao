@@ -67,6 +67,7 @@ const TIPOS_ELEMENTO: {
  *  terceiro. Página nova aqui = uma linha aqui e o arquivo lá. */
 const EMBEDS = [
   { url: '/welcome-path/calculadora-pagamento.html', label: 'Calculadora de pagamento' },
+  { url: '/welcome-path/simulador-plataforma.html', label: 'Simulador da plataforma' },
 ]
 
 const TIPO_POR_ID = Object.fromEntries(TIPOS_ELEMENTO.map(t => [t.id, t]))
