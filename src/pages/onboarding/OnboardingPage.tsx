@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { GraduationCap, MessageSquare, Route, PencilRuler } from 'lucide-react'
+import { GraduationCap, MessageSquare, Route, PencilRuler, Eye } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { MensagensTab } from './MensagensTab'
 import { WelcomePathTab } from './WelcomePathTab'
 import { ConteudoTab } from './ConteudoTab'
+import { VisaoProfessorTab } from './VisaoProfessorTab'
 import { Abas } from '@/components/ui/abas'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,13 +14,15 @@ import { Abas } from '@/components/ui/abas'
 //
 //   Mensagens     o que a COORDENAÇÃO manda nos 7 primeiros dias (checklist)
 //   Welcome Path  o que o PROFESSOR percorre sozinho na trilha
+//   Visão do      a trilha exatamente como o professor vê, com tudo aberto e
+//   professor     nada gravado, para conferir o conteúdo
 //   Conteúdo      o material da trilha (só coordenação/admin edita)
 //
 // Antes o Welcome Path era um app separado, com login próprio. Juntar aqui é o
 // que permite olhar um professor e ver as duas coisas de uma vez.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Aba = 'mensagens' | 'trilha' | 'conteudo'
+type Aba = 'mensagens' | 'trilha' | 'visao' | 'conteudo'
 
 export function OnboardingPage() {
   const { profile } = useAuth()
@@ -29,6 +32,7 @@ export function OnboardingPage() {
   const abas: { id: Aba; label: string; icone: typeof Route }[] = [
     { id: 'mensagens', label: 'Mensagens',    icone: MessageSquare },
     { id: 'trilha',    label: 'Welcome Path', icone: Route },
+    { id: 'visao',     label: 'Visão do professor', icone: Eye },
     ...(podeEditarConteudo
       ? [{ id: 'conteudo' as const, label: 'Conteúdo', icone: PencilRuler }]
       : []),
@@ -54,6 +58,7 @@ export function OnboardingPage() {
 
       {aba === 'mensagens' && <MensagensTab />}
       {aba === 'trilha'    && <WelcomePathTab />}
+      {aba === 'visao'     && <VisaoProfessorTab />}
       {aba === 'conteudo'  && podeEditarConteudo && <ConteudoTab />}
     </div>
   )

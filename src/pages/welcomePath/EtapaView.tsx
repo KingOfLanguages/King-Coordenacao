@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft, CheckCircle2, Info, NotebookPen, Clock3, CalendarClock, Repeat2, LifeBuoy,
 } from 'lucide-react'
@@ -9,10 +9,11 @@ import { BotaoWhatsApp } from '@/components/portal/PortalUI'
 import {
   useEtapa, useIniciarEtapa, useRegistrarTempo, useResponderEtapa, useSalvarObservacao,
   type RespostaEnviada, type ResultadoEnvio, type QuestaoEtapa, type MinhaResposta,
+  type EtapaDetalhe, type BlocoEtapa,
 } from '@/hooks/useWelcomePath'
 import { BlocoView } from './Blocos'
 import { QuestaoView, PainelResultado, BotoesQuiz } from './Quiz'
-import { useQuizEtapa } from './useQuizEtapa'
+import { useQuizEtapa, type QuizEtapa } from './useQuizEtapa'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Uma etapa da trilha, na linguagem editorial/control-room dos painéis do KTM:
@@ -257,6 +258,64 @@ export function EtapaView({
   }
 
   const { etapa, blocos, questoes, progresso } = data
+
+  return (
+    <EtapaLayout
+      etapa={etapa}
+      blocos={blocos}
+      questoes={questoes}
+      progresso={progresso}
+      totalEtapas={totalEtapas}
+      etapasConcluidas={etapasConcluidas}
+      quiz={quiz}
+      enviando={responder.isPending}
+      erroEnvio={erroEnvio}
+      onVoltar={onVoltar}
+      trilho={
+        <>
+          <ObservacaoPessoal token={token} etapaId={etapaId} inicial={progresso.observacao} />
+
+          <div className="space-y-3 rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4">
+            <div className="flex items-center gap-2">
+              <LifeBuoy className="h-4 w-4 text-ink-muted" />
+              <h2 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">Precisa de ajuda?</h2>
+            </div>
+            <p className="text-[12px] leading-relaxed text-ink-muted">
+              Travou em algo ou tem uma dúvida? A coordenação responde rápido.
+            </p>
+            <BotaoWhatsApp>Falar com a coordenação</BotaoWhatsApp>
+          </div>
+        </>
+      }
+    />
+  )
+}
+
+/** A etapa como o professor vê, sem saber de onde vêm os dados. O portal passa
+ *  os dados do professor logado (e grava tempo e respostas); a aba "Visão do
+ *  professor" do /onboarding passa o conteúdo lido pela coordenação e corrige
+ *  as respostas ali mesmo, sem gravar. Mudar o layout aqui muda os dois. */
+export function EtapaLayout({
+  etapa, blocos, questoes, progresso, totalEtapas, etapasConcluidas, quiz,
+  enviando, erroEnvio, onVoltar, trilho, aviso, aposQuestao,
+}: {
+  etapa: EtapaDetalhe['etapa']
+  blocos: BlocoEtapa[]
+  questoes: QuestaoEtapa[]
+  progresso: Pick<EtapaDetalhe['progresso'], 'concluidaEm' | 'revisaoPendente' | 'tempoSegundos' | 'tentativas'>
+  totalEtapas: number
+  etapasConcluidas: number
+  quiz: QuizEtapa
+  enviando: boolean
+  erroEnvio: string | null
+  onVoltar: () => void
+  /** Coluna da direita (anotações e ajuda, no portal). */
+  trilho: ReactNode
+  /** Faixa acima do conteúdo (a pré-visualização avisa que nada é gravado). */
+  aviso?: ReactNode
+  /** Algo depois de cada questão (o gabarito, na pré-visualização). */
+  aposQuestao?: (q: QuestaoEtapa) => ReactNode
+}) {
   const concluida = !!progresso.concluidaEm
   const pctTrilha = totalEtapas > 0 ? Math.round((etapasConcluidas / totalEtapas) * 100) : 0
   const vazia = blocos.length === 0 && questoes.length === 0
@@ -276,8 +335,8 @@ export function EtapaView({
 
   function renderQuestao(q: (typeof questoes)[number]) {
     return (
+      <Fragment key={q.id}>
       <QuestaoView
-        key={q.id}
         questao={q}
         numero={numeroDe.get(q.id) ?? 0}
         selecao={quiz.valorDe(q.id)}
@@ -285,6 +344,8 @@ export function EtapaView({
         travada={quiz.travada}
         onChange={v => quiz.definir(q.id, v)}
       />
+      {aposQuestao?.(q)}
+      </Fragment>
     )
   }
 
@@ -367,6 +428,7 @@ export function EtapaView({
       {/* Conteúdo (amplo) + trilho fixo com anotações */}
       <div className="mt-6 grid items-start gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-8">
         <main className="space-y-8">
+          {aviso}
           {etapa.notasCoordenacao && (
             <div className="flex gap-2.5 rounded-2xl border border-accentBlue/20 bg-accentBlue-soft/50 px-4 py-3.5">
               <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-accentBlue" />
@@ -422,7 +484,7 @@ export function EtapaView({
                       </div>
                     )}
 
-                    <BotoesQuiz quiz={quiz} enviando={responder.isPending} />
+                    <BotoesQuiz quiz={quiz} enviando={enviando} />
                   </div>
                 </Zona>
               )}
@@ -431,18 +493,7 @@ export function EtapaView({
         </main>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <ObservacaoPessoal token={token} etapaId={etapaId} inicial={progresso.observacao} />
-
-          <div className="space-y-3 rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4">
-            <div className="flex items-center gap-2">
-              <LifeBuoy className="h-4 w-4 text-ink-muted" />
-              <h2 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">Precisa de ajuda?</h2>
-            </div>
-            <p className="text-[12px] leading-relaxed text-ink-muted">
-              Travou em algo ou tem uma dúvida? A coordenação responde rápido.
-            </p>
-            <BotaoWhatsApp>Falar com a coordenação</BotaoWhatsApp>
-          </div>
+          {trilho}
         </aside>
       </div>
     </div>

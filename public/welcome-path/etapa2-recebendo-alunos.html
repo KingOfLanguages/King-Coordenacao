@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Etapa 2 · Prática</title>
+<!-- Atividades da etapa 2 (Recebendo alunos), cada uma por ?parte=<id>:
+     oferta, portas. Regras: margem de 5 minutos e "recusar na Oferta não
+     gera ônus" (comunicado da King de 03/02/2026); negar contrato tranca a
+     agenda e faltar à 1ª aula bloqueia (MAPA e etapa 3). Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.ofertas{display:grid; gap:12px}
+.of{border:1px solid var(--border-soft); border-radius:12px; overflow:hidden}
+.of.ok{border-color:var(--ok-bd)}
+.of-g{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+.of-card{padding:12px 13px; display:grid; gap:7px; align-content:start}
+.of-card .nome{display:flex; gap:9px; align-items:center}
+.of-card .nome b{font-size:13.5px}
+.of-ag{padding:12px 13px; background:var(--bg-subtle); border-left:1px solid var(--border-soft); display:grid; gap:5px; align-content:start}
+.slot{display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px; align-items:center; font-size:12px}
+.slot .dia{font:600 11px Geist,sans-serif; color:var(--fg-muted); min-width:92px}
+.slot .c{border-radius:6px; padding:4px 8px; font-weight:500}
+.slot .livre{background:var(--ok-bg); color:var(--ok-fg)}
+.slot .ocup{background:var(--err-bg); color:var(--err-fg)}
+.slot .marg{background:transparent; color:var(--info-fg); border:1.5px dashed var(--accent)}
+.of-dec{padding:10px 13px; border-top:1px solid var(--border-soft); display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.of-dec .res{font-size:12.5px; line-height:1.5; flex:1 1 220px}
+.of-dec .res.ok{color:var(--ok-fg)} .of-dec .res.no{color:var(--err-fg)}
+@media (max-width:560px){ .of-g{grid-template-columns:1fr} .of-ag{border-left:0; border-top:1px solid var(--border-soft)} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ 1. Oferta de Alunos × agenda ═════════ */
+  var OFERTAS = [
+    { nome: "Helena Castro", ini: "HC", cor: "#7c3aed", nivel: "A2", dias: "seg e qua", hora: "19h00–19h30", inicio: "qua, 14/10",
+      agenda: [["Segunda 19h00", "livre", "livre"], ["Quarta 19h00", "livre", "livre"]],
+      certo: "aceitar", ok: "Início, dias e horário cabem na sua agenda. Aceitar é o certo.",
+      erro: "Você tem a segunda e a quarta livres às 19h e consegue começar na data. Recusar deixaria passar um aluno que você pode atender." },
+    { nome: "Renato Dias", ini: "RD", cor: "#0e7490", nivel: "B1", dias: "ter e qui", hora: "18h00–18h30", inicio: "ter, 13/10",
+      agenda: [["Terça 18h00", "livre", "livre"], ["Quinta 18h00", "ocupado · aula da Carla", "ocup"]],
+      certo: "recusar", ok: "A quinta está ocupada. Ao aceitar, você assume todas as condições; não dá para aceitar só a terça.",
+      erro: "A quinta às 18h já é da Carla. Aceitar é assumir os dois dias, então essa oferta não cabe." },
+    { nome: "Sofia Prates", ini: "SP", cor: "#be185d", nivel: "A1", dias: "seg e sex", hora: "15h00–15h30", inicio: "sex, 16/10",
+      agenda: [["Segunda 14h25", "Diego até 14h55", "ocup"], ["Segunda 14h55", "livre até 15h25", "marg"], ["Segunda 15h25", "Eduarda", "ocup"], ["Sexta 15h00", "livre", "livre"]],
+      certo: "aceitar", ok: "Na segunda, 15h às 15h30 não está livre, mas 14h55 às 15h25 está. A Oferta tem margem de 5 minutos no início, então cabe.",
+      erro: "Olhe a segunda com atenção: 14h55 às 15h25 está livre, e a Oferta aceita começar até 5 minutos antes. A oferta cabe." },
+    { nome: "Tiago Neves", ini: "TN", cor: "#c2410c", nivel: "A2", dias: "qua", hora: "20h00–20h30", inicio: "amanhã, qua 14/10",
+      agenda: [["Quarta 20h00", "livre toda semana", "livre"], ["Amanhã, 14/10, 20h00", "consulta médica", "ocup"]],
+      certo: "recusar", ok: "A primeira aula seria amanhã, e amanhã você não pode. Aceitar é assumir a primeira aula na data de início. Recusar na Oferta não tem ônus.",
+      erro: "O horário cabe nas outras semanas, mas a primeira aula é amanhã e você tem consulta. Aceitar é assumir a primeira aula na data." }
+  ];
+  var oferta = {
+    tag: "Pratique", titulo: "Oferta de Alunos: aceitar ou recusar?",
+    instrucao: "Quatro alunos apareceram na Oferta. Compare cada um com a sua agenda e decida.",
+    estado: function () { return { dec: {} }; },
+    progresso: function (s) { return OFERTAS.filter(function (o, i) { return s.dec[i] === o.certo; }).length + " de 4"; },
+    completa: function (s) { return OFERTAS.every(function (o, i) { return s.dec[i] === o.certo; }); },
+    fecho: "Antes de aceitar, confira data de início, dias e horários, com a margem de 5 minutos no começo. Aceitar é assumir a primeira aula na data.",
+    corpo: function (s) {
+      return '<div class="ofertas">' + OFERTAS.map(function (o, i) {
+        var d = s.dec[i], ok = d ? d === o.certo : null;
+        return '<div class="of' + (ok ? " ok" : "") + '"><div class="of-g"><div class="of-card"><div class="nome"><span class="av2" style="background:' + o.cor + '">' + o.ini + "</span><div><b>" + esc(o.nome) + '</b><div><span class="chip">Nível ' + o.nivel + "</span></div></div></div>" +
+          '<div class="kv"><span>Dias</span><b>' + esc(o.dias) + "</b><span>Horário</span><b>" + esc(o.hora) + "</b><span>Início</span><b>" + esc(o.inicio) + "</b></div></div>" +
+          '<div class="of-ag"><div class="lbl" style="margin:0 0 2px">Sua agenda</div>' + o.agenda.map(function (a) {
+            return '<div class="slot"><span class="dia">' + esc(a[0]) + '</span><span class="c ' + a[2] + '">' + esc(a[1]) + "</span></div>";
+          }).join("") + "</div></div>" +
+          '<div class="of-dec">' + (ok ? "" : '<button class="btn btn-sm" id="r-' + i + '" data-act="decide" data-i="' + i + '" data-v="recusar">Recusar</button><button class="btn btn-sm btn-pri" id="a-' + i + '" data-act="decide" data-i="' + i + '" data-v="aceitar">Aceitar</button>') +
+          (d ? '<span class="res ' + (ok ? "ok" : "no") + '">' + (ok ? ic("check", 13) + " " : ic("x", 13) + " ") + esc(ok ? o.ok : o.erro) + "</span>" : "") + "</div></div>";
+      }).join("") + "</div>";
+    },
+    acoes: { decide: function (d, s) { s.dec[+d.i] = d.v; } }
+  };
+
+  /* ═════════ 2. O que trava a agenda ═════════ */
+  var portas = {
+    tag: "Pratique", titulo: "O que trava a sua agenda?",
+    instrucao: "Agenda travada é agenda sem alunos novos. Diga o que acontece em cada caso.",
+    progresso: function (s, a) { return a.gCertos("casos") + " de 3"; },
+    completa: function (s, a) { return a.gOk("casos"); },
+    fecho: "Recusar na Oferta é livre. Negar um contrato ou faltar à primeira aula trava a agenda, e só a coordenação destrava. Se um contrato não cabe, recusar ainda é o certo: faltar à primeira aula é pior.",
+    corpo: function (s, a) { return a.g("casos"); },
+    grupos: { casos: {
+      rotulos: [{ v: "livre", r: "Sem consequência" }, { v: "trava", r: "Trava a agenda" }],
+      itens: [
+        { t: "Recusar um aluno na tela Oferta de Alunos.", certo: "livre", porque: "Recusar na Oferta não gera nenhum ônus. O aluno volta para a lista e outro professor pode pegar.", dica: "Na Oferta, recusar é livre: é justamente para você escolher o que cabe." },
+        { t: "Negar o recebimento de um contrato que caiu na sua agenda.", certo: "trava", porque: "Negar um contrato tranca a agenda automaticamente, e só a coordenação destrava.", dica: "Contrato que caiu na agenda é diferente da Oferta: negar tranca a agenda." },
+        { t: "Aceitar um aluno e faltar à primeira aula.", certo: "trava", porque: "A agenda é bloqueada até você regularizar com a coordenação. Se isso se repete, a parceria pode acabar.", dica: "A primeira aula é um compromisso com a data do contrato. Faltar bloqueia a agenda." }
+      ]
+    } }
+  };
+
+  K.iniciar({ oferta: oferta, portas: portas });
+})();
+</script>
+</body>
+</html>

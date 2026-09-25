@@ -80,7 +80,8 @@ export function TrilhaView({
   nome: string
   etapas: EtapaTrilha[]
   onAbrir: (etapaId: string) => void
-  onSair: () => void
+  /** Sem ele, não mostra o "Sair deste dispositivo" (visão da coordenação). */
+  onSair?: () => void
 }) {
   const concluidas = etapas.filter(e => e.estado === 'concluida').length
   const total = etapas.length
@@ -220,6 +221,7 @@ export function TrilhaView({
         })}
       </ol>
 
+      {onSair && (
       <div className="flex justify-center pt-1">
         <button
           type="button"
@@ -229,6 +231,7 @@ export function TrilhaView({
           <LogOut className="h-3.5 w-3.5" /> Não é você? Sair deste dispositivo
         </button>
       </div>
+      )}
     </div>
   )
 }

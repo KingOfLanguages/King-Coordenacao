@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Etapa 1 · Prática</title>
+<!-- Atividades da etapa 1 (Boas-vindas), cada uma por ?parte=<id>: mes, home.
+     O tour segue o MAPA (material 1, Home). Dados da Home são fictícios.
+     Ver public/welcome-path/kit/kit.js. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+/* primeiro mês */
+.mes{display:grid; gap:0}
+.marco{display:grid; grid-template-columns:120px 18px minmax(0,1fr); gap:10px; position:relative; padding-bottom:6px}
+.marco:not(:last-child)::after{content:""; position:absolute; left:138px; top:18px; bottom:0; width:2px; background:var(--border-soft)}
+.marco .quando{font:600 11.5px Geist,sans-serif; color:var(--fg-muted); text-align:right; padding-top:9px; line-height:1.3}
+.marco .d{width:14px; height:14px; border-radius:50%; margin-top:10px; margin-left:2px; z-index:1; background:var(--bg-canvas); border:2px solid var(--accent)}
+.marco.aberto .d{background:var(--accent)}
+.marco button.cab{display:flex; align-items:center; gap:8px; width:100%; text-align:left; border:1px solid var(--border-soft); background:var(--bg-canvas); border-radius:10px; padding:8px 11px; cursor:pointer; font:600 13.5px Geist,sans-serif; color:var(--fg-primary)}
+.marco button.cab:hover{border-color:var(--accent)}
+.marco button.cab .et{margin-left:auto; font:500 11px Geist,sans-serif; color:var(--accent); white-space:nowrap}
+.marco .det{font-size:13px; line-height:1.55; color:var(--fg-secondary); padding:8px 4px 4px 11px}
+/* home */
+.home{border:1px solid var(--border-default); border-radius:12px; overflow:hidden}
+.home-g{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; padding:14px; background:var(--bg-subtle)}
+.hz{position:relative; background:var(--bg-canvas); border:1px solid var(--border-soft); border-radius:10px; padding:10px 11px; font-size:12px; color:var(--fg-secondary); min-height:86px; text-align:left; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:4px}
+.hz:hover{border-color:var(--accent)}
+.hz.visto{border-color:var(--ok-bd)}
+.hz.atual{border-color:var(--accent); box-shadow:0 0 0 3px var(--info-bg)}
+.hz b{font-size:12.5px; color:var(--fg-primary)}
+.hz .n{position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:var(--accent); color:#fff; font:700 11px Geist,sans-serif; display:grid; place-items:center; box-shadow:0 0 0 3px var(--bg-subtle)}
+.hz.visto .n{background:var(--ok-fg)}
+.hz .big{font:600 18px "Geist Mono",monospace; color:var(--fg-primary)}
+.mini{display:flex; gap:6px; align-items:center}
+.explica{margin-top:12px; border-left:3px solid var(--accent); background:var(--info-bg); color:var(--info-fg); border-radius:0 10px 10px 0; padding:10px 13px; font-size:13px; line-height:1.55}
+.explica b{display:block; margin-bottom:2px}
+@media (max-width:560px){ .home-g{grid-template-columns:1fr 1fr} .marco{grid-template-columns:86px 18px minmax(0,1fr)} .marco:not(:last-child)::after{left:104px} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ 1. O primeiro mês ═════════ */
+  var MARCOS = [
+    { q: "No dia em que o aluno chega", t: "Aceite, apresentação e grupo", et: "Etapas 2 e 3", x: "O contrato aparece na Home: confira se consegue cumprir início, dias e horário e dê o aceite. Depois, a mensagem de apresentação no WhatsApp, o quanto antes, e a confirmação no grupo da coordenação." },
+    { q: "Na data do contrato", t: "A primeira aula", et: "Etapa 4", x: "Até 15 minutos para conhecer o aluno e fazer o nivelamento, e 15 de aula de verdade. Depois da aula, registre o nível na plataforma: é isso que libera o livro." },
+    { q: "Todo dia", t: "Lançar as aulas e o checklist", et: "Etapa 5", x: "Cada aula lançada em até 24h, com observação que diga o que foi trabalhado. O checklist do dia vale XP; pendência em aberto tira XP e, acumulada, trava a agenda." },
+    { q: "Toda semana", t: "Conferir o Resumo Consolidado", et: "Etapa 6", x: "Na Financeira, o Resumo Consolidado mostra quanto você vai receber por aluno. Conferir toda semana evita surpresa no fechamento." },
+    { q: "Dia 1º do mês seguinte", t: "Fechamento e autorização", et: "Etapa 6", x: "O mês fecha e aparece o botão de autorizar o pagamento. Autorize só com tudo lançado e o resumo conferido." },
+    { q: "Até o 7º dia útil", t: "Pagamento e nota fiscal", et: "Etapa 6", x: "O pagamento cai na conta. Aí você emite a nota fiscal e lança na Financeira: escolher o arquivo e clicar em Lançar Nota Fiscal." },
+    { q: "Todo mês", t: "Reunião com a coordenação", et: "", x: "Uma conversa de acompanhamento com a coordenação de professores. Fora dela, qualquer coisa que fuja do normal vai pelo WhatsApp da coordenação, no mesmo dia." }
+  ];
+  var mes = {
+    tag: "Explore", titulo: "Seu primeiro mês na King",
+    instrucao: "O que acontece do dia em que o primeiro aluno chega até o seu primeiro pagamento. Toque em cada momento; a trilha ensina cada um em detalhe.",
+    estado: function () { return { abertos: {} }; },
+    progresso: function (s) { return Object.keys(s.abertos).length + " de " + MARCOS.length; },
+    completa: function (s) { return Object.keys(s.abertos).length === MARCOS.length; },
+    fecho: "Esse é o ciclo que se repete todo mês. As próximas etapas ensinam cada parte, e a última revisa tudo num simulador da plataforma.",
+    corpo: function (s) {
+      return '<div class="mes">' + MARCOS.map(function (m, i) {
+        var ab = !!s.abertos[i];
+        return '<div class="marco' + (ab ? " aberto" : "") + '"><span class="quando">' + esc(m.q) + '</span><span class="d"></span><div>' +
+          '<button class="cab" id="m-' + i + '" data-act="marco" data-v="' + i + '" aria-expanded="' + ab + '">' + esc(m.t) + (m.et ? '<span class="et">' + esc(m.et) + "</span>" : "") + "</button>" +
+          (ab ? '<div class="det">' + esc(m.x) + "</div>" : "") + "</div></div>";
+      }).join("") + "</div>";
+    },
+    acoes: { marco: function (d, s) { if (s.abertos[d.v]) delete s.abertos[d.v]; else s.abertos[d.v] = true; } }
+  };
+
+  /* ═════════ 2. Tour da Home ═════════ */
+  var PONTOS = [
+    { t: "Central de avisos", x: "Os comunicados da escola: workshops, Teachers' Talk, novidades da coordenação e vagas internas. Olhe sempre que entrar na plataforma.", html: '<span class="muted">Workshop sexta, 10h · Feriado nacional 12/10</span>' },
+    { t: "XP, liga e dia perfeito", x: "Você ganha XP lançando as aulas em dia, cumprindo o checklist do dia e com boas avaliações dos alunos. Cada dia com o checklist completo é um dia perfeito. Pendência em aberto tira XP.", html: '<span class="big">1.240 XP</span><span class="muted">Rookie · Liga Bronze</span>' },
+    { t: "Próximas aulas", x: "As aulas do dia em ordem. O botão Entrar abre a aula na hora certa.", html: '<span class="mini">19h · Bruno</span><span class="mini">20h · Ana</span>' },
+    { t: "Acessos rápidos", x: "Atalhos para o que você mais usa: Lançamento de Aulas, Agenda, Pendências e Reposições.", html: '<span class="muted">Lançamento · Agenda · Pendências · Reposições</span>' },
+    { t: "Avanço de nível", x: "Em que nível cada aluno está e há quanto tempo. Ajuda a ver quando é hora de trocar de nível e liberar o próximo material.", html: '<span class="muted">A1: 2 alunos · B1: 1 aluno</span>' },
+    { t: "Reposições", x: "As reposições pendentes e as já feitas, sem sair da Home. Mantenha esse número baixo.", html: '<span class="big">2</span><span class="muted">a agendar</span>' }
+  ];
+  var home = {
+    tag: "Explore", titulo: "A Home: onde o seu dia começa",
+    instrucao: "É a primeira tela quando você entra na plataforma do professor. Toque em cada número para ver para que serve.",
+    estado: function () { return { vistos: {}, atual: null }; },
+    progresso: function (s) { return Object.keys(s.vistos).length + " de 6"; },
+    completa: function (s) { return Object.keys(s.vistos).length === PONTOS.length; },
+    fecho: "Comece o dia pela Home: avisos, próximas aulas, pendências e reposições num lugar só.",
+    corpo: function (s) {
+      var h = '<div class="home">' + K.kmsBar("/home") + '<div class="home-g">' + PONTOS.map(function (p, i) {
+        var cls = (s.vistos[i] ? " visto" : "") + (s.atual === i ? " atual" : "");
+        return '<button class="hz' + cls + '" id="hz-' + i + '" data-act="ponto" data-v="' + i + '"><span class="n">' + (s.vistos[i] ? ic("check", 11) : i + 1) + "</span><b>" + esc(p.t) + "</b>" + p.html + "</button>";
+      }).join("") + "</div></div>";
+      if (s.atual !== null) h += '<div class="explica" role="status"><b>' + (s.atual + 1) + " · " + esc(PONTOS[s.atual].t) + "</b>" + esc(PONTOS[s.atual].x) + "</div>";
+      return h;
+    },
+    acoes: { ponto: function (d, s) { var i = +d.v; s.atual = i; s.vistos[i] = true; } }
+  };
+
+  K.iniciar({ mes: mes, home: home });
+})();
+</script>
+</body>
+</html>

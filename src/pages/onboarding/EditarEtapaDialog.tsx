@@ -69,6 +69,10 @@ const EMBEDS = [
   { url: '/welcome-path/calculadora-pagamento.html', label: 'Calculadora de pagamento' },
   { url: '/welcome-path/simulador-plataforma.html', label: 'Simulador da plataforma' },
   // Telas de prática: uma página por etapa, uma atividade por ?parte=.
+  { url: '/welcome-path/etapa1-boas-vindas.html?parte=mes', label: 'Etapa 1 · Primeiro mês na King' },
+  { url: '/welcome-path/etapa1-boas-vindas.html?parte=home', label: 'Etapa 1 · Tour da Home' },
+  { url: '/welcome-path/etapa2-recebendo-alunos.html?parte=oferta', label: 'Etapa 2 · Oferta × agenda' },
+  { url: '/welcome-path/etapa2-recebendo-alunos.html?parte=portas', label: 'Etapa 2 · O que trava a agenda' },
   { url: '/welcome-path/etapa3-primeiro-contato.html?parte=mensagem', label: 'Etapa 3 · Mensagem de apresentação' },
   { url: '/welcome-path/etapa3-primeiro-contato.html?parte=perfil', label: 'Etapa 3 · Card do aluno' },
   { url: '/welcome-path/etapa3-primeiro-contato.html?parte=sequencia', label: 'Etapa 3 · Do aceite à 1ª aula' },
@@ -81,6 +85,9 @@ const EMBEDS = [
   { url: '/welcome-path/etapa5-boas-praticas.html?parte=canais', label: 'Etapa 5 · Canais' },
   { url: '/welcome-path/etapa5-boas-praticas.html?parte=direito', label: 'Etapa 5 · Direito a reposição' },
   { url: '/welcome-path/etapa5-boas-praticas.html?parte=sinais', label: 'Etapa 5 · Sinais do aluno' },
+  { url: '/welcome-path/etapa6-pagamento.html?parte=proporcional', label: 'Etapa 6 · Aluno que entrou no meio do mês' },
+  { url: '/welcome-path/etapa6-pagamento.html?parte=resumo', label: 'Etapa 6 · Conferir o Resumo Consolidado' },
+  { url: '/welcome-path/etapa6-pagamento.html?parte=calendario', label: 'Etapa 6 · Do fim do mês à nota fiscal' },
 ]
 
 const TIPO_POR_ID = Object.fromEntries(TIPOS_ELEMENTO.map(t => [t.id, t]))

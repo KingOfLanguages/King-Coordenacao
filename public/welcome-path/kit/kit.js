@@ -12,6 +12,7 @@
      corpo(s)                    → HTML do miolo
      perguntas {id: {pergunta, opcoes:[{t, ok, porque}]}}
      grupos {id: {rotulos:[{v, r, tom}], itens:[{t, certo, porque}]}}
+     ordens {id: {passos:[{id, t, rot, cedo}], extras:[{id, t, porque}], mostra}}
      completa(s), progresso(s), fecho
      acoes {nome(dataset, s, el)} → cliques em [data-act="nome"]
      entrada {nome(el, s)}         → digitação em [data-inp="nome"] (sem redesenhar)
@@ -126,16 +127,46 @@
   }
   function grupoOk(def, s, id) { return grupoCertos(def, s, id) === def.grupos[id].itens.length; }
 
+  /* Colocar em ordem: toca os passos na ordem certa; os extras não fazem parte.
+     ordens {id: {passos:[{id, t, rot, cedo}], extras:[{id, t, porque}], mostra:[ids]}} */
+  function estOrdem(s, id) { return s.o[id] || (s.o[id] = { feitos: [], fora: {}, aviso: null }); }
+  function htmlOrdem(def, id, s) {
+    var o = def.ordens[id], e = estOrdem(s, id);
+    var h = '<div class="tl">' + o.passos.map(function (p, i) {
+      var on = e.feitos.indexOf(p.id) >= 0;
+      return '<div class="tl-it' + (on ? " on" : "") + '"><span class="t">' + (on ? esc(p.rot || "") : "") + '</span><span class="d"></span><span class="x">' + (on ? esc(p.t) : (i + 1) + "º passo") + "</span></div>";
+    }).join("") + "</div>";
+    var todos = o.passos.concat(o.extras || []), ordem = o.mostra || todos.map(function (x) { return x.id; });
+    var resta = ordem.filter(function (x) { return e.feitos.indexOf(x) < 0; });
+    if (resta.length && e.feitos.length < o.passos.length) h += '<div class="lbl">Toque na próxima</div><div class="cartas">' + resta.map(function (x) {
+      var c = todos.filter(function (y) { return y.id === x; })[0], fora = e.fora[x];
+      return '<button class="carta' + (fora ? " fora" : "") + '" id="o-' + id + "-" + x + '" data-act="__ord" data-o="' + id + '" data-v="' + x + '"' + (fora ? " disabled" : "") + ">" + esc(c.t) + "</button>";
+    }).join("") + "</div>";
+    if (e.aviso) h += fb(e.aviso[0], e.aviso[1], e.aviso[2]);
+    return h;
+  }
+  function ordemClique(def, s, id, v) {
+    var o = def.ordens[id], e = estOrdem(s, id);
+    var extra = (o.extras || []).filter(function (x) { return x.id === v; })[0];
+    if (extra) { e.fora[v] = true; e.aviso = ["err", "Isso fica de fora.", extra.porque]; return; }
+    var p = o.passos.filter(function (x) { return x.id === v; })[0];
+    if (o.passos[e.feitos.length] === p) { e.feitos.push(v); e.aviso = null; return; }
+    e.aviso = ["err", "Ainda não.", p.cedo || "Tem um passo antes deste."];
+  }
+
   /* ═════════ montagem ═════════ */
   function montar(root, def) {
-    function novo() { var e = def.estado ? def.estado() : {}; e.r = {}; e.c = {}; return e; }
+    function novo() { var e = def.estado ? def.estado() : {}; e.r = {}; e.c = {}; e.o = {}; return e; }
     var s = novo();
     var api = {
       q: function (id) { return htmlPergunta(def, id, s); },
       g: function (id) { return htmlGrupo(def, id, s); },
       qOk: function (id) { return perguntaOk(s, id); },
       gOk: function (id) { return grupoOk(def, s, id); },
-      gCertos: function (id) { return grupoCertos(def, s, id); }
+      gCertos: function (id) { return grupoCertos(def, s, id); },
+      o: function (id) { return htmlOrdem(def, id, s); },
+      oOk: function (id) { return estOrdem(s, id).feitos.length === def.ordens[id].passos.length; },
+      oFeitos: function (id) { return estOrdem(s, id).feitos.length; }
     };
     def.api = api;
 
@@ -165,6 +196,8 @@
         if (q.opcoes[i].ok) r.certa = i; else if (r.erros.indexOf(i) < 0) r.erros.push(i);
       } else if (act === "__cls") {
         (s.c[d.g] || (s.c[d.g] = {}))[+d.i] = d.v;
+      } else if (act === "__ord") {
+        ordemClique(def, s, d.o, d.v);
       } else if (act === "__refazer") {
         s = novo();
       } else if (def.acoes && def.acoes[act]) {

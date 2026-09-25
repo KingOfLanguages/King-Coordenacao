@@ -157,3 +157,18 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
   .atv-h .prog{margin-left:0}
   .bub{max-width:95%}
 }
+
+/* ── colocar em ordem (Kit ordens) ── */
+.tl{display:grid; margin-bottom:14px}
+.tl-it{display:grid; grid-template-columns:96px 18px minmax(0,1fr); gap:10px; align-items:start; min-height:40px; position:relative}
+.tl-it:not(:last-child)::after{content:""; position:absolute; left:114px; top:16px; bottom:0; width:2px; background:var(--border-soft)}
+.tl-it .t{font:500 12px "Geist Mono",monospace; color:var(--fg-muted); text-align:right; padding-top:2px}
+.tl-it .d{width:14px; height:14px; border-radius:50%; margin-top:3px; margin-left:2px; z-index:1; border:2px dashed var(--border-strong); background:var(--bg-canvas)}
+.tl-it.on .d{border:0; background:var(--accent)}
+.tl-it .x{font-size:13.5px; color:var(--fg-subtle); padding-top:1px}
+.tl-it.on .x{color:var(--fg-primary); font-weight:500}
+.cartas{display:flex; flex-wrap:wrap; gap:7px}
+.carta{border:1px solid var(--border-default); background:var(--bg-canvas); border-radius:9px; padding:8px 11px; font:13px/1.4 Geist,sans-serif; color:var(--fg-primary); cursor:pointer; text-align:left}
+.carta:hover{border-color:var(--accent)}
+.carta.fora{text-decoration:line-through; color:var(--fg-subtle); border-style:dashed; cursor:default}
+@media (max-width:560px){ .tl-it{grid-template-columns:78px 18px minmax(0,1fr)} .tl-it:not(:last-child)::after{left:96px} }

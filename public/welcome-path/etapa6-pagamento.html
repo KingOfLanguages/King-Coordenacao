@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Etapa 6 · Prática</title>
+<!-- Atividades da etapa 6 (Pagamento), cada uma por ?parte=<id>:
+     proporcional, resumo, calendario. Cada aula de 30 min vale R$ 7,50 no
+     plano (R$ 30 por sessão semanal / 4 semanas), como no exemplo da etapa
+     (R$ 15 retidos por 2 faltas num plano de R$ 120). O proporcional usa um
+     mês de 8 aulas num plano 2x, para não depender da regra de meses com mais
+     dias de aula (pendente com a coordenação). Pagamento até o 7º dia útil e
+     a nota depois do pagamento: MAPA (Financeiro e Notas fiscais). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.cal{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; max-width:420px}
+.cal .dow{font:600 10px Geist,sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-subtle); text-align:center}
+.dia{aspect-ratio:1; border-radius:7px; display:grid; place-items:center; font:12px "Geist Mono",monospace; color:var(--fg-subtle); border:1px solid transparent; background:transparent; padding:0}
+.dia.aula{background:var(--bg-muted); color:var(--fg-secondary); cursor:pointer; border-color:var(--border-soft); font-family:"Geist Mono",monospace}
+.dia.aula:hover{border-color:var(--accent)}
+.dia.conta{background:var(--info-bg); color:var(--info-fg); border-color:var(--info-bd)}
+.dia.entrou{background:var(--accent); color:var(--accent-on); border-color:var(--accent); font-weight:600}
+.prop{display:flex; flex-wrap:wrap; gap:18px; align-items:center; margin:14px 0}
+.prop .v{font:600 26px "Geist Mono",monospace; color:var(--accent); line-height:1}
+.prop .sub{font-size:12.5px; color:var(--fg-muted)}
+.barra{height:12px; border-radius:6px; background:var(--bg-muted); overflow:hidden; flex:1 1 180px; min-width:140px}
+.barra div{height:100%; background:var(--accent); border-radius:6px; transition:width .3s ease}
+.linha-r{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:baseline}
+.linha-r .val{font:600 13px "Geist Mono",monospace; white-space:nowrap}
+.linha-r .obs{font-size:12px; color:var(--fg-muted)}
+@media (prefers-reduced-motion:reduce){ .barra div{transition:none} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+  function brl(v) { return "R$ " + v.toFixed(2).replace(".", ","); }
+
+  /* ═════════ 1. Aluno que entrou no meio do mês ═════════ */
+  // Outubro de 2026 começa numa quinta. Aulas às segundas e quartas: 8 no mês.
+  var AULAS = [5, 7, 12, 14, 19, 21, 26, 28], PLANO = 60;
+  var proporcional = {
+    tag: "Explore", titulo: "Aluno que entrou no meio do mês",
+    instrucao: "Plano de 2 aulas de 30 min por semana (R$ 60), às segundas e quartas: 8 aulas em outubro. Toque no dia da primeira aula do aluno com você.",
+    estado: function () { return { entrou: 14 }; },
+    progresso: function (s, a) { return a.qOk("quanto") ? "1 de 1" : "0 de 1"; },
+    completa: function (s, a) { return a.qOk("quanto"); },
+    fecho: "O proporcional é calculado sozinho pela plataforma. Valor menor que o do plano, no mês em que o aluno chegou, não é erro. No mês seguinte, completo, ele volta ao valor cheio.",
+    corpo: function (s, a) {
+      var h = '<div class="cal" role="group" aria-label="Outubro de 2026">' + ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"].map(function (d) { return '<span class="dow">' + d + "</span>"; }).join("");
+      for (var i = 0; i < 4; i++) h += '<span class="dia"></span>';
+      var n = 0;
+      for (var dia = 1; dia <= 31; dia++) {
+        var aula = AULAS.indexOf(dia) >= 0;
+        if (!aula) { h += '<span class="dia">' + dia + "</span>"; continue; }
+        var cls = dia === s.entrou ? "entrou" : dia > s.entrou ? "conta" : "";
+        if (dia >= s.entrou) n++;
+        h += '<button class="dia aula ' + cls + '" id="d-' + dia + '" data-act="entrou" data-v="' + dia + '" aria-pressed="' + (dia === s.entrou) + '" title="Aula em ' + dia + '/10">' + dia + "</button>";
+      }
+      h += "</div>";
+      var valor = PLANO * n / AULAS.length;
+      h += '<div class="prop"><div><span class="v">' + brl(valor) + '</span><div class="sub">' + n + " de 8 aulas do mês com você</div></div>" +
+        '<div class="barra" aria-hidden="true"><div style="width:' + (n / AULAS.length * 100).toFixed(1) + '%"></div></div></div>';
+      return h + a.q("quanto");
+    },
+    acoes: { entrou: function (d, s) { s.entrou = +d.v; } },
+    perguntas: { quanto: { pergunta: "O aluno começou com você no dia 14. Quanto você recebe por ele em outubro?", opcoes: [
+      { t: "R$ 60,00, o valor cheio do plano.", ok: false, porque: "Ele não ficou o mês inteiro com você. O valor é proporcional ao período." },
+      { t: "Cerca de R$ 37,50: o proporcional às 5 aulas que ele teve com você.", ok: true, porque: "Do dia 14 em diante são 5 das 8 aulas do mês. A plataforma calcula sozinha." },
+      { t: "Nada em outubro: o pagamento por ele começa em novembro.", ok: false, porque: "Você recebe pelo período em que ele esteve com você, já no mês em que ele chegou." }
+    ] } }
+  };
+
+  /* ═════════ 2. Conferir o Resumo Consolidado ═════════ */
+  function linha(nome, plano, obs, conta) {
+    return '<div class="linha-r"><div><b>' + esc(nome) + '</b> <span class="muted small">· ' + esc(plano) + '</span><div class="obs">' + esc(obs) + '</div></div><span class="val">' + esc(conta) + "</span></div>";
+  }
+  var resumo = {
+    tag: "Pratique", titulo: "Confira o Resumo Consolidado",
+    instrucao: "É dia 1º e o botão de autorizar apareceu. Antes, confira cada linha do resumo: está certa ou tem erro?",
+    progresso: function (s, a) { return a.gCertos("linhas") + " de 5"; },
+    completa: function (s, a) { return a.gOk("linhas"); },
+    fecho: "Achou algo errado? Avise a coordenação antes de autorizar: o valor autorizado é o que será pago.",
+    corpo: function (s, a) { return '<div class="tela" style="margin-bottom:12px">' + K.kmsBar("/financeira") + '<div class="tela-corpo small muted">Resumo consolidado · outubro/2026</div></div>' + a.g("linhas"); },
+    grupos: { linhas: {
+      rotulos: [{ v: "ok", r: "Está certo" }, { v: "erro", r: "Tem erro" }],
+      itens: [
+        { html: linha("Ana", "2 aulas de 30 min", "1 reposição pendente (falta do aluno em 20/10)", "R$ 60,00 − 7,50 = R$ 52,50"), certo: "ok", porque: "Falta com direito a reposição pendente segura R$ 7,50. Volta quando a reposição acontecer.", dica: "Reposição pendente segura o valor de uma aula até ela ser feita. Está certo." },
+        { html: linha("Bruno", "3 aulas de 30 min", "2 faltas sem direito a reposição", "R$ 90,00 − 15,00 = R$ 75,00"), certo: "erro", porque: "Falta sem direito não desconta nada. O certo é R$ 90,00.", dica: "Falta sem direito não mexe no seu valor. Tem erro aí." },
+        { html: linha("Carla", "2 aulas de 30 min", "entrou em 14/10: proporcional (5 de 8 aulas)", "R$ 37,50"), certo: "ok", porque: "Quem entra no meio do mês gera proporcional. Está certo.", dica: "Aluno novo no meio do mês paga proporcional. Está certo." },
+        { html: linha("Diego", "4 aulas de 30 min", "reposição de 06/10 feita em 09/10", "R$ 120,00 − 7,50 = R$ 112,50"), certo: "erro", porque: "A reposição já foi feita, então o valor retido volta. O certo é R$ 120,00.", dica: "Reposição feita libera o valor. Não devia ter desconto." },
+        { html: linha("Eduarda", "2 aulas de 30 min", "feriado nacional em 12/10", "R$ 60,00"), certo: "ok", porque: "Feriado nacional é pago: lançado como falta sem direito, não desconta.", dica: "Feriado nacional não desconta. Está certo." }
+      ]
+    } }
+  };
+
+  /* ═════════ 3. O calendário do dinheiro ═════════ */
+  var calendario = {
+    tag: "Pratique", titulo: "Do fim do mês à nota fiscal",
+    instrucao: "Toque nos passos na ordem em que acontecem. Dois deles estão errados.",
+    progresso: function (s, a) { return a.oFeitos("dinheiro") + " de 6"; },
+    completa: function (s, a) { return a.oOk("dinheiro"); },
+    fecho: "O mês fecha no dia 1º. Confira e autorize, receba até o 7º dia útil, e só então emita e lance a nota. Escolher o arquivo não envia a nota: é o Lançar Nota Fiscal que envia.",
+    corpo: function (s, a) { return a.o("dinheiro"); },
+    ordens: { dinheiro: {
+      passos: [
+        { id: "fim", t: "O mês termina", rot: "31/10" },
+        { id: "fecha", t: "O mês fecha e aparece o botão de autorizar", rot: "01/11", cedo: "Primeiro o mês precisa terminar." },
+        { id: "autoriza", t: "Conferir o Resumo Consolidado e autorizar o pagamento", rot: "01/11", cedo: "O botão de autorizar só aparece quando o mês fecha, no dia 1º." },
+        { id: "cai", t: "O pagamento cai na sua conta", rot: "até 7º dia útil", cedo: "O pagamento vem depois da sua autorização." },
+        { id: "emite", t: "Emitir a nota fiscal (NFS-e)", rot: "após receber", cedo: "A nota é emitida assim que você recebe o pagamento." },
+        { id: "lanca", t: "Lançar a nota: Escolher arquivo e depois Lançar Nota Fiscal", rot: "Financeira", cedo: "Antes de lançar, a nota precisa ser emitida." }
+      ],
+      extras: [
+        { id: "antes", t: "Autorizar antes de lançar as aulas pendentes", porque: "Autorize só com tudo lançado e conferido: o valor autorizado é o que será pago." },
+        { id: "escolhe", t: "Só escolher o arquivo da nota e sair", porque: "Escolher o arquivo não envia a nota. É preciso clicar em Lançar Nota Fiscal." }
+      ],
+      mostra: ["cai", "antes", "fecha", "lanca", "fim", "escolhe", "emite", "autoriza"]
+    } }
+  };
+
+  K.iniciar({ proporcional: proporcional, resumo: resumo, calendario: calendario });
+})();
+</script>
+</body>
+</html>
