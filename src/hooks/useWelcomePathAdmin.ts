@@ -357,6 +357,38 @@ export function useProgressoTodos() {
   })
 }
 
+/** Todas as questões da trilha, com gabarito — para o Painel da trilha. */
+export function useQuestoesTodas() {
+  return useQuery({
+    queryKey: ['wp-admin', 'questoes-todas'],
+    queryFn: async (): Promise<QuestaoAdmin[]> => {
+      const { data, error } = await supabase
+        .from('welcome_path_questoes')
+        .select('*')
+        .order('ordem', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as QuestaoAdmin[]
+    },
+  })
+}
+
+export type RespostaResumo = Pick<RespostaAdmin, 'professor_id' | 'questao_id' | 'tentativa' | 'resposta' | 'correta'>
+
+/** Todas as respostas da trilha, só o que o Painel precisa. Uma linha por
+ *  questão × tentativa × professor: poucas centenas por turma. */
+export function useRespostasTodas() {
+  return useQuery({
+    queryKey: ['wp-admin', 'respostas-todas'],
+    queryFn: async (): Promise<RespostaResumo[]> => {
+      const { data, error } = await supabase
+        .from('welcome_path_respostas')
+        .select('professor_id, questao_id, tentativa, resposta, correta')
+      if (error) throw error
+      return (data ?? []) as RespostaResumo[]
+    },
+  })
+}
+
 /** Respostas de um professor numa etapa, com a questão junto — é o que a
  *  coordenação lê para revisar dissertativa e ver onde ele tropeçou. */
 export function useRespostasProfessor(professorId: string | null, etapaId: string | null) {

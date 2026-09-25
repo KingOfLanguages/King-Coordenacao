@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { Eye, KeyRound, RotateCcw, ExternalLink } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { linkWelcomePathPublico } from '@/lib/portal'
 import { TrilhaView } from '@/pages/welcomePath/TrilhaView'
 import { EtapaLayout } from '@/pages/welcomePath/EtapaView'
@@ -77,8 +76,8 @@ export function VisaoProfessorTab() {
 
 function FaixaPrevia({ texto }: { texto: string }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-2xl border border-accentBlue/20 bg-accentBlue-soft/50 px-4 py-3">
-      <Eye className="mt-0.5 h-4 w-4 flex-shrink-0 text-accentBlue" />
+    <div className="flex items-start gap-2.5 rounded-2xl border border-aviso-infoBd bg-aviso-infoBg px-4 py-3">
+      <Eye className="mt-0.5 h-4 w-4 flex-shrink-0 text-aviso-infoFg" />
       <p className="text-[13px] leading-relaxed text-ink-secondary">
         <span className="font-semibold text-ink">Visão do professor.</span> {texto} Nada do que você responder aqui é gravado.
       </p>
@@ -207,11 +206,8 @@ function Gabarito({ questao }: { questao: QuestaoAdmin | undefined }) {
   if (!questao) return null
   const dissertativa = questao.tipo === 'dissertativa'
   return (
-    <div className={cn(
-      '-mt-2 rounded-xl border border-dashed px-3.5 py-2.5 text-[12.5px] leading-relaxed',
-      'border-accentBlue/30 bg-accentBlue-soft/40 text-ink-secondary',
-    )}>
-      <span className="font-semibold text-accentBlue">Gabarito: </span>
+    <div className="-mt-2 rounded-xl border border-dashed border-aviso-infoBd bg-aviso-infoBg px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-secondary">
+      <span className="font-semibold text-aviso-infoFg">Gabarito: </span>
       {dissertativa
         ? 'resposta escrita, corrigida pela coordenação na aba Welcome Path.'
         : questao.corretas.map(i => String.fromCharCode(65 + i)).join(', ') || 'sem alternativa marcada'}

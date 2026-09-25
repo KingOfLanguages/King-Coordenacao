@@ -430,7 +430,7 @@ export function EtapaLayout({
         <main className="space-y-8">
           {aviso}
           {etapa.notasCoordenacao && (
-            <div className="flex gap-2.5 rounded-2xl border border-accentBlue/20 bg-accentBlue-soft/50 px-4 py-3.5">
+            <div className="flex gap-2.5 rounded-2xl border border-aviso-infoBd bg-aviso-infoBg px-4 py-3.5">
               <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-accentBlue" />
               <div className="min-w-0">
                 <p className="text-[10.5px] font-semibold uppercase tracking-label text-accentBlue">

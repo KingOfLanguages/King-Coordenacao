@@ -106,7 +106,7 @@ export function QuestaoView({
                   'flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px] transition-colors',
                   travada ? 'cursor-default' : 'cursor-pointer',
                   marcada
-                    ? 'border-accentBlue bg-accentBlue-soft/60 text-ink'
+                    ? 'border-accentBlue bg-aviso-infoBg text-ink'
                     : 'border-line-soft bg-surface-canvas text-ink-secondary',
                   !travada && !marcada && 'hover:border-line hover:bg-surface-subtle/60',
                 )}
@@ -137,7 +137,7 @@ export function QuestaoView({
         </div>
       )}
       {veredito?.comentario && (
-        <div className="rounded-xl border border-accentBlue/20 bg-accentBlue-soft/50 px-3 py-2.5">
+        <div className="rounded-xl border border-aviso-infoBd bg-aviso-infoBg px-3 py-2.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-label text-accentBlue">
             Retorno da coordenação
           </p>
