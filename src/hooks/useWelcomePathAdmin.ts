@@ -31,6 +31,7 @@ export type EtapaAdmin = {
   prazo_dias: number | null
   liberacao_dia: number | null
   notas_coordenacao: string | null
+  minutos_estimados: number | null
 }
 
 export type BlocoAdmin = {
@@ -123,7 +124,7 @@ export function useEtapasAdmin() {
     queryFn: async (): Promise<EtapaAdmin[]> => {
       const { data, error } = await supabase
         .from('welcome_path_etapas')
-        .select('id, ordem, titulo, descricao, ativa, obrigatoria, nota_minima, prazo_dias, liberacao_dia, notas_coordenacao')
+        .select('id, ordem, titulo, descricao, ativa, obrigatoria, nota_minima, prazo_dias, liberacao_dia, notas_coordenacao, minutos_estimados')
         .order('ordem', { ascending: true })
       if (error) throw error
       return (data ?? []) as EtapaAdmin[]

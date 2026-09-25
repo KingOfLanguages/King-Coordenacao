@@ -88,6 +88,10 @@ export function TrilhaView({
   const atual = etapas.find(e => e.estado === 'liberada')
   const tudoFeito = total > 0 && concluidas === total
   const primeiroNome = nome.split(' ')[0]
+  // Só soma o que a coordenação estimou; etapa sem estimativa não entra na conta.
+  const minutosRestantes = etapas
+    .filter(e => e.estado !== 'concluida')
+    .reduce((s, e) => s + (e.minutos ?? 0), 0)
 
   return (
     <div className="w-full max-w-2xl space-y-7 animate-fade-up">
@@ -112,6 +116,9 @@ export function TrilhaView({
           <div className="flex items-baseline justify-between">
             <span className="text-[12.5px] font-medium text-ink-secondary">
               {concluidas} de {total} etapas concluídas
+              {!tudoFeito && minutosRestantes > 0 && (
+                <span className="font-normal text-ink-muted"> · faltam cerca de {fmtDuracao(minutosRestantes * 60)}</span>
+              )}
             </span>
             <span className="text-[13px] font-semibold tabular-nums text-ink">{pct}%</span>
           </div>
@@ -164,9 +171,16 @@ export function TrilhaView({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[10.5px] font-semibold uppercase tracking-label text-ink-muted">
-                          Etapa {etapa.ordem}
-                          {!etapa.obrigatoria && ' · opcional'}
+                        <p className="flex flex-wrap items-center gap-x-2 text-[10.5px] font-semibold uppercase tracking-label text-ink-muted">
+                          <span>
+                            Etapa {etapa.ordem}
+                            {!etapa.obrigatoria && ' · opcional'}
+                          </span>
+                          {etapa.minutos != null && etapa.estado !== 'concluida' && (
+                            <span className="flex items-center gap-1 font-medium normal-case tracking-normal">
+                              <Clock3 className="h-3 w-3" /> cerca de {fmtDuracao(etapa.minutos * 60)}
+                            </span>
+                          )}
                         </p>
                         <p className="mt-0.5 text-[14.5px] font-semibold leading-snug tracking-[-0.01em] text-ink">
                           {etapa.titulo}

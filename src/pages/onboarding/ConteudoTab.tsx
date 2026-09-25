@@ -185,6 +185,12 @@ function LinhaEtapa({
           dica="Dia mínimo (desde o início do professor) em que a etapa abre, mesmo com a anterior concluída. Vazio = abre assim que a anterior conclui."
           onSalvar={v => patch({ liberacao_dia: v == null ? null : Math.max(1, v) })}
         />
+        <CampoNumero
+          label="Tempo (min)"
+          valor={etapa.minutos_estimados}
+          dica="Quanto tempo a etapa leva, com vídeos e atividades. O professor vê na trilha. Vazio = não mostra."
+          onSalvar={v => patch({ minutos_estimados: v == null ? null : Math.min(600, Math.max(1, v)) })}
+        />
         <label className="flex items-center gap-2 pb-1.5 text-[12.5px] text-ink-secondary">
           <input
             type="checkbox"

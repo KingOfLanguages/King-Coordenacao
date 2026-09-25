@@ -690,7 +690,7 @@ table.t .r{text-align:right}
           solucao: "Para cada um: Falta do aluno › Sem direito a reposição › print da conversa do aviso de feriado (tire no WhatsApp) › observação “Feriado nacional”. Salvar.",
           ok: function () { return !!(S.lancados["carla|2026-10-12|reg"] && S.lancados["felipe|2026-10-12|reg"]); } }
       ],
-      fechamento: "Feriado nacional = falta sem direito a reposição, com a observação “Feriado nacional” — e o dia é pago. Vale só para feriado nacional: ponto facultativo (como Corpus Christi) e feriado estadual ou municipal têm aula normal."
+      fechamento: "Feriado nacional = falta sem direito a reposição, com a observação “Feriado nacional” e o print da mensagem em que você avisou o aluno do feriado — e o dia é pago. Vale só para feriado nacional: ponto facultativo (como Corpus Christi) e feriado estadual ou municipal têm aula normal."
     },
     {
       id: "m5", titulo: "Falta avisada em cima da hora", ref: "MAPA · Critérios de reposição",
@@ -1331,7 +1331,7 @@ table.t .r{text-align:right}
       (f ? '<span class="file-chip">' + ic("img", 12) + " " + esc(f.nome) + "</span>" : "") +
       '<button class="btn btn-sm" data-act="abrirPicker" data-v="' + esc(alvo) + '" data-p="img" id="pk-' + fid(l.key) + '">' + ic("clipp", 13) + (f ? " Trocar arquivo" : " Anexar print") + "</button>" +
       (f ? '<button class="btn-link" data-act="tiraPrint" data-k="' + esc(l.key) + '">Remover</button>' : "") + "</div>" +
-      '<div class="help">Obrigatório em falta sem direito a reposição: a conversa em que o aluno avisou — ou, se ele não avisou, a sua tentativa de contato.</div>' +
+      '<div class="help">Obrigatório em falta sem direito a reposição: a conversa em que o aluno avisou — ou, se ele não avisou, a sua tentativa de contato. No feriado nacional, a mensagem em que você avisou o aluno do feriado.</div>' +
       (aberto ? pickerHTML() : "") + "</div>";
   }
   function secRepo() {

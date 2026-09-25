@@ -186,6 +186,7 @@ type EtapaRow = {
   id: string; ordem: number; titulo: string; descricao: string
   ativa: boolean; obrigatoria: boolean; nota_minima: number
   prazo_dias: number | null; liberacao_dia: number | null; notas_coordenacao: string | null
+  minutos_estimados: number | null
 }
 type ProgressoRow = {
   etapa_id: string; iniciada_em: string | null; concluida_em: string | null
@@ -196,7 +197,7 @@ type ProgressoRow = {
 async function carregarTrilha(admin: Admin, prof: ProfRow) {
   const { data: etapasRaw } = await admin
     .from('welcome_path_etapas')
-    .select('id, ordem, titulo, descricao, ativa, obrigatoria, nota_minima, prazo_dias, liberacao_dia, notas_coordenacao')
+    .select('id, ordem, titulo, descricao, ativa, obrigatoria, nota_minima, prazo_dias, liberacao_dia, notas_coordenacao, minutos_estimados')
     .eq('ativa', true)
     .order('ordem', { ascending: true })
 
@@ -232,6 +233,7 @@ async function carregarTrilha(admin: Admin, prof: ProfRow) {
       ordem: e.ordem,
       titulo: e.titulo,
       descricao: e.descricao,
+      minutos: e.minutos_estimados,
       obrigatoria: e.obrigatoria,
       notaMinima: e.nota_minima,
       notasCoordenacao: e.notas_coordenacao,

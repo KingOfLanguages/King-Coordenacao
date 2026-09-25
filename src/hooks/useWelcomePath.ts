@@ -46,6 +46,9 @@ export type EtapaTrilha = {
   ordem: number
   titulo: string
   descricao: string
+  /** Tempo estimado definido pela coordenação. Null (ou ausente, em deploy
+   *  antigo da função) = não mostra. */
+  minutos?: number | null
   obrigatoria: boolean
   notaMinima: number
   notasCoordenacao: string | null
