@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Etapa 5 · Prática</title>
+<!-- Atividades da etapa 5 (Boas práticas), cada uma por ?parte=<id>:
+     observacao, rotina, canais, direito, sinais.
+     Rotina: itens e XP do checklist real (/api/xp/checklist), patente
+     Rookie → Page aos 2.200 XP (/api/xp-professor), −10 XP por dia de
+     pendência (/api/xp-professor/resumo-diario) e a régua oficial de
+     pendências (2 dias lembrete, 3–4 agenda bloqueada, 5+ reunião), com a
+     mensagem real de bloqueio (/api/pendencia-lancamento).
+     Direito a reposição: critérios do MAPA. Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.cena{padding:10px 12px; border-radius:10px; background:var(--bg-subtle); font-size:13px; line-height:1.55; margin-bottom:8px}
+textarea{font:13.5px/1.5 Geist,sans-serif; color:var(--fg-primary); background:var(--bg-canvas); border:1px solid var(--border-default); border-radius:9px; padding:9px 11px; width:100%; min-height:78px; resize:vertical}
+.bloco-h{font-size:13px; font-weight:600; margin:16px 0 8px}
+/* checklist e XP */
+.ck{display:grid; gap:6px}
+.ck button{display:flex; align-items:center; gap:10px; width:100%; text-align:left; border:1px solid var(--border-soft); background:var(--bg-canvas); border-radius:9px; padding:8px 11px; font:13.5px Geist,sans-serif; color:var(--fg-primary); cursor:pointer}
+.ck button:hover{border-color:var(--border-strong)}
+.ck .box{width:18px; height:18px; border-radius:5px; border:1.5px solid var(--border-strong); flex:none; display:grid; place-items:center}
+.ck button[aria-checked="true"] .box{background:var(--ok-fg); border-color:var(--ok-fg); color:var(--bg-canvas)}
+.ck .xp{margin-left:auto; font:500 12px "Geist Mono",monospace; color:var(--ok-fg)}
+.xpbar{margin-top:12px}
+.xprow{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:5px; flex-wrap:wrap}
+.xprow b{font-weight:600}
+.track{height:10px; border-radius:5px; background:var(--bg-muted); overflow:hidden}
+.fill{height:100%; border-radius:5px; background:var(--accent); transition:width .3s ease}
+.fill.menos{background:var(--err-fg)}
+.perfeito{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; color:var(--ok-fg); background:var(--ok-bg); border:1px solid var(--ok-bd); border-radius:999px; padding:2px 9px}
+.dias{display:flex; flex-wrap:wrap; gap:4px}
+.estagio{margin-top:10px; border-radius:11px; padding:11px 13px; border:1px solid; font-size:13px; line-height:1.55}
+.estagio b{display:block; font-size:13.5px; margin-bottom:2px}
+.estagio.e0{background:var(--ok-bg); color:var(--ok-fg); border-color:var(--ok-bd)}
+.estagio.e1{background:var(--hold-bg); color:var(--hold-fg); border-color:var(--hold-bd)}
+.estagio.e2{background:var(--err-bg); color:var(--err-fg); border-color:var(--err-bd)}
+.aviso-real{margin-top:8px; padding:9px 11px; border-radius:8px; background:var(--bg-canvas); color:var(--fg-primary); border:1px solid var(--err-bd); font-size:12.5px}
+.aviso-real .de{font-size:11px; color:var(--fg-muted); margin-bottom:2px}
+/* alunos */
+.alunos{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:14px}
+.al{border:1px solid var(--border-soft); border-radius:11px; padding:10px 11px; display:grid; gap:6px; font-size:12.5px}
+.al .topo{display:flex; gap:8px; align-items:center}
+.al .topo b{font-size:13px}
+.passo{margin-top:14px}
+@media (max-width:560px){ .alunos{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ 1. Termômetro de observação ═════════ */
+  var CONTEUDO = ["aula 9", "past", "passado", "went", "saw", "irregular", "regular", "verbo", "conversa", "conversacao", "roleplay", "fim de semana"];
+  var observacao = {
+    tag: "Pratique", titulo: "Essa observação ajuda quem ler depois?",
+    instrucao: "A coordenação, o suporte e um próximo professor leem o histórico do aluno pelas observações. Separe as úteis das genéricas e depois escreva uma.",
+    estado: function () { return { texto: "", ok: false, aviso: null }; },
+    progresso: function (s, a) { return a.gCertos("obs") + (s.ok ? 1 : 0) + " de 6"; },
+    completa: function (s, a) { return a.gOk("obs") && s.ok; },
+    fecho: "Observação útil diz o que foi trabalhado, como o aluno respondeu e o que vem depois. “Aula realizada” não conta.",
+    corpo: function (s, a) {
+      return a.g("obs") +
+        '<div class="bloco-h">Agora é a sua vez</div><div class="cena">Hoje você deu a Aula 9 do livro para a Júlia (A2): simple past. Ela acertou os verbos regulares, travou nos irregulares (went, saw) e pediu mais conversação.</div>' +
+        '<label class="lbl" for="obs-txt">Observação do lançamento</label><textarea id="obs-txt" data-inp="texto" placeholder="O que foi trabalhado, como a aluna respondeu, o que retomar">' + esc(s.texto) + "</textarea>" +
+        '<div class="acoes"><button class="btn btn-pri" id="conferir" data-act="conferir">Conferir</button></div>' +
+        (s.aviso ? K.fb(s.aviso[0], s.aviso[1], s.aviso[2]) : "");
+    },
+    entrada: { texto: function (el, s) { s.texto = el.value; } },
+    acoes: {
+      conferir: function (d, s) {
+        var n = K.norm(s.texto);
+        if (!n) { s.aviso = ["info", "", "Escreva a observação primeiro."]; return; }
+        if (K.obsFraca(s.texto)) { s.aviso = ["err", "Ainda genérica.", "Diga o que foi trabalhado e como a Júlia respondeu. Ex.: “Aula 9 (simple past): acertou os regulares, travou em went e saw. Pediu mais conversação: próxima com roleplay sobre o fim de semana.”"]; s.ok = false; return; }
+        var fala = CONTEUDO.some(function (k) { return n.indexOf(k) >= 0; });
+        if (!fala) { s.aviso = ["err", "Falta o conteúdo.", "O tamanho está bom, mas a observação não diz o que foi trabalhado. Cite a aula ou o simple past e onde ela travou."]; s.ok = false; return; }
+        s.ok = true; s.aviso = ["ok", "Boa observação.", "Quem abrir o histórico da Júlia sabe o que foi feito e o que retomar."];
+      }
+    },
+    grupos: { obs: {
+      rotulos: [{ v: "u", r: "Útil" }, { v: "g", r: "Genérica" }],
+      itens: [
+        { html: "<q>Aula realizada.</q>", certo: "g", porque: "Não diz nada sobre a aula nem sobre o aluno.", dica: "“Aula realizada” só confirma que houve aula. É genérica." },
+        { html: "<q>Rever a ordem OSASCOMP dos adjetivos: trocou size e color. Retomar com imagens na próxima.</q>", certo: "u", porque: "Diz o conteúdo, a dificuldade e o próximo passo.", dica: "Tem conteúdo, dificuldade e próximo passo. É útil." },
+        { html: "<q>Aluno participou bem.</q>", certo: "g", porque: "Não diz o que foi trabalhado nem onde ele está.", dica: "Participar bem não conta o que foi feito. É genérica." },
+        { html: "<q>Aula 9 (simple past): acertou os regulares, travou nos irregulares. Pediu mais conversação; próxima com roleplay.</q>", certo: "u", porque: "Qualquer pessoa entende onde o aluno está e o que vem depois.", dica: "Tem aula, resultado e plano. É útil." },
+        { html: "<q>Tudo certo, sem novidades.</q>", certo: "g", porque: "Se a coordenação precisar defender você ou ajudar o aluno, isso não serve de nada.", dica: "“Sem novidades” não registra nada. É genérica." }
+      ]
+    } }
+  };
+
+  /* ═════════ 2. Rotina do dia, XP e pendências ═════════ */
+  var CK = [
+    { id: "lancei", t: "Lancei todas as aulas", xp: 15 },
+    { id: "nivel", t: "Atualizei nível e material dos alunos", xp: 10 },
+    { id: "pend", t: "Verifiquei pendências", xp: 10 },
+    { id: "faltas", t: "Mandei mensagem para os alunos que faltaram", xp: 5 },
+    { id: "queen", t: "Incentivei meus alunos a usar a Queen", xp: 5 }
+  ];
+  var XP_BASE = 1180, XP_PAGE = 2200;
+  var ESTAGIOS = [
+    { e: "e0", t: "Em dia", x: "Aula lançada em até 24h. Conta para o checklist e para o dia perfeito." },
+    { e: "e1", t: "Pendência aberta", x: "Passou de 24h: a aula aparece em Pendências e você perde 10 XP por dia enquanto ela estiver aberta." },
+    { e: "e1", t: "Lembrete", x: "A plataforma avisa que a agenda vai ser bloqueada se a pendência continuar." },
+    { e: "e2", t: "Agenda bloqueada", x: "Você deixa de receber alunos novos até regularizar com a coordenação.", real: true },
+    { e: "e2", t: "Agenda bloqueada", x: "Continua bloqueada. Lançar a aula e falar com a coordenação é o caminho para destravar.", real: true },
+    { e: "e2", t: "Reunião com a coordenação", x: "A coordenação chama para conversar. Pendência que se repete põe a parceria em risco.", real: true }
+  ];
+  var rotina = {
+    tag: "Explore", titulo: "O dia a dia em XP: checklist e pendências",
+    instrucao: "Marque o checklist do dia e veja o XP subir. Depois, deixe uma aula sem lançar e avance os dias.",
+    estado: function () { return { ck: {}, dias: 0, viu: false }; },
+    progresso: function (s) { var n = CK.filter(function (c) { return s.ck[c.id]; }).length; return n + " de 5 no checklist"; },
+    completa: function (s) { return CK.every(function (c) { return s.ck[c.id]; }) && s.viu; },
+    fecho: "Lançar no dia rende XP. Deixar para depois custa XP todo dia e, a partir do 3º dia, trava a agenda para alunos novos.",
+    corpo: function (s) {
+      var ganho = CK.reduce(function (t, c) { return t + (s.ck[c.id] ? c.xp : 0); }, 0);
+      var perda = s.dias * 10, xp = XP_BASE + ganho - perda, todos = CK.every(function (c) { return s.ck[c.id]; });
+      var h = '<div class="lbl">Checklist do dia</div><div class="ck">' + CK.map(function (c) {
+        return '<button role="checkbox" id="ck-' + c.id + '" aria-checked="' + !!s.ck[c.id] + '" data-act="ck" data-v="' + c.id + '"><span class="box">' + (s.ck[c.id] ? ic("check", 12) : "") + "</span>" + esc(c.t) + '<span class="xp">+' + c.xp + " XP</span></button>";
+      }).join("") + "</div>";
+      h += '<div class="xpbar"><div class="xprow"><span>' + ic("trophy", 13) + " <b>Rookie</b> → Page</span>" + (todos ? '<span class="perfeito">' + ic("check", 11) + " Dia perfeito</span>" : "") + '<span class="num">' + xp.toLocaleString("pt-BR") + " / " + XP_PAGE.toLocaleString("pt-BR") + " XP" + (perda ? ' <span style="color:var(--err-fg)">(−' + perda + ")</span>" : "") + '</span></div><div class="track"><div class="fill' + (perda ? " menos" : "") + '" style="width:' + Math.max(0, Math.min(100, xp / XP_PAGE * 100)).toFixed(1) + '%"></div></div></div>';
+      var st = ESTAGIOS[Math.min(s.dias, 5)];
+      h += '<div class="bloco-h">E se uma aula de ontem ficar sem lançar?</div><div class="dias seg" role="group" aria-label="Dias sem lançar">' + [0, 1, 2, 3, 4, 5].map(function (n) {
+        return '<button id="dia-' + n + '" aria-pressed="' + (s.dias === n) + '" data-act="dia" data-v="' + n + '">' + (n === 0 ? "Lançada" : n + (n === 1 ? " dia" : " dias") + (n === 5 ? "+" : "")) + "</button>";
+      }).join("") + "</div>" +
+        '<div class="estagio ' + st.e + '"><b>' + esc(st.t) + (s.dias ? " · −" + perda + " XP até aqui" : "") + "</b>" + esc(st.x) +
+        (st.real ? '<div class="aviso-real"><div class="de">O que aparece na sua plataforma</div>Sua agenda foi bloqueada. Devido ao acúmulo de pendências de lançamento, você não receberá novos alunos até que a situação seja regularizada. Entre em contato com a Coordenação de Professores.</div>' : "") + "</div>";
+      return h;
+    },
+    acoes: {
+      ck: function (d, s) { s.ck[d.v] = !s.ck[d.v]; },
+      dia: function (d, s) { s.dias = +d.v; if (s.dias >= 3) s.viu = true; }
+    }
+  };
+
+  /* ═════════ 3. Canais ═════════ */
+  var canais = {
+    tag: "Pratique", titulo: "Para quem vai cada assunto?",
+    instrucao: "Você fala com a coordenação de professores pelo WhatsApp dela. O aluno tem o suporte exclusivo do aluno. Escolha o canal certo para cada situação.",
+    progresso: function (s, a) { return a.gCertos("canais") + " de 6"; },
+    completa: function (s, a) { return a.gOk("canais"); },
+    fecho: "Tudo que foge do normal vai para a coordenação, no dia. Assunto do aluno vai para o suporte do aluno. E, na dúvida se comunica, já era para ter comunicado.",
+    corpo: function (s, a) { return a.g("canais"); },
+    grupos: { canais: {
+      rotulos: [{ v: "c", r: "Coordenação de professores" }, { v: "s", r: "Suporte do aluno" }],
+      itens: [
+        { t: "O aluno quer trocar de horário, e você tem outro horário livre para oferecer.", certo: "c", porque: "Com horário alternativo, você avisa a coordenação pelo WhatsApp e ela ajusta.", dica: "Você tem o horário: quem precisa saber é a coordenação." },
+        { t: "O aluno quer trocar de horário, e você não tem outro horário livre.", certo: "s", porque: "Sem horário alternativo, o caminho é o suporte do aluno.", dica: "Sem horário para oferecer, encaminhe ao suporte do aluno." },
+        { t: "Você percebeu que lançou uma falta errada ontem.", certo: "c", porque: "Inconsistência no lançamento vai para a coordenação na hora, sem esperar o fim do mês.", dica: "Erro de lançamento é assunto seu com a coordenação." },
+        { t: "O aluno pergunta sobre o boleto da mensalidade.", certo: "s", porque: "Pagamento do aluno é assunto do suporte do aluno.", dica: "Mensalidade é do aluno com a escola: suporte do aluno." },
+        { t: "O aluno faltou às três últimas aulas e não responde.", certo: "c", porque: "Aluno sumido é o tipo de coisa que foge do normal: a coordenação precisa saber cedo.", dica: "Aluno sumido é sinal de risco: avise a coordenação." },
+        { t: "O aluno avisa que vai viajar e quer pausar as aulas por um mês.", certo: "c", porque: "Pausa foge do fluxo normal: recado à coordenação no mesmo dia.", dica: "Pausa mexe na sua agenda: a coordenação precisa saber no dia." }
+      ]
+    } }
+  };
+
+  /* ═════════ 4. Tem direito a reposição? ═════════ */
+  var direito = {
+    tag: "Pratique", titulo: "Tem direito a reposição?",
+    instrucao: "Os critérios do MAPA decidem quem tem direito. Classifique cada falta.",
+    progresso: function (s, a) { return a.gCertos("faltas") + " de 5"; },
+    completa: function (s, a) { return a.gOk("faltas"); },
+    fecho: "Aviso com 24h ou mais: com direito, até 4 no mês. Sem aviso ou em cima da hora: sem direito, e o print da conversa vai no lançamento. Motivo nobre sem aviso: a seu critério. Falta do professor: sempre, sem limite.",
+    corpo: function (s, a) { return a.g("faltas"); },
+    grupos: { faltas: {
+      rotulos: [{ v: "com", r: "Com direito" }, { v: "sem", r: "Sem direito" }, { v: "crit", r: "A seu critério" }],
+      itens: [
+        { t: "A aula é segunda às 19h. O aluno avisou no domingo às 10h.", certo: "com", porque: "33 horas de antecedência: passou das 24h, tem direito.", dica: "Conte as horas: domingo 10h até segunda 19h passa de 24h." },
+        { t: "O aluno avisou 1 hora antes da aula: “surgiu um imprevisto no trabalho”.", certo: "sem", porque: "Aviso em cima da hora não dá direito. No lançamento, vai o print da conversa.", dica: "Menos de 24h de aviso não gera direito." },
+        { t: "O aluno não avisou. Depois contou que passou a noite no hospital com o filho.", certo: "crit", porque: "Faltou sem aviso, mas com motivo nobre: fica a seu critério. Se abrir a exceção, registre por escrito.", dica: "Sem aviso, mas com motivo nobre: o MAPA deixa a decisão com você." },
+        { t: "O aluno avisou com 2 dias de antecedência, mas já usou as 4 reposições do mês.", certo: "sem", porque: "O limite é de 4 faltas com direito por mês. Passou disso, fica sem direito, mesmo avisando.", dica: "Olhe o limite do mês: 4 por aluno." },
+        { t: "Você teve uma emergência e não conseguiu dar a aula.", certo: "com", porque: "Falta do professor sempre gera reposição, sem limite e sem prazo para expirar.", dica: "Quem faltou foi você: o aluno sempre tem direito." }
+      ]
+    } }
+  };
+
+  /* ═════════ 5. Sinais do aluno ═════════ */
+  var sinais = {
+    tag: "Pratique", titulo: "Quem está dando sinal?",
+    instrucao: "As bolinhas mostram as últimas 5 aulas de cada aluno, como no Histórico do Aluno: verde presença, vermelho falta, amarelo reposição.",
+    progresso: function (s, a) { return ["quem", "primeiro", "depois"].filter(function (q) { return a.qOk(q); }).length + " de 3"; },
+    completa: function (s, a) { return a.qOk("depois"); },
+    fecho: "Faltas seguidas são sinal. Converse cedo; com horário alternativo, avise a coordenação; sem horário, encaminhe ao suporte do aluno.",
+    corpo: function (s, a) {
+      function card(ini, cor, nome, d, nota) { return '<div class="al"><div class="topo"><span class="av2" style="background:' + cor + '">' + ini + "</span><b>" + nome + "</b></div><div>" + K.dots5(d) + '</div><span class="muted">' + nota + "</span></div>"; }
+      var h = '<div class="alunos">' + card("AL", "#7c3aed", "Ana Lima", ["p", "p", "p", "p", "p"], "5 presenças") +
+        card("MT", "#0e7490", "Marcos Teles", ["p", "p", "f", "f", "f"], "3 faltas seguidas, sem aviso") +
+        card("BR", "#be185d", "Beatriz Rocha", ["p", "f", "p", "p", "r"], "1 falta, já reposta") + "</div>";
+      h += a.q("quem");
+      if (a.qOk("quem")) h += '<div class="passo">' + a.q("primeiro") + "</div>";
+      if (a.qOk("primeiro")) h += '<div class="passo"><div class="cena">Na conversa, o Marcos conta que mudou de turno no trabalho. Você tem quinta às 19h livre.</div>' + a.q("depois") + "</div>";
+      return h;
+    },
+    perguntas: {
+      quem: { pergunta: "Qual aluno pede atenção agora?", opcoes: [
+        { t: "Ana Lima", ok: false, porque: "Cinco presenças seguidas: está tudo bem com a Ana." },
+        { t: "Marcos Teles", ok: true, porque: "Três faltas seguidas depois de um período assíduo: algo mudou na rotina dele." },
+        { t: "Beatriz Rocha", ok: false, porque: "Uma falta, já reposta, faz parte. Não é padrão." }
+      ] },
+      primeiro: { pergunta: "O que você faz primeiro?", opcoes: [
+        { t: "Lanço as faltas e espero ele voltar.", ok: false, porque: "Esperar deixa o problema crescer. Agir cedo é o que segura o aluno." },
+        { t: "Converso com ele para entender se o dia e o horário ainda funcionam.", ok: true, porque: "Faltas seguidas costumam ser mudança de rotina. A conversa mostra o que dá para ajustar." },
+        { t: "Peço à coordenação que troque o professor dele.", ok: false, porque: "Troca de professor sem conversa costuma virar desistência. Primeiro, entenda o que houve." }
+      ] },
+      depois: { pergunta: "E agora?", opcoes: [
+        { t: "Mudo a aula para quinta direto na agenda e aviso o Marcos.", ok: false, porque: "Mudança de horário passa pela coordenação. Avise pelo WhatsApp com o horário alternativo." },
+        { t: "Aviso a coordenação pelo WhatsApp que ele pode passar para quinta às 19h.", ok: true, porque: "Com horário alternativo, a coordenação ajusta e você mantém o aluno." },
+        { t: "Encaminho o Marcos ao suporte do aluno.", ok: false, porque: "O suporte do aluno é para quando você não tem horário alternativo. Você tem." }
+      ] }
+    }
+  };
+
+  K.iniciar({ observacao: observacao, rotina: rotina, canais: canais, direito: direito, sinais: sinais });
+})();
+</script>
+</body>
+</html>

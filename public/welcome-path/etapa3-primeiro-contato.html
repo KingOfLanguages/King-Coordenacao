@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Etapa 3 · Prática</title>
+<!-- Atividades da etapa 3 (Primeiro contato). Cada uma entra na etapa por um
+     bloco `embed` com ?parte=<id>: mensagem, perfil, sequencia.
+     Aluna e datas são fictícias. Ver public/welcome-path/kit/kit.js. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.dois{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px}
+.passo-h{font-size:12.5px; font-weight:600; color:var(--fg-secondary); margin:14px 0 8px}
+/* linha do tempo */
+.tl{display:grid; gap:0; margin-bottom:14px}
+.tl-it{display:grid; grid-template-columns:78px 18px minmax(0,1fr); gap:10px; align-items:start; min-height:40px; position:relative}
+.tl-it:not(:last-child)::after{content:""; position:absolute; left:96px; top:16px; bottom:0; width:2px; background:var(--border-soft)}
+.tl-it .t{font:500 12px "Geist Mono",monospace; color:var(--fg-muted); text-align:right; padding-top:2px}
+.tl-it .d{width:14px; height:14px; border-radius:50%; margin-top:3px; margin-left:2px; z-index:1; border:2px dashed var(--border-strong); background:var(--bg-canvas)}
+.tl-it.on .d{border:0; background:var(--accent)}
+.tl-it .x{font-size:13.5px; color:var(--fg-subtle); padding-top:1px}
+.tl-it.on .x{color:var(--fg-primary); font-weight:500}
+.cartas{display:flex; flex-wrap:wrap; gap:7px}
+.carta{border:1px solid var(--border-default); background:var(--bg-canvas); border-radius:9px; padding:8px 11px; font:13px/1.4 Geist,sans-serif; color:var(--fg-primary); cursor:pointer; text-align:left}
+.carta:hover{border-color:var(--accent)}
+.carta.fora{text-decoration:line-through; color:var(--fg-subtle); border-style:dashed; cursor:default}
+.perfil .topo{display:flex; gap:11px; align-items:center; margin-bottom:10px}
+.perfil .mais{margin-top:10px; padding-top:10px; border-top:1px solid var(--border-soft)}
+@media (max-width:560px){ .dois{grid-template-columns:1fr} .tl-it{grid-template-columns:64px 18px minmax(0,1fr)} .tl-it:not(:last-child)::after{left:82px} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ 1. Mensagem de apresentação ═════════ */
+  var PECAS = [
+    { id: "nome", ok: true, rot: "Quem é você", txt: "Oi, Lívia! Tudo bem? Aqui é o(a) teacher [seu nome], da King of Languages — vou ser seu professor(a) de inglês 😊" },
+    { id: "data", ok: true, rot: "Data e horário da 1ª aula", txt: "Nossa primeira aula será na terça-feira, 13/10, às 18h30 (horário de Brasília)." },
+    { id: "consid", ok: true, rot: "Considerações gerais", txt: "Alguns combinados: pontualidade (começamos e terminamos no horário), tempo de espera na sala e as regras de faltas e reposições." },
+    { id: "plataforma", ok: true, rot: "Como entrar na aula", txt: "Para entrar, é só acessar a sua plataforma do aluno — o link da aula fica lá. Cinco minutinhos antes eu te mando um lembrete!" },
+    { id: "meet", ok: false, rot: "Link direto do Google Meet", txt: "Já deixo aqui o link da nossa sala: meet.google.com/kgx-rtpa-wqe" },
+    { id: "nodia", ok: false, rot: "Como avisar faltas", txt: "Se precisar faltar, é só me avisar no dia, tá bom?" }
+  ];
+  var mensagem = {
+    tag: "Pratique", titulo: "Monte a mensagem de apresentação",
+    instrucao: "A Lívia acabou de entrar na sua agenda. Marque o que vai na primeira mensagem e envie. Depois, avise a coordenação.",
+    estado: function () { return { sel: {}, enviada: false, grupo: false, aviso: null }; },
+    progresso: function (s) { return (s.enviada ? 1 : 0) + (s.grupo ? 1 : 0) + " de 2 passos"; },
+    completa: function (s) { return s.grupo; },
+    fecho: "Apresentação completa e contato confirmado no grupo: o aluno sabe quem é o professor, e a coordenação sabe que o contato aconteceu.",
+    corpo: function (s) {
+      var h = '<div class="wa"><div class="wa-h"><span class="av2" style="background:#7c3aed;width:26px;height:26px;font-size:10px">LP</span>Lívia Prado</div>';
+      var txt = PECAS.filter(function (p) { return s.sel[p.id]; }).map(function (p) { return p.txt; }).join("\n\n");
+      if (s.enviada) {
+        h += '<div class="bub out">' + esc(s.texto) + '<span class="t">10:05 ✓✓</span></div><div class="bub in">Oi, teacher! Tudo ótimo 😄 Combinado, terça às 18h30!<span class="t">10:08</span></div>';
+      } else if (txt) {
+        h += '<div class="bub out" style="opacity:.8">' + esc(txt) + '<span class="t">rascunho</span></div>';
+      } else {
+        h += '<div class="bub in" style="align-self:center;background:transparent;box-shadow:none;color:var(--wa-meta);font-size:12px">A mensagem aparece aqui enquanto você monta.</div>';
+      }
+      h += "</div>";
+      if (!s.enviada) {
+        h += '<div class="passo-h">O que vai na mensagem?</div><div class="pecas" role="group" aria-label="Partes da mensagem">' + PECAS.map(function (p) {
+          return '<button class="pc" role="checkbox" aria-checked="' + !!s.sel[p.id] + '" id="pc-' + p.id + '" data-act="peca" data-v="' + p.id + '">' + (s.sel[p.id] ? ic("check", 12) : "") + esc(p.rot) + "</button>";
+        }).join("") + '</div><div class="acoes"><button class="btn btn-wa" id="enviar" data-act="enviar">Enviar ' + ic("arrow", 14) + "</button></div>";
+      } else if (!s.grupo) {
+        h += '<div class="passo-h">Agora, no grupo da coordenação:</div><div class="opcoes">' +
+          '<button class="opcao" id="g-vespera" data-act="grupo" data-v="vespera"><span class="mk"></span><span>“Aceitei a Lívia! Vou falar com ela na véspera da primeira aula.”</span></button>' +
+          '<button class="opcao" id="g-ok" data-act="grupo" data-v="ok"><span class="mk"></span><span>“Contato com a aluna Lívia Prado feito ✅ Primeira aula: terça, 13/10, às 18h30.”</span></button></div>';
+      }
+      if (s.aviso) h += K.fb(s.aviso[0], s.aviso[1], s.aviso[2]);
+      return h;
+    },
+    acoes: {
+      peca: function (d, s) { s.sel[d.v] = !s.sel[d.v]; s.aviso = null; },
+      enviar: function (d, s) {
+        var sel = s.sel, marcadas = PECAS.filter(function (p) { return sel[p.id]; });
+        if (!marcadas.length) { s.aviso = ["info", "", "Marque o que vai na mensagem."]; return; }
+        if (sel.meet) { s.aviso = ["err", "Tire o link do Meet.", "A aluna entra pela plataforma do aluno, que abre a mesma sala que você. O link direto só vai se ela não aparecer nos primeiros 5 minutos de aula."]; return; }
+        if (sel.nodia) { s.aviso = ["err", "Tire o “me avise no dia”.", "Aviso no dia não dá direito a reposição: a regra é avisar com 24h de antecedência. O que você promete vira acordo."]; return; }
+        var falta = PECAS.filter(function (p) { return p.ok && !sel[p.id]; }).map(function (p) { return p.rot.toLowerCase(); });
+        if (falta.length) { s.aviso = ["err", "Faltou informação.", "A apresentação tem quatro itens obrigatórios. Faltou: " + falta.join(", ") + "."]; return; }
+        s.texto = marcadas.map(function (p) { return p.txt; }).join("\n\n");
+        s.enviada = true; s.aviso = ["ok", "Enviada.", "A Lívia já sabe quem é o professor dela."];
+      },
+      grupo: function (d, s) {
+        if (d.v === "vespera") { s.aviso = ["err", "Não é isso.", "O contato é o quanto antes, e você já fez. O grupo recebe a confirmação do contato feito, não a promessa de fazer."]; return; }
+        s.grupo = true; s.aviso = null;
+      }
+    }
+  };
+
+  /* ═════════ 2. O card do aluno ═════════ */
+  var perfil = {
+    tag: "Pratique", titulo: "Leia o card antes da primeira aula",
+    instrucao: "Em Histórico do Aluno, o card mostra o que a Lívia contou na matrícula. Use o que ele diz.",
+    completa: function (s, a) { return a.qOk("abertura") && a.qOk("correcao"); },
+    progresso: function (s, a) { return (a.qOk("abertura") ? 1 : 0) + (a.qOk("correcao") ? 1 : 0) + " de 2"; },
+    fecho: "O card é a sua cola da primeira aula: interesses e metas viram assunto, e a preferência de correção diz como corrigir.",
+    corpo: function (s, a) {
+      return '<div class="tela perfil">' + K.kmsBar("/perfil-alunos") + '<div class="tela-corpo">' +
+        '<div class="topo"><span class="av2 lg" style="background:#7c3aed">LP</span><div><b>Lívia Prado</b><div><span class="chip sem">Sem nível · aluna nova</span></div></div></div>' +
+        '<div class="kv"><span>Início na escola</span><b>13/10/2026</b><span>Plano</span><b>2 aulas de 30 min</b><span>Aulas</span><b>ter e qui · 18h30</b></div>' +
+        '<div class="mais"><div class="lbl">Mais informações</div><div class="kv"><span>Ocupação</span><b>Médica veterinária</b><span>Interesses</span><b>Séries de investigação, viagens de carro</b><span>Metas</span><b>Conversar com tutores estrangeiros na clínica</b><span>Correção</span><b>Na hora, com calma</b></div></div>' +
+        "</div></div>" +
+        '<div style="margin-top:14px;display:grid;gap:14px">' + a.q("abertura") + a.q("correcao") + "</div>";
+    },
+    perguntas: {
+      abertura: { pergunta: "Qual abertura aproveita o que o card conta?", opcoes: [
+        { t: "“Hi Lívia! Let's start with the verb to be.”", ok: false, porque: "Não usa nada do que ela contou. O card existe para você chegar sabendo quem ela é." },
+        { t: "“Hi Lívia! I saw you're a vet. Tell me about a day at the clinic with foreign clients.”", ok: true, porque: "Liga a conversa ao trabalho e à meta dela: é o getting to know que já mostra por que a aula vai servir." },
+        { t: "“Hi! Let's do the placement test first and talk later.”", ok: false, porque: "O card fica sem uso, e a aluna entra num teste sem se sentir conhecida. Conhecer o aluno faz parte dos primeiros 15 minutos." }
+      ] },
+      correcao: { pergunta: "“Correção: na hora, com calma.” O que isso muda na aula?", opcoes: [
+        { t: "Juntar todas as correções para o fim da aula.", ok: false, porque: "Ela pediu correção na hora. Deixar para o fim vai contra o que ela contou." },
+        { t: "Corrigir no momento, sem pressa, começando pelo que trava a comunicação.", ok: true, porque: "Respeita a preferência dela e segue a prioridade da King: comunicar primeiro, falar perfeito depois." },
+        { t: "Corrigir todo erro, logo que ele aparece, para ela não repetir.", ok: false, porque: "Corrigir tudo interrompe a fala e desanima. Priorize o que trava a comunicação." }
+      ] }
+    }
+  };
+
+  /* ═════════ 3. Do aceite à primeira aula ═════════ */
+  var CARTAS = [
+    { id: "grupo", n: 3, t: "Confirmar no grupo da coordenação que o contato foi feito", hora: "seg 10h10", cedo: "O grupo recebe a confirmação de um contato que já aconteceu. Primeiro, fale com a aluna." },
+    { id: "espera", n: 0, t: "Esperar a aluna mandar a primeira mensagem", porque: "Até você se apresentar, ela nem sabe quem é o professor. O contato é seu, e o quanto antes." },
+    { id: "lembrete", n: 4, t: "Mandar o lembrete com o link da plataforma do aluno", hora: "ter 18h25", cedo: "O lembrete vai 5 minutos antes da aula. Antes dele vêm o contato e a confirmação no grupo." },
+    { id: "aceite", n: 1, t: "Dar o aceite no contrato, na Home", hora: "seg 10h00" },
+    { id: "meet", n: 5, t: "Ela não entrou até 18h35: mandar o link direto do Meet", hora: "ter 18h35", cedo: "O link direto do Meet é o último recurso: só depois do lembrete, se ela não entrar nos primeiros 5 minutos." },
+    { id: "junto", n: 0, t: "Mandar o link do Meet junto com a apresentação", porque: "O link direto não vai com a apresentação: a aluna entra pela plataforma do aluno, na mesma sala que você." },
+    { id: "apres", n: 2, t: "Mandar a mensagem de apresentação", hora: "seg 10h05", cedo: "Antes, o aceite: é ele que libera o início das aulas." }
+  ];
+  var ORDEM = CARTAS.filter(function (c) { return c.n; }).sort(function (a, b) { return a.n - b.n; });
+  var sequencia = {
+    tag: "Pratique", titulo: "Do aceite à primeira aula, na ordem",
+    instrucao: "A Lívia entrou na sua agenda na segunda às 10h; a primeira aula é na terça às 18h30. Toque nas ações na ordem em que elas acontecem. Duas delas não fazem parte do processo.",
+    estado: function () { return { feitos: [], fora: {}, aviso: null }; },
+    progresso: function (s) { return s.feitos.length + " de 5"; },
+    completa: function (s) { return s.feitos.length === 5; },
+    fecho: "Aceite, apresentação o quanto antes, confirmação no grupo, lembrete 5 minutos antes, e o link do Meet só se ela não entrar em 5 minutos.",
+    corpo: function (s) {
+      var h = '<div class="tl">' + ORDEM.map(function (c, i) {
+        var on = s.feitos.indexOf(c.id) >= 0;
+        return '<div class="tl-it' + (on ? " on" : "") + '"><span class="t">' + (on ? c.hora : "") + '</span><span class="d"></span><span class="x">' + (on ? esc(c.t) : (i + 1) + "º passo") + "</span></div>";
+      }).join("") + "</div>";
+      var restantes = CARTAS.filter(function (c) { return s.feitos.indexOf(c.id) < 0; });
+      if (restantes.length) h += '<div class="lbl">Ações</div><div class="cartas">' + restantes.map(function (c) {
+        var fora = s.fora[c.id];
+        return '<button class="carta' + (fora ? " fora" : "") + '" id="c-' + c.id + '" data-act="carta" data-v="' + c.id + '"' + (fora ? " disabled" : "") + ">" + esc(c.t) + "</button>";
+      }).join("") + "</div>";
+      if (s.aviso) h += K.fb(s.aviso[0], s.aviso[1], s.aviso[2]);
+      return h;
+    },
+    acoes: {
+      carta: function (d, s) {
+        var c = CARTAS.filter(function (x) { return x.id === d.v; })[0];
+        if (!c.n) { s.fora[c.id] = true; s.aviso = ["err", "Isso fica de fora.", c.porque]; return; }
+        if (c.n === s.feitos.length + 1) { s.feitos.push(c.id); s.aviso = null; return; }
+        s.aviso = ["err", "Ainda não.", c.cedo];
+      }
+    }
+  };
+
+  K.iniciar({ mensagem: mensagem, perfil: perfil, sequencia: sequencia });
+})();
+</script>
+</body>
+</html>

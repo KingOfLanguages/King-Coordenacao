@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Etapa 4 · Prática</title>
+<!-- Atividades da etapa 4 (Primeira aula), cada uma por ?parte=<id>:
+     regua, nivelamento, material, transferido.
+     O material imita o Now We're Talking (/api/materials/{id}: blocos
+     coloridos e elementos visibleToTeachersOnly), com título real do A1.
+     Alunos e observações são fictícios. Ver public/welcome-path/kit/kit.js. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+/* régua de 30 minutos */
+.regua{display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--border-default); border-radius:10px; overflow:hidden; margin-bottom:6px}
+.metade{padding:9px 10px; min-height:74px; display:flex; flex-direction:column; gap:5px}
+.metade.a{background:var(--hold-bg); color:var(--hold-fg)}
+.metade.b{background:var(--info-bg); color:var(--info-fg); border-left:1px solid var(--border-default)}
+.metade .cab{font:600 11px Geist,sans-serif; letter-spacing:.05em; text-transform:uppercase}
+.metade .peca{font-size:12px; background:var(--bg-canvas); color:var(--fg-primary); border-radius:6px; padding:3px 8px; align-self:flex-start}
+.metade .vazio{font-size:12px; opacity:.6}
+.escala{display:flex; justify-content:space-between; font:500 10.5px "Geist Mono",monospace; color:var(--fg-subtle); margin:0 2px 14px}
+/* fala do aluno */
+.fala{display:flex; gap:9px; align-items:flex-start}
+.fala .bub{background:var(--bg-subtle); color:var(--fg-primary); box-shadow:none; max-width:100%; font-style:italic}
+.fala .av2{width:26px; height:26px; font-size:9.5px}
+/* material */
+.mat{border:1px solid var(--border-default); border-radius:12px; overflow:hidden}
+.mat-top{display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid var(--border-soft); background:var(--bg-subtle); font-size:12.5px}
+.mat-top b{font-size:13px}
+.mat-top .btn{margin-left:auto}
+.mat-corpo{display:grid; grid-template-columns:minmax(0,1fr); gap:0}
+.mat-corpo.apres{grid-template-columns:minmax(0,1fr) 190px}
+.blocos{padding:10px; display:grid; gap:8px}
+.bl{border-radius:9px; padding:10px 12px; font-size:12.5px; line-height:1.5}
+.bl b{display:block; font-size:13.5px; margin-bottom:2px}
+.bl.azul{background:var(--mat-azul-bg); color:var(--mat-azul-fg)}
+.bl.amarelo{background:var(--mat-amarelo-bg); color:var(--mat-amarelo-fg)}
+.bl.verde{background:var(--mat-verde-bg); color:var(--mat-verde-fg)}
+.instr{border-left:1px solid var(--border-soft); padding:10px; background:var(--bg-canvas)}
+.instr .box{border:1.5px dashed var(--accent); border-radius:9px; padding:9px 10px; background:var(--info-bg); color:var(--info-fg); font-size:12px; line-height:1.5}
+.instr .box b{display:flex; gap:5px; align-items:center; font-size:12px; margin-bottom:4px}
+.instr .so{font-size:11px; color:var(--fg-muted); margin-top:6px}
+/* aluno transferido */
+.cardt .topo{display:flex; gap:11px; align-items:center; margin-bottom:10px}
+.obsant{margin-top:10px; padding:9px 11px; border-radius:9px; background:var(--bg-subtle); font-size:12.5px; line-height:1.5}
+.obsant .de{font-size:11px; color:var(--fg-muted); margin-bottom:2px}
+@media (max-width:560px){ .regua{grid-template-columns:1fr} .metade.b{border-left:0; border-top:1px solid var(--border-default)} .mat-corpo.apres{grid-template-columns:1fr} .instr{border-left:0; border-top:1px solid var(--border-soft)} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ 1. Régua de 30 minutos ═════════ */
+  var regua = {
+    tag: "Pratique", titulo: "Monte a primeira aula em 30 minutos",
+    instrucao: "Diga onde cada momento entra: nos até 15 minutos de alinhamento, nos 15 de aula, ou fora da aula.",
+    progresso: function (s, a) { return a.gCertos("momentos") + " de 7"; },
+    completa: function (s, a) { return a.gOk("momentos"); },
+    fecho: "Até 15 minutos de alinhamento e 15 de aula de verdade. Depois da aula, registre o nível na plataforma: é isso que libera o livro.",
+    corpo: function (s, a) {
+      var g = regua.grupos.momentos, c = s.c.momentos || {};
+      function na(v) {
+        var p = g.itens.filter(function (it, i) { return it.certo === v && c[i] === v; });
+        return p.length ? p.map(function (it) { return '<span class="peca">' + esc(it.curto) + "</span>"; }).join("") : '<span class="vazio">vazio</span>';
+      }
+      return '<div class="regua"><div class="metade a"><span class="cab">Alinhamento · até 15 min</span>' + na("a") + '</div><div class="metade b"><span class="cab">Aula · 15 min</span>' + na("b") + "</div></div>" +
+        '<div class="escala"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30 min</span></div>' + a.g("momentos");
+    },
+    grupos: { momentos: {
+      rotulos: [{ v: "a", r: "Alinhamento" }, { v: "b", r: "Aula" }, { v: "x", r: "Fica de fora" }],
+      itens: [
+        { t: "Conhecer o aluno (getting to know)", curto: "Getting to know", certo: "a", porque: "Faz parte dos até 15 minutos de alinhamento.", dica: "Conhecer o aluno é parte do alinhamento, nos primeiros 15 minutos." },
+        { t: "Apresentar sua didática e os tipos de feedback que você dá", curto: "Sua didática", certo: "a", porque: "Entra no alinhamento: o aluno precisa saber como você trabalha.", dica: "Apresentar a didática é alinhamento, antes da aula prática." },
+        { t: "Ouvir os objetivos: por que ele quer aprender, com o que trabalha", curto: "Objetivos", certo: "a", porque: "É do alinhamento, e é o que alimenta a aula prática logo depois.", dica: "Ouvir os objetivos é alinhamento: a aula prática usa o que ele contar." },
+        { t: "Aplicar o teste de nivelamento", curto: "Nivelamento", certo: "a", porque: "O nivelamento cabe no alinhamento, seguindo as instruções do próprio link.", dica: "O nivelamento acontece dentro dos até 15 minutos de alinhamento." },
+        { t: "Uma aula prática ligada ao objetivo que ele acabou de contar", curto: "Aula prática", certo: "b", porque: "Os outros 15 minutos são aula de verdade: ele sai aprendendo algo em inglês.", dica: "A aula prática ocupa os 15 minutos finais. A primeira aula não é só conversa." },
+        { t: "Dizer a nota do teste e quantos erros ele cometeu", curto: "", certo: "x", porque: "Fica de fora: o nivelamento é para motivar, não para expor nota nem erros.", dica: "Você não precisa dizer nota nem número de erros. Isso fica de fora." },
+        { t: "Dar a aula em português, para ele ficar à vontade", curto: "", certo: "x", porque: "Fica de fora: a aula é em inglês. Português só se ele tiver muita dificuldade, depois de mímica, imagem e escrita.", dica: "A aula é em inglês. Português é o último recurso, não o padrão." }
+      ]
+    } }
+  };
+
+  /* ═════════ 2. Nivelamento de treino ═════════ */
+  function fala(t) { return '<div class="fala"><span class="av2" style="background:#0e7490">RS</span><span class="bub">' + esc(t) + "</span></div>"; }
+  var nivelamento = {
+    tag: "Pratique", titulo: "Nivelamento: o que trava a comunicação?",
+    instrucao: "Trechos do Rafael no teste de nivelamento. Nem todo erro derruba a nota: marque o que atrapalha entender o que ele quer dizer.",
+    progresso: function (s, a) { return a.gCertos("trechos") + (a.qOk("devolutiva") ? 1 : 0) + " de 7"; },
+    completa: function (s, a) { return a.gOk("trechos") && a.qOk("devolutiva"); },
+    fecho: "O que pesa é o que trava a comunicação. O resultado vira motivação, não nota: registre o nível na plataforma e diga ao aluno o que ele já faz e o que vão trabalhar.",
+    corpo: function (s, a) { return a.g("trechos") + '<div style="margin-top:14px">' + a.q("devolutiva") + "</div>"; },
+    grupos: { trechos: {
+      rotulos: [{ v: "t", r: "Trava a comunicação" }, { v: "n", r: "Não trava" }],
+      itens: [
+        { html: fala("My name Rafael. I engineer in a car company."), certo: "t", porque: "Falta o verbo to be. É um dos erros que mais atrapalham a comunicação.", dica: "Sem o verbo to be, a frase perde a estrutura. Isso trava." },
+        { html: fala("She don't like coffee."), certo: "n", porque: "Erro de concordância, mas a frase se entende perfeitamente.", dica: "Dá para entender a frase sem esforço. É um erro para trabalhar com o tempo." },
+        { html: fala("Yesterday I go to the gym with my brother."), certo: "n", porque: "O verbo está no presente, mas o “yesterday” deixa claro quando foi.", dica: "O “yesterday” resolve o tempo da frase. A mensagem passa." },
+        { html: fala("I like travel I go Paris last year I want go again."), certo: "t", porque: "Sem conectivos, as ideias se amontoam e fica difícil seguir.", dica: "Faltam conectivos e a fala vira uma lista solta. Isso trava." },
+        { html: fala("I arrive on the airport in 8 o'clock at morning."), certo: "t", porque: "Preposições erradas em sequência confundem onde e quando.", dica: "São três preposições trocadas numa frase. A trilha trata isso como falha que trava." },
+        { html: '<div class="fala"><span class="av2" style="background:#0e7490">RS</span><span class="bub" style="font-style:normal">Ele fala “think” como “fink”, mas o resto da frase é claro.</span></div>', certo: "n", porque: "Sotaque não derruba a nota quando as palavras são reconhecíveis.", dica: "Dá para entender a palavra pelo contexto. Não trava." }
+      ]
+    } },
+    perguntas: { devolutiva: { pergunta: "No fim do teste, o que você diz ao Rafael?", opcoes: [
+      { t: "“Você errou seis vezes, então vamos começar do básico.”", ok: false, porque: "Contar erros desanima. O momento do nivelamento é para motivar." },
+      { t: "“Sua nota foi 4,5 de 10.”", ok: false, porque: "Você não precisa dizer a nota. Ela serve para registrar o nível na plataforma." },
+      { t: "“Você já se apresenta e conta o que faz! Vamos trabalhar o verbo to be e os conectivos para ganhar fluidez.”", ok: true, porque: "Mostra o que ele já consegue e aponta o caminho, sem nota nem lista de erros." }
+    ] } }
+  };
+
+  /* ═════════ 3. O material por dentro ═════════ */
+  var material = {
+    tag: "Pratique", titulo: "O material na aula",
+    instrucao: "Uma aula do Now We're Talking. Ligue o modo apresentação para ver o que só você enxerga, e responda.",
+    estado: function () { return { apres: false }; },
+    progresso: function (s, a) { return (a.qOk("compartilhar") ? 1 : 0) + (a.qOk("anotacoes") ? 1 : 0) + " de 2"; },
+    completa: function (s, a) { return a.qOk("compartilhar") && a.qOk("anotacoes"); },
+    fecho: "No Meet, compartilhe só a guia do material: as Instruções da Aula são suas. E o que você escreve na tela some ao fechar.",
+    corpo: function (s, a) {
+      var h = '<div class="mat">' + K.kmsBar("/materials") +
+        '<div class="mat-top">' + ic("book", 14) + '<div><b>Aula 7 - Asking About Personal Information</b><div class="muted small">Now We\'re Talking · A1</div></div>' +
+        '<button class="btn btn-sm' + (s.apres ? " btn-pri" : "") + '" id="apres" data-act="apres" aria-pressed="' + s.apres + '">' + ic("eye", 13) + (s.apres ? " Modo apresentação ligado" : " Modo apresentação") + "</button></div>" +
+        '<div class="mat-corpo' + (s.apres ? " apres" : "") + '"><div class="blocos">' +
+        '<div class="bl azul"><b>Asking About Personal Information</b>Ao final desta aula, você vai conseguir perguntar e responder nome, idade, profissão e de onde a pessoa é.</div>' +
+        '<div class="bl amarelo"><b>Warm-up</b>What\'s your name? Where are you from? What do you do?</div>' +
+        '<div class="bl verde"><b>Practice</b>Complete o diálogo com as perguntas certas e leia em voz alta com o professor.</div></div>' +
+        (s.apres ? '<aside class="instr"><div class="box"><b>' + ic("lock", 12) + " Instruções da aula</b>Warm-up: antes de mostrar o diálogo, peça que o aluno pergunte o seu nome e a sua profissão. Corrija só o que travar a pergunta.</div><p class=\"so\">Só você vê este painel.</p></aside>" : "") +
+        "</div></div>";
+      return h + '<div style="margin-top:14px;display:grid;gap:14px">' + a.q("compartilhar") + a.q("anotacoes") + "</div>";
+    },
+    acoes: { apres: function (d, s) { s.apres = !s.apres; } },
+    perguntas: {
+      compartilhar: { pergunta: "Hora de compartilhar no Meet. O que você compartilha?", opcoes: [
+        { t: "A tela inteira, para não correr o risco de escolher a janela errada.", ok: false, porque: "Na tela inteira, o aluno também vê o painel de Instruções da Aula." },
+        { t: "Só a guia (ou a janela) do material em modo apresentação.", ok: true, porque: "O aluno vê os slides e as instruções ficam só com você." },
+        { t: "A janela da plataforma, com a agenda aberta ao lado do material.", ok: false, porque: "A agenda mostra dados de outros alunos. Compartilhe só o material." }
+      ] },
+      anotacoes: { pergunta: "Você escreveu no slide, com a ferramenta de desenho, as três perguntas que o aluno errou. Elas estarão lá na próxima aula?", opcoes: [
+        { t: "Sim, ficam salvas no material.", ok: false, porque: "As anotações feitas na tela não ficam salvas para as próximas aulas." },
+        { t: "Só se eu clicar em salvar antes de fechar.", ok: false, porque: "Não existe salvar anotação: elas somem quando a aula fecha." },
+        { t: "Não. Peço ao aluno que anote ou tire um print antes de fechar.", ok: true, porque: "É a orientação do MAPA. E o que importa para a próxima aula também vai na observação do lançamento." }
+      ] }
+    }
+  };
+
+  /* ═════════ 4. Aluno transferido ═════════ */
+  var transferido = {
+    tag: "Pratique", titulo: "Aluno transferido: por onde começar?",
+    instrucao: "O Paulo veio de outra professora. Antes da primeira aula com ele, o histórico da plataforma já conta onde ele está.",
+    completa: function (s, a) { return a.qOk("comeco"); },
+    fecho: "Aluno transferido não refaz o nivelamento: o histórico mostra o nível e onde ele parou. Um getting to know rápido e a aula segue dali.",
+    corpo: function (s, a) {
+      return '<div class="tela cardt">' + K.kmsBar("/perfil-alunos") + '<div class="tela-corpo">' +
+        '<div class="topo"><span class="av2 lg" style="background:#c2410c">PN</span><div><b>Paulo Nunes</b><div><span class="chip">Nível B1</span> <span class="chip hold">Transferido para você em 08/10</span></div></div></div>' +
+        '<div class="kv"><span>Material</span><b>B1 - parte 1 - Aula 1 até Aula 25</b><span>Últimas 5 aulas</span><b>' + K.dots5(["p", "p", "f", "p", "p"]) + "</b></div>" +
+        '<div class="obsant"><div class="de">Última observação · Teacher Carol · 06/10</div>Aula 11 (Move in, Pay off, Settle for): usou bem “pay off”; confundiu “settle for” com “settle down”. Retomar na próxima.</div>' +
+        '</div></div><div style="margin-top:14px">' + a.q("comeco") + "</div>";
+    },
+    perguntas: { comeco: { pergunta: "Primeira aula com o Paulo. Como você começa?", opcoes: [
+      { t: "Aplico o teste de nivelamento para conferir se ele é mesmo B1.", ok: false, porque: "Aluno transferido já tem nível definido. Refazer o nivelamento só atrasa a aula." },
+      { t: "Faço um getting to know rápido, de uns 5 minutos, e sigo para a Aula 12, retomando “settle for”.", ok: true, porque: "É o caminho da etapa: conhecer o aluno rapidinho e continuar de onde a professora anterior parou." },
+      { t: "Começo o B1 do zero, pela Aula 1, para ele se adaptar a mim.", ok: false, porque: "Ele já passou dessas aulas. Voltar ao começo desperdiça o que ele aprendeu." },
+      { t: "Peço à coordenação o nível dele antes da aula.", ok: false, porque: "O nível e os conteúdos já estão no histórico da plataforma." }
+    ] } }
+  };
+
+  K.iniciar({ regua: regua, nivelamento: nivelamento, material: material, transferido: transferido });
+})();
+</script>
+</body>
+</html>

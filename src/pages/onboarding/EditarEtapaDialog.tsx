@@ -68,6 +68,19 @@ const TIPOS_ELEMENTO: {
 const EMBEDS = [
   { url: '/welcome-path/calculadora-pagamento.html', label: 'Calculadora de pagamento' },
   { url: '/welcome-path/simulador-plataforma.html', label: 'Simulador da plataforma' },
+  // Telas de prática: uma página por etapa, uma atividade por ?parte=.
+  { url: '/welcome-path/etapa3-primeiro-contato.html?parte=mensagem', label: 'Etapa 3 · Mensagem de apresentação' },
+  { url: '/welcome-path/etapa3-primeiro-contato.html?parte=perfil', label: 'Etapa 3 · Card do aluno' },
+  { url: '/welcome-path/etapa3-primeiro-contato.html?parte=sequencia', label: 'Etapa 3 · Do aceite à 1ª aula' },
+  { url: '/welcome-path/etapa4-primeira-aula.html?parte=regua', label: 'Etapa 4 · Régua de 30 minutos' },
+  { url: '/welcome-path/etapa4-primeira-aula.html?parte=nivelamento', label: 'Etapa 4 · Nivelamento' },
+  { url: '/welcome-path/etapa4-primeira-aula.html?parte=material', label: 'Etapa 4 · Material na aula' },
+  { url: '/welcome-path/etapa4-primeira-aula.html?parte=transferido', label: 'Etapa 4 · Aluno transferido' },
+  { url: '/welcome-path/etapa5-boas-praticas.html?parte=observacao', label: 'Etapa 5 · Observação' },
+  { url: '/welcome-path/etapa5-boas-praticas.html?parte=rotina', label: 'Etapa 5 · Checklist, XP e pendências' },
+  { url: '/welcome-path/etapa5-boas-praticas.html?parte=canais', label: 'Etapa 5 · Canais' },
+  { url: '/welcome-path/etapa5-boas-praticas.html?parte=direito', label: 'Etapa 5 · Direito a reposição' },
+  { url: '/welcome-path/etapa5-boas-praticas.html?parte=sinais', label: 'Etapa 5 · Sinais do aluno' },
 ]
 
 const TIPO_POR_ID = Object.fromEntries(TIPOS_ELEMENTO.map(t => [t.id, t]))
