@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { MessageCircle, Check, Copy, Lock, Mail, Loader2, ChevronDown } from 'lucide-react'
+import { MessageCircle, Check, Copy, Lock, Mail, MailCheck, Loader2, ChevronDown } from 'lucide-react'
 import {
   useContatosHoje, useMarcarContato, useEnviarConvite, coordenadorResponsavelDe, type ContatoDia,
 } from '@/hooks/useContatosDia'
@@ -10,7 +10,7 @@ import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { montarMensagemContato, montarAssuntoContato } from '@/lib/mensagemContato'
 import { linkAgendamentoPublico } from '@/lib/portal'
 import { ESTAGIO } from '@/lib/centralPendencias'
-import { useEmailCarencia, textoCarencia } from '@/hooks/useEnviarEmailMassa'
+import { useEmailCarencia, textoCarencia, diaMes } from '@/hooks/useEnviarEmailMassa'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
 import {
@@ -26,7 +26,8 @@ import {
 //
 // Carência de e-mail (15 dias): a lista normal já não traz quem recebeu e-mail
 // nesse prazo; nas linhas de pendência, que continuam entrando, o botão de
-// e-mail fica travado e o WhatsApp segue livre.
+// e-mail fica travado e o WhatsApp segue livre. Quem recebe convite por um
+// disparo em massa depois de entrar na lista sai marcado como enviado.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function MensagensDoDia() {
@@ -87,13 +88,17 @@ export function MensagensDoDia() {
     const coord = coordDe(c)
     setEnviandoId(c.id)
     try {
-      const { para } = await enviarConvite.mutateAsync({
+      const { para, jaConvidadoEm } = await enviarConvite.mutateAsync({
         contato_id:     c.id,
         corpo:          montarMensagemContato(c, coord, linkAgendamento, 'email'),
         assunto:        montarAssuntoContato(c),
         remetente_nome: coord,
       })
-      toast.success(`E-mail enviado para ${para || c.professor?.nome || 'o professor'}.`)
+      if (jaConvidadoEm) {
+        toast.info(`${c.professor?.nome ?? 'O professor'} já recebeu convite por e-mail em ${diaMes(jaConvidadoEm)} — marcado como enviado.`)
+      } else {
+        toast.success(`E-mail enviado para ${para || c.professor?.nome || 'o professor'}.`)
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao enviar e-mail.')
     } finally {
@@ -181,6 +186,15 @@ export function MensagensDoDia() {
                   >
                     {c.professor?.nome ?? 'Professor removido'}
                   </Link>
+                  {!c.enviado && carencia?.has(c.professor_id) && (
+                    <span
+                      title={`${textoCarencia(carencia.get(c.professor_id)!)} Use o WhatsApp.`}
+                      className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium text-ink-muted"
+                    >
+                      <MailCheck className="h-2.5 w-2.5" />
+                      e-mail em {diaMes(carencia.get(c.professor_id)!.ultimo_envio)} · só WhatsApp
+                    </span>
+                  )}
                   {c.origem !== 'normal' && c.estagio && !c.enviado && (
                     <span className={cn('inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium', ESTAGIO[c.estagio].chip)}>
                       <Lock className="h-2.5 w-2.5" />

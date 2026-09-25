@@ -304,6 +304,22 @@ serve(async (req) => {
     if (logErr) console.error('[enviar-email-massa] falhou ao gravar auditoria:', logErr.message)
   }
 
+  // ── 6. Mensagens do dia: quem acabou de receber convite está contatado ───────
+  // Sem isto, a linha do professor na lista de qualquer coordenador ficava
+  // pendente com o e-mail travado pela carência — em 25/09 um disparo às 11h
+  // pegou os 20 da lista do Caio, e para ele virou "erro no envio".
+  // `data` segue o CURRENT_DATE do banco (UTC), como na geração da lista.
+  const convidados = resultados.filter(r => r.status === 'enviado').map(r => r.professor_id)
+  if (convidados.length > 0) {
+    const { error: cdErr } = await admin
+      .from('contatos_diarios')
+      .update({ enviado: true, enviado_em: new Date().toISOString() })
+      .eq('data', new Date().toISOString().slice(0, 10))
+      .eq('enviado', false)
+      .in('professor_id', convidados)
+    if (cdErr) console.error('[enviar-email-massa] falhou ao marcar as Mensagens do dia:', cdErr.message)
+  }
+
   const enviados  = resultados.filter(r => r.status === 'enviado').length
   const falhas    = resultados.filter(r => r.status === 'falha').length
   const semEmail  = resultados.filter(r => r.status === 'sem_email').length

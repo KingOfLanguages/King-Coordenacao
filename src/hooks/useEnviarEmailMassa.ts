@@ -75,6 +75,8 @@ export function useEnviarEmailMassa() {
       queryClient.invalidateQueries({ queryKey: ['email-disparos'] })
       queryClient.invalidateQueries({ queryKey: ['email-quota-hoje'] })
       queryClient.invalidateQueries({ queryKey: ['email-carencia'] })
+      // O servidor marca como contatado quem estava nas Mensagens do dia.
+      queryClient.invalidateQueries({ queryKey: ['contatos-dia'] })
     },
   })
 }

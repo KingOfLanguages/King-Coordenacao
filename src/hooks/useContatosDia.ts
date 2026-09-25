@@ -120,7 +120,7 @@ export function useEnviarConvite() {
   return useMutation({
     mutationFn: async (
       params: { contato_id: string; corpo: string; assunto: string; remetente_nome: string },
-    ): Promise<{ para: string }> => {
+    ): Promise<{ para: string; jaConvidadoEm: string | null }> => {
       const { data, error } = await supabase.functions.invoke('enviar-convite-email', { body: params })
       // Erros HTTP (4xx/5xx) da function chegam em error.context como Response.
       if (error) {
@@ -129,7 +129,9 @@ export function useEnviarConvite() {
         throw new Error(msg)
       }
       if (data?.error) throw new Error(data.error)
-      return { para: data?.para ?? '' }
+      // ja_convidado: o professor recebeu convite por e-mail (disparo em massa)
+      // depois de entrar na lista — o servidor só marcou a linha, não reenviou.
+      return { para: data?.para ?? '', jaConvidadoEm: data?.ja_convidado ? (data.em ?? null) : null }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contatos-dia'] })

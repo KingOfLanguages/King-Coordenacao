@@ -136,7 +136,7 @@ serve(async (req) => {
   const admin = createClient(url, serviceKey)
   const { data: contato, error: contatoErr } = await admin
     .from('contatos_diarios')
-    .select('id, enviado, professor_id, professor:professores(nome, email, status)')
+    .select('id, enviado, professor_id, created_at, professor:professores(nome, email, status)')
     .eq('id', contatoId)
     .maybeSingle()
 
@@ -168,6 +168,20 @@ serve(async (req) => {
     return json({ error: 'Não consegui conferir o último e-mail deste professor — nada foi enviado. Tente de novo.' }, 503)
   }
   const emCarencia = (carencia ?? [])[0] as { ultimo_envio: string; libera_em: string } | undefined
+
+  // O convite saiu DEPOIS que o professor entrou na lista (um disparo em massa,
+  // de qualquer coordenador): o contato do dia já está feito. Marca e avisa, em
+  // vez de devolver erro — a tela pode estar aberta desde antes do disparo.
+  if (emCarencia && new Date(emCarencia.ultimo_envio) >= new Date(contato.created_at as string)) {
+    const { error: markErr } = await admin
+      .from('contatos_diarios')
+      .update({ enviado: true, enviado_em: emCarencia.ultimo_envio })
+      .eq('id', contatoId)
+    if (markErr) console.error('[enviar-convite-email] falhou ao marcar contato já convidado:', markErr.message)
+    console.log(`[enviar-convite-email] ↺ ${nome}: já convidado por e-mail em ${emCarencia.ultimo_envio}`)
+    return json({ enviado: false, ja_convidado: true, em: emCarencia.ultimo_envio })
+  }
+
   if (emCarencia) {
     const fmt = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
     const recebeu = fmt(new Date(emCarencia.ultimo_envio))
