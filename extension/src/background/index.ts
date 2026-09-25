@@ -55,7 +55,7 @@ type LinhaReuniaoHoje = {
 }
 
 const SELECT_REUNIAO_HOJE = 'id, reuniao_id, status, numero, observacao, confirmacao_origem, reuniao:reunioes!reuniao_id!inner (data)'
-/** O mesmo sem confirmacao_origem (migration 20260789): sem a coluna, o painel perderia a reunião do dia inteira. */
+/** O mesmo sem confirmacao_origem (migration 20260790): sem a coluna, o painel perderia a reunião do dia inteira. */
 const SELECT_REUNIAO_HOJE_LEGADO = 'id, reuniao_id, status, numero, observacao, reuniao:reunioes!reuniao_id!inner (data)'
 
 /** Participação (reuniao_professores) de hoje para este professor, se existir — mesma tabela
@@ -1181,7 +1181,7 @@ async function handleConfirmarReuniao(
     confirmacao_origem:    origem,
     presenca_detectada_em: origem === 'automatica' ? presencaDetectadaEm ?? null : null,
   })
-  // Banco sem a migration 20260789: confirma mesmo assim, só sem o rastro da origem.
+  // Banco sem a migration 20260790: confirma mesmo assim, só sem o rastro da origem.
   if (colunaInexistente(res.error)) res = await atualizar(base)
   if (res.error) return { ok: false, erro: res.error.message }
   const atualizado = res.data

@@ -95,7 +95,7 @@ Duas restrições que valem manter ao mexer:
   1:1 pendente, depois de 3 min contínuos com o professor na chamada, marca como
   realizada com `confirmacao_origem = 'automatica'` e mostra um aviso com
   **Desfazer**. Em grupo, só pré-marca quem foi reconhecido — a confirmação é do
-  coordenador. Precisa da migration `20260789_reuniao_presenca_automatica`.
+  coordenador. Precisa da migration `20260790_reuniao_presenca_automatica`.
 - **Concluir pendências**: botão **Concluir** em cada chamado aberto (aba
   Registros) e, com a reunião realizada, a lista "Resolveu algo na conversa?"
   com chamados e ocorrências em aberto. Chamado com a TI (`ti_status`) não

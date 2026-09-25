@@ -193,7 +193,7 @@ export interface ReuniaoHojeInfo {
   participantes?: ParticipanteReuniao[]  // Preenchido só se tipo_reuniao='grupo'
   /** Minha anotação PRIVADA desta reunião (reuniao_anotacoes_internas, RLS dono-apenas). */
   anotacaoInterna: string
-  /** Como foi confirmada (migration 20260789). 'automatica' habilita o Desfazer. */
+  /** Como foi confirmada (migration 20260790). 'automatica' habilita o Desfazer. */
   confirmacao_origem?: OrigemConfirmacao | null
 }
 
