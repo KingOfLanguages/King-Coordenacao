@@ -192,7 +192,7 @@ export function MensagensDoDia() {
                       className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium text-ink-muted"
                     >
                       <MailCheck className="h-2.5 w-2.5" />
-                      e-mail em {diaMes(carencia.get(c.professor_id)!.ultimo_envio)} · só WhatsApp
+                      não pode receber e-mail até {diaMes(carencia.get(c.professor_id)!.libera_em)} · use o WhatsApp
                     </span>
                   )}
                   {c.origem !== 'normal' && c.estagio && !c.enviado && (

@@ -120,8 +120,26 @@ export function diaMes(isoOuDia: string): string {
 
 /** Texto único de "por que não dá para mandar e-mail" (tooltip e avisos). */
 export function textoCarencia(c: CarenciaEmail): string {
-  return `Recebeu e-mail em ${diaMes(c.ultimo_envio)}. O próximo fica liberado em ${diaMes(c.libera_em)} (carência de ${CARENCIA_EMAIL_DIAS} dias).`
+  return `Não pode receber e-mail: recebeu um em ${diaMes(c.ultimo_envio)} e só volta a poder em ${diaMes(c.libera_em)} (regra dos ${CARENCIA_EMAIL_DIAS} dias).`
 }
+
+/** Dias corridos até poder receber de novo (0 = já hoje). */
+export function diasParaLiberar(liberaEm: string): number {
+  const hoje = new Date()
+  hoje.setHours(12, 0, 0, 0)
+  const alvo = new Date(`${liberaEm}T12:00:00`)
+  return Math.max(0, Math.round((alvo.getTime() - hoje.getTime()) / 86_400_000))
+}
+
+/** "amanhã", "em 6 dias". */
+export function quandoLibera(liberaEm: string): string {
+  const n = diasParaLiberar(liberaEm)
+  return n <= 0 ? 'hoje' : n === 1 ? 'amanhã' : `em ${n} dias`
+}
+
+/** A regra, numa frase — a mesma em todas as telas de envio. */
+export const REGRA_CARENCIA =
+  `Quem recebeu e-mail da coordenação nos últimos ${CARENCIA_EMAIL_DIAS} dias não pode receber outro até completar os ${CARENCIA_EMAIL_DIAS} dias.`
 
 // ─── Contador diário (limite auto-imposto de 200/dia) ────────────────────────
 

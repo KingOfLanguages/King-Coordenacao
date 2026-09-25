@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { toast } from 'sonner'
 import {
-  Mail, Send, X, Check, AlertTriangle, Loader2, Sparkles, PenLine, ChevronDown, MailWarning, MailCheck, History, Gauge,
+  Mail, Send, X, Check, AlertTriangle, Loader2, Sparkles, PenLine, ChevronDown, MailWarning, History, Gauge, Clock,
 } from 'lucide-react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import type { PainelProfessor } from '@/hooks/usePainelProfessores'
 import {
-  useEnviarEmailMassa, useHistoricoDisparos, useEmailQuotaHoje, diaMes, CARENCIA_EMAIL_DIAS,
+  useEnviarEmailMassa, useHistoricoDisparos, useEmailQuotaHoje, diaMes, CARENCIA_EMAIL_DIAS, REGRA_CARENCIA,
   type MensagemAlvo, type RespostaDisparo, type DisparoRegistro, type QuotaHoje,
 } from '@/hooks/useEnviarEmailMassa'
 import {
@@ -115,7 +115,7 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
       } else {
         toast.warning(
           `${res.enviados} enviado(s), ${res.falhas} falha(s), ${res.sem_email} sem e-mail` +
-          (carencia > 0 ? `, ${carencia} em carência.` : '.'),
+          (carencia > 0 ? `, ${carencia} não podiam receber (${CARENCIA_EMAIL_DIAS} dias).` : '.'),
         )
       }
     } catch (e) {
@@ -155,6 +155,14 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
                 A seleção vem da lista do Índice — feche o painel para ajustar.
               </DialogPrimitive.Description>
             </div>
+
+            <p className="flex items-start gap-2 rounded-lg border border-aviso-warnBd bg-aviso-warnBg px-3 py-2 text-[11.5px] leading-snug text-aviso-warnFg">
+              <Clock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+              <span>
+                <strong className="font-semibold">Regra dos {CARENCIA_EMAIL_DIAS} dias.</strong> {REGRA_CARENCIA} Quem não pode
+                receber já fica fora da seleção — a coluna E-mail do Índice mostra quando cada um libera.
+              </span>
+            </p>
 
             <QuotaBar quota={quota} />
 
@@ -250,9 +258,9 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
               </p>
             )}
             {emCarencia > 0 && (
-              <p className="flex items-start gap-1.5 text-[11.5px] text-ink-muted">
-                <MailCheck className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                {emCarencia} selecionado(s) receberam e-mail nos últimos {CARENCIA_EMAIL_DIAS} dias — ficam de fora até a carência acabar.
+              <p className="flex items-start gap-1.5 text-[11.5px] text-aviso-warnFg">
+                <Clock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                {emCarencia} selecionado(s) não podem receber e-mail agora (receberam nos últimos {CARENCIA_EMAIL_DIAS} dias) — ficam de fora.
               </p>
             )}
 
@@ -282,7 +290,7 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
               {modo === 'convocacao' ? 'Convocação padrão' : 'Mensagem personalizada'} para{' '}
               <strong className="text-ink">{destinatarios.length}</strong> professor(es) com e-mail.
               {semEmail > 0 && <> {semEmail} sem e-mail serão ignorados.</>}
-              {emCarencia > 0 && <> {emCarencia} em carência ficam de fora.</>}
+              {emCarencia > 0 && <> {emCarencia} que não podem receber ({CARENCIA_EMAIL_DIAS} dias) ficam de fora.</>}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg bg-surface-subtle p-3 space-y-1">
@@ -381,7 +389,7 @@ function PainelResultado({ resultado, onFechar }: { resultado: RespostaDisparo; 
     { label: 'Falhas', valor: resultado.falhas, tone: resultado.falhas > 0 ? 'high' as const : 'neutral' as const },
     { label: 'Sem e-mail', valor: resultado.sem_email, tone: resultado.sem_email > 0 ? 'high' as const : 'neutral' as const },
     ...((resultado.inativos ?? 0) > 0 ? [{ label: 'Inativos', valor: resultado.inativos, tone: 'high' as const }] : []),
-    ...((resultado.em_carencia ?? 0) > 0 ? [{ label: 'Em carência', valor: resultado.em_carencia, tone: 'neutral' as const }] : []),
+    ...((resultado.em_carencia ?? 0) > 0 ? [{ label: `Não podiam (${CARENCIA_EMAIL_DIAS}d)`, valor: resultado.em_carencia, tone: 'neutral' as const }] : []),
   ]
   return (
     <div className="rounded-lg border border-line-soft p-3 space-y-3">
@@ -403,7 +411,7 @@ function PainelResultado({ resultado, onFechar }: { resultado: RespostaDisparo; 
               <span className={cn('flex-shrink-0 text-[11px] font-medium', p.status === 'falha' ? 'text-urg-highFg' : 'text-ink-muted')}>
                 {p.status === 'sem_email' ? 'sem e-mail'
                   : p.status === 'inativo' ? 'não está mais ativo'
-                  : p.status === 'carencia' ? `em carência${p.libera_em ? ` · libera ${diaMes(p.libera_em)}` : ''}`
+                  : p.status === 'carencia' ? `não pode receber${p.libera_em ? ` · libera ${diaMes(p.libera_em)}` : ''}`
                   : 'falha'}
               </span>
             </li>

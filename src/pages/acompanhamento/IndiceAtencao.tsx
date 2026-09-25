@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Copy, Check, Star, X, Ban, CheckCircle2, ChevronDown, FileText,
-  PauseCircle, Mail, MailCheck, Users, Lock, WifiOff,
+  PauseCircle, Mail, MailX, Users, Lock, WifiOff, Clock,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils'
 import { useCanView } from '@/hooks/usePagePermissions'
 import { PainelEmail } from '@/components/acompanhamento/PainelEmail'
 import {
-  useEmailCarencia, textoCarencia, diaMes, CARENCIA_EMAIL_DIAS, type CarenciaEmail,
+  useEmailCarencia, textoCarencia, diaMes, quandoLibera, REGRA_CARENCIA, CARENCIA_EMAIL_DIAS, type CarenciaEmail,
 } from '@/hooks/useEnviarEmailMassa'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +34,9 @@ import {
 // Desde 2026-09 é também daqui que sai e-mail: a antiga página /emails
 // repetia esta mesma lista com os mesmos filtros. Marca os professores, abre o
 // painel lateral e envia. Quem recebeu e-mail nos últimos 15 dias não pode ser
-// marcado (carência — migration 20260787).
+// marcado (carência — migration 20260787), e isso fica explícito em três
+// lugares: a faixa "Quem pode receber e-mail" (que também filtra), a coluna
+// E-mail de cada linha e o painel de envio.
 //
 // Régua de pendência: a do King (1 Lembrete · 2 Bloqueio · 3 Reunião), a mesma
 // da aba Pendências. A régua local 6/9/12 foi aposentada; "Marcar enviada" grava
@@ -51,6 +53,13 @@ const SEM_REUNIAO_ALERTA  = 60
 const N_COLUNAS = 9
 const SEM_CARENCIA = new Map<string, CarenciaEmail>()
 
+type SituacaoEmail = 'pode' | 'nao_pode' | 'sem'
+
+function situacaoEmail(r: PainelProfessor, carencia: Map<string, CarenciaEmail>): SituacaoEmail {
+  if (!r.email) return 'sem'
+  return carencia.has(r.professor_id) ? 'nao_pode' : 'pode'
+}
+
 type QuickId = 'todos' | 'critica' | 'score_baixo' | 'pendencias' | 'bloqueados' | 'acompanhamento' | 'informes'
 type OrdenarPor = 'prioridade' | 'score' | 'pendencias' | 'dias' | 'ultimo' | 'nome'
 type AgruparPor = 'nenhum' | 'nivel' | 'coordenador' | 'silStatus'
@@ -66,6 +75,7 @@ interface Filtros {
   silStatus: string      // 'todos' | 'sem' | '1' | '2' | '3' (estágio do King)
   bloqueado: string      // 'todos' | 'sim' | 'nao'
   recente: string        // 'todos' | 'com' (≤30d) | 'sem' (30+ d) | '7' | '14' | '60' | 'nunca'
+  email: string          // 'todos' | SituacaoEmail — quem pode receber e-mail agora
   ordenarPor: OrdenarPor
   ordemDir: 'asc' | 'desc'
   agrupar: AgruparPor
@@ -73,7 +83,7 @@ interface Filtros {
 
 const FILTROS_PADRAO: Filtros = {
   busca: '', quick: 'todos', grupoId: 'todos', nivel: 'todos', faixaScore: 'todos',
-  minPendencias: '0', minDias: '0', silStatus: 'todos', bloqueado: 'todos', recente: 'todos',
+  minPendencias: '0', minDias: '0', silStatus: 'todos', bloqueado: 'todos', recente: 'todos', email: 'todos',
   ordenarPor: 'prioridade', ordemDir: 'desc', agrupar: 'nenhum',
 }
 
@@ -230,22 +240,30 @@ export function IndiceAtencao() {
     ]
   }, [rows])
 
-  const filtrados = useMemo(() => aplicarFiltros(rows, f), [rows, f])
+  // O filtro de e-mail fica fora do aplicarFiltros porque depende da carência e
+  // porque a faixa de resumo conta as três situações sobre o resto do filtro.
+  const filtradosBase = useMemo(() => aplicarFiltros(rows, f), [rows, f])
+  const contagemEmail = useMemo(() => {
+    const n: Record<SituacaoEmail, number> = { pode: 0, nao_pode: 0, sem: 0 }
+    for (const r of filtradosBase) n[situacaoEmail(r, carencia)]++
+    return n
+  }, [filtradosBase, carencia])
+  const filtroEmail = podeEmail && f.email !== 'todos' ? f.email as SituacaoEmail : null
+  const filtrados = useMemo(
+    () => filtroEmail ? filtradosBase.filter(r => situacaoEmail(r, carencia) === filtroEmail) : filtradosBase,
+    [filtradosBase, filtroEmail, carencia],
+  )
   const ordenados = useMemo(() => ordenar(filtrados, f.ordenarPor, f.ordemDir), [filtrados, f.ordenarPor, f.ordemDir])
   const gruposLista = useMemo(() => construirGrupos(ordenados, f.agrupar), [ordenados, f.agrupar])
 
   const filtrosAtivos = JSON.stringify(f) !== JSON.stringify(FILTROS_PADRAO)
-  const nColunas = N_COLUNAS + (podeEmail ? 1 : 0)
+  const nColunas = N_COLUNAS + (podeEmail ? 2 : 0)   // + caixinha + coluna E-mail
 
   // Seleção para e-mail: opera no filtro inteiro, não só no que está na tela.
   // Apto = tem e-mail e não está em carência (recebeu nos últimos 15 dias).
   const porId = useMemo(() => new Map(rows.map(r => [r.professor_id, r])), [rows])
   const filtradosAptos = useMemo(
     () => ordenados.filter(r => !!r.email && !carencia.has(r.professor_id)),
-    [ordenados, carencia],
-  )
-  const filtradosEmCarencia = useMemo(
-    () => ordenados.filter(r => !!r.email && carencia.has(r.professor_id)).length,
     [ordenados, carencia],
   )
   const destinatarios = useMemo(
@@ -408,6 +426,15 @@ export function IndiceAtencao() {
         </div>
       </div>
 
+      {/* Quem pode receber e-mail agora (regra dos 15 dias) — também filtra */}
+      {podeEmail && (
+        <FaixaEmail
+          contagem={contagemEmail}
+          ativo={filtroEmail}
+          onFiltrar={sit => setF(prev => ({ ...prev, email: prev.email === sit ? 'todos' : sit }))}
+        />
+      )}
+
       {/* Meta + seleção para e-mail */}
       <div className="flex flex-wrap items-center gap-2 -mt-1">
         <p className="text-[12px] text-ink-muted tabular-nums mr-auto">
@@ -415,15 +442,6 @@ export function IndiceAtencao() {
         </p>
         {podeEmail && (
           <>
-            {filtradosEmCarencia > 0 && (
-              <span
-                title={`Receberam e-mail nos últimos ${CARENCIA_EMAIL_DIAS} dias — não recebem outro até a carência acabar.`}
-                className="inline-flex items-center gap-1 text-[12px] text-ink-muted tabular-nums"
-              >
-                <MailCheck className="h-3.5 w-3.5" />
-                {filtradosEmCarencia} em carência de e-mail
-              </span>
-            )}
             <button
               type="button"
               onClick={selecionarFiltrados}
@@ -431,7 +449,7 @@ export function IndiceAtencao() {
               className="btn-press inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium text-ink-secondary bg-surface-subtle hover:text-ink transition-colors disabled:opacity-40"
             >
               <Users className="h-3.5 w-3.5" />
-              Selecionar os {filtradosAptos.length} com e-mail liberado
+              Selecionar os {filtradosAptos.length} que podem receber
             </button>
             {selecionados.size > 0 && (
               <button
@@ -457,14 +475,14 @@ export function IndiceAtencao() {
 
       {/* ── 3. Tabela ── */}
       <div className="card-surface overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[980px]">
+        <table className={cn('w-full text-[13px]', podeEmail ? 'min-w-[1100px]' : 'min-w-[980px]')}>
           <thead>
             <tr className="border-b border-line text-left text-[11px] text-ink-muted uppercase tracking-wide">
               {podeEmail && (
                 <th className="px-3 py-2.5 w-9">
                   <input
                     type="checkbox"
-                    aria-label="Selecionar todos os filtrados com e-mail liberado"
+                    aria-label="Selecionar todos os filtrados que podem receber e-mail"
                     checked={filtradosAptos.length > 0 && filtradosAptos.every(r => selecionados.has(r.professor_id))}
                     onChange={e => (e.target.checked ? selecionarFiltrados() : setSelecionados(new Set()))}
                     className="h-4 w-4 rounded border-line align-middle"
@@ -473,6 +491,9 @@ export function IndiceAtencao() {
                 </th>
               )}
               <SortHeader label="Professor"   campo="nome"       f={f} setF={setF} />
+              {podeEmail && (
+                <th className="px-3 py-2.5 font-medium" title={REGRA_CARENCIA}>E-mail</th>
+              )}
               <SortHeader label="Score"        campo="score"      f={f} setF={setF} align="center" numeric />
               <SortHeader label="Pendências"   campo="pendencias" f={f} setF={setF} align="center" numeric />
               <SortHeader label="Dias"         campo="dias"       f={f} setF={setF} align="center" numeric />
@@ -790,15 +811,6 @@ function PainelRow({ r, podeAgir, selecao }: {
               {r.informe_reincidente && ' · reincide'}
             </span>
           )}
-          {selecao?.carencia && (
-            <span
-              title={textoCarencia(selecao.carencia)}
-              className="inline-flex items-center gap-1 rounded-full bg-surface-subtle text-ink-muted px-2 py-0.5 text-[10.5px] font-medium tabular-nums"
-            >
-              <MailCheck className="h-3 w-3" />
-              e-mail em {diaMes(selecao.carencia.ultimo_envio)}
-            </span>
-          )}
           {r.pausa_vencida_dias != null && (
             <span
               title={
@@ -815,6 +827,13 @@ function PainelRow({ r, podeAgir, selecao }: {
         </div>
         {r.grupo_nome && <div className="text-[11px] text-ink-muted mt-0.5">{r.grupo_nome}</div>}
       </td>
+
+      {/* E-mail: pode ou não pode receber agora (regra dos 15 dias) */}
+      {selecao && (
+        <td className="px-3 py-2.5 whitespace-nowrap">
+          <CelulaEmail temEmail={!!r.email} carencia={selecao.carencia} />
+        </td>
+      )}
 
       {/* Score */}
       <td className="px-3 py-2.5 text-center">
@@ -928,6 +947,90 @@ function PainelRow({ r, podeAgir, selecao }: {
         </div>
       </td>
     </tr>
+  )
+}
+
+// ─── E-mail: quem pode e quem não pode receber ────────────────────────────────
+
+const FAIXA_EMAIL: {
+  id: SituacaoEmail; label: string; icone: typeof CheckCircle2; cls: string; ativoCls: string; title: string
+}[] = [
+  {
+    id: 'pode', label: 'Podem receber', icone: CheckCircle2,
+    cls: 'bg-urg-lowBg text-urg-lowFg', ativoCls: 'ring-2 ring-urg-lowFg/50',
+    title: `Têm e-mail e não receberam nenhum nos últimos ${CARENCIA_EMAIL_DIAS} dias.`,
+  },
+  {
+    id: 'nao_pode', label: `Não podem (${CARENCIA_EMAIL_DIAS} dias)`, icone: Clock,
+    cls: 'bg-aviso-warnBg text-aviso-warnFg', ativoCls: 'ring-2 ring-aviso-warnBd',
+    title: `Receberam e-mail nos últimos ${CARENCIA_EMAIL_DIAS} dias. A coluna E-mail mostra quando cada um libera.`,
+  },
+  {
+    id: 'sem', label: 'Sem e-mail', icone: MailX,
+    cls: 'bg-surface-subtle text-ink-secondary', ativoCls: 'ring-2 ring-line',
+    title: 'Sem e-mail cadastrado — só pelo WhatsApp.',
+  },
+]
+
+function FaixaEmail({ contagem, ativo, onFiltrar }: {
+  contagem: Record<SituacaoEmail, number>
+  ativo: SituacaoEmail | null
+  onFiltrar: (s: SituacaoEmail) => void
+}) {
+  return (
+    <div className="card-surface flex flex-wrap items-center gap-x-4 gap-y-2 px-3.5 py-2.5 -mt-1">
+      <div className="min-w-[220px] flex-1">
+        <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
+          <Mail className="h-3.5 w-3.5 text-accentBlue" /> Quem pode receber e-mail agora
+        </p>
+        <p className="text-[11.5px] text-ink-muted leading-snug">{REGRA_CARENCIA}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por situação de e-mail">
+        {FAIXA_EMAIL.map(({ id, label, icone: Icone, cls, ativoCls, title }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onFiltrar(id)}
+            aria-pressed={ativo === id}
+            title={`${title} Clique para ${ativo === id ? 'ver todos' : 'ver só estes'}.`}
+            className={cn(
+              'btn-press inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium transition-shadow',
+              cls, ativo === id && ativoCls,
+            )}
+          >
+            <Icone className="h-3.5 w-3.5" />
+            <span className="tabular-nums font-semibold">{contagem[id]}</span> {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CelulaEmail({ temEmail, carencia }: { temEmail: boolean; carencia?: CarenciaEmail }) {
+  if (!temEmail) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-subtle">
+        <MailX className="h-3 w-3" /> Sem e-mail
+      </span>
+    )
+  }
+  if (!carencia) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-urg-lowFg">
+        <CheckCircle2 className="h-3 w-3" /> Pode receber
+      </span>
+    )
+  }
+  return (
+    <div title={textoCarencia(carencia)}>
+      <span className="inline-flex items-center gap-1 rounded-full bg-aviso-warnBg text-aviso-warnFg px-2 py-0.5 text-[10.5px] font-medium">
+        <Clock className="h-3 w-3" /> Não pode receber
+      </span>
+      <div className="mt-0.5 text-[11px] text-ink-muted tabular-nums">
+        recebeu {diaMes(carencia.ultimo_envio)} · libera {diaMes(carencia.libera_em)} ({quandoLibera(carencia.libera_em)})
+      </div>
+    </div>
   )
 }
 
