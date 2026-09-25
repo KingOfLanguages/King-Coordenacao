@@ -9,8 +9,8 @@
      plano (R$ 30 por sessão semanal / 4 semanas), como no exemplo da etapa
      (R$ 15 retidos por 2 faltas num plano de R$ 120). O proporcional usa um
      mês de 8 aulas num plano 2x, para não depender da regra de meses com mais
-     dias de aula (pendente com a coordenação). Pagamento até o 7º dia útil e
-     a nota depois do pagamento: MAPA (Financeiro e Notas fiscais). -->
+     dias de aula). Pagamento até o dia 7 (decisão da coordenação, 25/09; o
+     MAPA dizia 7º dia útil) e a nota depois do pagamento (MAPA, Notas fiscais). -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
@@ -107,14 +107,14 @@
     instrucao: "Toque nos passos na ordem em que acontecem. Dois deles estão errados.",
     progresso: function (s, a) { return a.oFeitos("dinheiro") + " de 6"; },
     completa: function (s, a) { return a.oOk("dinheiro"); },
-    fecho: "O mês fecha no dia 1º. Confira e autorize, receba até o 7º dia útil, e só então emita e lance a nota. Escolher o arquivo não envia a nota: é o Lançar Nota Fiscal que envia.",
+    fecho: "O mês fecha no dia 1º. Confira e autorize, receba até o dia 7, e só então emita e lance a nota. Escolher o arquivo não envia a nota: é o Lançar Nota Fiscal que envia.",
     corpo: function (s, a) { return a.o("dinheiro"); },
     ordens: { dinheiro: {
       passos: [
         { id: "fim", t: "O mês termina", rot: "31/10" },
         { id: "fecha", t: "O mês fecha e aparece o botão de autorizar", rot: "01/11", cedo: "Primeiro o mês precisa terminar." },
         { id: "autoriza", t: "Conferir o Resumo Consolidado e autorizar o pagamento", rot: "01/11", cedo: "O botão de autorizar só aparece quando o mês fecha, no dia 1º." },
-        { id: "cai", t: "O pagamento cai na sua conta", rot: "até 7º dia útil", cedo: "O pagamento vem depois da sua autorização." },
+        { id: "cai", t: "O pagamento cai na sua conta", rot: "até o dia 7", cedo: "O pagamento vem depois da sua autorização." },
         { id: "emite", t: "Emitir a nota fiscal (NFS-e)", rot: "após receber", cedo: "A nota é emitida assim que você recebe o pagamento." },
         { id: "lanca", t: "Lançar a nota: Escolher arquivo e depois Lançar Nota Fiscal", rot: "Financeira", cedo: "Antes de lançar, a nota precisa ser emitida." }
       ],

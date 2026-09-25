@@ -1627,7 +1627,7 @@ table.t .r{text-align:right}
     if (!S.conferi) return aviso("fin", "Confirme a conferência", "Marque que conferiu seus lançamentos e o Resumo Consolidado.");
     if (pendencias().length) return erro("fin", "Ainda há aula pendente", "A aula da Carla de 30/10 não foi lançada. Autorize só depois de lançar tudo e conferir o resumo: o valor autorizado é o que será pago. Havendo divergência, avise a coordenação antes de autorizar.");
     S.autorizado = true;
-    sucesso("fin", "Pagamento autorizado", "O pagamento cai até o 7º dia útil do mês.");
+    sucesso("fin", "Pagamento autorizado", "O pagamento cai até o dia 7. Quem autoriza mais cedo recebe mais cedo.");
   };
   A.lancarNF = function () {
     if (!S.nfEscolhido) return aviso("nf", "Nenhum arquivo", "Escolha o PDF da nota fiscal primeiro.");
