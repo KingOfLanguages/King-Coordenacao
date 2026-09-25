@@ -30,7 +30,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
 <style>
+/* color-scheme igual ao do portal: o next-themes põe color-scheme:dark no
+   <html> do KTM no tema escuro, e quando o iframe tem esquema diferente do
+   da página o navegador pinta um fundo BRANCO opaco atrás dele. */
 :root{
+  color-scheme:light;
   --bg-canvas:#ffffff; --bg-subtle:#eef0f4; --bg-muted:#e5e7ec;
   --fg-primary:#131316; --fg-secondary:#474850; --fg-muted:#818290; --fg-subtle:#b2b4bd;
   --border-soft:#eaecf0; --border-default:#dde0e7; --border-strong:#c8cbd4;
@@ -42,6 +46,7 @@
   --r-lg:14px; --r-md:10px; --r-sm:6px;
 }
 :root[data-theme="dark"]{
+  color-scheme:dark;
   --bg-canvas:#0e1016; --bg-subtle:#1a1e29; --bg-muted:#212636;
   --fg-primary:#edeef2; --fg-secondary:#bbbdc8; --fg-muted:#878a96; --fg-subtle:#565966;
   --border-soft:#181c27; --border-default:#22283a; --border-strong:#2e3548;
