@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { extrairCandidatos, extrairEmailsParticipantes } from './scrape'
+import { codigoDaSala, extrairCandidatos, extrairEmailsParticipantes } from './scrape'
 import { GrupoParticipantes } from './GrupoParticipantes'
+import { usePresencaAutomatica, TEMPO_PRESENCA_MS, type EstadoPresenca } from './presenca'
+import { ConcluirChamado, PendenciasPosReuniao, type Concluir } from './Pendencias'
+import { lerPresencaAutomatica, aoMudarPresencaAutomatica } from '../shared/preferencias'
+import { matchTodosPorNome } from '../shared/match'
 import type {
   MensagemParaBackground, RespostaDoBackground, ProfessorEncontrado, SessaoArmazenada,
   AvaliacaoAlunos, SugestaoProfessor, ScorePonto, AvaliacaoPonto, AlunoVinculado, AlunoSaida,
@@ -1044,11 +1048,51 @@ type AbaId = 'visao' | 'grupo' | 'situacao' | 'desempenho' | 'alunos' | 'registr
  *  é uma reunião em grupo, mesmo sem reunião de grupo agendada no KTM. */
 const MIN_PARA_GRUPO = 3
 
+/** Linha de status da presença automática no cartão da reunião (null = nada a mostrar). */
+function textoPresenca(e: EstadoPresenca): { texto: string; tom: Tom } | null {
+  const minutos = TEMPO_PRESENCA_MS / 60_000
+  switch (e.fase) {
+    case 'aguardando':
+      return { texto: `Presença automática: marco como realizada depois de ${minutos} min com o professor na chamada.`, tom: 'neutro' }
+    case 'contando': {
+      const falta = Math.max(0, Math.ceil((TEMPO_PRESENCA_MS / 1000 - e.segundos) / 60))
+      return { texto: `Professor na chamada · presença registrada em ~${falta} min.`, tom: 'verde' }
+    }
+    case 'sem-leitura':
+      return { texto: 'Não consegui ler os participantes da chamada — confirme à mão.', tom: 'ambar' }
+    case 'confirmando':
+      return { texto: 'Registrando a presença…', tom: 'verde' }
+    case 'erro':
+      return { texto: 'Não consegui registrar a presença sozinho — confirme à mão.', tom: 'vermelho' }
+    default:
+      return null
+  }
+}
+
 export function Panel() {
   const [sessao, setSessao]         = useState<SessaoArmazenada | null | undefined>(undefined)
   const [colapsado, setColapsado]   = useState(false)
   const [buscando, setBuscando]     = useState(false)
-  const [resultado, setResultado]   = useState<ProfessorEncontrado | null>(null)
+  const [resultado, setResultadoBruto] = useState<ProfessorEncontrado | null>(null)
+  // Toda ação recarrega o perfil pelo background, que devolve motivo 'nome' sem
+  // confiança. Para o MESMO professor, mantém como ele foi reconhecido — é disso
+  // que dependem o selo "Pela agenda" e a presença automática.
+  const setResultado = (valor: ProfessorEncontrado | null | ((prev: ProfessorEncontrado | null) => ProfessorEncontrado | null)) => {
+    setResultadoBruto(prev => {
+      const novo = typeof valor === 'function' ? valor(prev) : valor
+      if (novo && prev && novo.professor.id === prev.professor.id && novo.motivo === 'nome' && novo.confianca == null) {
+        return { ...novo, motivo: prev.motivo, confianca: prev.confianca }
+      }
+      return novo
+    })
+  }
+  const [presencaLigada, setPresencaLigada] = useState(false)
+  // Depois de um Desfazer a contagem não volta sozinha pra este professor — o
+  // coordenador já disse que a detecção errou.
+  const [presencaPausada, setPresencaPausada] = useState(false)
+  const [avisoPresenca, setAvisoPresenca] = useState<string | null>(null)
+  const [desfazendo, setDesfazendo] = useState(false)
+  const [pendenciasDispensadas, setPendenciasDispensadas] = useState(false)
   const [aba, setAba]               = useState<AbaId>('visao')
   const [buscaManual, setBuscaManual] = useState('')
   const [obsReuniao, setObsReuniao]   = useState('')
@@ -1146,16 +1190,46 @@ export function Panel() {
   // Busca automática: reavalia os participantes a cada poucos segundos.
   useEffect(() => {
     if (!sessao) return
+    // Sala desta aba já resolvida pela agenda? Aí o nome dos participantes não
+    // troca mais o professor — ele só alimenta o ranking e a presença.
+    let salaDaAgenda: string | null = null
+    let salaConsultada: string | null = null
+    // Uma rodada por vez: se a consulta passar dos 4s do intervalo, a próxima rodada
+    // não pode buscar pelo nome em paralelo e chegar depois, por cima da agenda.
+    let rodando = false
 
     async function checar() {
+      if (rodando) return
+      rodando = true
+      try { await rodada() } finally { rodando = false }
+    }
+
+    async function rodada() {
       const candidatos = extrairCandidatos()
       const emails = extrairEmailsParticipantes()
+
+      // 1 — Agenda: o link desta sala na reunião de hoje. Uma consulta por sala
+      // (o Meet troca de sala sem recarregar a aba, então o código é relido).
+      const sala = codigoDaSala()
+      if (sala && sala !== salaConsultada) {
+        setBuscando(true)
+        const r = await enviar({ tipo: 'BUSCAR_POR_MEET', codigo: sala, nomes: candidatos })
+        setBuscando(false)
+        // Só dá a sala por consultada com resposta: erro de rede tenta de novo na próxima rodada.
+        if (r.ok) salaConsultada = sala
+        if (r.ok && 'resultado' in r && r.resultado) {
+          salaDaAgenda = sala
+          setResultado(r.resultado)
+        }
+      }
+
       // E-mail primeiro (identificação inequívoca), nome como fallback — a chave
       // do dedupe inclui os dois pra reavaliar quando qualquer um deles mudar.
       const chave = `${candidatos.join('|')}#${emails.join('|')}`
       if ((!candidatos.length && !emails.length) || chave === ultimosCandidatos.current) return
       ultimosCandidatos.current = chave
       setParticipantesMeet({ nomes: candidatos, emails })
+      if (salaDaAgenda && salaDaAgenda === sala) return
 
       setBuscando(true)
       const r = await enviar({ tipo: 'BUSCAR_PROFESSOR', nomes: candidatos, emails })
@@ -1168,6 +1242,29 @@ export function Panel() {
     return () => clearInterval(intervalo)
   }, [sessao])
 
+  // Preferência do popup — e a mudança dela com a chamada aberta.
+  useEffect(() => {
+    lerPresencaAutomatica().then(setPresencaLigada)
+    return aoMudarPresencaAutomatica(setPresencaLigada)
+  }, [])
+
+  // A confirmação automática dispara de dentro de um intervalo: lê o estado
+  // atual por ref, não o da renderização em que o intervalo nasceu.
+  const resultadoRef = useRef(resultado)
+  const obsReuniaoRef = useRef(obsReuniao)
+  useEffect(() => {
+    resultadoRef.current = resultado
+    obsReuniaoRef.current = obsReuniao
+  })
+
+  const presenca = usePresencaAutomatica(resultado, !!sessao && presencaLigada && !presencaPausada, confirmarAutomatico)
+
+  useEffect(() => {
+    if (!avisoPresenca) return
+    const t = setTimeout(() => setAvisoPresenca(null), 20_000)
+    return () => clearTimeout(t)
+  }, [avisoPresenca])
+
   // Só reseta os rascunhos quando o professor identificado muda — evita apagar
   // texto em digitação a cada refresh automático (a cada 4s).
   useEffect(() => {
@@ -1178,6 +1275,8 @@ export function Panel() {
     setErroAcao(null)
     setIncAberto(false); setIncTexto(''); setIncAluno('')
     setConfirmLiberar(false); setErroLiberar(null)
+    setPendenciasDispensadas(false)
+    setPresencaPausada(false)
     setAba('visao')
     abaGrupoJaAberta.current = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1294,6 +1393,53 @@ export function Panel() {
     atualizarReuniaoHoje(r)
   }
 
+  /** Chamado pela presença automática. Leva a observação que estiver digitada. */
+  async function confirmarAutomatico(desdeISO: string): Promise<boolean> {
+    const atual = resultadoRef.current
+    if (!atual?.reuniaoHoje) return false
+    const r = await enviar({
+      tipo: 'CONFIRMAR_REUNIAO',
+      participanteId: atual.reuniaoHoje.participanteId,
+      professorId: atual.professor.id,
+      aconteceu: true,
+      observacao: obsReuniaoRef.current,
+      origem: 'automatica',
+      presencaDetectadaEm: desdeISO,
+    })
+    if (!r.ok || !('reuniaoHoje' in r)) return false
+    atualizarReuniaoHoje(r)
+    // Outro coordenador pode ter confirmado antes: só avisa se a marcação foi nossa.
+    if (r.reuniaoHoje.confirmacao_origem === 'automatica') {
+      setAvisoPresenca(`Presença de ${atual.professor.nome} registrada automaticamente.`)
+    }
+    return true
+  }
+
+  async function desfazerPresenca() {
+    if (!resultado?.reuniaoHoje) return
+    setDesfazendo(true); setErroAcao(null)
+    const r = await enviar({
+      tipo: 'DESFAZER_CONFIRMACAO',
+      participanteId: resultado.reuniaoHoje.participanteId,
+      professorId: resultado.professor.id,
+    })
+    setDesfazendo(false)
+    if (r.ok && 'reuniaoHoje' in r) {
+      atualizarReuniaoHoje(r)
+      setAvisoPresenca(null)
+      // Sem desligar, a contagem recomeçaria e marcaria de novo em 3 min.
+      setPresencaPausada(true)
+    } else if (!r.ok) setErroAcao(r.erro)
+  }
+
+  const concluirPendencias: Concluir = async (chamados, ocorrencias) => {
+    if (!resultado) return 'Nenhum professor carregado.'
+    const r = await enviar({ tipo: 'CONCLUIR_PENDENCIAS', professorId: resultado.professor.id, chamados, ocorrencias })
+    if (!r.ok) return r.erro
+    if ('resultado' in r && r.resultado) setResultado(r.resultado)
+    return 'aviso' in r && r.aviso ? r.aviso : null
+  }
+
   async function confirmarColocarMesAnalise() {
     if (!resultado || !mesAnaliseTexto.trim()) return
     setSalvandoMesAnalise(true); setErroAcao(null)
@@ -1330,15 +1476,48 @@ export function Panel() {
 
   if (sessao === undefined) return null // ainda carregando, evita flash
 
+  // Aviso da presença automática com o Desfazer à mão — aparece mesmo com o painel minimizado.
+  const aviso = avisoPresenca && (
+    <>
+      <span className="ktm-aviso-txt">{avisoPresenca}</span>
+      <button className="ktm-linkbtn" onClick={desfazerPresenca} disabled={desfazendo}>
+        {desfazendo ? 'Desfazendo…' : 'Desfazer'}
+      </button>
+      <button className="ktm-icone-btn" onClick={() => setAvisoPresenca(null)} title="Fechar aviso" aria-label="Fechar aviso">×</button>
+    </>
+  )
+
   if (colapsado) {
     return (
-      <button className="ktm ktm-fab" onClick={() => setColapsado(false)} aria-label="Abrir o painel">
-        <span className="ktm-selo" style={{ width: 26, height: 26, fontSize: 12 }}>K</span>
-      </button>
+      <>
+        <button className="ktm ktm-fab" onClick={() => setColapsado(false)} aria-label="Abrir o painel">
+          <span className="ktm-selo" style={{ width: 26, height: 26, fontSize: 12 }}>K</span>
+        </button>
+        {aviso && <div className="ktm ktm-aviso-solto ktm-entra" role="status">{aviso}</div>}
+      </>
     )
   }
 
   const p = resultado?.professor
+  const linhaPresenca = textoPresenca(presenca)
+  // Todos os chamados abertos primeiro (cada um com o Concluir), depois os
+  // recentes já fechados ou informes — sem repetir.
+  const abertosIds = new Set(resultado?.nexus.chamadosAbertos.map(c => c.id) ?? [])
+  const listaOcorrencias = resultado
+    ? [
+        ...resultado.nexus.chamadosAbertos,
+        ...resultado.nexus.ocorrencias.filter(o => !abertosIds.has(o.id)).slice(0, 3),
+      ]
+    : []
+  // Reunião em grupo: quem da lista agendada aparece entre os nomes da chamada.
+  // Mesmo limiar do ranking — um falso positivo aqui marcaria presença de quem não veio.
+  const participantesGrupo = resultado?.reuniaoHoje?.participantes
+  const detectadosGrupo = participantesGrupo
+    ? matchTodosPorNome(
+        participantesMeet.nomes,
+        participantesGrupo.map(pg => ({ id: pg.professor_id, nome: pg.professor_nome })),
+      ).encontrados.map(e => e.id)
+    : []
   const abas: { id: AbaId; label: string; n?: number; alerta?: boolean }[] = resultado ? [
     { id: 'visao',      label: 'Visão' },
     ...(ehGrupo ? [{ id: 'grupo' as AbaId, label: 'Grupo', n: ranking?.itens.length }] : []),
@@ -1375,7 +1554,11 @@ export function Panel() {
             <div className="ktm-id-nome">
               <span className="ktm-nome" title={p.nome}>{p.nome}</span>
               <CopiarNome nome={p.nome} />
-              {resultado!.confianca != null && (
+              {resultado!.motivo === 'agenda' ? (
+                <Selo tom="verde" titulo="Reconhecido pelo link desta chamada na reunião de hoje">Pela agenda</Selo>
+              ) : resultado!.motivo === 'email' ? (
+                <Selo tom="verde" titulo="Reconhecido pelo e-mail de um participante">Pelo e-mail</Selo>
+              ) : resultado!.confianca != null && (
                 <Selo tom={resultado!.confianca! >= 0.8 ? 'verde' : resultado!.confianca! >= 0.6 ? 'azul' : 'ambar'}
                       titulo="Confiança do reconhecimento automático pelo nome">
                   {Math.round(resultado!.confianca! * 100)}%
@@ -1394,6 +1577,8 @@ export function Panel() {
             </div>
           </div>
         )}
+
+        {aviso && <div className="ktm-aviso ktm-entra" role="status">{aviso}</div>}
 
         {resultado && (
           <nav className="ktm-abas" ref={abasRef}>
@@ -1486,6 +1671,7 @@ export function Panel() {
                   resultado.reuniaoHoje.tipo_reuniao === 'grupo' && resultado.reuniaoHoje.participantes ? (
                     <GrupoParticipantes
                       participantes={resultado.reuniaoHoje.participantes}
+                      detectados={detectadosGrupo}
                       observacaoComum={resultado.reuniaoHoje.observacao}
                       onSalvar={async (presentesIds, obs) => {
                         setSalvandoReuniao(true)
@@ -1510,22 +1696,47 @@ export function Panel() {
                     />
                   ) : (
                     <>
+                      {linhaPresenca && (
+                        <p className="ktm-txt-2" style={{
+                          marginBottom: 8,
+                          color: linhaPresenca.tom === 'neutro' ? undefined : `var(--${linhaPresenca.tom})`,
+                        }}>
+                          {linhaPresenca.texto}
+                        </p>
+                      )}
                       <textarea className="ktm-area" value={obsReuniao} onChange={e => setObsReuniao(e.target.value)}
                                 placeholder="Observações da reunião…" />
                       <div className="ktm-acoes">
-                        <button onClick={() => confirmarReuniao(true)} disabled={salvandoReuniao} className="ktm-btn ktm-btn--ok">Realizada</button>
-                        <button onClick={() => confirmarReuniao(false)} disabled={salvandoReuniao} className="ktm-btn">Não aconteceu</button>
+                        <button onClick={() => confirmarReuniao(true)} disabled={salvandoReuniao || presenca.fase === 'confirmando'} className="ktm-btn ktm-btn--ok">Realizada</button>
+                        <button onClick={() => confirmarReuniao(false)} disabled={salvandoReuniao || presenca.fase === 'confirmando'} className="ktm-btn">Não aconteceu</button>
                       </div>
                     </>
                   )
                 ) : (
                   <>
+                    {resultado.reuniaoHoje.confirmacao_origem === 'automatica' && resultado.reuniaoHoje.status === 'realizada' && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                        <span className="ktm-txt-2">Marcada sozinha: o professor ficou na chamada.</span>
+                        <button className="ktm-linkbtn" onClick={desfazerPresenca} disabled={desfazendo}>
+                          {desfazendo ? 'Desfazendo…' : 'Desfazer'}
+                        </button>
+                      </div>
+                    )}
                     <textarea className="ktm-area" value={obsReuniao} onChange={e => setObsReuniao(e.target.value)}
                               placeholder="Observações da reunião…" />
                     <button onClick={salvarObservacaoReuniao} className="ktm-linkbtn" style={{ marginTop: 8 }}
                             disabled={salvandoReuniao || obsReuniao === (resultado.reuniaoHoje.observacao ?? '')}>
                       {salvandoReuniao ? 'Salvando…' : 'Salvar observação'}
                     </button>
+
+                    {resultado.reuniaoHoje.status === 'realizada' && !pendenciasDispensadas && (
+                      <PendenciasPosReuniao
+                        chamados={resultado.nexus.chamadosAbertos}
+                        ocorrencias={resultado.ocorrenciasKtmAbertas}
+                        onConcluir={concluirPendencias}
+                        onDispensar={() => setPendenciasDispensadas(true)}
+                      />
+                    )}
                   </>
                 )}
 
@@ -1741,7 +1952,7 @@ export function Panel() {
                 )}
               </Cartao>
 
-              {!!(resultado.nexus.ocorrencias.length || resultado.nexus.tracking || resultado.nexus.alertas.length) && (
+              {!!(listaOcorrencias.length || resultado.nexus.tracking || resultado.nexus.alertas.length) && (
                 <Cartao rotulo="Ocorrências" style={atraso(120)} acessorio={
                   resultado.nexus.ocorrenciasAbertasTotal > 0
                     ? <Selo tom="vermelho">{resultado.nexus.ocorrenciasAbertasTotal} em aberto</Selo>
@@ -1763,7 +1974,7 @@ export function Panel() {
                   )}
 
                   <ul className="ktm-lista ktm-lista--esp">
-                    {resultado.nexus.ocorrencias.slice(0, 3).map((o, i) => (
+                    {listaOcorrencias.map((o, i) => (
                       <li key={o.id} className={`ktm-registro ktm-entra ${URGENCIA_CLASSE[o.urgency] ?? ''}`} style={atraso(140 + i * 50)}>
                         <div className="ktm-registro-topo">
                           <span>{o.problem_type}</span>
@@ -1782,6 +1993,7 @@ export function Panel() {
                           )}
                           {o.resolved && <Selo tom="verde">Resolvido</Selo>}
                         </div>
+                        {abertosIds.has(o.id) && <ConcluirChamado chamado={o} onConcluir={concluirPendencias} />}
                       </li>
                     ))}
                   </ul>

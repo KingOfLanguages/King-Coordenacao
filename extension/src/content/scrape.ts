@@ -15,6 +15,16 @@ function limpar(texto: string): string {
   return texto.replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Código da sala na URL (meet.google.com/abc-defg-hij). Ao contrário do DOM, a URL
+ * do Meet é estável — e é o que liga a chamada à reunião da agenda
+ * (`reunioes.meet_link`), sem depender do nome que o professor exibe.
+ */
+export function codigoDaSala(): string | null {
+  const m = location.pathname.match(/^\/([a-z]{3}-[a-z]{4}-[a-z]{3})(?:\/|$)/i)
+  return m ? m[1].toLowerCase() : null
+}
+
 export function extrairNomesParticipantes(): string[] {
   const nomes = new Set<string>()
 

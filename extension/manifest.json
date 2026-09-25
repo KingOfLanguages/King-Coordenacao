@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "King TeacherTrack — Assistente de Reunião",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reconhece o professor automaticamente no Google Meet e mostra perfil, histórico e observações sem precisar trocar de aba.",
   "action": {
     "default_popup": "src/popup/popup.html",
