@@ -21,7 +21,8 @@
 .marco.aberto .d{background:var(--accent)}
 .marco button.cab{display:flex; align-items:center; gap:8px; width:100%; text-align:left; border:1px solid var(--border-soft); background:var(--bg-canvas); border-radius:10px; padding:8px 11px; cursor:pointer; font:600 13.5px Geist,sans-serif; color:var(--fg-primary)}
 .marco button.cab:hover{border-color:var(--accent)}
-.marco button.cab .et{margin-left:auto; font:500 11px Geist,sans-serif; color:var(--accent); white-space:nowrap}
+.marco button.cab{flex-wrap:wrap}
+.marco button.cab .et{margin-left:auto; font:500 11px Geist,sans-serif; color:var(--accent); text-align:right}
 .marco .det{font-size:13px; line-height:1.55; color:var(--fg-secondary); padding:8px 4px 4px 11px}
 /* home */
 .home{border:1px solid var(--border-default); border-radius:12px; overflow:hidden}
@@ -50,7 +51,7 @@
 
   /* ═════════ 1. O primeiro mês ═════════ */
   var MARCOS = [
-    { q: "No dia em que o aluno chega", t: "Aceite, apresentação e aviso à coordenação", et: "Recebendo alunos e Primeiro contato", x: "O contrato aparece na Home: confira se consegue cumprir início, dias e horário e dê o aceite. Depois, a mensagem de apresentação no WhatsApp, o quanto antes, e o aviso à coordenação, pelo WhatsApp dela, de que o contato foi feito." },
+    { q: "No dia em que o aluno chega", t: "Aceite, apresentação e aviso à coordenação", et: "Recebendo alunos e Primeiro contato", x: "O contrato aparece na Home e também chega pelo WhatsApp: confira se consegue cumprir início, dias e horário e dê o aceite. Depois, a mensagem de apresentação no WhatsApp, o quanto antes, e o aviso à coordenação, pelo WhatsApp dela, de que o contato foi feito." },
     { q: "Na data do contrato", t: "A primeira aula", et: "Primeira aula", x: "Até 15 minutos para conhecer o aluno e fazer o nivelamento, e 15 de aula de verdade. Depois da aula, registre o nível na plataforma: é isso que libera o livro." },
     { q: "Todo dia", t: "Lançar as aulas e o checklist", et: "Boas práticas", x: "Cada aula lançada em até 24h, com observação que diga o que foi trabalhado. O checklist do dia vale XP; pendência em aberto tira XP e, acumulada, trava a agenda." },
     { q: "Toda semana", t: "Conferir o Resumo financeiro", et: "Pagamento", x: "Na aba Financeira, o Resumo financeiro mostra quanto você vai receber por aluno. Conferir toda semana evita surpresa no fechamento." },

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lançamento de aulas · Prática</title>
+<!-- Atividades do módulo "Lançamento de aulas" (pedido do RH em 29/09), cada
+     uma por ?parte=<id>: lancar, rotina.
+     Réplica do cartão da tela "Lançamento de Aulas" do KMS (capturada em
+     25/09): Tipo de registro, Subtipo (Com reposição x/4 ou Sem reposição),
+     Nível do aluno, Aula personalizada, Livro / Material, Última aula
+     aplicada, Observação e Comprovação da aula (print obrigatório só em falta
+     sem reposição). As mensagens de erro da plataforma são as do KMS.
+     Regras: MAPA 14, guia de XP (+10 no mesmo dia, +3 pela observação,
+     pendência −10 por dia) e decisões de 24 e 29/09. Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.cena{border:1px solid var(--border-soft); background:var(--bg-subtle); border-radius:11px; padding:11px 14px; font-size:13.5px; line-height:1.55; margin-bottom:12px}
+.fundo-wa{background:var(--wa-bg); border-radius:10px; padding:9px; margin-top:8px}
+.wa{display:grid; gap:4px; max-width:44ch; background:var(--wa-in); color:var(--wa-text); border-radius:4px 10px 10px 10px; padding:7px 10px 6px; box-shadow:0 1px .5px rgba(11,20,26,.13); font-size:13.5px; line-height:1.45}
+.wa .de{font:600 12px Geist,sans-serif; color:var(--wa-green)}
+.wa .h{justify-self:end; font:400 10.5px Geist,sans-serif; color:var(--wa-meta); margin-top:-2px}
+.cartao{border:1px solid var(--border-default); border-radius:10px; padding:14px; display:grid; gap:12px}
+.cab-al{display:flex; align-items:center; gap:10px; border:1px solid var(--border-soft); background:var(--bg-subtle); border-radius:10px; padding:9px 12px}
+.cab-al .ini{width:34px; height:34px; border-radius:50%; background:var(--accent); color:#fff; display:grid; place-items:center; font:700 13px Geist,sans-serif; flex:none}
+.cab-al b{font-size:14px; display:block}
+.cab-al span{font-size:12px; color:var(--fg-muted)}
+.duas{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px}
+.campo{display:grid; gap:5px}
+.campo .rot{font:600 12px Geist,sans-serif; color:var(--fg-muted)}
+.campo .nota{font-size:11.5px; color:var(--fg-muted)}
+.inp{font:13px Geist,sans-serif; padding:8px 10px; border-radius:8px; border:1px solid var(--border-default); background:var(--bg-canvas); color:var(--fg-primary); width:100%}
+.inp:disabled{opacity:.55}
+textarea.inp{min-height:62px; resize:vertical; line-height:1.5}
+.vazio-sub{display:flex; align-items:center; height:36px; border:1px dashed var(--border-default); border-radius:8px; padding:0 10px; font-size:12px; color:var(--fg-muted)}
+.prints{border:1px dashed var(--border-default); border-radius:10px; padding:10px 12px; display:grid; gap:8px}
+.prints .top{display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between}
+.prints b{font-size:13px}
+.arq{display:flex; flex-wrap:wrap; gap:6px}
+.arq button{border:1px solid var(--border-default); background:var(--bg-canvas); border-radius:7px; padding:5px 9px; font:500 12px "Geist Mono",monospace; color:var(--fg-primary); cursor:pointer}
+.anexo{display:inline-flex; gap:6px; align-items:center; font:500 12px "Geist Mono",monospace; color:var(--ok-fg); background:var(--ok-bg); border:1px solid var(--ok-bd); border-radius:7px; padding:4px 8px}
+.rodape{display:flex; justify-content:flex-end; gap:8px}
+.lancadas{display:grid; gap:6px; margin-top:12px}
+.lancadas div{display:flex; gap:8px; align-items:flex-start; font-size:12.5px; color:var(--fg-secondary)}
+.lancadas b{color:var(--fg-primary)}
+@media (max-width:520px){ .duas{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+  function wa(de, txt, hora) {
+    return '<div class="fundo-wa"><div class="wa"><span class="de">' + esc(de) + "</span><span>" + esc(txt) + '</span><span class="h">' + esc(hora) + "</span></div></div>";
+  }
+  function opts(lista, v) { return lista.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === v ? " selected" : "") + (o[2] ? " disabled" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); }
+
+  var NIVEIS = ["A1", "A2", "B1", "B2", "C1", "C2"];
+  var ARQUIVOS = ["Print_WhatsApp_Bruno_hoje_18h12.png", "Print_WhatsApp_Carla_segunda_09h40.png", "comprovante_pix_setembro.png"];
+  var ALUNOS = [
+    { id: "ana", nome: "Ana Ribeiro", hora: "18:05", nivel: "B1", usadas: 0,
+      cena: "Você deu a aula da Ana. Vocês fizeram a Aula 7 do Now We're Talking B1 (Look like, Put together, Hold on to) e você trouxe um vídeo curto sobre a viagem dela para a Irlanda. Ela usou bem \"put together\", mas travou em \"hold on to\".",
+      certo: { tipo: "presenca", pers: "livro", ultima: "7" },
+      ultimas: [["", "Selecione"], ["6", "Aula 6 - What's the Best Gift You've Ever Received?"], ["7", "Aula 7 - Look like, Put together, Hold on to"], ["8", "Aula 8 - The Meaning Inside the Box"]] },
+    { id: "bruno", nome: "Bruno Tavares", hora: "19:15", nivel: "A1", usadas: 1,
+      cena: "O Bruno tinha aula às 19h15 e mandou esta mensagem:", msg: ["Bruno Tavares", "Teacher, surgiu um imprevisto no trabalho e não vou conseguir hoje 😕", "18:12"],
+      certo: { tipo: "faltaAluno", sub: "sem", print: "Print_WhatsApp_Bruno_hoje_18h12.png" } },
+    { id: "carla", nome: "Carla Mendes", hora: "20:25", nivel: "A2", usadas: 1,
+      cena: "A Carla tinha aula hoje às 20h25. Ela avisou na segunda de manhã:", msg: ["Carla Mendes", "Teacher, quinta vou estar numa formatura e não consigo fazer a aula. Podemos repor?", "09:40"],
+      certo: { tipo: "faltaAluno", sub: "com" } }
+  ];
+  function vazio() { return { tipo: "", sub: "", nivel: "", pers: "", livro: "nwt", ultima: "", obs: "", prints: [], escolhendo: false }; }
+
+  function erroPedagogico(a, f) {
+    var c = a.certo;
+    if (f.tipo !== c.tipo) {
+      if (c.tipo === "presenca") return "A Ana participou da aula: o tipo de registro é Presença.";
+      if (f.tipo === "presenca") return "O aluno não teve aula: não é presença.";
+      if (f.tipo === "faltaProfessor") return "Quem faltou foi o aluno, não você. Falta do professor gera reposição obrigatória.";
+      return "Escolha o tipo de registro certo para o que aconteceu.";
+    }
+    if (c.sub && f.sub !== c.sub) {
+      return c.sub === "sem"
+        ? "Ele avisou às 18h12 para a aula das 19h15: menos de 24h. Falta sem direito a reposição, com o print da conversa."
+        : "Ela avisou na segunda para a aula de quinta: mais de 24h. Tem direito a reposição, e ainda está dentro do limite de 4 do mês.";
+    }
+    if (c.tipo === "presenca") {
+      if (f.nivel !== a.nivel) return "Confira o nível da Ana: ela está no B1.";
+      if (f.pers !== c.pers) return "Vocês usaram a aula do livro: é Personalizada + livro.";
+    }
+    return null;
+  }
+
+  var lancar = {
+    tag: "Pratique",
+    titulo: "Lance as aulas de hoje",
+    instrucao: "Quinta, 20h55. Suas três aulas do dia terminaram. Lance uma de cada vez, como na tela Lançamento de Aulas.",
+    estado: function () { return { n: 0, f: vazio(), aviso: null, feitas: [] }; },
+    progresso: function (s) { return s.n + " de " + ALUNOS.length; },
+    completa: function (s) { return s.n === ALUNOS.length; },
+    fecho: "Presença com o nível, o material e uma observação de verdade. Falta avisada com 24h ou mais: com reposição, dentro do limite de 4 no mês. Aviso em cima da hora: sem reposição, com o print da conversa. Tudo lançado no mesmo dia.",
+    corpo: function (s) {
+      var h = "";
+      if (s.feitas.length) h += '<div class="lancadas">' + s.feitas.map(function (x) { return "<div>" + ic("check", 13) + "<span><b>" + esc(x[0]) + "</b> · " + esc(x[1]) + "</span></div>"; }).join("") + "</div>";
+      if (s.n === ALUNOS.length) return h;
+      var a = ALUNOS[s.n], f = s.f;
+      h = '<div class="cena">' + esc(a.cena) + (a.msg ? wa(a.msg[0], a.msg[1], a.msg[2]) : "") + "</div>" + h;
+      var faltaAluno = f.tipo === "faltaAluno", presenca = f.tipo === "presenca";
+      var card = '<div class="tela">' + K.kmsBar("/lancamento-aulas") + '<div class="tela-corpo"><div class="cartao">' +
+        '<div class="cab-al"><span class="ini">' + esc(a.nome.charAt(0)) + "</span><div><b>" + esc(a.nome) + "</b><span>Horário: " + esc(a.hora) + " · Nível: " + esc(a.nivel) + "</span></div></div>" +
+        '<div class="duas"><div class="campo"><span class="rot">Tipo de registro</span><select class="inp" id="f-tipo" data-chg="tipo">' +
+        opts([["", "Selecione"], ["presenca", "Presença"], ["faltaAluno", "Falta do Aluno"], ["faltaProfessor", "Falta do Professor"]], f.tipo) + "</select></div>" +
+        '<div class="campo"><span class="rot">Subtipo</span>' + (faltaAluno
+          ? '<select class="inp" id="f-sub" data-chg="sub">' + opts([["", "Selecione"], ["com", "Com reposição (" + a.usadas + "/4)", a.usadas >= 4], ["sem", "Sem reposição"]], f.sub) + "</select>"
+          : '<div class="vazio-sub">Selecione "Falta do Aluno"</div>') + "</div></div>";
+      if (presenca) {
+        card += '<div class="duas"><div class="campo"><span class="rot">Nível do aluno</span><select class="inp" id="f-nivel" data-chg="nivel">' + opts([["", "Selecione"]].concat(NIVEIS.map(function (n) { return [n, n]; })), f.nivel) + "</select></div>" +
+          '<div class="campo"><span class="rot">Aula personalizada</span><select class="inp" id="f-pers" data-chg="pers">' + opts([["", "Selecione"], ["livro", "Personalizada + livro"], ["semlivro", "Personalizada sem livro"]], f.pers) + "</select></div></div>" +
+          '<div class="campo"><span class="rot">Livro / Material</span><select class="inp" id="f-livro" data-chg="livro">' + opts([["nwt", "Now We're Talking"]], f.livro) + "</select></div>" +
+          '<div class="campo"><span class="rot">Última aula aplicada</span><select class="inp" id="f-ultima" data-chg="ultima">' + opts(a.ultimas || [["", "Selecione"]], f.ultima) + "</select></div>";
+      }
+      card += '<div class="campo"><span class="rot">Observação</span><textarea class="inp" id="f-obs" data-inp="obs" placeholder="Observação">' + esc(f.obs) + "</textarea></div>";
+      if (faltaAluno && f.sub === "sem") {
+        card += '<div class="prints"><div class="top"><div><b>Comprovação da aula</b><div class="campo"><span class="nota">Obrigatório só em falta sem reposição · PNG, JPG ou WEBP · até 3 prints.</span></div></div>' +
+          '<button class="btn btn-sm" id="f-anexar" data-act="escolher">Anexar print</button></div>' +
+          (f.prints.length ? '<div class="arq">' + f.prints.map(function (p) { return '<span class="anexo">' + ic("check", 12) + esc(p) + "</span>"; }).join("") + "</div>" : "") +
+          (f.escolhendo ? '<div class="arq" role="group" aria-label="Seus arquivos">' + ARQUIVOS.map(function (p, i) { return '<button id="arq-' + i + '" data-act="anexar" data-v="' + i + '">' + esc(p) + "</button>"; }).join("") + "</div>" : "") + "</div>";
+      }
+      card += '<div class="rodape"><button class="btn btn-sm btn-pri" id="f-salvar" data-act="salvar">Salvar</button></div></div>';
+      if (s.aviso) card += K.fb(s.aviso[0], s.aviso[1], s.aviso[2]);
+      return h + card + "</div></div>";
+    },
+    mudanca: {
+      tipo: function (el, s) { s.f.tipo = el.value; s.f.sub = ""; s.aviso = null; },
+      sub: function (el, s) { s.f.sub = el.value; s.aviso = null; },
+      nivel: function (el, s) { s.f.nivel = el.value; s.aviso = null; },
+      pers: function (el, s) { s.f.pers = el.value; s.aviso = null; },
+      livro: function (el, s) { s.f.livro = el.value; },
+      ultima: function (el, s) { s.f.ultima = el.value; s.aviso = null; }
+    },
+    entrada: { obs: function (el, s) { s.f.obs = el.value; } },
+    acoes: {
+      escolher: function (d, s) { s.f.escolhendo = !s.f.escolhendo; },
+      anexar: function (d, s) {
+        var p = ARQUIVOS[+d.v], a = ALUNOS[s.n];
+        s.f.escolhendo = false;
+        if (a.certo.print && p !== a.certo.print) { s.aviso = ["err", "Esse print não serve.", "A comprovação é o print da conversa em que o Bruno avisou que não vinha."]; return; }
+        if (s.f.prints.length >= 3) { s.aviso = ["err", "", "Máximo de 3 prints por aula."]; return; }
+        if (s.f.prints.indexOf(p) < 0) s.f.prints.push(p);
+        s.aviso = null;
+      },
+      salvar: function (d, s) {
+        var a = ALUNOS[s.n], f = s.f;
+        if (!f.tipo) { s.aviso = ["err", "", "Nenhum aluno com dados preenchidos."]; return; }
+        if (f.tipo === "faltaAluno" && !f.sub) { s.aviso = ["err", "Falta o subtipo.", "Em Falta do Aluno, escolha Com reposição ou Sem reposição."]; return; }
+        if (f.tipo === "presenca" && f.pers === "livro" && !f.ultima) { s.aviso = ["err", "", "A última aula aplicada é obrigatória para presença com uso do livro."]; return; }
+        if (f.tipo === "faltaAluno" && f.sub === "sem" && !f.prints.length) { s.aviso = ["err", "", "Anexe ao menos 1 print para registrar falta sem reposição."]; return; }
+        var ped = erroPedagogico(a, f);
+        if (ped) { s.aviso = ["err", "Confira antes de salvar.", ped]; return; }
+        if (a.certo.ultima && f.ultima !== a.certo.ultima) { s.aviso = ["err", "Confira a última aula.", "Hoje vocês fizeram a Aula 7. É ela que registra onde a Ana parou."]; return; }
+        if (K.obsFraca(f.obs)) { s.aviso = ["err", "Observação fraca.", "Observação genérica não conta: diga o que aconteceu. Na presença, o que foi trabalhado e como o aluno respondeu; na falta, quando e como ele avisou."]; return; }
+        var tipoTxt = f.tipo === "presenca" ? "Presença" : "Falta do Aluno · " + (f.sub === "com" ? "Com reposição" : "Sem reposição, com print");
+        s.feitas.push([a.nome, tipoTxt + " · lançada no dia: +10 XP, e +3 pela observação"]);
+        s.n++; s.f = vazio(); s.aviso = null;
+      }
+    }
+  };
+
+  /* ═════════ 2. A rotina do lançamento ═════════ */
+  var rotina = {
+    tag: "Pratique",
+    titulo: "Todo dia, depois da aula",
+    instrucao: "O lançamento é o registro oficial do que aconteceu com o aluno e a base do seu pagamento. Três situações da rotina.",
+    progresso: function (s, a) { return ["quando", "esqueci", "errei"].filter(a.qOk).length + " de 3"; },
+    completa: function (s, a) { return ["quando", "esqueci", "errei"].every(a.qOk); },
+    fecho: "Lance no mesmo dia, logo depois da aula. Esqueceu? Resolva a pendência na hora. Errou? Avise a coordenação. Lançamento feito errado de propósito é motivo para o encerramento da parceria.",
+    corpo: function (s, a) { return '<div style="display:grid;gap:20px">' + a.q("quando") + a.q("esqueci") + a.q("errei") + "</div>"; },
+    perguntas: {
+      quando: {
+        pergunta: "Quando lançar a aula?",
+        opcoes: [
+          { t: "No fim da semana, todas de uma vez.", porque: "Passadas 24h, a aula vira pendência: −10 XP por dia até você lançar, e pendência acumulada trava a agenda." },
+          { t: "No mesmo dia, logo depois da aula.", ok: true, porque: "Lançada no dia, a aula rende +10 XP, sai da lista do Lançamento de Aulas e deixa o histórico do aluno em dia." },
+          { t: "No fim do mês, antes de autorizar o pagamento.", porque: "O prazo é de 24h. Deixar para o fim do mês vira um mês de pendências." }
+        ]
+      },
+      esqueci: {
+        pergunta: "Você percebeu que não lançou a aula de anteontem. E agora?",
+        opcoes: [
+          { t: "Lançar agora, pela aba de pendências.", ok: true, porque: "A aba de pendências lista as aulas não lançadas em 24h. Clique na aula e lance normalmente: cada dia em aberto custa 10 XP." },
+          { t: "Deixar para lá: a aula já passou.", porque: "Aula sem lançamento segue como pendência, tirando XP todo dia e, acumulada, trava a agenda." },
+          { t: "Lançar como presença numa aula de hoje.", porque: "Cada aula é lançada na data em que aconteceu. Lançar numa data errada de propósito é lançamento incorreto." }
+        ]
+      },
+      errei: {
+        pergunta: "Você lançou a falta da Carla como \"sem reposição\", mas ela tinha avisado com 3 dias. O que fazer?",
+        opcoes: [
+          { t: "Avisar a coordenação na hora, sem esperar o fim do mês.", ok: true, porque: "Inconsistência no lançamento vai para a coordenação no dia, pelo WhatsApp. Quanto antes, mais fácil de corrigir." },
+          { t: "Não falar nada: no fim do mês ninguém vai perceber.", porque: "O lançamento é o registro oficial do aluno e a base do pagamento. Erro escondido vira problema maior." },
+          { t: "Lançar uma presença extra para compensar.", porque: "Isso é lançamento propositalmente errado, motivo para o encerramento da parceria." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ lancar: lancar, rotina: rotina });
+})();
+</script>
+</body>
+</html>

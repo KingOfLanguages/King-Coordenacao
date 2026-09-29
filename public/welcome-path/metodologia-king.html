@@ -79,9 +79,9 @@
     tag: "Pratique",
     titulo: "Boa prática ou evite?",
     instrucao: "Frases que você pode dizer em aula. Quais seguem o jeito King de conduzir: apresentar, praticar e personalizar?",
-    progresso: function (s, a) { return a.gCertos("fa") + " de 7"; },
+    progresso: function (s, a) { return a.gCertos("fa") + " de 8"; },
     completa: function (s, a) { return a.gOk("fa"); },
-    fecho: "Nunca pergunte \"Você entendeu?\": faça o aluno usar o que você explicou. Pratique em situações reais, personalize com a vida dele, evite traduzir e não use conteúdo pago ou de outra escola.",
+    fecho: "Nunca pergunte \"Você entendeu?\": faça o aluno usar o que você explicou. Pratique em situações reais, personalize com o que ele conta na conversa, evite traduzir. Vídeo, jogo ou texto gratuito é bem-vindo; conteúdo pago ou de outra escola, não.",
     corpo: function (s, a) { return a.g("fa"); },
     grupos: { fa: {
       rotulos: [{ v: "boa", r: "Boa prática" }, { v: "evite", r: "Evite" }],
@@ -104,6 +104,9 @@
         { html: fala("Agora me conta, em inglês, como foi o seu fim de semana."), certo: "boa",
           porque: "Ele fala, monta as próprias frases e pratica com o que é da vida dele.",
           dica: "Quem fala é o aluno, sobre a vida dele." },
+        { html: fala("Você disse que torce pelo Flamengo: separei um vídeo curto de uma entrevista em inglês para a gente comentar."), certo: "boa",
+          porque: "Recurso externo gratuito, como vídeo, jogo ou texto, é bem-vindo. E ele nasce da conversa com o aluno: é assim que você descobre o que ele gosta.",
+          dica: "É gratuito e saiu do que o aluno contou." },
         { html: fala("Vou usar hoje a apostila que comprei de outro curso."), certo: "evite",
           porque: "Criatividade é bem-vinda, mas nada de conteúdo pago ou de outras escolas. Use o material da King e os complementares gratuitos do MAPA.",
           dica: "A origem do material importa." }

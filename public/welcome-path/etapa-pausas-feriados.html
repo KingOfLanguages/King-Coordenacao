@@ -42,10 +42,20 @@
     tag: "Pratique",
     titulo: "Tem aula nesse dia?",
     instrucao: "A King só para em feriado nacional. Para cada data, diga se tem aula.",
-    progresso: function (s, a) { return a.gCertos("datas") + " de 7"; },
-    completa: function (s, a) { return a.gOk("datas"); },
-    fecho: "Feriado nacional: sem aula e dia pago. Ponto facultativo, feriado estadual e municipal: aula normal.",
-    corpo: function (s, a) { return a.g("datas"); },
+    progresso: function (s, a) { return (a.gCertos("datas") + (a.qOk("facult") ? 1 : 0)) + " de 8"; },
+    completa: function (s, a) { return a.gOk("datas") && a.qOk("facult"); },
+    fecho: "Feriado nacional: sem aula e dia pago. Ponto facultativo, feriado estadual e municipal: aula normal. Se o aluno faltar nesses dias, vale o critério de reposição de sempre.",
+    corpo: function (s, a) { return a.g("datas") + (a.gOk("datas") ? '<div style="margin-top:16px">' + a.q("facult") + "</div>" : ""); },
+    perguntas: {
+      facult: {
+        pergunta: "No Corpus Christi, a Eduarda manda às 17h: \"Hoje é ponto facultativo, vou aproveitar e não vou fazer a aula das 18h.\" Como fica?",
+        opcoes: [
+          { t: "Sem aula e dia pago, como num feriado nacional.", porque: "Ponto facultativo tem aula normal. Quem decidiu faltar foi a aluna." },
+          { t: "Falta do aluno sem direito a reposição: ela avisou com menos de 24h. O print da conversa vai no lançamento.", ok: true, porque: "Se o aluno escolhe faltar num ponto facultativo, vale o critério de reposição de sempre: com 24h ou mais de aviso, tem direito; sem isso, é falta sem direito." },
+          { t: "Falta com direito a reposição, porque é um dia de folga para muita gente.", porque: "O ponto facultativo não muda o critério. Ela avisou uma hora antes: não tem direito." }
+        ]
+      }
+    },
     grupos: { datas: {
       rotulos: [{ v: "sem", r: "Sem aula" }, { v: "com", r: "Aula normal" }],
       itens: [

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Etapa 3 · Prática</title>
 <!-- Atividades da etapa 3 (Primeiro contato). Cada uma entra na etapa por um
-     bloco `embed` com ?parte=<id>: mensagem, perfil, sequencia.
+     bloco `embed` com ?parte=<id>: onboarding, mensagem, perfil, sequencia.
      Aluna e datas são fictícias. Ver public/welcome-path/kit/kit.js. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,6 +39,54 @@
 (function () {
   "use strict";
   var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ 0. O seu Meu Onboarding ═════════ */
+  // Vídeo 6 do roteiro do suporte ("Meu Onboarding") e parecer do RH de 29/09:
+  // o aluno vinculado à agenda assiste ao vídeo de apresentação do professor.
+  var onboarding = {
+    tag: "Pratique", titulo: "O seu Meu Onboarding",
+    instrucao: "Antes do primeiro aluno, prepare o seu Meu Onboarding, no menu do seu perfil na plataforma. Monte, na ordem, o roteiro do vídeo de apresentação. Três cartas não entram nele.",
+    progresso: function (s, a) { return (a.oFeitos("video") + ["luz", "quando"].filter(a.qOk).length) + " de 6"; },
+    completa: function (s, a) { return a.oOk("video") && a.qOk("luz") && a.qOk("quando"); },
+    fecho: "Um vídeo curto e verdadeiro: quem você é, como é a sua aula e um convite para a primeira aula. Regras e combinados vão na mensagem de apresentação.",
+    corpo: function (s, a) {
+      var h = a.o("video");
+      if (a.oOk("video")) h += '<div style="margin-top:16px;display:grid;gap:18px">' + a.q("luz") + a.q("quando") + "</div>";
+      return h;
+    },
+    ordens: { video: {
+      passos: [
+        { id: "nome", t: "Se apresente: seu nome e de onde você fala, com um tom leve e sorrindo", rot: "5 a 8 s", cedo: "Comece pelo básico: quem é você." },
+        { id: "quem", t: "Mostre quem você é: um hobby, uma paixão, algo pessoal que humanize você", rot: "10 a 15 s", cedo: "Antes de falar da aula, deixe o aluno conhecer a pessoa." },
+        { id: "aula", t: "Conte, numa frase, como você é em aula e como se relaciona com o aluno", rot: "10 a 15 s", cedo: "O jeito de dar aula vem depois de você se apresentar." },
+        { id: "convite", t: "Convide o aluno para a primeira aula, com energia e tom convidativo", rot: "10 a 15 s", cedo: "O convite fecha o vídeo." }
+      ],
+      extras: [
+        { id: "regras", t: "Explicar as regras de falta e reposição", porque: "Regras e combinados vão por escrito, na mensagem de apresentação. O vídeo é para criar conexão." },
+        { id: "novo", t: "Contar que você acabou de entrar na King", porque: "Você não precisa contar aos alunos que está começando agora na escola." },
+        { id: "curriculo", t: "Ler o seu currículo completo", porque: "O vídeo tem menos de um minuto. O que conecta é quem você é, não a lista de certificados." }
+      ],
+      mostra: ["aula", "regras", "nome", "novo", "convite", "curriculo", "quem"]
+    } },
+    perguntas: {
+      luz: {
+        pergunta: "Na hora de gravar, o que ajuda?",
+        opcoes: [
+          { t: "Luz atrás de você e a câmera de baixo para cima.", porque: "Luz de costas escurece o rosto. Deixe a luz de frente e a câmera na altura dos olhos." },
+          { t: "Luz de frente, câmera na altura dos olhos, ambiente silencioso e fundo neutro.", ok: true, porque: "E um aquecimento rápido para soltar a voz. É a primeira impressão que o aluno tem de você." },
+          { t: "Tanto faz: o aluno só vai ver o vídeo depois da primeira aula.", porque: "O aluno pode assistir assim que é vinculado à sua agenda, antes mesmo de vocês se falarem." }
+        ]
+      },
+      quando: {
+        pergunta: "Quando o aluno pode assistir ao seu vídeo?",
+        opcoes: [
+          { t: "Assim que é vinculado à sua agenda.", ok: true, porque: "Por isso vale caprichar antes do primeiro aluno: o vídeo chega antes da sua primeira mensagem." },
+          { t: "Só depois da primeira aula.", porque: "O vídeo fica disponível assim que o aluno é vinculado à sua agenda." },
+          { t: "Só se você mandar o vídeo pelo WhatsApp.", porque: "O vídeo fica no Meu Onboarding, na plataforma: o aluno vê sem você precisar mandar nada." }
+        ]
+      }
+    }
+  };
 
   /* ═════════ 1. Mensagem de apresentação ═════════ */
   var PECAS = [
@@ -168,7 +216,7 @@
     }
   };
 
-  K.iniciar({ mensagem: mensagem, perfil: perfil, sequencia: sequencia });
+  K.iniciar({ onboarding: onboarding, mensagem: mensagem, perfil: perfil, sequencia: sequencia });
 })();
 </script>
 </body>

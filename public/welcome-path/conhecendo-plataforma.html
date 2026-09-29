@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conhecendo a plataforma · Prática</title>
+<!-- Atividade do módulo "Conhecendo a plataforma" (pedido do RH em 29/09:
+     entre "A King por dentro" e "Sua agenda"), por ?parte=menu.
+     O menu é o da plataforma do professor capturado em 25/09 (Home, Agenda do
+     Professor, Histórico do Aluno, Aulas e Reposições, Materiais, Gestão
+     Professor, Ranking, Financeira, Histórico e o menu do perfil com o Meu
+     Onboarding). O que cada tela tem vem do vídeo "Conhecendo a plataforma"
+     do roteiro do suporte e dos materiais 11 a 18 do MAPA. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.plat{display:grid; grid-template-columns:214px minmax(0,1fr); min-height:420px}
+.side{background:var(--kms-head); color:#dfe5f5; padding:10px 8px; display:grid; align-content:start; gap:2px}
+.side .sec{font:600 10px Geist,sans-serif; letter-spacing:.12em; text-transform:uppercase; color:rgba(223,229,245,.45); padding:9px 10px 3px}
+.side button{display:flex; align-items:center; gap:8px; width:100%; border:0; background:none; color:inherit; font:500 13px Geist,sans-serif; text-align:left; padding:7px 10px; border-radius:7px; cursor:pointer}
+.side button.sub{padding-left:24px; font-size:12.5px; color:rgba(223,229,245,.8)}
+.side button:hover{background:rgba(255,255,255,.08)}
+.side button.ok{background:rgba(110,214,154,.18); color:#bff0d4}
+.side button.no{background:rgba(255,157,149,.16); color:#ffc9c4}
+.barra{display:flex; align-items:center; gap:9px; background:var(--kms-head); color:#fff; padding:8px 12px; font:700 13px Geist,sans-serif; border-bottom:1px solid rgba(255,255,255,.08); position:relative}
+.barra .av{margin-left:auto; width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.16); display:grid; place-items:center; font:600 10px Geist,sans-serif; border:0; color:#fff; cursor:pointer}
+.barra .av[aria-expanded="true"]{outline:2px solid #4f7bff}
+.perfil-menu{position:absolute; right:10px; top:42px; z-index:2; width:190px; background:var(--bg-canvas); color:var(--fg-primary); border:1px solid var(--border-default); border-radius:10px; box-shadow:0 12px 28px rgba(15,23,42,.18); padding:5px; display:grid}
+.perfil-menu button{border:0; background:none; text-align:left; font:500 13px Geist,sans-serif; color:inherit; padding:7px 10px; border-radius:7px; cursor:pointer}
+.perfil-menu button:hover{background:var(--bg-subtle)}
+.perfil-menu button.ok{background:var(--ok-bg); color:var(--ok-fg)}
+.perfil-menu button.no{background:var(--err-bg); color:var(--err-fg)}
+.painel{padding:16px 18px; display:grid; align-content:start; gap:12px}
+.tarefa{border:1px solid var(--info-bd); background:var(--info-bg); color:var(--info-fg); border-radius:11px; padding:12px 14px}
+.tarefa small{display:block; font:600 10.5px Geist,sans-serif; letter-spacing:.1em; text-transform:uppercase; opacity:.8; margin-bottom:3px}
+.tarefa b{font-size:14.5px; color:var(--fg-primary)}
+.feitos{display:grid; gap:6px; font-size:12.5px; color:var(--fg-secondary)}
+.feitos div{display:flex; gap:7px; align-items:flex-start}
+.feitos b{color:var(--fg-primary); font-weight:600}
+@media (max-width:620px){ .plat{grid-template-columns:1fr} .side{grid-template-columns:repeat(2,minmax(0,1fr))} .side .sec{grid-column:1/-1} .side button.sub{padding-left:10px} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* O que tem em cada tela: o vídeo "Conhecendo a plataforma" e o MAPA. */
+  var TELAS = {
+    home: ["Home", "A sua central do dia: avisos da escola, próximas aulas, checklist diário, acessos rápidos, avanço de nível dos alunos e reposições."],
+    agenda: ["Agenda do Professor", "A sua semana: os alunos, as reposições, os horários livres, os ocupados e os breaks."],
+    historicoAluno: ["Histórico do Aluno", "Um card por aluno: nível, presença do mês, próxima e última aula e as últimas 5 aulas. Tem o Mais informações e o Trocar nível e liberar material."],
+    lancamento: ["Lançamento de Aulas", "Os alunos com aula no dia aparecem aqui. Lançou, a aula sai da lista; se não lançar, ela vira pendência."],
+    reposicoes: ["Reposições", "As reposições pendentes e as agendadas. É aqui que você agenda uma reposição."],
+    materiais: ["Materiais", "Os módulos: o Now We're Talking por nível, o MAPA e o módulo Primeira aula e nivelamento."],
+    professor: ["Professor", "Informações sobre você e os seus alunos."],
+    oferta: ["Oferta de Alunos", "Os alunos que a escola oferece aos professores. Aqui você aceita ou recusa."],
+    ligas: ["Ranking de Ligas", "A sua Liga do mês e a sua posição no ranking."],
+    financeira: ["Financeira", "O Resumo financeiro do mês, a autorização do pagamento, os dados bancários e a nota fiscal. Com pendência, os ganhos ficam escondidos."],
+    historicoAulas: ["Histórico de Aulas", "As aulas de cada aluno, mês a mês, com o tipo de cada aula e quando ela aconteceu."],
+    perfil: ["Perfil", "Os seus dados de cadastro."],
+    banco: ["Dados bancários", "A conta em que você recebe o pagamento."],
+    onboarding: ["Meu Onboarding", "O seu vídeo de apresentação e o seu perfil para os alunos. O aluno assiste assim que é vinculado à sua agenda."],
+    senha: ["Resetar senha", "Troca a sua senha de acesso."],
+    sair: ["Sair", "Encerra a sua sessão."]
+  };
+  var MENU = [
+    { id: "home" }, { id: "agenda" }, { id: "historicoAluno" },
+    { sec: "Aulas e Reposições" }, { id: "lancamento", sub: true }, { id: "reposicoes", sub: true },
+    { id: "materiais" },
+    { sec: "Gestão Professor" }, { id: "professor", sub: true }, { id: "oferta", sub: true },
+    { sec: "Ranking" }, { id: "ligas", sub: true },
+    { id: "financeira" },
+    { sec: "Histórico" }, { id: "historicoAulas", sub: true }
+  ];
+  var PERFIL = ["perfil", "banco", "onboarding", "oferta", "senha", "sair"];
+  var TAREFAS = [
+    { t: "Ver os avisos da escola, as próximas aulas e o checklist do dia.", alvo: "home" },
+    { t: "Fechar um horário em que você não pode dar aula.", alvo: "agenda" },
+    { t: "Aceitar um aluno novo que a escola ofereceu.", alvo: "oferta" },
+    { t: "Trocar o nível de um aluno e liberar o material dele.", alvo: "historicoAluno" },
+    { t: "Lançar a aula que você acabou de dar.", alvo: "lancamento" },
+    { t: "Agendar a reposição de um aluno que faltou com direito.", alvo: "reposicoes" },
+    { t: "Abrir a aula do livro e consultar o MAPA.", alvo: "materiais" },
+    { t: "Conferir quanto vai receber no mês e lançar a nota fiscal.", alvo: "financeira" },
+    { t: "Ver as aulas de um aluno mês a mês, com o tipo de cada aula.", alvo: "historicoAulas" },
+    { t: "Ver a sua posição na Liga do mês.", alvo: "ligas" },
+    { t: "Gravar o seu vídeo de apresentação para os alunos.", alvo: "onboarding", dica: "Esse fica no menu do seu perfil, no canto de cima." }
+  ];
+
+  var menu = {
+    tag: "Pratique",
+    titulo: "Onde fica cada coisa",
+    instrucao: "Este é o menu da plataforma do professor. Para cada tarefa, clique onde você faria isso.",
+    estado: function () { return { n: 0, erro: null, perfil: false }; },
+    progresso: function (s) { return s.n + " de " + TAREFAS.length; },
+    completa: function (s) { return s.n === TAREFAS.length; },
+    fecho: "Home para começar o dia, Agenda para os horários, Histórico do Aluno para nível e material, Aulas e Reposições para lançar e repor, Materiais para o livro e o MAPA, Oferta para aceitar alunos, Financeira para receber e o Meu Onboarding no menu do perfil.",
+    corpo: function (s) {
+      var atual = TAREFAS[s.n], feita = s.n === TAREFAS.length;
+      function botao(id, sub) {
+        var cls = (sub ? "sub " : "") + (s.erro === id ? "no" : "");
+        return '<button class="' + cls + '" id="m-' + id + '" data-act="menu" data-v="' + id + '">' + esc(TELAS[id][0]) + "</button>";
+      }
+      var h = '<div class="tela"><div class="barra">King of Languages<button class="av" id="m-perfil" data-act="perfil" aria-expanded="' + s.perfil + '" aria-label="Menu do perfil">VC</button>';
+      if (s.perfil) h += '<div class="perfil-menu" role="menu">' + PERFIL.map(function (id) {
+        return '<button role="menuitem" class="' + (s.erro === id ? "no" : "") + '" id="p-' + id + '" data-act="menu" data-v="' + id + '">' + esc(TELAS[id][0]) + "</button>";
+      }).join("") + "</div>";
+      h += '</div><div class="plat"><nav class="side" aria-label="Menu da plataforma">' + MENU.map(function (m) {
+        return m.sec ? '<div class="sec">' + esc(m.sec) + "</div>" : botao(m.id, m.sub);
+      }).join("") + '</nav><div class="painel">';
+      if (!feita) {
+        h += '<div class="tarefa" role="status"><small>Tarefa ' + (s.n + 1) + " de " + TAREFAS.length + "</small><b>" + esc(atual.t) + "</b></div>";
+        if (s.erro) h += K.fb("err", "Aqui é " + TELAS[s.erro][0] + ".", TELAS[s.erro][1] + (atual.dica && s.tentou ? " " + atual.dica : ""));
+      }
+      if (s.n) {
+        h += '<div class="feitos">' + TAREFAS.slice(0, s.n).reverse().map(function (x) {
+          return "<div>" + ic("check", 13) + "<span><b>" + esc(TELAS[x.alvo][0]) + ".</b> " + esc(TELAS[x.alvo][1]) + "</span></div>";
+        }).join("") + "</div>";
+      }
+      return h + "</div></div></div>";
+    },
+    acoes: {
+      perfil: function (d, s) { s.perfil = !s.perfil; },
+      menu: function (d, s) {
+        var atual = TAREFAS[s.n];
+        if (!atual) return;
+        if (d.v === atual.alvo) { s.n++; s.erro = null; s.tentou = false; s.perfil = false; return; }
+        s.erro = d.v; s.tentou = true;
+      }
+    }
+  };
+
+  K.iniciar({ menu: menu });
+})();
+</script>
+</body>
+</html>
