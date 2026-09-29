@@ -78,17 +78,17 @@
     ] } }
   };
 
-  /* ═════════ 2. Conferir o Resumo Consolidado ═════════ */
+  /* ═════════ 2. Conferir o Resumo financeiro ═════════ */
   function linha(nome, plano, obs, conta) {
     return '<div class="linha-r"><div><b>' + esc(nome) + '</b> <span class="muted small">· ' + esc(plano) + '</span><div class="obs">' + esc(obs) + '</div></div><span class="val">' + esc(conta) + "</span></div>";
   }
   var resumo = {
-    tag: "Pratique", titulo: "Confira o Resumo Consolidado",
+    tag: "Pratique", titulo: "Confira o Resumo financeiro",
     instrucao: "É dia 1º e o botão de autorizar apareceu. Antes, confira cada linha do resumo: está certa ou tem erro?",
     progresso: function (s, a) { return a.gCertos("linhas") + " de 5"; },
     completa: function (s, a) { return a.gOk("linhas"); },
     fecho: "Achou algo errado? Avise a coordenação antes de autorizar: o valor autorizado é o que será pago.",
-    corpo: function (s, a) { return '<div class="tela" style="margin-bottom:12px">' + K.kmsBar("/financeira") + '<div class="tela-corpo small muted">Resumo consolidado · outubro/2026</div></div>' + a.g("linhas"); },
+    corpo: function (s, a) { return '<div class="tela" style="margin-bottom:12px">' + K.kmsBar("/financeira") + '<div class="tela-corpo small muted">Resumo financeiro · outubro/2026</div></div>' + a.g("linhas"); },
     grupos: { linhas: {
       rotulos: [{ v: "ok", r: "Está certo" }, { v: "erro", r: "Tem erro" }],
       itens: [
@@ -113,7 +113,7 @@
       passos: [
         { id: "fim", t: "O mês termina", rot: "31/10" },
         { id: "fecha", t: "O mês fecha e aparece o botão de autorizar", rot: "01/11", cedo: "Primeiro o mês precisa terminar." },
-        { id: "autoriza", t: "Conferir o Resumo Consolidado e autorizar o pagamento", rot: "01/11", cedo: "O botão de autorizar só aparece quando o mês fecha, no dia 1º." },
+        { id: "autoriza", t: "Conferir o Resumo financeiro e autorizar o pagamento", rot: "01/11", cedo: "O botão de autorizar só aparece quando o mês fecha, no dia 1º." },
         { id: "cai", t: "O pagamento cai na sua conta", rot: "até o dia 7", cedo: "O pagamento vem depois da sua autorização." },
         { id: "emite", t: "Emitir a nota fiscal (NFS-e)", rot: "após receber", cedo: "A nota é emitida assim que você recebe o pagamento." },
         { id: "lanca", t: "Lançar a nota: Escolher arquivo e depois Lançar Nota Fiscal", rot: "Financeira", cedo: "Antes de lançar, a nota precisa ser emitida." }

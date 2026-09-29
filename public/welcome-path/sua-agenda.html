@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sua agenda · Prática</title>
+<!-- Atividades do módulo "Sua agenda" (Welcome Path 2.0, Fase 1), cada uma
+     por ?parte=<id>: horarios, alunos, reposicao.
+     Réplica da Agenda do Professor e da tela de Reposições do KMS, com os
+     textos da plataforma (os sem acento são assim no KMS, não corrigir), as
+     cores da legenda e as regras: horário livre recebe aluno novo; alta
+     demanda das 6h às 9h e das 17h às 23h pede confirmação ao fechar; troca de
+     dia de aluno vale a partir da semana seguinte; reposição só em horário
+     livre. Regras: MAPA 12 (Agenda do Professor), 1 e 15; KMS atual.
+     A semana é a atual, vista de segunda. Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+/* ── missão ── */
+.missao{border:1px solid var(--border-soft); border-radius:11px; padding:12px 14px; margin-bottom:12px; background:var(--bg-subtle)}
+.cena{font-size:13px; color:var(--fg-secondary); line-height:1.55; margin-bottom:10px}
+.tarefas{list-style:none; margin:0; padding:0; display:grid; gap:9px}
+.tarefas li{display:flex; gap:10px; align-items:flex-start; font-size:13px}
+.tarefas .n{width:20px; height:20px; border-radius:50%; flex:none; display:grid; place-items:center; font:600 11px Geist,sans-serif; border:1.5px solid var(--border-strong); color:var(--fg-muted); margin-top:1px}
+.tarefas li.ok .n{background:var(--ok-fg); border-color:var(--ok-fg); color:var(--bg-canvas)}
+.tarefas li.at .n{border-color:var(--accent); color:var(--accent)}
+.tarefas li.fut{opacity:.55}
+.tarefas li.ok b{color:var(--fg-secondary); font-weight:500}
+.tarefas .tx{flex:1; min-width:0}
+.tarefas .tx > p{margin-top:3px; line-height:1.55}
+.tarefas .pergunta{margin-top:10px}
+.tarefas .link{margin-top:8px}
+.passos{margin:6px 0 0; padding-left:18px; line-height:1.6}
+
+/* ── telas do KMS ── */
+.tela-nav{display:flex; gap:2px; padding:0 8px; background:var(--bg-subtle); border-bottom:1px solid var(--border-soft); overflow-x:auto}
+.tela-nav button{border:0; background:none; padding:8px 12px; font:500 12.5px Geist,sans-serif; color:var(--fg-muted); border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap}
+.tela-nav button[aria-selected="true"]{color:var(--accent); border-bottom-color:var(--accent); font-weight:600}
+.k-h1{font:700 16px Geist,sans-serif; margin:2px 0 10px}
+.ag-top{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px}
+.ag-top .dir{margin-left:auto; display:flex; gap:6px; flex-wrap:wrap}
+.trava{display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:4px 11px; font:600 10.5px Geist,sans-serif; letter-spacing:.18em; text-transform:uppercase; border:1px solid var(--ok-bd); background:var(--ok-bg); color:var(--ok-fg)}
+.btn-perigo{background:var(--err-fg); border-color:var(--err-fg); color:var(--bg-canvas)}
+.tst{display:flex; align-items:center; gap:7px; font-size:12.5px; border-radius:8px; padding:7px 11px; margin-bottom:10px; border:1px solid}
+.tst-ok{background:var(--ok-bg); color:var(--ok-fg); border-color:var(--ok-bd)}
+.tst-err{background:var(--err-bg); color:var(--err-fg); border-color:var(--err-bd)}
+.tst-av{background:var(--hold-bg); color:var(--hold-fg); border-color:var(--hold-bd)}
+.caixa-k{border:1px solid var(--border-default); border-radius:10px; padding:12px 14px; margin-bottom:10px; background:var(--bg-canvas); box-shadow:0 8px 24px rgba(15,23,42,.10)}
+.caixa-k h3{font:600 14.5px Geist,sans-serif; margin:0}
+.caixa-k .d{font-size:12.5px; color:var(--fg-muted); margin-top:2px}
+.caixa-k .corpo{font-size:13px; color:var(--fg-secondary); margin-top:8px}
+.dlg-acoes{display:flex; justify-content:flex-end; gap:6px; margin-top:12px}
+.campo{display:grid; gap:5px; margin-top:10px}
+.campo .rot{font:600 10.5px Geist,sans-serif; letter-spacing:.16em; text-transform:uppercase; color:var(--fg-muted)}
+.campo .rot.min{letter-spacing:0; text-transform:none; font-size:12.5px; color:var(--fg-primary); font-weight:500}
+.campo .nota{font-size:12px; color:var(--fg-muted)}
+.inp{font:13px Geist,sans-serif; padding:6px 9px; border-radius:7px; border:1px solid var(--border-default); background:var(--bg-canvas); color:var(--fg-primary); width:fit-content; max-width:100%}
+.inp:disabled{opacity:.55}
+.chip-k{display:inline-block; margin-top:10px; font-size:12px; color:var(--fg-muted); border:1px solid var(--border-soft); background:var(--bg-subtle); border-radius:7px; padding:5px 10px}
+.chk{display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:5px 10px; border:1px solid var(--border-soft); border-radius:8px; padding:8px 10px; font-size:12px; color:var(--fg-secondary)}
+.chk label{display:flex; align-items:center; gap:6px; cursor:pointer}
+.chk label.off{text-decoration:line-through; opacity:.55; cursor:default}
+
+/* grade da agenda: cores = legenda do KMS */
+.grade{overflow-x:auto; border:1px solid var(--border-default); border-radius:10px}
+.grade table{width:100%; min-width:600px; border-collapse:collapse; table-layout:fixed}
+.grade th{font:700 11px Geist,sans-serif; letter-spacing:.05em; background:var(--bg-muted); color:var(--fg-primary); padding:7px 4px; border:1px solid var(--border-default); text-align:center}
+.grade th:first-child{width:96px; text-align:left; padding-left:8px}
+.grade td{border:1px solid var(--border-default); height:29px; padding:0; position:relative; font-size:11px; vertical-align:middle}
+.grade td.h{background:var(--bg-subtle); color:var(--fg-secondary); font:600 10.5px "Geist Mono",monospace; padding:0 8px; white-space:nowrap}
+.grade td.sobre{outline:2px solid var(--accent); outline-offset:-2px}
+.grade td[data-act]{cursor:pointer}
+.cb{display:block; width:100%; height:100%; min-height:28px; border:0; background:none; cursor:pointer; font:600 11px Geist,sans-serif; color:inherit; padding:2px 6px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+td:not([class*="k-"]) > .cb:hover{background:var(--bg-subtle)}
+.cx{display:flex; align-items:center; gap:4px; min-height:28px; padding:2px 4px 2px 7px; font-weight:600; white-space:nowrap; overflow:hidden}
+.cx .nm{overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0}
+.cx .nm[draggable="true"]{cursor:grab}
+.mini{border:1px solid rgba(29,78,216,.7); width:21px; height:21px; flex:none; border-radius:5px; background:#3b82f6; color:#fff; display:grid; place-items:center; cursor:pointer; padding:0}
+.mini:hover{filter:brightness(1.1)}
+.rm{position:absolute; right:3px; top:50%; transform:translateY(-50%); width:19px; height:19px; border-radius:50%; border:1px solid #fca5a5; background:#fee2e2; color:#b91c1c; display:grid; place-items:center; cursor:pointer; padding:0; opacity:0}
+td:hover > .rm, .rm:focus-visible{opacity:1}
+.k-aula{background:#22C55E; color:#000} .k-repo{background:#EAB308; color:#000} .k-turma{background:#8B5CF6; color:#fff}
+.k-pausa{background:#EC4899; color:#fff} .k-res{background:#EF4444; color:#fff} .k-transf{background:#F97316; color:#000}
+.k-break{background:#9CA3AF; color:#000} .k-ocup{background:#4B5563; color:#fff}
+.alt::before{content:""; position:absolute; left:0; top:3px; bottom:3px; width:3px; border-radius:0 3px 3px 0; background:#fbbf24; box-shadow:0 0 10px rgba(251,191,36,.7); pointer-events:none; z-index:1}
+.fut{display:flex; align-items:center; gap:4px; padding:3px 4px}
+.fut-b{flex:1; min-width:0; border:1px solid #d97706; border-radius:999px; background:linear-gradient(180deg,#fff4bf,#ffd45c); color:#451a03; font:600 8.5px/1.25 Geist,sans-serif; letter-spacing:.1em; text-transform:uppercase; padding:3px 6px; cursor:pointer; white-space:normal}
+.fut-x{width:20px; height:20px; flex:none; border-radius:50%; border:1px solid #fca5a5; background:#fff; color:#dc2626; display:grid; place-items:center; cursor:pointer; padding:0}
+tr.dlg > td{padding:10px; background:var(--bg-subtle); cursor:default}
+/* no celular a grade rola de lado: a janela fica presa na parte visível */
+tr.dlg .caixa-k{margin:0; position:sticky; left:10px; max-width:calc(100vw - 84px)}
+.legenda{display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:6px 14px; margin-top:10px; padding:9px 12px; border:1px solid var(--border-soft); border-radius:9px; font-size:11px; color:var(--fg-secondary)}
+.legenda b{font-weight:600; color:var(--fg-muted)}
+.legenda i{width:11px; height:11px; border-radius:3px; display:inline-block; vertical-align:-1px; margin-right:5px}
+
+/* tabelas simples (faltas, reposições) */
+.tk-wrap{overflow-x:auto; border:1px solid var(--border-soft); border-radius:9px}
+table.tk{width:100%; border-collapse:collapse; font-size:12.5px; min-width:420px}
+table.tk th{text-align:left; font:600 11px Geist,sans-serif; color:var(--fg-muted); padding:8px 10px; background:var(--bg-subtle); border-bottom:1px solid var(--border-soft)}
+table.tk td{padding:9px 10px; border-top:1px solid var(--border-soft)}
+.badge-k{display:inline-block; border-radius:6px; padding:2px 7px; font:600 11px Geist,sans-serif; background:var(--bg-muted); color:var(--fg-primary)}
+.vazio-k{border:1px dashed var(--border-default); border-radius:9px; padding:18px; text-align:center; font-size:12.5px; color:var(--fg-muted)}
+.sub-abas{display:flex; gap:2px; border-bottom:1px solid var(--border-soft); margin-bottom:12px}
+.sub-abas button{border:0; background:none; padding:7px 14px; font:500 12px Geist,sans-serif; color:var(--fg-muted); border-bottom:2px solid transparent; cursor:pointer}
+.sub-abas button[aria-selected="true"]{color:var(--accent); border-bottom-color:var(--accent); font-weight:600}
+.fim-k{display:flex; justify-content:flex-end; margin-bottom:10px}
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ ícones que o kit não tem ═════════ */
+  var SVG = {
+    pencil: '<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+    trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+    save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+    cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>'
+  };
+  function sv(n, t) { return '<svg class="ic" width="' + (t || 14) + '" height="' + (t || 14) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + SVG[n] + "</svg>"; }
+
+  /* ═════════ a semana: horários do KMS (aula de 30 min a cada 35 min) ═════════ */
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function hm(m) { return pad(Math.floor(m / 60)) + ":" + pad(m % 60); }
+  var INI = [], HORA = [];
+  for (var i = 0, m = 7 * 60; i < 27; i++, m += 35) { INI.push(hm(m)); HORA.push(hm(m) + " - " + hm(m + 30)); }
+  function H(ini) { return INI.indexOf(ini); }
+  var DIAS = ["", "SEG", "TER", "QUA", "QUI", "SEX"];
+  /** Alta demanda no KMS: das 6h às 9h e das 17h às 23h. */
+  function altaDemanda(h) { var hh = +INI[h].slice(0, 2); return (hh >= 6 && hh < 9) || (hh >= 17 && hh < 23); }
+
+  var hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+  var SEG = new Date(hoje); SEG.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7));
+  function dia(n) { var d = new Date(SEG); d.setDate(SEG.getDate() + n); return d; }
+  function br(d) { return pad(d.getDate()) + "/" + pad(d.getMonth() + 1) + "/" + d.getFullYear(); }
+  var SEMANA = "Semana de segunda, " + br(dia(0)).slice(0, 5) + ", a sexta, " + br(dia(4)).slice(0, 5) + ". Hoje é segunda.";
+
+  var AL = { ana: "Ana Clara Menezes", bruno: "Bruno Tavares", edu: "Eduarda Lins", felipe: "Felipe Andrade", lucas: "Lucas Ferreira", turma: "Marina e Paulo", gabriel: "Gabriel Rocha" };
+  var LEGENDA = [["aula", "Aula"], ["repo", "Reposição"], ["turma", "Turma"], ["pausa", "Pausa"], ["res", "Reservado"], ["transf", "Transferência"], ["break", "Break"], ["ocup", "Ocupado"]];
+  var COR = { aula: "#22C55E", repo: "#EAB308", turma: "#8B5CF6", pausa: "#EC4899", res: "#EF4444", transf: "#F97316", "break": "#9CA3AF", ocup: "#4B5563" };
+  var TIPOS = [["none", "Sem aula"], ["aula", "Aula normal"], ["turma", "Turma"], ["ocup", "Horário ocupado"], ["break", "Break personalizado"]];
+
+  function k(d, h) { return d + "|" + h; }
+  function dk(key) { return +key.split("|")[0]; }
+  function hk(key) { return +key.split("|")[1]; }
+  function rotK(key) { return DIAS[dk(key)] + " " + HORA[hk(key)]; }
+
+  /* A agenda da semana de um professor fictício. */
+  function base() {
+    var c = {};
+    function poe(al, t, lista) { lista.forEach(function (x) { c[k(x[0], H(x[1]))] = { t: t, al: al }; }); }
+    [1, 2, 3, 4, 5].forEach(function (d) { ["14:00", "14:35", "15:10", "15:45"].forEach(function (x) { c[k(d, H(x))] = { t: "ocup" }; }); });
+    c[k(3, H("13:25"))] = { t: "ocup" };
+    poe("felipe", "aula", [[3, "07:35"], [5, "07:35"]]);
+    poe("ana", "aula", [[1, "18:05"], [3, "18:05"]]);
+    poe("edu", "aula", [[1, "18:40"], [4, "18:40"]]);
+    poe("bruno", "aula", [[2, "19:15"], [4, "19:15"]]);
+    poe("lucas", "res", [[2, "19:50"], [4, "19:50"]]);
+    poe("turma", "turma", [[2, "20:25"], [4, "20:25"]]);
+    poe("gabriel", "pausa", [[5, "18:05"]]);
+    return {
+      cel: c, pend: {}, movs: [], fut: {}, repos: [], faltasRep: [],
+      painel: null, aviso: null, toast: null, faltas: false,
+      aba: "agenda", repoAba: "pendentes", repoForm: null,
+      dica: {}, feitas: {}
+    };
+  }
+
+  /* Grade desta semana com as alterações ainda não salvas. */
+  function grade(s, soSalvo) {
+    var g = {};
+    Object.keys(s.cel).forEach(function (x) { g[x] = s.cel[x]; });
+    s.repos.forEach(function (r) { if (r.ag) g[r.ag] = { t: "repo", al: r.al }; });
+    if (soSalvo) return g;
+    s.movs.forEach(function (mv) { var it = g[mv.de]; delete g[mv.de]; g[mv.para] = it; });
+    Object.keys(s.pend).forEach(function (x) { if (s.pend[x]) g[x] = s.pend[x]; else delete g[x]; });
+    return g;
+  }
+  function alterada(s, key) { return key in s.pend || s.movs.some(function (mv) { return mv.de === key || mv.para === key; }); }
+  function temAlteracoes(s) { return Object.keys(s.pend).length > 0 || s.movs.length > 0; }
+  function muda(s, key, v) {
+    var salvo = s.cel[key];
+    if ((!salvo && !v) || (salvo && v && salvo.t === v.t)) delete s.pend[key]; else s.pend[key] = v;
+  }
+  function salvo(s, d, ini, t) { var it = s.cel[k(d, H(ini))]; return !!it && it.t === t; }
+
+  /* ═════════ a grade ═════════ */
+  function celula(s, g, key) {
+    var fut = s.fut[key];
+    if (fut) {
+      var txt = "Ocupado a partir da proxima semana para " + AL[fut.al];
+      return '<td data-solta="' + key + '"><div class="fut"><button class="fut-b" id="fut-' + key.replace("|", "-") + '" data-act="futura" data-k="' + key + '">' + esc(txt) + '</button><button class="fut-x" data-act="futura" data-k="' + key + '" title="Cancelar mudança" aria-label="Cancelar mudança">' + sv("trash", 12) + "</button></div></td>";
+    }
+    var it = g[key], id = "c-" + key.replace("|", "-"), alt = it && alterada(s, key) ? " alt" : "";
+    var rot = DIAS[dk(key)] + " " + HORA[hk(key)];
+    if (!it) return '<td data-solta="' + key + '" class="' + alt + '"><button class="cb" id="' + id + '" data-act="cel" data-k="' + key + '" aria-label="' + rot + ', livre"></button></td>';
+    if (it.t === "ocup" || it.t === "break") {
+      return '<td data-solta="' + key + '" class="k-' + it.t + alt + '"><button class="cb" id="' + id + '" data-act="cel" data-k="' + key + '" aria-label="' + rot + ", " + (it.t === "ocup" ? "Horário ocupado" : "Break") + '">' + (it.t === "ocup" ? "Horário ocupado" : "Break") + "</button>" +
+        (it.t === "break" ? '<button class="rm" data-act="rmBreak" data-k="' + key + '" title="Remover break" aria-label="Remover break">' + sv("trash", 11) + "</button>" : "") + "</td>";
+    }
+    var nome = esc(AL[it.al] || ""), arrasta = it.t === "aula";
+    var titulo = it.t === "res" ? ' title="Previsão de início: ' + br(dia(7)) + '"' : "";
+    return '<td data-solta="' + key + '" class="k-' + it.t + alt + '" id="' + id + '" data-act="cel" data-k="' + key + '"' + titulo + '><div class="cx">' +
+      '<span class="nm"' + (arrasta ? ' draggable="true" data-arr="' + key + '"' : "") + ">" + nome + "</span>" +
+      (arrasta ? '<button class="mini" id="ed-' + key.replace("|", "-") + '" data-act="editar" data-k="' + key + '" title="Editar horário" aria-label="Editar horário de ' + nome + '">' + sv("pencil", 11) + "</button>" : "") +
+      "</div></td>";
+  }
+
+  function caixa(titulo, desc, corpo, botoes, rotulo) {
+    return '<div class="caixa-k" role="dialog" aria-label="' + esc(rotulo || titulo) + '"><h3>' + esc(titulo) + "</h3>" + (desc ? '<p class="d">' + esc(desc) + "</p>" : "") + corpo + '<div class="dlg-acoes">' + botoes + "</div></div>";
+  }
+  function bt(act, txt, cls, extra) { return '<button class="btn btn-sm ' + (cls || "") + '" data-act="' + act + '"' + (extra || "") + ">" + txt + "</button>"; }
+  function opts(lista, v) { return lista.map(function (o) { return '<option value="' + o[0] + '"' + (String(o[0]) === String(v) ? " selected" : "") + (o[2] ? " disabled" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); }
+
+  /* Janela aberta embaixo da linha do horário clicado. */
+  function painel(s, g) {
+    var p = s.painel;
+    if (p.tipo === "agendar") {
+      var d = dk(p.k), h = hk(p.k), corpo = '<span class="chip-k">' + DIAS[d] + " -  " + HORA[h] + "</span>" +
+        '<div class="campo"><span class="rot">Tipo do agendamento</span><select class="inp" id="sel-tipo" data-chg="tipo">' + opts(TIPOS, p.sel) + "</select></div>";
+      if (p.sel === "break") {
+        corpo += '<div class="campo"><span class="nota">Aplicar este break a um ou mais horários do mesmo dia:</span><div class="chk">' + INI.map(function (_, j) {
+          var o = g[k(d, j)] || (s.fut[k(d, j)] ? { t: "fut" } : null), off = o && o.t !== "break" && j !== h;
+          return '<label class="' + (off ? "off" : "") + '"><input type="checkbox" id="chk-' + j + '" data-inp="slot" value="' + j + '"' + (p.slots.indexOf(j) >= 0 ? " checked" : "") + (off ? " disabled" : "") + "> " + HORA[j] + "</label>";
+        }).join("") + "</div></div>";
+      }
+      var aluno = p.sel === "aula" || p.sel === "turma";
+      if (aluno) corpo += '<div class="campo"><span class="nota">Para trocar o dia de um aluno seu, arraste a célula dele até o novo horário ou use o lápis dentro dela.</span></div>';
+      return caixa("Agendar aula", "Defina o tipo do agendamento e preencha os dados obrigatorios.", corpo,
+        bt("cancelar", "Cancelar") + bt("aplicar", "Aplicar", "btn-pri", ' id="b-aplicar"' + (aluno ? " disabled" : "")));
+    }
+    if (p.tipo === "editar") {
+      var alvoOcupado = function (j) { var x = k(p.dia, j); return x !== p.k && (g[x] || s.fut[x]); };
+      var corpoE = '<div class="campo"><span class="rot min">Dia da semana</span><select class="inp" id="ed-dia" data-chg="edDia">' + opts([1, 2, 3, 4, 5].map(function (x) { return [x, DIAS[x]]; }), p.dia) + "</select></div>" +
+        '<div class="campo"><span class="rot min">Horário</span><select class="inp" id="ed-h" data-chg="edH">' + opts(INI.map(function (_, j) { var o = alvoOcupado(j); return [j, HORA[j] + (o ? " (ocupado)" : ""), o]; }), p.h) + "</select></div>";
+      return caixa("Editar horário da aula", "Selecione o novo dia e horário para a aula do aluno.", corpoE,
+        bt("cancelar", "Cancelar") + bt("confEditar", "Confirmar alteração", "btn-pri", ' id="b-conf-editar"'));
+    }
+    var it = g[p.de];
+    return caixa("Confirmar mudança de horário", "Essa alteração será aplicada na agenda e deverá ser salva para entrar em vigor.",
+      '<p class="corpo">' + esc(AL[it.al]) + ": " + rotK(p.de) + " → " + rotK(p.para) + "</p>",
+      bt("cancelar", "Cancelar") + bt("confMov", "Confirmar", "btn-pri", ' id="b-conf-mov"'));
+  }
+  function linhaPainel(s) {
+    var p = s.painel;
+    if (!p) return -1;
+    return hk(p.tipo === "mov" ? p.para : p.k);
+  }
+
+  function aviso(s) {
+    var a = s.aviso;
+    if (!a) return "";
+    if (a.tipo === "alta") return caixa("Tem certeza?", "Esse horário é de alta demanda; se você deixar aberto, terá um aluno novo nesse horário muito breve.", "",
+      bt("fechaAviso", "Cancelar") + bt("confAlta", "Confirmar", "btn-pri", ' id="b-conf-alta"'));
+    if (a.tipo === "atencao") return caixa("Atencao", "A alteracao do dia/horario passa a valer a partir da proxima semana.", "",
+      bt("fechaAviso", "Entendi", "btn-pri", ' id="b-entendi"'));
+    var f = s.fut[a.k];
+    return caixa("Deletar agendamento", "Essa alteração será removida agora.",
+      '<p class="corpo">Ocupado a partir da proxima semana para ' + esc(AL[f.al]) + " - " + rotK(a.k) + "</p>",
+      bt("fechaAviso", "Cancelar") + bt("delFut", "Deletar agendamento", "btn-perigo", ' id="b-del-fut"'));
+  }
+
+  function relatorioFaltas(s) {
+    var corpo = !s.faltasRep.length ? '<div class="vazio-k" style="margin-top:10px">Nenhuma falta reportada nos próximos 7 dias.</div>' :
+      '<div class="tk-wrap" style="margin-top:10px"><table class="tk"><thead><tr><th>Aluno</th><th>Tipo</th><th>Data</th></tr></thead><tbody>' + s.faltasRep.map(function (f) {
+        return "<tr><td><b>" + esc(AL[f.al]) + '</b></td><td><span class="badge-k">' + esc(f.tipo) + "</span></td><td>" + br(dia(f.d)) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+    return caixa("Relatório de faltas", "Alunos com faltas reportadas nos próximos 7 dias.", corpo, bt("faltas", "Fechar"));
+  }
+
+  function toast(s) {
+    if (!s.toast) return "";
+    var t = s.toast[0];
+    return '<div class="tst tst-' + t + '" role="status">' + ic(t === "ok" ? "check" : "alert", 14) + "<span>" + esc(s.toast[1]) + "</span></div>";
+  }
+
+  function telaAgenda(s) {
+    var g = grade(s), lp = linhaPainel(s);
+    var h = '<h3 class="k-h1">Agenda do Professor</h3><div class="ag-top"><span class="trava">' + sv("unlock", 12) + 'Agenda destravada</span><div class="dir">' +
+      '<button class="btn btn-sm" id="b-faltas" data-act="faltas">' + sv("cal") + "Verificar Faltas</button>" +
+      '<button class="btn btn-sm btn-pri" id="b-salvar" data-act="salvar"' + (temAlteracoes(s) ? "" : " disabled") + ">" + sv("save") + "Salvar alterações</button></div></div>" +
+      toast(s) + aviso(s) + (s.faltas ? relatorioFaltas(s) : "");
+    h += '<div class="grade"><table><thead><tr><th>Horários</th>' + [1, 2, 3, 4, 5].map(function (d) { return "<th>" + DIAS[d] + "</th>"; }).join("") + "</tr></thead><tbody>";
+    INI.forEach(function (_, j) {
+      h += '<tr><td class="h">' + HORA[j] + "</td>" + [1, 2, 3, 4, 5].map(function (d) { return celula(s, g, k(d, j)); }).join("") + "</tr>";
+      if (j === lp) h += '<tr class="dlg"><td colspan="6">' + painel(s, g) + "</td></tr>";
+    });
+    h += "</tbody></table></div>";
+    return h + '<div class="legenda"><b>Legenda:</b>' + LEGENDA.map(function (l) { return '<span><i style="background:' + COR[l[0]] + '"></i>' + l[1] + "</span>"; }).join("") + "</div>";
+  }
+
+  /* ═════════ Aulas e Reposições › Reposições ═════════ */
+  function livres(s, d) {
+    var g = grade(s, true), out = [];
+    INI.forEach(function (_, j) { if (!g[k(d, j)] && !s.fut[k(d, j)]) out.push(j); });
+    return out;
+  }
+  function telaRepo(s) {
+    var pend = [], ags = [];
+    s.repos.forEach(function (r, n) { (r.ag ? ags : pend).push(n); });
+    var h = '<h3 class="k-h1">Reposições</h3><div class="sub-abas" role="tablist">' +
+      [["pendentes", "Pendentes"], ["agendadas", "Agendadas"]].map(function (a) {
+        return '<button role="tab" id="rt-' + a[0] + '" aria-selected="' + (s.repoAba === a[0]) + '" data-act="repoTab" data-t="' + a[0] + '">' + a[1] + "</button>";
+      }).join("") + "</div>" + toast(s);
+    if (s.repoAba === "pendentes") {
+      h += '<div class="fim-k">' + bt("repoAgendar", "Agendar Reposição", "btn-pri", ' id="b-agendar-repo"') + "</div>";
+      if (s.repoForm) h += formRepo(s);
+      h += !pend.length ? '<div class="vazio-k">Nenhuma reposição pendente.</div>' :
+        '<div class="tk-wrap"><table class="tk"><thead><tr><th>Aluno</th><th>Data da Aula com Direito a Reposicao</th><th>Dias Restantes</th></tr></thead><tbody>' + pend.map(function (n) {
+          var r = s.repos[n];
+          return "<tr><td>" + esc(AL[r.al]) + "</td><td>" + br(dia(r.falta)) + "</td><td>" + (30 + r.falta) + " dia(s)</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    } else {
+      h += !ags.length ? '<div class="vazio-k">Nenhuma reposição agendada.</div>' :
+        '<div class="tk-wrap"><table class="tk"><thead><tr><th>Aluno</th><th>Dia da Aula Original</th><th>Dia Agendado</th><th>Acoes</th></tr></thead><tbody>' + ags.map(function (n) {
+          var r = s.repos[n];
+          return "<tr><td>" + esc(AL[r.al]) + "</td><td>" + br(dia(r.falta)) + "</td><td>" + br(dia(dk(r.ag) - 1)) + " " + INI[hk(r.ag)] + "</td><td>" + bt("repoRm", "Remover", "", ' data-i="' + n + '" id="b-repo-rm-' + n + '"') + "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    }
+    return h;
+  }
+  function formRepo(s) {
+    var f = s.repoForm, rep = f.aula !== "0" ? s.repos[+f.aula.slice(1)] : null;
+    var lv = rep && f.dia ? livres(s, +f.dia) : [];
+    var nota = !rep ? "Escolha a aula que será reposta, ou o aluno, para ver os horários disponíveis." :
+      !f.dia ? "Escolha a data para ver os horários disponíveis." : !lv.length ? "Nenhum horário disponível para este aluno nesta data." : "";
+    var corpo = '<div class="campo"><span class="rot min">Data da reposicao (semana atual)</span><select class="inp" id="r-dia" data-chg="rDia">' +
+      opts([["", "Selecione a data"]].concat([2, 3, 4, 5].map(function (d) { return [d, DIAS[d] + " - " + br(dia(d - 1))]; })), f.dia) + "</select></div>" +
+      '<div class="campo"><span class="rot min">Horário da reposição</span><select class="inp" id="r-h" data-chg="rH"' + (lv.length ? "" : " disabled") + ">" +
+      opts([["", "Selecione o horário"]].concat(lv.map(function (j) { return [j, DIAS[+f.dia] + " - " + INI[j]]; })), f.h) + "</select>" +
+      (nota ? '<span class="nota">' + esc(nota) + "</span>" : "") + "</div>" +
+      '<div class="campo"><span class="rot min">Aula que deseja repor</span><select class="inp" id="r-aula" data-chg="rAula">' +
+      opts([["0", "NENHUM"]].concat(s.repos.map(function (r, n) { return r.ag ? null : ["r" + n, AL[r.al] + " - " + br(dia(r.falta))]; }).filter(Boolean)), f.aula) + "</select></div>";
+    return caixa("Agendar Reposicao de Aula", "", corpo, bt("repoCancelar", "Cancelar") + bt("repoSalvar", "Salvar", "btn-pri", ' id="b-repo-salvar"'));
+  }
+
+  function tela(s, cfg) {
+    var nav = cfg.comRepo ? '<div class="tela-nav" role="tablist">' + [["agenda", "Agenda do Professor"], ["repo", "Aulas e Reposições › Reposições"]].map(function (a) {
+      return '<button role="tab" id="aba-' + a[0] + '" aria-selected="' + (s.aba === a[0]) + '" data-act="aba" data-aba="' + a[0] + '">' + a[1] + "</button>";
+    }).join("") + "</div>" : "";
+    return '<div class="tela">' + K.kmsBar(s.aba === "repo" ? "/reposicoes" : "/agenda-professor") + nav + '<div class="tela-corpo">' + (s.aba === "repo" ? telaRepo(s) : telaAgenda(s)) + "</div></div>";
+  }
+
+  /* ═════════ ações da tela ═════════ */
+  function efetivar(s) {
+    Object.keys(s.pend).forEach(function (x) { if (s.pend[x]) s.cel[x] = s.pend[x]; else delete s.cel[x]; });
+    var mudouAluno = s.movs.length > 0;
+    s.movs.forEach(function (mv) { s.fut[mv.para] = { al: mv.al, de: mv.de }; });
+    s.pend = {}; s.movs = []; s.painel = null;
+    s.toast = ["ok", "Agenda salva com sucesso."];
+    s.aviso = mudouAluno ? { tipo: "atencao" } : null;
+  }
+  var A = {
+    cel: function (d, s) {
+      var it = grade(s)[d.k];
+      if (it && (it.t === "aula" || it.t === "repo")) { s.toast = ["err", "Nao e permitido excluir o horario do aluno."]; return; }
+      if (it && it.t === "turma") { s.toast = ["err", "Não é permitido excluir o horário da turma."]; return; }
+      if (it && (it.t === "res" || it.t === "pausa")) return;
+      s.painel = { tipo: "agendar", k: d.k, sel: it ? it.t : "none", slots: [hk(d.k)] };
+    },
+    cancelar: function (d, s) { s.painel = null; },
+    aplicar: function (d, s) {
+      var p = s.painel;
+      if (!p || p.sel === "aula" || p.sel === "turma") return;
+      if (p.sel === "break") {
+        if (!p.slots.length) { s.toast = ["err", "Selecione ao menos um horário para o break."]; return; }
+        p.slots.forEach(function (j) { muda(s, k(dk(p.k), j), { t: "break" }); });
+      } else muda(s, p.k, p.sel === "ocup" ? { t: "ocup" } : null);
+      s.painel = null;
+    },
+    rmBreak: function (d, s) { muda(s, d.k, null); },
+    editar: function (d, s) { s.painel = { tipo: "editar", k: d.k, dia: dk(d.k), h: hk(d.k) }; },
+    confEditar: function (d, s) {
+      var p = s.painel, g = grade(s), para = k(p.dia, p.h);
+      if (para === p.k) { s.painel = null; return; }
+      if (g[para] || s.fut[para]) { s.toast = ["err", "Horário já ocupado."]; return; }
+      s.movs.push({ de: p.k, para: para, al: g[p.k].al });
+      s.painel = null;
+    },
+    confMov: function (d, s) {
+      var p = s.painel;
+      s.movs.push({ de: p.de, para: p.para, al: grade(s)[p.de].al });
+      s.painel = null;
+    },
+    salvar: function (d, s) {
+      var alta = Object.keys(s.pend).some(function (x) { var v = s.pend[x]; return v && v.t === "ocup" && altaDemanda(hk(x)); });
+      if (alta) s.aviso = { tipo: "alta" }; else efetivar(s);
+    },
+    confAlta: function (d, s) { efetivar(s); },
+    fechaAviso: function (d, s) { s.aviso = null; },
+    futura: function (d, s) { s.aviso = { tipo: "delFut", k: d.k }; },
+    delFut: function (d, s) { delete s.fut[s.aviso.k]; s.aviso = null; },
+    faltas: function (d, s) { s.faltas = !s.faltas; },
+    aba: function (d, s) { s.aba = d.aba; s.painel = null; s.aviso = null; },
+    repoTab: function (d, s) { s.repoAba = d.t; },
+    repoAgendar: function (d, s) { s.repoForm = { dia: "", h: "", aula: "0" }; },
+    repoCancelar: function (d, s) { s.repoForm = null; },
+    repoSalvar: function (d, s) {
+      var f = s.repoForm;
+      if (f.aula === "0") { s.toast = ["av", "Selecione um aluno."]; return; }
+      if (f.h === "") { s.toast = ["av", "Selecione um horário."]; return; }
+      s.repos[+f.aula.slice(1)].ag = k(+f.dia, +f.h);
+      s.repoForm = null;
+      s.repoAba = "agendadas";
+      s.toast = ["ok", "Reposição agendada com sucesso!"];
+    },
+    repoRm: function (d, s) { s.repos[+d.i].ag = null; s.toast = ["ok", "Reposição removida."]; },
+    dica: function (d, s) { s.dica[d.t] = Math.min(2, (s.dica[d.t] || 0) + 1); }
+  };
+  var ACOES = {};
+  Object.keys(A).forEach(function (n) { ACOES[n] = function (d, s, el) { s.toast = null; A[n](d, s, el); }; });
+  var MUDANCA = {
+    tipo: function (el, s) { s.painel.sel = el.value; if (s.painel.slots.indexOf(hk(s.painel.k)) < 0) s.painel.slots.push(hk(s.painel.k)); },
+    edDia: function (el, s) { s.painel.dia = +el.value; },
+    edH: function (el, s) { s.painel.h = +el.value; },
+    rDia: function (el, s) { s.repoForm.dia = el.value; s.repoForm.h = ""; },
+    rH: function (el, s) { s.repoForm.h = el.value; },
+    rAula: function (el, s) { s.repoForm.aula = el.value; s.repoForm.h = ""; }
+  };
+  var ENTRADA = {
+    slot: function (el, s) {
+      var j = +el.value, l = s.painel.slots, at = l.indexOf(j);
+      if (el.checked && at < 0) l.push(j);
+      if (!el.checked && at >= 0) l.splice(at, 1);
+    }
+  };
+  function soltar(de, para, s) {
+    s.toast = null;
+    if (de === para) return;
+    var g = grade(s);
+    if (g[para] || s.fut[para]) { s.toast = ["err", "Horário já ocupado."]; return; }
+    s.painel = { tipo: "mov", de: de, para: para };
+  }
+
+  /* ═════════ a missão: tarefas conferidas pelo que foi salvo ═════════ */
+  function avalia(s, a, cfg) {
+    cfg.tarefas.forEach(function (t) { if (!s.feitas[t.id] && (t.q ? a.qOk(t.q) : t.checar(s))) s.feitas[t.id] = true; });
+  }
+  function fbHtml(tipo, html) { return '<div class="fb fb-' + tipo + '" role="' + (tipo === "err" ? "alert" : "status") + '">' + ic(tipo === "err" ? "alert" : "info", 15) + "<div>" + html + "</div></div>"; }
+  function missao(s, a, cfg) {
+    var atual = cfg.tarefas.filter(function (t) { return !s.feitas[t.id]; })[0];
+    var h = '<div class="missao"><div class="cena">' + cfg.cena() + '</div><ol class="tarefas">';
+    cfg.tarefas.forEach(function (t, n) {
+      var ok = s.feitas[t.id], at = t === atual;
+      h += '<li class="' + (ok ? "ok" : at ? "at" : "fut") + '"' + (at ? ' aria-current="step"' : "") + '><span class="n">' + (ok ? ic("check", 11) : n + 1) + '</span><div class="tx"><b>' + esc(t.titulo) + "</b>";
+      if (at) {
+        h += "<p>" + t.texto + "</p>";
+        var al = t.alerta && t.alerta(s);
+        if (al) h += fbHtml("err", al);
+        if (t.q) h += a.q(t.q);
+        else {
+          var nd = s.dica[t.id] || 0;
+          if (nd >= 1) h += fbHtml("info", t.dica + (nd >= 2 ? '<ol class="passos">' + t.passos.map(function (p) { return "<li>" + p + "</li>"; }).join("") + "</ol>" : ""));
+          if (nd < 2) h += '<button class="link" id="dica-' + t.id + '" data-act="dica" data-t="' + t.id + '">' + (nd ? "Mostrar o passo a passo" : "Ver dica") + "</button>";
+        }
+      }
+      h += "</div></li>";
+    });
+    return h + "</ol></div>";
+  }
+  function atividade(cfg) {
+    return {
+      tag: "Pratique", titulo: cfg.titulo, instrucao: cfg.instrucao, fecho: cfg.fecho, perguntas: cfg.perguntas || {},
+      estado: function () { var e = base(); if (cfg.cenario) cfg.cenario(e); return e; },
+      progresso: function (s, a) { avalia(s, a, cfg); return cfg.tarefas.filter(function (t) { return s.feitas[t.id]; }).length + " de " + cfg.tarefas.length; },
+      completa: function (s, a) { avalia(s, a, cfg); return cfg.tarefas.every(function (t) { return s.feitas[t.id]; }); },
+      corpo: function (s, a) { return missao(s, a, cfg) + tela(s, cfg); },
+      acoes: ACOES, mudanca: MUDANCA, entrada: ENTRADA, soltar: soltar
+    };
+  }
+
+  /* ═════════ 1. Organize seus horários ═════════ */
+  var horarios = atividade({
+    titulo: "Organize seus horários",
+    instrucao: "Horário que fica livre na agenda recebe aluno novo. O que você não pode, feche.",
+    cena: function () { return esc(SEMANA) + " Você vai ajustar a sua disponibilidade na Agenda do Professor."; },
+    fecho: "Horário livre recebe aluno. O que você não pode, feche como Horário ocupado; horário de alta demanda, só feche se não puder mesmo. E nada muda sem Salvar alterações.",
+    tarefas: [
+      { id: "seg", titulo: "Fechar segunda de manhã",
+        texto: "Você arrumou um compromisso fixo às segundas no fim da manhã. Feche <b>segunda 10:30, 11:05 e 11:40</b> como <b>Horário ocupado</b> e salve.",
+        checar: function (s) { return ["10:30", "11:05", "11:40"].every(function (x) { return salvo(s, 1, x, "ocup"); }); },
+        alerta: function (s) { return ["10:30", "11:05", "11:40"].some(function (x) { return salvo(s, 1, x, "break"); }) ? "Break não é o caminho aqui. Para tirar o horário da oferta de alunos toda semana, use <b>Horário ocupado</b>." : null; },
+        dica: "Clique na célula vazia, escolha o tipo <b>Horário ocupado</b> e clique em <b>Aplicar</b>. Faça nas três e só então clique em <b>Salvar alterações</b>, no alto da agenda.",
+        passos: ["Clique em segunda 10:30.", "Em Tipo do agendamento, escolha <b>Horário ocupado</b> e clique em <b>Aplicar</b>.", "Repita em 11:05 e 11:40.", "Clique em <b>Salvar alterações</b>, no alto da agenda."] },
+      { id: "sex", titulo: "Fechar sexta à noite",
+        texto: "Às sextas à noite você vai fazer um curso. Feche <b>sexta 21:00, 21:35 e 22:10</b> e salve. Leia com atenção o aviso que aparece ao salvar.",
+        checar: function (s) { return ["21:00", "21:35", "22:10"].every(function (x) { return salvo(s, 5, x, "ocup"); }); },
+        dica: "Das 6h às 9h e das 17h às 23h são horários de <b>alta demanda</b>: é neles que mais chega aluno. Ao salvar, o KMS pergunta se você tem certeza. Se não pode mesmo, confirme.",
+        passos: ["Marque sexta 21:00, 21:35 e 22:10 como <b>Horário ocupado</b>.", "Clique em <b>Salvar alterações</b>.", "No aviso \"Tem certeza?\", clique em <b>Confirmar</b>."] },
+      { id: "qua", titulo: "Criar um break na quarta",
+        texto: "Às quartas você vai almoçar mais cedo. Crie um <b>Break personalizado</b> em <b>quarta 11:05 e 11:40</b> e salve.",
+        checar: function (s) { return salvo(s, 3, "11:05", "break") && salvo(s, 3, "11:40", "break"); },
+        alerta: function (s) { return salvo(s, 3, "11:05", "ocup") || salvo(s, 3, "11:40", "ocup") ? "Aqui o pedido é um <b>Break personalizado</b>, que aparece na agenda como Break. Troque o tipo dessas células." : null; },
+        dica: "Um break pode valer para vários horários do mesmo dia: ao escolher <b>Break personalizado</b>, marque os dois horários na lista.",
+        passos: ["Clique em quarta 11:05.", "Escolha <b>Break personalizado</b>.", "Na lista \"Aplicar este break a um ou mais horários do mesmo dia\", marque também <b>11:40 - 12:10</b>.", "Clique em <b>Aplicar</b> e depois em <b>Salvar alterações</b>."] }
+    ]
+  });
+
+  /* ═════════ 2. Seus alunos na agenda ═════════ */
+  var alunos = atividade({
+    titulo: "Seus alunos na agenda",
+    instrucao: "Trocar o dia de um aluno, ler a grade e conferir quem avisou que vai faltar.",
+    cena: function () { return esc(SEMANA) + " Agora o assunto são os alunos que já estão na sua agenda."; },
+    cenario: function (e) {
+      e.faltasRep = [
+        { al: "felipe", tipo: "Falta com Direito a Reposição - Falta do Aluno", d: 2 },
+        { al: "edu", tipo: "Falta com Direito a Reposição - Falta do Aluno", d: 3 }
+      ];
+    },
+    fecho: "Troca de dia vale a partir da semana seguinte, e a coordenação precisa saber. A legenda diz o que é cada horário, e o Verificar Faltas mostra quem já avisou que não vem.",
+    tarefas: [
+      { id: "mover", titulo: "Trocar o dia da Eduarda",
+        texto: "A Eduarda pediu para trocar a aula de <b>quinta 18:40</b> para <b>sexta 18:40</b>. Arraste a célula dela (ou use o lápis), confirme e salve.",
+        checar: function (s) { var f = s.fut[k(5, H("18:40"))]; return !!f && f.al === "edu" && f.de === k(4, H("18:40")); },
+        alerta: function (s) {
+          var errada = Object.keys(s.fut).some(function (x) { var f = s.fut[x]; return f.al !== "edu" || f.de !== k(4, H("18:40")) || x !== k(5, H("18:40")); });
+          return errada ? "A Eduarda pediu <b>quinta 18:40 → sexta 18:40</b>. Para desfazer uma troca já salva, clique no aviso \"Ocupado a partir da proxima semana\" e delete." : null;
+        },
+        dica: "Arraste a célula verde da Eduarda na quinta 18:40 até a sexta 18:40, ou clique no lápis dela e escolha o novo dia. Depois de confirmar, salve.",
+        passos: ["Na quinta 18:40, clique no lápis da Eduarda.", "Escolha <b>SEX</b> e o horário <b>18:40 - 19:10</b>.", "Clique em <b>Confirmar alteração</b>.", "Clique em <b>Salvar alterações</b> e leia o aviso."] },
+      { id: "quando", titulo: "Quando a troca vale", q: "quando",
+        texto: "Troca salva. A Eduarda ainda tem aula na <b>quinta 18:40 desta semana</b>?" },
+      { id: "vermelho", titulo: "Ler a célula vermelha", q: "vermelho",
+        texto: "Na <b>terça e na quinta às 19:50</b> aparece <b>Lucas Ferreira</b> em vermelho. O que isso quer dizer?" },
+      { id: "faltas", titulo: "Verificar faltas", q: "faltas",
+        texto: "Clique em <b>Verificar Faltas</b>, no alto da agenda. Quem avisou que vai faltar na <b>quarta</b>?" }
+    ],
+    perguntas: {
+      quando: { opcoes: [
+        { t: "Não. A troca vale na hora.", porque: "A troca de dia de um aluno só vale a partir da semana seguinte. O KMS avisa isso ao salvar." },
+        { t: "Sim. A troca vale a partir da próxima semana.", ok: true, porque: "Nesta semana a quinta continua, e a sexta 18:40 aparece como \"Ocupado a partir da proxima semana\". Sempre que mexer no horário de um aluno, avise a coordenação." },
+        { t: "Só se a coordenação aprovar a troca.", porque: "A troca é feita por você na agenda. O que se pede é avisar a coordenação sempre que mexer no horário de um aluno." }
+      ] },
+      vermelho: { opcoes: [
+        { t: "É um aluno novo reservado para você, que começa na data prevista.", ok: true, porque: "Vermelho é horário reservado: o aluno já é seu e começa na previsão de início (passe o mouse sobre a célula para ver a data). Esse horário não está livre." },
+        { t: "O Lucas faltou e tem reposição.", porque: "Reposição aparece em amarelo, não em vermelho. Confira a legenda embaixo da grade." },
+        { t: "É um horário bloqueado pela coordenação.", porque: "Horário fechado aparece em cinza escuro, como Horário ocupado. Confira a legenda." },
+        { t: "O Lucas foi transferido para outro professor.", porque: "Transferência aparece em laranja. Confira a legenda embaixo da grade." }
+      ] },
+      faltas: { opcoes: [
+        { t: "Felipe Andrade", ok: true, porque: "O aluno pode avisar a falta pela plataforma dele até 7 dias antes, e o aviso aparece no Verificar Faltas. Confira antes das aulas da semana." },
+        { t: "Eduarda Lins", porque: "A Eduarda avisou falta na quinta, não na quarta. Confira a data na lista." },
+        { t: "Ana Clara Menezes", porque: "A Ana Clara não aparece no relatório de faltas desta semana." },
+        { t: "Ninguém avisou", porque: "Abra o Verificar Faltas: há dois avisos nesta semana." }
+      ] }
+    }
+  });
+
+  /* ═════════ 3. Reposição num horário fechado ═════════ */
+  var reposicao = atividade({
+    titulo: "Reposição num horário fechado",
+    instrucao: "A reposição só pode ser agendada em horário livre. E se o único horário possível estiver fechado?",
+    comRepo: true,
+    cena: function () { return esc(SEMANA) + " O Bruno faltou na terça passada, avisou com antecedência e tem direito a uma reposição. Ele só pode na quarta às 13:25, que está fechada na sua agenda."; },
+    cenario: function (e) { e.repos = [{ al: "bruno", falta: -6, ag: null }]; },
+    fecho: "Para usar um horário fechado numa reposição: abra, agende e, depois que ela acontecer, feche de novo. Reposição nunca vira extensão da aula regular: ela acontece num horário próprio.",
+    tarefas: [
+      { id: "abrir", titulo: "Abrir quarta 13:25",
+        texto: "Primeiro abra o horário: mude <b>quarta 13:25</b> para <b>Sem aula</b> e salve.",
+        checar: function (s) { return !s.cel[k(3, H("13:25"))]; },
+        alerta: function (s) { return salvo(s, 3, "13:25", "break") ? "Break também fecha o horário. Mude para <b>Sem aula</b>." : null; },
+        dica: "A reposição só pode ser agendada em horário livre. Para usar um horário fechado, abra-o antes e salve.",
+        passos: ["Clique na célula cinza de quarta 13:25.", "Em Tipo do agendamento, escolha <b>Sem aula</b> e clique em <b>Aplicar</b>.", "Clique em <b>Salvar alterações</b>."] },
+      { id: "agendar", titulo: "Agendar a reposição",
+        texto: "Agora abra <b>Aulas e Reposições › Reposições</b>, clique em <b>Agendar Reposição</b> e marque a reposição do Bruno na <b>quarta às 13:25</b>.",
+        checar: function (s) { return s.repos[0].ag === k(3, H("13:25")); },
+        alerta: function (s) { var ag = s.repos[0].ag; return ag && ag !== k(3, H("13:25")) ? "O Bruno só pode na <b>quarta às 13:25</b>. Em Agendadas, remova essa reposição e agende de novo." : null; },
+        dica: "No agendamento, escolha a data de quarta e a aula do Bruno em \"Aula que deseja repor\": o 13:25 só aparece se o horário já foi aberto e salvo na agenda.",
+        passos: ["Clique na aba <b>Aulas e Reposições › Reposições</b>.", "Clique em <b>Agendar Reposição</b>.", "Em Data, escolha <b>QUA</b>.", "Em \"Aula que deseja repor\", escolha a aula do <b>Bruno Tavares</b>.", "Em Horário, escolha <b>QUA - 13:25</b> e clique em <b>Salvar</b>."] },
+      { id: "depois", titulo: "E depois da reposição?", q: "depois",
+        texto: "A reposição aparece em amarelo na agenda. E <b>depois que ela acontecer</b>, o que fazer com a quarta 13:25?" }
+    ],
+    perguntas: {
+      depois: { opcoes: [
+        { t: "Deixar aberto: quanto mais horário livre, melhor.", porque: "Horário livre recebe aluno novo. Se você não pode dar aula nesse horário toda semana, um aluno pode ser colocado nele." },
+        { t: "Fechar de novo como Horário ocupado.", ok: true, porque: "O horário foi aberto só para a reposição. Depois dela, volte a célula para Horário ocupado." },
+        { t: "Pedir para a coordenação fechar.", porque: "Não precisa: você mesmo fecha o horário na agenda, do mesmo jeito que abriu." }
+      ] }
+    }
+  });
+
+  K.iniciar({ horarios: horarios, alunos: alunos, reposicao: reposicao });
+})();
+</script>
+</body>
+</html>

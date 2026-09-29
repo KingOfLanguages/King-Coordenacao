@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Seu XP · Prática</title>
+<!-- Atividades do módulo "Seu XP" (Welcome Path 2.0, Fase 2), cada uma por
+     ?parte=<id>: ganha, multiplica, ligas, virada.
+     Fonte: "Sistema de XP: funcionamento e regras" (complementar do MAPA,
+     implementação KLS-709), com as decisões do João de 29/09: Dia Perfeito é o
+     dia com o checklist da Home completo (o checklist dá XP por tarefa e
+     convive com o sistema de XP) e frações de XP arredondam para cima. Se a
+     coordenação mudar algum valor, mudar aqui e nas questões da etapa.
+     Números fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.ctrl{display:grid; gap:6px; margin-bottom:12px}
+.ctrl .lbl{margin:0}
+.tab-xp{width:100%; border-collapse:collapse; font-size:13px; margin:4px 0 16px}
+.tab-xp th{text-align:left; font:600 11px Geist,sans-serif; color:var(--fg-muted); padding:7px 10px; background:var(--bg-subtle); border-bottom:1px solid var(--border-soft)}
+.tab-xp td{padding:8px 10px; border-top:1px solid var(--border-soft)}
+.tab-xp td.v{text-align:right; font:600 13px "Geist Mono",monospace; white-space:nowrap}
+.tab-xp td.v.neg{color:var(--err-fg)}
+.tab-xp td.v.pos{color:var(--ok-fg)}
+.tab-xp tr.mult td{font-size:12px; color:var(--fg-muted); background:var(--bg-subtle)}
+.tk-wrap{overflow-x:auto; border:1px solid var(--border-soft); border-radius:10px; margin-bottom:16px}
+.tk-wrap .tab-xp{margin:0}
+.cena{border:1px solid var(--border-soft); background:var(--bg-subtle); border-radius:11px; padding:12px 14px; font-size:13.5px; line-height:1.55; margin-bottom:14px}
+.cena ul{margin:6px 0 0; padding-left:18px}
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc;
+  function fmt(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toLocaleString("pt-BR", { maximumFractionDigits: 1 }); }
+
+  /* ═════════ 1. Ganha, perde ou não muda ═════════ */
+  var ganha = {
+    tag: "Pratique",
+    titulo: "Ganha, perde ou não muda?",
+    instrucao: "Onze coisas que acontecem na sua semana. Diga o que cada uma faz com o seu XP.",
+    progresso: function (s, a) { return a.gCertos("ev") + " de 11"; },
+    completa: function (s, a) { return a.gOk("ev"); },
+    fecho: "Lançar no dia, observação de verdade, aluno que avança e aluno satisfeito sobem o XP. Pendência, avaliação baixa e falta sua descontam. Lançar atrasado não tira nada, mas deixa os +10 na mesa.",
+    corpo: function (s, a) { return a.g("ev"); },
+    grupos: { ev: {
+      rotulos: [{ v: "g", r: "Ganha XP" }, { v: "p", r: "Perde XP" }, { v: "n", r: "Não muda" }],
+      itens: [
+        { t: "Você deu a aula e lançou no mesmo dia.", certo: "g",
+          porque: "+10 XP na hora do lançamento. Com uma observação de verdade, mais +3.",
+          dica: "O prazo para ganhar XP pelo lançamento é o próprio dia da aula." },
+        { t: "Você completou todas as tarefas do checklist do dia, na Home.", certo: "g",
+          porque: "Cada tarefa do checklist soma XP, e o dia com o checklist completo é um Dia Perfeito: mais +30 e um dia a mais na sua sequência.",
+          dica: "O checklist da Home é o caminho do Dia Perfeito." },
+        { t: "Você lançou a aula no dia seguinte, antes de virar pendência.", certo: "n",
+          porque: "Lançar em outro dia não tira XP: você só deixa de ganhar os +10 daquela aula.",
+          dica: "Atrasar um pouco não desconta nada, mas também não rende." },
+        { t: "Uma aula está sem lançamento há três dias.", certo: "p",
+          porque: "Cada pendência custa −10 XP por dia, até você resolver. É a perda que mais cresce sozinha.",
+          dica: "Pendência é contada toda manhã." },
+        { t: "Você escreveu \"xxxxx\" na observação da aula.", certo: "n",
+          porque: "Os +3 da observação exigem um texto real e seu. Repetido ou \"xxxxx\" não conta.",
+          dica: "Observação só vale XP quando diz algo de verdade." },
+        { t: "O aluno avaliou a aula com 4 estrelas.", certo: "g",
+          porque: "+5 XP. Com 5 estrelas são +10, e um comentário elogioso junto rende +2.",
+          dica: "4 e 5 estrelas somam." },
+        { t: "O aluno avaliou a aula com 3 estrelas.", certo: "p",
+          porque: "3 estrelas ou menos descontam: −3 com 3 estrelas, −6 com 2 e −10 com 1.",
+          dica: "Só 4 e 5 estrelas somam." },
+        { t: "Seu aluno avançou de nível.", certo: "g",
+          porque: "+150 XP, no máximo uma vez a cada 90 dias por aluno.",
+          dica: "É um marco do aluno, e dos grandes." },
+        { t: "Você voltou um aluno para o nível anterior.", certo: "n",
+          porque: "Rebaixar o nível do aluno não tira XP.",
+          dica: "O guia diz que rebaixar não desconta." },
+        { t: "Você faltou na primeira aula de um aluno novo.", certo: "p",
+          porque: "−300 XP: a maior penalidade do sistema.",
+          dica: "A estreia com o aluno é o pior momento para faltar." },
+        { t: "Você não repôs uma falta sua, e um colega deu a reposição.", certo: "p",
+          porque: "−150 XP quando outro professor precisa cobrir a sua falta.",
+          dica: "Repor a própria falta é com você." }
+      ]
+    } }
+  };
+
+  /* ═════════ 2. Multiplicadores ═════════ */
+  var FAIXAS = [{ v: "1", r: "Até 6", m: 1 }, { v: "2", r: "7 a 10", m: 1.1 }, { v: "3", r: "11 a 15", m: 1.2 }, { v: "4", r: "16 a 20", m: 1.3 }, { v: "5", r: "21 ou mais", m: 1.4 }];
+  var SEQ = [{ v: "1", r: "Menos de 7 dias", m: 1 }, { v: "2", r: "7 dias ou mais", m: 1.2 }, { v: "3", r: "30 dias ou mais", m: 1.5 }];
+  var ACOES = [
+    { t: "Aula lançada no dia", xp: 10, turbo: true },
+    { t: "Reposição dada e lançada no prazo", xp: 15, turbo: true },
+    { t: "Dia Perfeito", xp: 30, turbo: true },
+    { t: "Aluno avançou de nível", xp: 150, turbo: false },
+    { t: "Pendência, por dia", xp: -10, turbo: false }
+  ];
+  function seg(nome, lista, atual) {
+    return '<div class="seg" role="group">' + lista.map(function (f) {
+      return '<button id="' + nome + "-" + f.v + '" aria-pressed="' + (f.v === atual) + '" data-act="' + nome + '" data-v="' + f.v + '">' + esc(f.r) + "</button>";
+    }).join("") + "</div>";
+  }
+  function achar(lista, v) { return lista.filter(function (f) { return f.v === v; })[0]; }
+  var multiplica = {
+    tag: "Explore",
+    titulo: "O mesmo esforço rendendo mais",
+    instrucao: "Mude o número de alunos ativos e a sequência de Dias Perfeitos e veja quanto cada coisa vale. Depois responda.",
+    estado: function () { return { al: "1", seq: "1" }; },
+    progresso: function (s, a) { return ["aula", "pend"].filter(a.qOk).length + " de 2"; },
+    completa: function (s, a) { return a.qOk("aula") && a.qOk("pend"); },
+    fecho: "Os dois multiplicadores se multiplicam um sobre o outro e turbinam aula, reposição, observação, material e Dia Perfeito. Penalidades, avanço de nível e prêmios do mês ficam de fora.",
+    corpo: function (s, a) {
+      var fa = achar(FAIXAS, s.al), sq = achar(SEQ, s.seq), m = fa.m * sq.m;
+      var h = '<div class="ctrl"><span class="lbl">Alunos ativos</span>' + seg("al", FAIXAS, s.al) + "</div>" +
+        '<div class="ctrl"><span class="lbl">Sequência de Dias Perfeitos</span>' + seg("seq", SEQ, s.seq) + "</div>";
+      h += '<div class="tk-wrap"><table class="tab-xp"><thead><tr><th>O que aconteceu</th><th style="text-align:right">Base</th><th style="text-align:right">Com o bônus</th></tr></thead><tbody>' +
+        ACOES.map(function (x) {
+          var v = x.turbo ? Math.ceil(Math.round(x.xp * m * 1000) / 1000) : x.xp;
+          return "<tr><td>" + esc(x.t) + '</td><td class="v">' + fmt(x.xp) + '</td><td class="v ' + (v < 0 ? "neg" : "pos") + '">' + fmt(v) + "</td></tr>";
+        }).join("") +
+        '<tr class="mult"><td colspan="3">Multiplicador: ×' + fa.m.toLocaleString("pt-BR") + " pelos alunos × " + sq.m.toLocaleString("pt-BR") + " pela sequência = ×" + (Math.round(m * 100) / 100).toLocaleString("pt-BR") + ". Frações de XP são arredondadas para cima.</td></tr></tbody></table></div>";
+      return h + '<div style="display:grid;gap:18px">' + a.q("aula") + a.q("pend") + "</div>";
+    },
+    acoes: {
+      al: function (d, s) { s.al = d.v; },
+      seq: function (d, s) { s.seq = d.v; }
+    },
+    perguntas: {
+      aula: {
+        pergunta: "Com 12 alunos ativos e 30 Dias Perfeitos seguidos, quanto vale uma aula lançada no dia?",
+        opcoes: [
+          { t: "10 XP", porque: "10 é a base. Com 12 alunos entra o ×1,2, e com 30 dias seguidos, o ×1,5." },
+          { t: "12 XP", porque: "Esse é só o bônus dos alunos (×1,2). A sequência de 30 dias multiplica de novo, por 1,5." },
+          { t: "18 XP", ok: true, porque: "10 × 1,2 pelos 12 alunos × 1,5 pelos 30 dias = 18 XP, pelo mesmo trabalho." },
+          { t: "27 XP", porque: "Os bônus multiplicam a base de 10: 10 × 1,2 × 1,5 = 18." }
+        ]
+      },
+      pend: {
+        pergunta: "E uma pendência, para quem tem 21 alunos ativos?",
+        opcoes: [
+          { t: "−14 XP por dia", porque: "Os multiplicadores não mexem nas penalidades." },
+          { t: "−10 XP por dia", ok: true, porque: "Os bônus só turbinam os ganhos do dia a dia e o Dia Perfeito. A pendência custa −10 por dia para todo mundo." },
+          { t: "Nada, porque quem tem muitos alunos é isento", porque: "Ninguém é isento: pendência custa −10 por dia, até resolver." }
+        ]
+      }
+    }
+  };
+
+  /* ═════════ 3. Patente ou Liga ═════════ */
+  var ligas = {
+    tag: "Pratique",
+    titulo: "Patente, Liga ou as duas?",
+    instrucao: "O seu XP alimenta dois caminhos ao mesmo tempo. Diga de qual cada frase fala.",
+    progresso: function (s, a) { return a.gCertos("pl") + " de 8"; },
+    completa: function (s, a) { return a.gOk("pl"); },
+    fecho: "A Patente é a sua carreira: acumula a jornada toda e nunca desce. A Liga é a disputa do mês: o placar zera a cada virada, os melhores sobem e ninguém cai. Cada ponto, ganho ou perdido, conta nas duas.",
+    corpo: function (s, a) { return a.g("pl"); },
+    grupos: { pl: {
+      rotulos: [{ v: "pat", r: "Patente" }, { v: "liga", r: "Liga" }, { v: "ambas", r: "As duas" }],
+      itens: [
+        { t: "Vai de Rookie a King's Circle, conforme o XP da sua jornada inteira.", certo: "pat",
+          porque: "São 10 patentes, de Rookie (0) a King's Circle (27.000 XP acumulados).",
+          dica: "É o caminho que acumula tudo desde o seu primeiro dia." },
+        { t: "O placar zera todo mês.", certo: "liga",
+          porque: "A Liga é a disputa do mês: na virada, o placar recomeça. A Patente nunca zera.",
+          dica: "Qual das duas é uma corrida mensal?" },
+        { t: "Nunca desce: ou sobe, ou fica onde está.", certo: "ambas",
+          porque: "A Patente nunca rebaixa, e na Liga ninguém cai: quem não sobe fica.",
+          dica: "O guia garante isso para os dois caminhos." },
+        { t: "Os 10 melhores do mês que bateram o XP mínimo sobem.", certo: "liga",
+          porque: "Na virada, dentro de cada Liga, os 10 melhores que bateram o mínimo sobem.",
+          dica: "É uma regra de disputa entre professores." },
+        { t: "Cada XP que você ganha conta nela.", certo: "ambas",
+          porque: "Cada ponto soma na Patente e na Liga do mês ao mesmo tempo.",
+          dica: "Você não escolhe entre os dois caminhos." },
+        { t: "Quem enche o teto do mês pula duas de uma vez.", certo: "liga",
+          porque: "Chegou ao teto da Liga, sobe dobrado. O XP que passa do teto não sobe o placar do mês, mas conta inteiro na Patente.",
+          dica: "Teto é coisa do mês." },
+        { t: "Uma perda de XP desconta dela.", certo: "ambas",
+          porque: "As perdas descontam das duas. Na Patente, atrasam o próximo nível, mas nunca fazem você descer.",
+          dica: "Perda e ganho funcionam igual nos dois caminhos." },
+        { t: "São 10 níveis, e a escalada fica mais íngreme no topo.", certo: "pat",
+          porque: "De Page (2.200) a King's Circle (27.000), a distância entre um nível e outro aumenta.",
+          dica: "Pense nos nomes: Rookie, Page, Squire, Knight…" }
+      ]
+    } }
+  };
+
+  /* ═════════ 4. A virada do mês ═════════ */
+  var virada = {
+    tag: "Pratique",
+    titulo: "A virada do mês",
+    instrucao: "Os prêmios do mês e o fechamento das Ligas acontecem na virada. Faça as contas.",
+    progresso: function (s, a) { return ["fecha", "sobe", "teto"].filter(a.qOk).length + " de 3"; },
+    completa: function (s, a) { return ["fecha", "sobe", "teto"].every(a.qOk); },
+    fecho: "Os maiores ganhos são mensais e por aluno: mês de casa, mês sem falta, alunos assíduos e alunos que continuam. No longo prazo, retenção e presença é o que mais move o seu XP.",
+    corpo: function (s, a) {
+      return '<div class="cena"><b>Último dia do mês.</b><ul><li>Você tem 8 alunos ativos.</li><li>6 deles fecharam o mês com 80% ou mais de presença.</li><li>Você lançou aulas e não faltou nenhuma vez.</li><li>Você segue ativo na King.</li></ul></div>' +
+        '<div style="display:grid;gap:18px">' + a.q("fecha") + a.q("sobe") + a.q("teto") + "</div>";
+    },
+    perguntas: {
+      fecha: {
+        pergunta: "Quanto XP entra na virada do mês?",
+        opcoes: [
+          { t: "700 XP", porque: "Faltaram os prêmios por aluno: +50 por aluno com 80% ou mais de presença e +40 por aluno ativo." },
+          { t: "820 XP", porque: "Faltou o mês de casa: +500 a cada mês que você fecha ativo na King." },
+          { t: "1.320 XP", ok: true, porque: "6 × 50 (presença) + 8 × 40 (alunos ativos) + 200 (mês sem falta) + 500 (mês de casa) = 1.320 XP." },
+          { t: "1.620 XP", porque: "O +50 de presença vale só para os 6 alunos com 80% ou mais, não para os 8." }
+        ]
+      },
+      sobe: {
+        pergunta: "Você está na Prata, fez 3.900 XP no mês e ficou em 7º. O que acontece na virada?",
+        opcoes: [
+          { t: "Continua na Prata.", porque: "Você ficou entre os 10 melhores e passou do mínimo da Prata, que é 3.500: sobe." },
+          { t: "Sobe para o Ouro.", ok: true, porque: "Entre os 10 melhores e acima do mínimo da Prata (3.500): sobe uma Liga." },
+          { t: "Sobe para a Platina.", porque: "Pular duas Ligas é só para quem enche o teto do mês. O teto da Prata é 8.000." }
+        ]
+      },
+      teto: {
+        pergunta: "Outra professora da Prata fechou o mês em 1º, com 8.000 XP, o teto da Liga. Para onde ela vai?",
+        opcoes: [
+          { t: "Ouro.", porque: "Quem enche o teto sobe dobrado: pula duas Ligas." },
+          { t: "Platina.", ok: true, porque: "Encheu o teto, pula duas de uma vez: da Prata direto para a Platina. O XP além do teto não conta no mês, mas vai inteiro para a Patente." },
+          { t: "Liga King.", porque: "Da Prata, duas Ligas acima é a Platina." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ ganha: ganha, multiplica: multiplica, ligas: ligas, virada: virada });
+})();
+</script>
+</body>
+</html>

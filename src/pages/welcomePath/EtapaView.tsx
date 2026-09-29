@@ -193,11 +193,13 @@ function ObservacaoPessoal({
 }
 
 export function EtapaView({
-  token, etapaId, onVoltar, totalEtapas, etapasConcluidas,
+  token, etapaId, onVoltar, numero, totalEtapas, etapasConcluidas,
 }: {
   token: string
   etapaId: string
   onVoltar: () => void
+  /** Posição da etapa entre as que o professor vê (ver TrilhaView). */
+  numero: number
   totalEtapas: number
   etapasConcluidas: number
 }) {
@@ -265,6 +267,7 @@ export function EtapaView({
       blocos={blocos}
       questoes={questoes}
       progresso={progresso}
+      numero={numero}
       totalEtapas={totalEtapas}
       etapasConcluidas={etapasConcluidas}
       quiz={quiz}
@@ -296,13 +299,15 @@ export function EtapaView({
  *  professor" do /onboarding passa o conteúdo lido pela coordenação e corrige
  *  as respostas ali mesmo, sem gravar. Mudar o layout aqui muda os dois. */
 export function EtapaLayout({
-  etapa, blocos, questoes, progresso, totalEtapas, etapasConcluidas, quiz,
+  etapa, blocos, questoes, progresso, numero, totalEtapas, etapasConcluidas, quiz,
   enviando, erroEnvio, onVoltar, trilho, aviso, aposQuestao,
 }: {
   etapa: EtapaDetalhe['etapa']
   blocos: BlocoEtapa[]
   questoes: QuestaoEtapa[]
   progresso: Pick<EtapaDetalhe['progresso'], 'concluidaEm' | 'revisaoPendente' | 'tempoSegundos' | 'tentativas'>
+  /** Posição entre as etapas visíveis; `etapa.ordem` pula os rascunhos. */
+  numero: number
   totalEtapas: number
   etapasConcluidas: number
   quiz: QuizEtapa
@@ -372,13 +377,13 @@ export function EtapaLayout({
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex gap-4 sm:gap-5">
             <span className="font-mono text-[2.5rem] font-medium leading-none tracking-tight tabular-nums text-brand/85 sm:text-[3rem]">
-              {String(etapa.ordem).padStart(2, '0')}
+              {String(numero).padStart(2, '0')}
             </span>
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="label-micro flex items-center gap-1.5 text-accentBlue">
                   <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
-                  Welcome Path · Etapa {etapa.ordem} de {totalEtapas}
+                  Welcome Path · Etapa {numero} de {totalEtapas}
                 </span>
                 {concluida && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-urg-lowBg px-2 py-0.5 text-[10.5px] font-medium text-urg-lowFg">

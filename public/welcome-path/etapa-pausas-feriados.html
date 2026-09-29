@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pausas, feriados e fim de ano · Prática</title>
+<!-- Atividades do módulo "Pausas, feriados e fim de ano" (Welcome Path 2.0,
+     Fase 2), cada uma por ?parte=<id>: feriados, lancar, pausas.
+     Regras: MAPA 8 (Feriados e pausas); feriado nacional é lançado como falta
+     sem direito a reposição, com a observação "Feriado nacional" e o print do
+     aviso ao aluno (decisão de 24/09); pausa do aluno vai para a coordenação
+     pelo WhatsApp (decisão de 25/09) e o aluno fala com o suporte ao aluno;
+     pausa do professor pelo formulário de pausa (portal /pausa: motivo, último
+     dia de aula e fim previsto). Corpus Christi não é feriado nacional
+     (comunicado da King). Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.data{display:flex; gap:10px; align-items:center}
+.data .dd{display:grid; place-items:center; min-width:46px; padding:4px 6px; border-radius:8px; background:var(--bg-subtle); border:1px solid var(--border-soft); font:600 12px/1.2 "Geist Mono",monospace; text-align:center}
+.data .dd small{display:block; font:500 10px Geist,sans-serif; color:var(--fg-muted); text-transform:uppercase; letter-spacing:.04em}
+.data b{font-size:13.5px}
+.data span.q{display:block; font-size:12px; color:var(--fg-muted)}
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc;
+
+  function data(dia, sem, nome, qual) {
+    return '<div class="data"><span class="dd">' + esc(dia) + "<small>" + esc(sem) + "</small></span><div><b>" + esc(nome) + '</b><span class="q">' + esc(qual) + "</span></div></div>";
+  }
+
+  /* ═════════ 1. Tem aula? ═════════ */
+  var feriados = {
+    tag: "Pratique",
+    titulo: "Tem aula nesse dia?",
+    instrucao: "A King só para em feriado nacional. Para cada data, diga se tem aula.",
+    progresso: function (s, a) { return a.gCertos("datas") + " de 7"; },
+    completa: function (s, a) { return a.gOk("datas"); },
+    fecho: "Feriado nacional: sem aula e dia pago. Ponto facultativo, feriado estadual e municipal: aula normal.",
+    corpo: function (s, a) { return a.g("datas"); },
+    grupos: { datas: {
+      rotulos: [{ v: "sem", r: "Sem aula" }, { v: "com", r: "Aula normal" }],
+      itens: [
+        { html: data("12/10", "seg", "Nossa Senhora Aparecida", "Feriado nacional"), certo: "sem",
+          porque: "Feriado nacional: não tem aula e o dia é pago. As aulas são lançadas como falta sem direito a reposição, com a observação e o print.",
+          dica: "É feriado nacional. Nesses dias a King não dá aula, e o dia é pago." },
+        { html: data("28/10", "qua", "Dia do Servidor Público", "Ponto facultativo"), certo: "com",
+          porque: "Ponto facultativo não é feriado nacional: tem aula normal.",
+          dica: "Ponto facultativo não é feriado nacional. A King só para em feriado nacional." },
+        { html: data("02/11", "seg", "Finados", "Feriado nacional"), certo: "sem",
+          porque: "Feriado nacional: sem aula, e o dia é pago.",
+          dica: "Finados é feriado nacional." },
+        { html: data("20/11", "sex", "Dia da Consciência Negra", "Feriado nacional desde 2024"), certo: "sem",
+          porque: "Desde 2024 o 20 de novembro é feriado nacional: sem aula, e o dia é pago.",
+          dica: "O 20 de novembro virou feriado nacional em 2024." },
+        { html: data("08/12", "ter", "Feriado da sua cidade", "Feriado municipal"), certo: "com",
+          porque: "A King adere só a feriados nacionais. Feriado municipal ou estadual tem aula normal.",
+          dica: "Feriado municipal não é nacional. Seus alunos podem ser de qualquer cidade do país." },
+        { html: data("25/12", "sex", "Natal", "Feriado nacional"), certo: "sem",
+          porque: "Natal é feriado nacional: sem aula, e o dia é pago.",
+          dica: "O Natal é feriado nacional." },
+        { html: data("27/05", "qui", "Corpus Christi (2027)", "Ponto facultativo"), certo: "com",
+          porque: "Corpus Christi é ponto facultativo, não feriado nacional. A King já avisou: tem aula.",
+          dica: "Corpus Christi não é feriado nacional, apesar de muita gente folgar." }
+      ]
+    } }
+  };
+
+  /* ═════════ 2. Lançar o feriado ═════════ */
+  var lancar = {
+    tag: "Pratique",
+    titulo: "Lançando as aulas do feriado",
+    instrucao: "Segunda foi 12 de outubro, feriado nacional. Monte, na ordem, o lançamento de uma dessas aulas.",
+    progresso: function (s, a) { return a.oFeitos("lanc") + " de 5"; },
+    completa: function (s, a) { return a.oOk("lanc"); },
+    fecho: "Feriado nacional é falta do aluno sem reposição, com a observação \"Feriado nacional\" e o print da mensagem em que você avisou o aluno. O dia é pago.",
+    corpo: function (s, a) { return a.o("lanc"); },
+    ordens: { lanc: {
+      passos: [
+        { id: "data", t: "Abrir o lançamento na data do feriado", rot: "1", cedo: "Comece pela data: a aula que você vai lançar é a de 12/10." },
+        { id: "tipo", t: "Tipo de registro: Falta do Aluno", rot: "2", cedo: "Primeiro o tipo de registro, depois o subtipo." },
+        { id: "sub", t: "Subtipo: Sem reposição", rot: "3", cedo: "O subtipo só aparece depois de escolher Falta do Aluno." },
+        { id: "obs", t: "Observação: Feriado nacional", rot: "4", cedo: "A observação vem depois do tipo e do subtipo." },
+        { id: "print", t: "Anexar o print do aviso ao aluno e salvar", rot: "5", cedo: "O print e o salvar fecham o lançamento." }
+      ],
+      extras: [
+        { id: "prof", t: "Tipo de registro: Falta do Professor", porque: "Ninguém faltou: a King não dá aula em feriado nacional. Falta do professor gera reposição obrigatória." },
+        { id: "com", t: "Subtipo: Com reposição", porque: "Feriado não gera reposição. O dia é pago normalmente." },
+        { id: "nada", t: "Deixar sem lançar, porque não houve aula", porque: "Aula sem lançamento vira pendência: tira XP todo dia e, acumulada, trava a agenda." }
+      ],
+      mostra: ["obs", "prof", "data", "print", "com", "tipo", "nada", "sub"]
+    } }
+  };
+
+  /* ═════════ 3. Pausas ═════════ */
+  var pausas = {
+    tag: "Pratique",
+    titulo: "Pausas: do aluno, sua e de fim de ano",
+    instrucao: "Quatro situações que acontecem todo ano. Escolha o que fazer.",
+    progresso: function (s, a) { return ["aluno", "prof", "saude", "fimano"].filter(a.qOk).length + " de 4"; },
+    completa: function (s, a) { return ["aluno", "prof", "saude", "fimano"].every(a.qOk); },
+    fecho: "Pausa longa do aluno vai para o suporte ao aluno e a coordenação fica sabendo. A sua pausa é pelo formulário. E a de fim de ano é escolha sua, sabendo que os alunos podem não voltar.",
+    corpo: function (s, a) { return '<div style="display:grid;gap:18px">' + a.q("aluno") + a.q("prof") + a.q("saude") + a.q("fimano") + "</div>"; },
+    perguntas: {
+      aluno: {
+        pergunta: "A Eduarda vai viajar e ficar três semanas sem aula. O que fazer?",
+        opcoes: [
+          { t: "Lançar falta com direito a reposição em todas as aulas.", porque: "O limite é de 4 faltas com direito por mês, e três semanas fora é uma pausa, não uma falta. Isso não se resolve no lançamento." },
+          { t: "Orientar a aluna a falar com o suporte ao aluno e avisar a coordenação pelo WhatsApp.", ok: true, porque: "Mais de uma semana fora é pausa: quem cuida do aluno é o suporte ao aluno, e a coordenação precisa saber no mesmo dia." },
+          { t: "Combinar com a aluna de repor tudo quando ela voltar.", porque: "Acordo fora do padrão vira compromisso seu e ainda estoura o limite de reposições. Pausa passa pelo suporte ao aluno e pela coordenação." },
+          { t: "Não fazer nada até ela voltar.", porque: "Sem pausa registrada, as aulas continuam no seu lançamento e viram falta ou pendência. Avise a coordenação." }
+        ]
+      },
+      prof: {
+        pergunta: "Você vai precisar parar por um mês. Qual é o caminho?",
+        opcoes: [
+          { t: "Marcar todos os seus horários como Horário ocupado.", porque: "Horário ocupado só impede aluno novo. Os seus alunos continuam na sua agenda esperando aula." },
+          { t: "Lançar falta do professor em todas as aulas do mês.", porque: "Cada falta sua gera uma reposição obrigatória, sem prazo para vencer. Isso vira um mês de reposições para dar na volta." },
+          { t: "Falar com a coordenação e preencher o formulário de pausa, com o motivo, o último dia de aula e o fim previsto.", ok: true, porque: "Com a pausa registrada, a agenda é bloqueada para alunos novos e os seus alunos são passados para outros professores antes do início. Você recebe por tudo o que deu até lá." },
+          { t: "Avisar só os alunos e voltar quando puder.", porque: "Sem a coordenação saber, os alunos ficam sem aula e a sua agenda segue recebendo gente. A pausa tem que ser registrada." }
+        ]
+      },
+      saude: {
+        pergunta: "Você acordou doente e não consegue dar as aulas de amanhã. O que vem primeiro?",
+        opcoes: [
+          { t: "Avisar os alunos e a coordenação o quanto antes.", ok: true, porque: "O aluno não pode ficar esperando na chamada. Avise os dois com antecedência; se o afastamento for maior, alinhe com o seu coordenador a data e o caminho." },
+          { t: "Esperar para ver se melhora e avisar na hora da aula.", porque: "Aviso em cima da hora deixa o aluno esperando e desorganiza a agenda. Quanto antes, melhor." },
+          { t: "Pedir para um colega dar as aulas no seu lugar.", porque: "Substituição não é combinada entre professores: quem organiza é a coordenação." }
+        ]
+      },
+      fimano: {
+        pergunta: "Você decidiu aderir à pausa de fim de ano da escola. O que é verdade?",
+        opcoes: [
+          { t: "É obrigatória para todos os professores.", porque: "A adesão é uma escolha sua." },
+          { t: "Seus alunos ficam guardados e voltam todos em janeiro.", porque: "A escola não garante os mesmos alunos nem a mesma quantidade de aulas: alguns cancelam, pausam ou ficam com outro professor." },
+          { t: "Você recebe por todas as aulas dadas até o início da pausa, e parte dos alunos pode não voltar.", ok: true, porque: "A pausa vai da semana do Natal até 2 de janeiro. Na volta, os alunos retornam aos poucos, e a escola segue mandando alunos novos para os seus horários livres." },
+          { t: "Você recebe dezembro inteiro, como se tivesse dado aula.", porque: "Você recebe pelas aulas dadas até o início da pausa, não pelo mês cheio." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ feriados: feriados, lancar: lancar, pausas: pausas });
+})();
+</script>
+</body>
+</html>

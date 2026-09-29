@@ -52,6 +52,7 @@ export function VisaoProfessorTab() {
         <EtapaPrevia
           key={`${etapa.id}-${rodada}`}
           etapa={etapa}
+          numero={etapas.indexOf(etapa) + 1}
           totalEtapas={etapas.length}
           onVoltar={() => { setAberta(null); window.scrollTo({ top: 0 }) }}
           onRefazer={() => setRodada(r => r + 1)}
@@ -114,9 +115,10 @@ function corrigir(questoes: QuestaoAdmin[], respostas: RespostaEnviada[], notaMi
 }
 
 function EtapaPrevia({
-  etapa, totalEtapas, onVoltar, onRefazer,
+  etapa, numero, totalEtapas, onVoltar, onRefazer,
 }: {
   etapa: EtapaAdmin
+  numero: number
   totalEtapas: number
   onVoltar: () => void
   onRefazer: () => void
@@ -155,6 +157,7 @@ function EtapaPrevia({
       blocos={blocos}
       questoes={questoes}
       progresso={{ concluidaEm: null, revisaoPendente: false, tempoSegundos: 0, tentativas: 0 }}
+      numero={numero}
       totalEtapas={totalEtapas}
       etapasConcluidas={0}
       quiz={quiz}

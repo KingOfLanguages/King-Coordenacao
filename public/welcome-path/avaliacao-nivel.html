@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Avaliação e troca de nível · Prática</title>
+<!-- Atividades do módulo "Avaliação e troca de nível" (Welcome Path 2.0,
+     Fase 2), cada uma por ?parte=<id>: evaluation, nivel.
+     Fontes: MAPA 9 (avaliações no Now We're Talking: aula "Evaluation" a cada
+     12 aulas, em conversa), MAPA 0 seção 6 (feedback), MAPA 13 (Perfil dos
+     Alunos: "Trocar nível e liberar material") e guia de XP. Decisões do João
+     em 29/09: as provas fazem parte do Now We're Talking; a avaliação é
+     contínua (quem vai bem em todas as Evaluations está pronto para passar de
+     nível; a prova de 70 pontos era do modelo antigo); o material vai de A1 a
+     C2. Os textos da janela são os do KMS. Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.perfil{display:flex; gap:12px; align-items:center; border:1px solid var(--border-soft); background:var(--bg-subtle); border-radius:11px; padding:11px 13px; margin-bottom:14px}
+.perfil b{display:block; font-size:14px}
+.perfil span{font-size:12.5px; color:var(--fg-secondary)}
+.nv{display:inline-block; font:600 10.5px Geist,sans-serif; border-radius:5px; padding:1px 7px; background:var(--info-bg); color:var(--info-fg); margin-left:6px; vertical-align:1px}
+.nv.sem{background:var(--err-bg); color:var(--err-fg)}
+.aulas{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:5px; font-size:12px; margin-bottom:14px}
+.aulas span{border:1px solid var(--border-soft); border-radius:7px; padding:5px 8px; color:var(--fg-secondary); background:var(--bg-canvas)}
+.aulas span.ev{border-color:var(--accent); color:var(--accent); font-weight:600; background:var(--info-bg)}
+.notas{border-left:3px solid var(--border-strong); padding:4px 0 4px 11px; font-size:13px; line-height:1.55; margin-bottom:12px}
+.notas small{display:block; font:600 10.5px Geist,sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-muted)}
+.passo{border-top:1px solid var(--border-soft); margin-top:16px; padding-top:16px}
+/* réplica do Perfil dos Alunos */
+.card-al{border:1px solid var(--border-default); border-radius:12px; padding:14px; display:grid; gap:10px}
+.card-al .topo{display:flex; gap:12px; align-items:center}
+.card-al .topo b{display:block; font-size:15px}
+.card-al .kv{font-size:12.5px}
+.dlg{border:1px solid var(--border-default); border-radius:12px; padding:14px; margin-top:12px; background:var(--bg-canvas); box-shadow:0 8px 24px rgba(15,23,42,.10)}
+.dlg h3{font:600 15px Geist,sans-serif; margin:0}
+.dlg .d{font-size:12.5px; color:var(--fg-muted); margin-top:2px}
+.campo{display:grid; gap:5px; margin-top:12px}
+.campo .rot{font:600 10.5px Geist,sans-serif; letter-spacing:.18em; text-transform:uppercase; color:var(--fg-muted)}
+.inp{font:13px Geist,sans-serif; padding:6px 9px; border-radius:7px; border:1px solid var(--border-default); background:var(--bg-canvas); color:var(--fg-primary); width:fit-content; max-width:100%}
+.dlg-acoes{display:flex; justify-content:flex-end; gap:6px; margin-top:14px}
+.tst{display:flex; align-items:center; gap:7px; font-size:12.5px; border-radius:8px; padding:7px 11px; margin-top:10px; border:1px solid}
+.tst-ok{background:var(--ok-bg); color:var(--ok-fg); border-color:var(--ok-bd)}
+.tst-err{background:var(--err-bg); color:var(--err-fg); border-color:var(--err-bd)}
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  /* ═════════ 1. A aula 13 do Bruno ═════════ */
+  var AULAS = ["Alphabet", "Numbers", "English Common Sounds", "Letters, Numbers, and Sounds", "Verb To Be and Subject Pronouns", "Greetings and Introductions",
+    "Asking About Personal Information", "Starting a Conversation", "Days of the Week and Months", "Making Simple Plans for the Week", "Prepositions of Time", "What's Happening This Week?"];
+  var evaluation = {
+    tag: "Pratique",
+    titulo: "A aula 13 do Bruno",
+    instrucao: "O Bruno fez as 12 primeiras aulas do Now We're Talking A1. A próxima da lista é diferente.",
+    progresso: function (s, a) { return ["oque", "como", "feedback", "depois", "pronto"].filter(a.qOk).length + " de 5"; },
+    completa: function (s, a) { return ["oque", "como", "feedback", "depois", "pronto"].every(a.qOk); },
+    fecho: "A Evaluation é uma conversa sobre as 12 aulas anteriores. Você observa o uso real do inglês, dá um feedback que reconhece e direciona, e ajusta as próximas aulas com o aluno. A avaliação é contínua: quem vai bem em todas as Evaluations está pronto para passar de nível.",
+    corpo: function (s, a) {
+      var h = '<div class="perfil"><span class="av2 lg" style="background:#0e8a5f;color:#fff">BT</span><div><b>Bruno Tavares<span class="nv">A1</span></b><span>Now We\'re Talking A1 · aulas de 30 minutos</span></div></div>' +
+        '<div class="aulas">' + AULAS.map(function (t, i) { return "<span>" + (i + 1) + " · " + esc(t) + "</span>"; }).join("") + '<span class="ev">13 · Evaluation</span></div>' + a.q("oque");
+      if (a.qOk("oque")) h += '<div class="passo">' + a.q("como") + "</div>";
+      if (a.qOk("como")) h += '<div class="passo"><div class="notas"><small>O que você percebeu na Evaluation</small>O Bruno fala da rotina e dos dias da semana com segurança e entende bem as perguntas. Ainda hesita nas preposições de tempo: disse "in Monday" duas vezes.</div>' + a.q("feedback") + "</div>";
+      if (a.qOk("feedback")) h += '<div class="passo">' + a.q("depois") + "</div>";
+      if (a.qOk("depois")) h += '<div class="passo">' + a.q("pronto") + "</div>";
+      return h;
+    },
+    perguntas: {
+      oque: {
+        pergunta: "O que é a aula 13?",
+        opcoes: [
+          { t: "Uma prova de alternativas para decidir se ele passa de nível.", porque: "No Now We're Talking, o foco deixou de ser acertar alternativas: a Evaluation é o uso real do inglês em conversa." },
+          { t: "Uma Evaluation, que aparece sozinha a cada 12 aulas, com perguntas sobre as 12 aulas anteriores.", ok: true, porque: "A cada 12 aulas, o material traz uma Evaluation: aula 13, 26, 39… As perguntas são sobre o que foi trabalhado no ciclo." },
+          { t: "Uma aula livre, para revisar o que o aluno quiser.", porque: "Ela tem perguntas prontas, baseadas nos conteúdos das 12 aulas anteriores." }
+        ]
+      },
+      como: {
+        pergunta: "Como conduzir a Evaluation?",
+        opcoes: [
+          { t: "Como uma conversa: o Bruno responde e fala, e você observa compreensão, fala, vocabulário, comunicação, confiança e evolução.", ok: true, porque: "A avaliação acontece dentro da própria aula, de forma natural. E é também o momento de conversar com ele sobre o que evoluiu e o que ainda pede prática." },
+          { t: "Como prova: ele responde e você corrige cada erro na hora.", porque: "Corrigir tudo na hora trava a conversa. O objetivo é observar a comunicação real e dar o feedback no fim." },
+          { t: "Pular a Evaluation, porque ele está indo bem.", porque: "A Evaluation é parte do material e do acompanhamento do aluno. É nela que vocês alinham o próximo ciclo." }
+        ]
+      },
+      feedback: {
+        pergunta: "Qual feedback você dá?",
+        opcoes: [
+          { t: "\"Você errou as preposições várias vezes. Vamos ter que voltar.\"", porque: "Feedback que só aponta erro desmotiva. Comece reconhecendo o que evoluiu." },
+          { t: "\"Você evoluiu muito para falar da sua rotina e já responde com segurança. O que ainda pede prática são as preposições de tempo: vamos trabalhar isso nas próximas aulas.\"", ok: true, porque: "Reconhece o progresso, aponta com clareza o que precisa de atenção e ajusta o plano. É esse equilíbrio que sustenta o engajamento." },
+          { t: "\"Excelente, está tudo perfeito!\"", porque: "Feedback que só elogia não ajuda: o Bruno não fica sabendo o que ainda precisa praticar." }
+        ]
+      },
+      pronto: {
+        pergunta: "No Now We're Talking, quando o Bruno vai estar pronto para passar de nível?",
+        opcoes: [
+          { t: "Quando tirar 70 pontos numa prova final do livro.", porque: "Esse era o modelo antigo. No Now We're Talking a avaliação é contínua, feita nas Evaluations ao longo do livro." },
+          { t: "Quando completar um ano de aulas.", porque: "O tempo não decide a troca de nível. O que decide é o desempenho nas Evaluations." },
+          { t: "Quando for bem em todas as Evaluations do livro.", ok: true, porque: "É a avaliação contínua: cada Evaluation, a cada 12 aulas, mostra como ele está. Indo bem em todas, ele está pronto para o próximo nível, e aí você troca o nível e libera o material." }
+        ]
+      },
+      depois: {
+        pergunta: "E depois da Evaluation?",
+        opcoes: [
+          { t: "Seguir para a aula 14 como se nada tivesse acontecido.", porque: "A Evaluation serve para direcionar: use o que você observou nas próximas aulas." },
+          { t: "Anotar a nota numa planilha do Kit Professor.", porque: "O Kit Professor deixou de existir. As avaliações fazem parte do próprio Now We're Talking." },
+          { t: "Reforçar as preposições de tempo nas próximas aulas e combinar com ele os objetivos do próximo ciclo.", ok: true, porque: "A Evaluation é acompanhamento: ajuste as próximas aulas às dificuldades e aos objetivos do aluno. E registre o que viu na observação da aula." }
+        ]
+      }
+    }
+  };
+
+  /* ═════════ 2. Trocar nível e liberar material ═════════ */
+  var NIVEIS = ["A1", "A2", "B1", "B2", "C1", "C2"];
+  var ORIGENS = [["antigo", "Material Antigo (Beyond Basics/Google Slide/PDF)"], ["novo", "Material Novo (Now We're Talking/Plataforma)"]];
+  var MODULOS = { novo: NIVEIS.map(function (n) { return ["nwt-" + n, "Now We're Talking " + n]; }), antigo: [["ant-1", "Módulo 1 - Aula 1 até Aula 12"], ["ant-2", "Módulo 2 - Aula 13 até Aula 24"]] };
+  function opts(lista, v, vazio) { return (vazio ? '<option value="">' + esc(vazio) + "</option>" : "") + lista.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === v ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); }
+  var nivel = {
+    tag: "Pratique",
+    titulo: "Trocar nível e liberar material",
+    instrucao: "O Rafael acabou de fazer a primeira aula. O nivelamento deu A1, mas ele ainda não vê o livro na plataforma dele. Resolva no Perfil dos Alunos.",
+    estado: function () { return { aberto: false, origem: "", nivel: "", modulo: "", salvo: null, toast: null }; },
+    progresso: function (s, a) { return ((s.salvo ? 1 : 0) + ["sem", "quando"].filter(a.qOk).length) + " de 3"; },
+    completa: function (s, a) { return !!s.salvo && a.qOk("sem") && a.qOk("quando"); },
+    fecho: "Sem salvar nível e módulo, o aluno não acessa o material. Atualize sempre que o aluno trocar de nível ou começar um módulo novo: isso também vale +20 XP (no máximo uma vez a cada 90 dias por aluno), e cada avanço de nível, +150.",
+    corpo: function (s, a) {
+      var nv = s.salvo ? s.salvo.nivel : "";
+      var h = '<div class="tela">' + K.kmsBar("/perfil-alunos") + '<div class="tela-corpo"><div class="card-al"><div class="topo"><span class="av2 lg" style="background:#b45309;color:#fff">RN</span><div><b>Rafael Nunes' +
+        (nv ? '<span class="nv">' + esc(nv) + "</span>" : '<span class="nv sem">Sem nível</span>') + '</b><span class="small muted">Início na escola: esta semana · 1 aula realizada</span></div></div>' +
+        '<div class="kv"><span>Material</span><b>' + (s.salvo ? esc(s.salvo.moduloNome) : "Nenhum material liberado") + "</b></div>" +
+        '<div><button class="btn btn-sm" id="b-trocar" data-act="abrir">Trocar nível e liberar material</button></div></div>';
+      if (s.aberto) {
+        var mods = s.origem ? MODULOS[s.origem] : [];
+        h += '<div class="dlg" role="dialog" aria-label="Alterar módulo e nível do aluno"><h3>Alterar módulo e nível do aluno</h3><p class="d">Selecione o nível e o módulo atual do aluno.</p>' +
+          '<div class="campo"><span class="rot">Origem do material</span><select class="inp" id="sel-origem" data-chg="origem">' + opts(ORIGENS, s.origem, "Selecione a origem") + "</select></div>" +
+          '<div class="campo"><span class="rot">Nível do aluno</span><select class="inp" id="sel-nivel" data-chg="nivel">' + opts(NIVEIS.map(function (n) { return [n, n]; }), s.nivel, "Selecione") + "</select></div>" +
+          '<div class="campo"><span class="rot">Módulo do material</span><select class="inp" id="sel-modulo" data-chg="modulo">' + opts(mods, s.modulo, "Selecione") + "</select></div>" +
+          '<div class="dlg-acoes"><button class="btn btn-sm" data-act="fechar">Cancelar</button><button class="btn btn-sm btn-pri" id="b-salvar-nivel" data-act="salvar">Salvar</button></div></div>';
+      }
+      if (s.toast) h += '<div class="tst tst-' + s.toast[0] + '" role="status">' + ic(s.toast[0] === "ok" ? "check" : "alert", 14) + "<span>" + esc(s.toast[1]) + "</span></div>";
+      h += "</div></div>";
+      if (s.salvo) h += '<div class="passo" style="display:grid;gap:18px">' + a.q("sem") + a.q("quando") + "</div>";
+      return h;
+    },
+    acoes: {
+      abrir: function (d, s) { s.aberto = true; s.toast = null; if (s.salvo) { s.origem = s.salvo.origem; s.nivel = s.salvo.nivel; s.modulo = s.salvo.modulo; } },
+      fechar: function (d, s) { s.aberto = false; s.toast = null; },
+      salvar: function (d, s) {
+        if (!s.nivel || !s.modulo) { s.toast = ["err", "Selecione nível e módulo."]; return; }
+        if (s.origem !== "novo") { s.toast = ["err", "O Rafael é aluno novo: ele começa no material novo, o Now We're Talking."]; return; }
+        if (s.nivel !== "A1") { s.toast = ["err", "O nivelamento do Rafael deu A1. Salve o nível que ele tem hoje."]; return; }
+        if (s.modulo !== "nwt-A1") { s.toast = ["err", "O módulo precisa ser o do nível dele: Now We're Talking A1."]; return; }
+        var nome = MODULOS.novo.filter(function (m) { return m[0] === s.modulo; })[0][1];
+        s.salvo = { origem: s.origem, nivel: s.nivel, modulo: s.modulo, moduloNome: nome };
+        s.aberto = false;
+        s.toast = ["ok", "Nível e módulo atualizados com sucesso."];
+      }
+    },
+    mudanca: {
+      origem: function (el, s) { s.origem = el.value; s.modulo = ""; s.toast = null; },
+      nivel: function (el, s) { s.nivel = el.value; s.toast = null; },
+      modulo: function (el, s) { s.modulo = el.value; s.toast = null; }
+    },
+    perguntas: {
+      sem: {
+        pergunta: "E se você não tivesse salvado?",
+        opcoes: [
+          { t: "Nada: o material aparece sozinho depois do nivelamento.", porque: "Sem essa configuração, o aluno não consegue acessar o material na plataforma dele." },
+          { t: "O Rafael não conseguiria acessar o material na plataforma dele.", ok: true, porque: "É o nível e o módulo salvos que liberam o material. Por isso essa é uma das tarefas mais importantes do seu dia a dia." },
+          { t: "A coordenação liberaria no fim do mês.", porque: "Quem configura é você, no Perfil dos Alunos. Sem isso, o aluno fica sem material." }
+        ]
+      },
+      quando: {
+        pergunta: "Quando você volta a mexer nessa configuração?",
+        opcoes: [
+          { t: "Só uma vez por ano.", porque: "A configuração acompanha o aluno: atualize sempre que houver troca de nível ou início de um novo módulo." },
+          { t: "Toda aula, para garantir.", porque: "Não precisa mexer toda aula. Atualize quando o aluno trocar de nível ou começar um módulo novo." },
+          { t: "Sempre que o aluno trocar de nível ou começar um módulo novo.", ok: true, porque: "Assim o material certo fica sempre liberado. E atualizar o material rende +20 XP, no máximo uma vez a cada 90 dias por aluno." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ evaluation: evaluation, nivel: nivel });
+})();
+</script>
+</body>
+</html>

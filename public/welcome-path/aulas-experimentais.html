@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aulas experimentais · Prática</title>
+<!-- Atividades do módulo "Aulas experimentais" (Welcome Path 2.0, Fase 2),
+     cada uma por ?parte=<id>: roteiro, quem, situacoes.
+     Fontes: MAPA 4 (Aulas experimentais) e vídeo 11 do roteiro do suporte.
+     Decisão de 29/09: o material próprio de experimental não é mais usado; a
+     experimental usa uma aula do Now We're Talking, escolhida pelo nível
+     aproximado que o vendedor passa. A cor da célula na agenda ficou de fora:
+     o MAPA fala em azul, mas a legenda capturada do KMS não tem essa cor.
+     Alunos e vendedores fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.cena{border:1px solid var(--border-soft); background:var(--bg-subtle); border-radius:11px; padding:11px 14px; font-size:13.5px; line-height:1.55}
+.fundo-wa{background:var(--wa-bg); border-radius:10px; padding:10px; margin-bottom:10px}
+.wa{display:grid; gap:4px; max-width:46ch; background:var(--wa-in); color:var(--wa-text); border-radius:4px 10px 10px 10px; padding:7px 10px 6px; box-shadow:0 1px .5px rgba(11,20,26,.13); font-size:13.5px; line-height:1.45}
+.wa .de{font:600 12px Geist,sans-serif; color:var(--wa-green)}
+.wa .h{justify-self:end; font:400 10.5px Geist,sans-serif; color:var(--wa-meta); margin-top:-2px}
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc;
+  function wa(de, txt, hora) {
+    return '<div class="fundo-wa"><div class="wa"><span class="de">' + esc(de) + "</span><span>" + esc(txt) + '</span><span class="h">' + esc(hora) + "</span></div></div>";
+  }
+
+  /* ═════════ 1. Os 30 minutos ═════════ */
+  var roteiro = {
+    tag: "Pratique",
+    titulo: "Os 30 minutos da experimental",
+    instrucao: "Monte a aula experimental na ordem. Três cartas não fazem parte dela.",
+    progresso: function (s, a) { return a.oFeitos("exp") + " de 4"; },
+    completa: function (s, a) { return a.oOk("exp"); },
+    fecho: "Você se apresenta, o aluno se apresenta em inglês, vocês falam da história dele com o idioma e o resto da aula é uma atividade dinâmica. Ele precisa sair tendo aprendido algo novo, em 30 minutos, sem conversa de venda.",
+    corpo: function (s, a) { return a.o("exp"); },
+    ordens: { exp: {
+      passos: [
+        { id: "voce", t: "Você se apresenta: nome, de onde fala e por que dá aula de inglês", rot: "2 min", cedo: "Comece por você: uma apresentação curta cria conexão e confiança." },
+        { id: "aluno", t: "O aluno se apresenta em inglês: nome, de onde fala e por que quer aprender", rot: "3 a 5 min", cedo: "Antes de falar da história dele com o inglês, deixe o aluno se apresentar. É assim que você sente o nível de comunicação." },
+        { id: "hist", t: "A história dele com o inglês e o que espera das aulas", rot: "3 a 5 min", cedo: "Primeiro ele se apresenta; depois vocês falam das experiências e expectativas." },
+        { id: "ativ", t: "Uma atividade dinâmica com uma aula do Now We're Talking, com ele falando em inglês", rot: "o resto", cedo: "A atividade usa o tempo que sobra, depois de vocês se conhecerem." }
+      ],
+      extras: [
+        { id: "planos", t: "Explicar os planos e o valor da mensalidade", porque: "Valores, pacotes e contrato ficam com o vendedor, que tira as dúvidas depois da aula. O seu foco é a aula." },
+        { id: "lancar", t: "Lançar a aula experimental na plataforma", porque: "Quem lança a experimental é o vendedor que agendou. Não é função sua." },
+        { id: "estender", t: "Estender até 45 minutos, se a aula estiver indo bem", porque: "A experimental tem 30 minutos. Respeite a duração." }
+      ],
+      mostra: ["ativ", "planos", "aluno", "estender", "voce", "lancar", "hist"]
+    } }
+  };
+
+  /* ═════════ 2. Com você ou com o vendedor ═════════ */
+  var quem = {
+    tag: "Pratique",
+    titulo: "Com você ou com o vendedor?",
+    instrucao: "Na experimental, o vendedor cuida do aluno e você cuida da aula. De quem é cada tarefa?",
+    progresso: function (s, a) { return a.gCertos("qm") + " de 8"; },
+    completa: function (s, a) { return a.gOk("qm"); },
+    fecho: "O vendedor agenda, fala com o aluno, tira as dúvidas de valor e lança a aula. Você manda o link, escolhe a aula pelo nível, dá a melhor aula possível e guarda os dados para conferir o pagamento.",
+    corpo: function (s, a) { return a.g("qm"); },
+    grupos: { qm: {
+      rotulos: [{ v: "voce", r: "Com você" }, { v: "vend", r: "Com o vendedor" }],
+      itens: [
+        { t: "Mandar o link da aula.", certo: "voce",
+          porque: "Você manda o link da aula para o vendedor e está presente no dia e horário combinados.",
+          dica: "É a sua parte antes da aula." },
+        { t: "Falar com o aluno antes da aula.", certo: "vend",
+          porque: "Diferente dos alunos regulares, na experimental quem faz contato com o aluno é o vendedor.",
+          dica: "O aluno ainda não é da escola." },
+        { t: "Escolher a aula do Now We're Talking pelo nível aproximado do aluno.", certo: "voce",
+          porque: "O vendedor passa o nível aproximado, e você escolhe a aula mais adequada no material oficial.",
+          dica: "A aula é com você." },
+        { t: "Responder quanto custa a mensalidade.", certo: "vend",
+          porque: "Valores, pacotes e contrato são com o vendedor, que tira todas as dúvidas depois da aula.",
+          dica: "Não é assunto da aula." },
+        { t: "Lançar a aula experimental na plataforma.", certo: "vend",
+          porque: "Quem lança é o vendedor que agendou, e ele tem até o fim do mês para isso.",
+          dica: "Quem agendou é quem registra." },
+        { t: "Guardar o nome do aluno, o nome do vendedor, o dia e o horário.", certo: "voce",
+          porque: "São esses dados que você usa para conferir o pagamento depois.",
+          dica: "Pense em quem precisa conferir se a aula foi paga." },
+        { t: "Pedir o lançamento quando a experimental não aparece até o dia do pagamento.", certo: "voce",
+          porque: "Se ela não constar até o pagamento, você procura quem agendou e pede o lançamento.",
+          dica: "O interesse em receber é seu." },
+        { t: "Tirar a experimental da sua agenda.", certo: "vend",
+          porque: "Só o vendedor responsável ou a coordenação podem excluir essa marcação. Se precisar, peça a eles.",
+          dica: "Você não apaga uma aula que outra pessoa agendou." }
+      ]
+    } }
+  };
+
+  /* ═════════ 3. Situações ═════════ */
+  var situacoes = {
+    tag: "Pratique",
+    titulo: "Na hora da experimental",
+    instrucao: "Quatro momentos comuns, do convite ao pagamento.",
+    progresso: function (s, a) { return ["convite", "preco", "tempo", "pago"].filter(a.qOk).length + " de 4"; },
+    completa: function (s, a) { return ["convite", "preco", "tempo", "pago"].every(a.qOk); },
+    fecho: "Experimental é aula avulsa de 30 minutos, remunerada à parte. Aceite pelo privado do vendedor, dê a aula sem vender e confira o lançamento antes do pagamento.",
+    corpo: function (s, a) {
+      return '<div style="display:grid;gap:22px"><div>' +
+        wa("Paula · Vendas", "Pessoal, tenho uma aula experimental amanhã às 19h, nível básico. Alguém pode assumir?", "14:02") + a.q("convite") + "</div>" +
+        '<div><div class="cena" style="margin-bottom:10px">No meio da atividade, o aluno pergunta: <b>"E quanto custa por mês? Quantas aulas por semana eu posso fazer?"</b></div>' + a.q("preco") + "</div>" +
+        '<div><div class="cena" style="margin-bottom:10px">A conversa está ótima, o aluno está animado, e já deram os 30 minutos.</div>' + a.q("tempo") + "</div>" +
+        '<div><div class="cena" style="margin-bottom:10px">O pagamento sai amanhã, e a experimental que você deu no dia 12 não aparece no seu financeiro.</div>' + a.q("pago") + "</div></div>";
+    },
+    perguntas: {
+      convite: {
+        pergunta: "Você está livre amanhã às 19h. Como pega essa aula?",
+        opcoes: [
+          { t: "Respondendo no grupo que você pode.", porque: "O grupo central da coordenação é só de avisos. A resposta vai no privado de quem ofereceu a aula." },
+          { t: "Respondendo no privado da Paula que você pode assumir.", ok: true, porque: "Quem oferece a experimental é o vendedor. Confirme no privado e mande o link da aula para ele." },
+          { t: "Esperando a coordenação escolher alguém.", porque: "Quem distribui a experimental é o vendedor. Se você pode, responda no privado dele." }
+        ]
+      },
+      preco: {
+        pergunta: "O que você responde?",
+        opcoes: [
+          { t: "Explica os planos e os valores que você conhece.", porque: "Não explique valores, pacotes ou contrato: quem cuida disso é o vendedor." },
+          { t: "Diz que o vendedor tira todas essas dúvidas depois da aula, e segue com a atividade.", ok: true, porque: "O seu foco não é explicar o curso, é dar a aula. O vendedor responde sobre valores e planos logo depois." },
+          { t: "Aproveita para convencer o aluno a fechar o plano mais longo.", porque: "Não tente vender o curso. Encante com a aula: é ela que mostra o que é ser aluno King." }
+        ]
+      },
+      tempo: {
+        pergunta: "E agora?",
+        opcoes: [
+          { t: "Segue mais 15 minutos, já que está indo bem.", porque: "A experimental tem 30 minutos. Respeite a duração." },
+          { t: "Encerra no horário, e o aluno sai tendo aprendido algo novo.", ok: true, porque: "30 minutos e uma aula que deixa algo novo: é isso que mostra a experiência de ser aluno King." },
+          { t: "Marca uma segunda aula experimental com ele.", porque: "Quem agenda experimental é o vendedor. O próximo passo do aluno é com ele." }
+        ]
+      },
+      pago: {
+        pergunta: "O que fazer?",
+        opcoes: [
+          { t: "Lançar a experimental você mesmo.", porque: "Lançar a experimental não é função sua: quem lança é o vendedor que agendou." },
+          { t: "Esquecer: experimental não é paga.", porque: "A experimental é remunerada, à parte do plano dos seus alunos." },
+          { t: "Falar com o vendedor que agendou e pedir o lançamento.", ok: true, porque: "Com o nome do aluno, do vendedor, o dia e o horário anotados, você pede o lançamento a quem agendou." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ roteiro: roteiro, quem: quem, situacoes: situacoes });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Metodologia King · Prática</title>
+<!-- Atividades do módulo "Metodologia King" (Welcome Path 2.0, Fase 2), cada
+     uma por ?parte=<id>: equilibrio, conduzir, planejar.
+     Fontes: MAPA 0 (proposta pedagógica, liberdade, critério de equilíbrio,
+     planejamento de 30 e 60 min), MAPA 10 (complementares por habilidade),
+     MAPA 16 (Materiais: biblioteca por nível, modo apresentação, guia do
+     professor) e vídeos 12, 13 e 14 do roteiro (conversação, apresentar →
+     praticar → personalizar, nunca "entendeu?", evitar tradução, nada de
+     conteúdo pago ou de outra escola, IA; a dica de um chat de IA por aluno
+     entrou por decisão do João em 29/09). O Kit Professor acabou: o material
+     está na plataforma. Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.perfil{display:flex; gap:12px; align-items:center; border:1px solid var(--border-soft); background:var(--bg-subtle); border-radius:11px; padding:11px 13px; margin-bottom:14px}
+.perfil b{display:block; font-size:14px}
+.perfil span{font-size:12.5px; color:var(--fg-secondary)}
+.nv{display:inline-block; font:600 10.5px Geist,sans-serif; border-radius:5px; padding:1px 7px; background:var(--info-bg); color:var(--info-fg); margin-left:6px; vertical-align:1px}
+.obs{display:grid; gap:8px; margin-top:6px}
+.obs div{border-left:3px solid var(--border-strong); padding:4px 0 4px 11px; font-size:13px; line-height:1.55}
+.obs small{display:block; font:600 10.5px Geist,sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-muted)}
+.passo{border-top:1px solid var(--border-soft); margin-top:16px; padding-top:16px}
+.fala{font-size:14px}
+.fala q{quotes:"“" "”"; font-weight:500}
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc;
+  function fala(t) { return '<div class="fala"><q>' + esc(t) + "</q></div>"; }
+
+  /* ═════════ 1. Critério de equilíbrio ═════════ */
+  var equilibrio = {
+    tag: "Pratique",
+    titulo: "Avance, complemente ou mude a dinâmica",
+    instrucao: "O livro é a espinha dorsal, mas cada aluno pede uma decisão. Para cada caso, o que o critério de equilíbrio manda fazer?",
+    progresso: function (s, a) { return a.gCertos("eq") + " de 6"; },
+    completa: function (s, a) { return a.gOk("eq"); },
+    fecho: "Domina o conteúdo: avance no livro. Tem dificuldade em algo que o livro não cobre bem, ou tem um foco profissional: use um complementar. Desmotivado ou sem ritmo: mude a dinâmica antes de mudar o conteúdo.",
+    corpo: function (s, a) { return a.g("eq"); },
+    grupos: { eq: {
+      rotulos: [{ v: "av", r: "Avance no livro" }, { v: "comp", r: "Use um complementar" }, { v: "din", r: "Mude a dinâmica" }],
+      itens: [
+        { t: "A Marina acertou tudo de present perfect na aula passada, e a lição de hoje revisa o mesmo ponto.", certo: "av",
+          porque: "Se o aluno já domina o conteúdo do livro naquele ponto, avance. Sem necessidade de complementar.",
+          dica: "Ela já sabe o que a lição revisa." },
+        { t: "O Bruno entende bem o que lê, mas não acompanha quando ouve um áudio, e o capítulo tem pouco listening.", certo: "comp",
+          porque: "Dificuldade em algo que o livro não cobre bem pede um complementar da habilidade certa: aqui, Listening.",
+          dica: "O livro não cobre bem o que ele precisa." },
+        { t: "A Carla chega cansada, responde com uma palavra e a aula perdeu o ritmo.", certo: "din",
+          porque: "Aluno desmotivado ou aula sem ritmo: mude a dinâmica antes de mudar o conteúdo, com um jogo ou um warm-up.",
+          dica: "O problema não é o conteúdo, é a energia da aula." },
+        { t: "O Diego vai apresentar um projeto em inglês no trabalho e trava no vocabulário de reuniões.", certo: "comp",
+          porque: "Foco profissional ou acadêmico: priorize um complementar de Business English ou de Reading.",
+          dica: "Ele tem um objetivo profissional bem específico." },
+        { t: "A Eduarda já usa com segurança o vocabulário da lição e quer seguir.", certo: "av",
+          porque: "Domina o conteúdo: avance normalmente no livro.",
+          dica: "O que o livro traz hoje ela já domina." },
+        { t: "O Theo, de 13 anos, perde o interesse em exercícios longos.", certo: "din",
+          porque: "Mude a dinâmica: jogos e atividades curtas e visuais seguram a atenção de adolescentes.",
+          dica: "É uma questão de formato, não de conteúdo." }
+      ]
+    } }
+  };
+
+  /* ═════════ 2. Conduzir a aula ═════════ */
+  var conduzir = {
+    tag: "Pratique",
+    titulo: "Boa prática ou evite?",
+    instrucao: "Frases que você pode dizer em aula. Quais seguem o jeito King de conduzir: apresentar, praticar e personalizar?",
+    progresso: function (s, a) { return a.gCertos("fa") + " de 7"; },
+    completa: function (s, a) { return a.gOk("fa"); },
+    fecho: "Nunca pergunte \"Você entendeu?\": faça o aluno usar o que você explicou. Pratique em situações reais, personalize com a vida dele, evite traduzir e não use conteúdo pago ou de outra escola.",
+    corpo: function (s, a) { return a.g("fa"); },
+    grupos: { fa: {
+      rotulos: [{ v: "boa", r: "Boa prática" }, { v: "evite", r: "Evite" }],
+      itens: [
+        { html: fala("Você entendeu?"), certo: "evite",
+          porque: "O aluno quase sempre responde que sim. Em vez de perguntar, faça ele usar o que você explicou.",
+          dica: "Essa pergunta não mostra se ele aprendeu." },
+        { html: fala("Me dá um exemplo seu com used to, sobre a sua infância."), certo: "boa",
+          porque: "Ele usa o conteúdo numa frase própria: você vê na hora se entendeu, e a aula fica pessoal.",
+          dica: "Ele precisa usar o conteúdo com a própria vida." },
+        { html: fala("Em português, isso quer dizer…"), certo: "evite",
+          porque: "Evite tradução direta: a ideia é que o aluno pense no idioma. Explique com exemplos, imagens ou contexto.",
+          dica: "Pense em qual língua o aluno deveria estar pensando." },
+        { html: fala("Imagine que você está no aeroporto e a sua mala não chegou. O que você fala no balcão?"), certo: "boa",
+          porque: "Praticar é simular situações reais. E, para quem quer viajar, é exatamente a situação que importa.",
+          dica: "É uma situação real do dia a dia." },
+        { html: fala("Ficou claro?"), certo: "evite",
+          porque: "É o mesmo \"Você entendeu?\" com outras palavras. Peça que ele use o conteúdo.",
+          dica: "Compare com a primeira frase." },
+        { html: fala("Agora me conta, em inglês, como foi o seu fim de semana."), certo: "boa",
+          porque: "Ele fala, monta as próprias frases e pratica com o que é da vida dele.",
+          dica: "Quem fala é o aluno, sobre a vida dele." },
+        { html: fala("Vou usar hoje a apostila que comprei de outro curso."), certo: "evite",
+          porque: "Criatividade é bem-vinda, mas nada de conteúdo pago ou de outras escolas. Use o material da King e os complementares gratuitos do MAPA.",
+          dica: "A origem do material importa." }
+      ]
+    } }
+  };
+
+  /* ═════════ 3. Planeje a aula do Felipe ═════════ */
+  var planejar = {
+    tag: "Pratique",
+    titulo: "Planeje a próxima aula do Felipe",
+    instrucao: "Uma decisão de cada vez, do jeito que você vai fazer antes das suas aulas.",
+    progresso: function (s, a) { return ["olha", "foco", "tempo", "material", "ia"].filter(a.qOk).length + " de 5"; },
+    completa: function (s, a) { return ["olha", "foco", "tempo", "material", "ia"].every(a.qOk); },
+    fecho: "Onde o aluno está, o que ele quer e um foco por aula. Com 30 minutos, vá direto ao ponto; o material está em Materiais, e a IA ajuda a adaptar. Quem transforma tudo numa aula única é você.",
+    corpo: function (s, a) {
+      var h = '<div class="perfil"><span class="av2 lg" style="background:#2a5cff;color:#fff">FA</span><div><b>Felipe Andrade<span class="nv">A1</span></b><span>Quer inglês para viajar · aulas de 30 minutos</span></div></div>' + a.q("olha");
+      if (a.qOk("olha")) h += '<div class="passo"><div class="lbl">Histórico do Aluno · observações</div><div class="obs">' +
+        "<div><small>Aula 7</small>Trabalhamos preços e horários num café. Felipe entende valores quando falo devagar, mas trava para dizer números acima de 100. Reforçar números falados.</div>" +
+        "<div><small>Aula 8</small>Compra de passagem. Leu bem os horários, mas ainda troca thirteen e thirty ao falar. Quer praticar para a viagem de dezembro.</div>" +
+        '</div><div style="margin-top:14px">' + a.q("foco") + "</div></div>";
+      if (a.qOk("foco")) h += '<div class="passo">' + a.q("tempo") + "</div>";
+      if (a.qOk("tempo")) h += '<div class="passo">' + a.q("material") + "</div>";
+      if (a.qOk("material")) h += '<div class="passo">' + a.q("ia") + "</div>";
+      if (a.qOk("ia")) h += K.fb("info", "Dica extra", "Abra na IA um chat para cada aluno e guarde nele o que você sabe dele: objetivos, interesses, rotina, dificuldades e o que vocês já trabalharam. Assim, a cada aula, você cria exercícios totalmente personalizados a partir da vida do aluno.");
+      return h;
+    },
+    perguntas: {
+      olha: {
+        pergunta: "Antes de preparar a próxima aula do Felipe, o que você olha?",
+        opcoes: [
+          { t: "Só a próxima lição do livro.", porque: "O livro é a espinha dorsal, mas a aula parte do aluno: o nível, o objetivo e as dificuldades anotadas nas observações." },
+          { t: "O nível, o objetivo e as observações das últimas aulas dele.", ok: true, porque: "Onde o aluno está, o que ele quer e o que travou nas últimas aulas. É por isso que a observação do lançamento precisa dizer algo de verdade." },
+          { t: "Nada: uma aula de 30 minutos é curta demais para planejar.", porque: "Justamente por ser curta, a aula de 30 minutos precisa de um foco claro. Sem direção, o tempo se perde." }
+        ]
+      },
+      foco: {
+        pergunta: "Qual é o foco da próxima aula?",
+        opcoes: [
+          { t: "Uma lição nova de gramática, para não atrasar o livro.", porque: "As duas últimas observações apontam a mesma dificuldade. Seguir adiante deixa o Felipe travado no que ele mais precisa para a viagem." },
+          { t: "Revisar tudo desde a aula 1.", porque: "Sem foco, a aula de 30 minutos não rende. As observações dizem exatamente onde ele travou." },
+          { t: "Números falados em situações de viagem: preços, horários e portão de embarque.", ok: true, porque: "É o que travou nas duas últimas aulas e é o que ele vai usar na viagem. Uma habilidade principal por aula." },
+          { t: "Deixar o Felipe escolher na hora.", porque: "Ouvir o aluno é importante, mas o planejamento vem antes: as observações já mostram o que ele precisa." }
+        ]
+      },
+      tempo: {
+        pergunta: "A aula é de 30 minutos. Como organizar?",
+        opcoes: [
+          { t: "Um foco claro e direto: apresentar, praticar numa situação de viagem e personalizar com a viagem dele.", ok: true, porque: "Aula de 30 minutos exige objetividade. O arco completo, com aquecimento, conteúdo, prática e fechamento, cabe melhor nas aulas de 60." },
+          { t: "Aquecimento, três temas diferentes e uma revisão no fim.", porque: "Em 30 minutos, três temas diluem o foco. Um tema só, bem trabalhado." },
+          { t: "Seguir a lição do livro do começo ao fim, sem desvio.", porque: "Você tem liberdade para adaptar a aula ao aluno. O livro garante a progressão, mas o foco hoje são os números da viagem." }
+        ]
+      },
+      material: {
+        pergunta: "Onde você encontra a aula para usar com ele?",
+        opcoes: [
+          { t: "No Kit Professor, no Google Drive.", porque: "O Kit Professor deixou de existir. O material está na plataforma, em Materiais." },
+          { t: "Numa apostila de outra escola que trata de viagem.", porque: "Nada de conteúdo pago ou de outras escolas." },
+          { t: "Em Materiais, na plataforma: a biblioteca por nível, com modo apresentação e guia do professor.", ok: true, porque: "Busque pelo conteúdo ou filtre pelo nível A1. No modo apresentação, o guia do professor fica no canto inferior esquerdo. As anotações na tela não ficam salvas: se for importante, peça ao aluno que anote." }
+        ]
+      },
+      ia: {
+        pergunta: "Você quer usar IA para criar uma atividade extra. O que funciona melhor?",
+        opcoes: [
+          { t: "Pedir \"uma aula de inglês\", sem mais nada.", porque: "Sem contexto, a IA devolve algo genérico. Descreva o nível, o objetivo e os interesses do aluno." },
+          { t: "Descrever o nível A1, a viagem e a dificuldade com números, e pedir um diálogo de aeroporto. Depois, revisar e adaptar.", ok: true, porque: "Com o perfil do aluno, a IA cria atividades, diálogos e textos sob medida. Ajuste vocabulário e dificuldade: a IA ajuda, e quem faz a aula é você." },
+          { t: "Usar a aula que a IA gerar do jeito que veio.", porque: "Revise sempre: ajuste o vocabulário e a dificuldade ao nível dele e traga situações reais do dia a dia do aluno." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ equilibrio: equilibrio, conduzir: conduzir, planejar: planejar });
+})();
+</script>
+</body>
+</html>

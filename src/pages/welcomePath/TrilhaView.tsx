@@ -9,7 +9,9 @@ import type { EtapaTrilha } from '@/hooks/useWelcomePath'
 // forte, para o professor não ter dúvida de onde continuar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Marco({ etapa, atual }: { etapa: EtapaTrilha; atual: boolean }) {
+/** `numero` é a posição entre as etapas que o professor vê, não `etapa.ordem`:
+ *  rascunhos (ativa = false) ficam no meio da ordem e a numeração pularia. */
+function Marco({ etapa, numero, atual }: { etapa: EtapaTrilha; numero: number; atual: boolean }) {
   const base = 'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[12.5px] font-semibold'
 
   if (etapa.estado === 'concluida') {
@@ -25,7 +27,7 @@ function Marco({ etapa, atual }: { etapa: EtapaTrilha; atual: boolean }) {
         ? 'bg-ink text-ink-inverse shadow-[0_2px_10px_-2px_rgba(0,0,0,0.3)]'
         : 'bg-accentBlue-soft text-accentBlue',
     )}>
-      {etapa.ordem}
+      {numero}
     </span>
   )
 }
@@ -167,14 +169,14 @@ export function TrilhaView({
                 )}
               >
                 <div className="flex gap-3.5">
-                  <Marco etapa={etapa} atual={ehAtual} />
+                  <Marco etapa={etapa} numero={i + 1} atual={ehAtual} />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="flex flex-wrap items-center gap-x-2 text-[10.5px] font-semibold uppercase tracking-label text-ink-muted">
                           <span>
-                            Etapa {etapa.ordem}
+                            Etapa {i + 1}
                             {!etapa.obrigatoria && ' · opcional'}
                           </span>
                           {etapa.minutos != null && etapa.estado !== 'concluida' && (
@@ -208,7 +210,7 @@ export function TrilhaView({
 
                     {etapa.estado === 'bloqueada' && etapa.motivoBloqueio === 'anterior' && (
                       <p className="pt-1.5 text-[11.5px] text-ink-subtle">
-                        Conclua a etapa {etapa.ordem - 1} para liberar.
+                        Conclua a etapa {i} para liberar.
                       </p>
                     )}
 

@@ -514,7 +514,10 @@ table.t .r{text-align:right}
   ];
 
   var CHATS = [
-    { id: "coord", nome: "Coordenação King · Professores", grupo: true, cor: "#0b1739" },
+    // Grupo central: só a coordenação escreve. O contato do professor com a
+    // coordenação é pelo WhatsApp dela (decisão de 29/09: o grupo antigo acabou).
+    { id: "avisos", nome: "King · Avisos aos professores", grupo: true, cor: "#0b1739" },
+    { id: "coord", nome: "Coordenação de professores", cor: "#2a5cff" },
     { id: "felipe", nome: "Felipe Moraes", cor: ALUNOS.felipe.cor },
     { id: "ana", nome: "Ana Ribeiro", cor: ALUNOS.ana.cor },
     { id: "bruno", nome: "Bruno Tavares", cor: ALUNOS.bruno.cor },
@@ -524,8 +527,8 @@ table.t .r{text-align:right}
   ];
   // Conversas do mês. Só aparece o que já aconteceu no relógio da simulação.
   var MSGS = [
-    ["c-0110", "coord", "coord", "2026-10-01 09:00", "Bom dia, teachers! 💙 Lembrete do mês: lancem as aulas em até 24h e deem uma olhada nas pendências todos os dias."],
-    ["c-0910", "coord", "coord", "2026-10-09 16:30", "Teachers, segunda-feira (12/10) é feriado nacional — Nossa Senhora Aparecida. Não há aulas nesse dia. Bom feriado! 🇧🇷"],
+    ["c-0110", "avisos", "coord", "2026-10-01 09:00", "Bom dia, teachers! 💙 Lembrete do mês: lancem as aulas em até 24h e deem uma olhada nas pendências todos os dias."],
+    ["c-0910", "avisos", "coord", "2026-10-09 16:30", "Teachers, segunda-feira (12/10) é feriado nacional — Nossa Senhora Aparecida. Não há aulas nesse dia. Bom feriado! 🇧🇷"],
     ["carla-0110", "carla", "ele", "2026-10-01 07:00", "Bom dia, teacher! Amanhã (sexta) vou viajar bem cedo com a família e não vou conseguir ir na aula 😕"],
     ["carla-0110r", "carla", "eu", "2026-10-01 07:30", "Bom dia, Carla! Obrigado por avisar. Fica com direito a reposição: que tal terça (06/10) às 8h?"],
     ["carla-0110b", "carla", "ele", "2026-10-01 07:34", "Perfeito! 🙏"],
@@ -612,7 +615,7 @@ table.t .r{text-align:right}
   /* ═════════ missões ═════════ */
   var MISSOES = [
     {
-      id: "m1", titulo: "Aluno novo na agenda", ref: "Etapas 2 e 3",
+      id: "m1", titulo: "Aluno novo na agenda", ref: "Recebendo alunos e Primeiro contato",
       inicio: "2026-10-05 10:00", abre: { tab: "king", rota: "home" },
       historia: "Segunda, 05/10, 10h. A equipe de pós-vendas colocou um aluno novo num horário que você deixou aberto, e o contrato já está na Home da plataforma. Faça o que a King espera, do aceite até a coordenação saber que o contato aconteceu.",
       objetivos: [
@@ -624,15 +627,15 @@ table.t .r{text-align:right}
           dica: "Não pode faltar: seu nome, data e horário da 1ª aula (horário de Brasília), as considerações gerais e o lembrete de entrar pela plataforma do aluno.",
           solucao: "WhatsApp › Felipe › marque Quem é você, Data e horário, Considerações gerais e Como entrar na aula. Deixe de fora o link do Meet e o “avise no dia”. Enviar.",
           ok: function () { return S.flags.apresentacao; } },
-        { id: "grupo", texto: "Confirmar no grupo da coordenação que o contato foi feito",
-          dica: "O grupo “Coordenação King · Professores” está na lista de conversas do WhatsApp.",
-          solucao: "WhatsApp › Coordenação King · Professores › a mensagem de contato feito, com a data da 1ª aula.",
+        { id: "grupo", texto: "Avisar a coordenação, pelo WhatsApp dela, que o contato foi feito",
+          dica: "A conversa “Coordenação de professores” está na lista do WhatsApp. O grupo de avisos é só para a coordenação escrever.",
+          solucao: "WhatsApp › Coordenação de professores › a mensagem de contato feito, com a data da 1ª aula.",
           ok: function () { return S.flags.grupo; } }
       ],
-      fechamento: "Aceite → contato o quanto antes → confirmação no grupo. O aluno só descobre quem é o professor quando você se apresenta, e a coordenação só sabe que o contato aconteceu quando você confirma no grupo. Sem a confirmação, para a King é como se ele não tivesse acontecido."
+      fechamento: "Aceite → contato o quanto antes → aviso à coordenação pelo WhatsApp dela. O aluno só descobre quem é o professor quando você se apresenta, e a coordenação só sabe que o contato aconteceu quando você avisa. Sem esse aviso, para a King é como se ele não tivesse acontecido."
     },
     {
-      id: "m2", titulo: "A primeira aula", ref: "Etapas 3 e 4",
+      id: "m2", titulo: "A primeira aula", ref: "Primeiro contato e Primeira aula",
       inicio: "2026-10-07 18:55", abre: { tab: "whats", chat: "felipe" },
       historia: "Quarta, 07/10, 18h55. Faltam 5 minutos para a primeira aula do Felipe.",
       objetivos: [
@@ -652,10 +655,10 @@ table.t .r{text-align:right}
           S.narr.push("<b>19h</b> — o Felipe entrou pela plataforma. Nos primeiros 15 minutos vocês se conheceram, você apresentou sua didática e aplicou o nivelamento: <b>resultado A2</b>. Nos outros 15, uma aula prática sobre apresentações pessoais. Agora, registre o nível dele.");
         }
       },
-      fechamento: "O lembrete vai 5 minutos antes, com o link da plataforma do aluno; o link direto do Meet só se ele não aparecer nos primeiros 5 minutos. E é o nível registrado que libera o livro na plataforma do aluno — sem isso, ele chega na próxima aula sem material."
+      fechamento: "O lembrete vai 5 minutos antes, com o link da plataforma do aluno; o link do Meet não vai antes, só se, passados 2 minutos do início, ele tiver dificuldade para entrar. E é o nível registrado que libera o livro na plataforma do aluno — sem isso, ele chega na próxima aula sem material."
     },
     {
-      id: "m3", titulo: "Lançar uma presença", ref: "Etapa 5 · Transparência nos lançamentos",
+      id: "m3", titulo: "Lançar uma presença", ref: "Boas práticas · Transparência nos lançamentos",
       inicio: "2026-10-08 20:45", abre: { tab: "king", rota: "aulas", aba: "lancamento" },
       historia: "Quinta, 08/10, 20h45. Você acabou de dar aula para a Ana (B1). Vocês fizeram a Aula 7 — Look like, Put together, Hold on to, do Now We're Talking, e você trouxe um vídeo curto sobre a viagem dela para a Irlanda. Ela usou bem “put together”, mas travou em “hold on to”. Lance a aula.",
       alvos: function () {
@@ -744,7 +747,7 @@ table.t .r{text-align:right}
       fechamento: "Com 24h ou mais de aviso, a falta tem direito a reposição, até 4 por mês. Sem aviso, em cima da hora ou com o limite do mês estourado, não tem — e o print vai junto. Quando o aluno some, o print é da sua tentativa de contato."
     },
     {
-      id: "m7", titulo: "Quando quem falta é você", ref: "Etapa 5 · MAPA · Reposições",
+      id: "m7", titulo: "Quando quem falta é você", ref: "Boas práticas · MAPA · Reposições",
       inicio: "2026-10-15 21:00", abre: { tab: "king", rota: "aulas", aba: "lancamento" },
       historia: "Quinta, 15/10, 21h. Às 17h você teve uma emergência e avisou a Ana que não daria a aula das 20h. Falta do professor gera reposição obrigatória — sem limite e sem prazo para expirar, e é você quem garante que ela aconteça.",
       alvos: function () {
@@ -790,7 +793,7 @@ table.t .r{text-align:right}
       fechamento: "Falta do professor: reposição obrigatória, sem teto e sem prazo para expirar. Agende em horário livre, com até 7 dias de antecedência, sem estender a aula regular — e lance como “Presença na reposição”. No fim, confirme com o aluno quantas reposições ainda restam."
     },
     {
-      id: "m8", titulo: "Fechamento do mês", ref: "Etapa 6 · MAPA · Financeiro e Notas fiscais",
+      id: "m8", titulo: "Fechamento do mês", ref: "Pagamento · MAPA · Financeiro e Notas fiscais",
       inicio: "2026-11-01 10:00", abre: { tab: "king", rota: "home" },
       historia: "Domingo, 01/11. Outubro fechou e o botão de autorizar pagamento já apareceu na Financeira. Só que há uma pendência: na sexta, 30/10, a Carla pediu para treinar a entrevista de emprego dela — vocês conversaram a aula toda, sem abrir o livro — e você esqueceu de lançar.",
       alvos: function () {
@@ -805,9 +808,9 @@ table.t .r{text-align:right}
           dica: "Aulas e Reposições › Pendências.",
           solucao: "Pendências › Lançar › Presença · Aula personalizada sem uso do livro · observação com o que foi treinado. Salvar.",
           ok: function () { return !!S.lancados["carla|2026-10-30|reg"]; } },
-        { id: "autorizar", texto: "Conferir o Resumo Consolidado e autorizar o pagamento (Financeira)",
+        { id: "autorizar", texto: "Conferir o Resumo financeiro e autorizar o pagamento (Financeira)",
           dica: "Autorize só com tudo lançado e o resumo conferido. Havendo divergência, a coordenação fica sabendo antes da autorização.",
-          solucao: "Financeira › marque “Conferi meus lançamentos e o Resumo Consolidado” › Autorizar pagamento.",
+          solucao: "Financeira › marque “Conferi meus lançamentos e o Resumo financeiro” › Autorizar pagamento.",
           ok: function () { return S.autorizado; } },
         { id: "nf", texto: "Lançar a nota fiscal de outubro",
           dica: "Financeira › Notas fiscais. Escolher o arquivo ainda não envia a nota.",
@@ -820,7 +823,7 @@ table.t .r{text-align:right}
           S.narr.push("<b>Sexta, 06/11</b> — o pagamento de outubro caiu na sua conta. Agora falta a nota fiscal.");
         }
       },
-      fechamento: "No fechamento: lance tudo, confira o Resumo Consolidado (o retido é dinheiro seu, só adiado), autorize e, com o pagamento na conta, lance a nota fiscal. Escolher o arquivo não basta — é o “Lançar Nota Fiscal” que envia."
+      fechamento: "No fechamento: lance tudo, confira o Resumo financeiro (o retido é dinheiro seu, só adiado), autorize e, com o pagamento na conta, lance a nota fiscal. Escolher o arquivo não basta — é o “Lançar Nota Fiscal” que envia."
     }
   ];
 
@@ -1406,9 +1409,9 @@ table.t .r{text-align:right}
     if (!fechou) aut = '<div class="card"><div class="card-h">Autorização de pagamento</div><p class="pg-sub">O botão aparece no dia 1º do mês seguinte, quando o mês fecha. Até lá, o valor é uma previsão.</p></div>';
     else if (S.autorizado) aut = '<div class="card okc"><div class="card-h" style="margin:0">' + ic("check", 15) + " Pagamento de outubro autorizado · " + brl(tot) + "</div></div>";
     else aut = '<div class="card destaque"><div class="card-h">Autorizar pagamento · outubro/2026</div><p>Valor a autorizar: <b class="num">' + brl(tot) + "</b></p>" +
-      '<label class="ck-line"><input type="checkbox" id="conferi" data-chg="conferi"' + (S.conferi ? " checked" : "") + "> Conferi meus lançamentos e o Resumo Consolidado</label>" + fbHTML("fin") +
+      '<label class="ck-line"><input type="checkbox" id="conferi" data-chg="conferi"' + (S.conferi ? " checked" : "") + "> Conferi meus lançamentos e o Resumo financeiro</label>" + fbHTML("fin") +
       '<div class="savebar"><button class="btn btn-pri" data-act="autorizar" id="btn-autorizar">Autorizar pagamento</button></div></div>';
-    var tabela = '<div class="card"><div class="card-h">Resumo consolidado · outubro/2026</div><div class="tbl-wrap"><table class="t"><thead><tr><th>Aluno</th><th>Plano</th><th class="r">Valor</th><th class="r">Retido</th><th class="r">A receber</th></tr></thead><tbody>' +
+    var tabela = '<div class="card"><div class="card-h">Resumo financeiro · outubro/2026</div><div class="tbl-wrap"><table class="t"><thead><tr><th>Aluno</th><th>Plano</th><th class="r">Valor</th><th class="r">Retido</th><th class="r">A receber</th></tr></thead><tbody>' +
       ls.map(function (x) {
         return "<tr><td><b>" + esc(x.nome) + '</b><div class="pg-sub">' + esc(x.obs) + "</div></td><td>" + esc(x.plano) + '</td><td class="r num">' + brl(x.base) + '</td><td class="r num' + (x.ret ? " txt-hold" : "") + '">' + (x.ret ? "− " + brl(x.ret) : "—") + '</td><td class="r num"><b>' + brl(x.final) + "</b></td></tr>";
       }).join("") + '</tbody><tfoot><tr><td colspan="4">Total previsto</td><td class="r num">' + brl(tot) + "</td></tr></tfoot></table></div>" +
@@ -1423,7 +1426,7 @@ table.t .r{text-align:right}
         '<div class="savebar" style="margin-top:10px"><button class="btn btn-pri" data-act="lancarNF" id="btn-nf">Lançar Nota Fiscal</button></div>';
     }
     nf += '<div class="help" style="margin-top:10px">Enviadas: NF_setembro_2026.pdf (05/10)' + (S.nfLancada ? " · NF_outubro_2026.pdf (06/11)" : "") + "</div></div>";
-    return '<div class="pg-h"><div><h3>Financeira</h3><div class="pg-sub">Estimativa, resumo consolidado, autorização e notas fiscais</div></div><div class="est"><span class="eyebrow">' + (fechou ? "Outubro fechado" : "Estimativa de outubro") + '</span><b>' + brl(tot) + "</b></div></div>" + aut + tabela + nf;
+    return '<div class="pg-h"><div><h3>Financeira</h3><div class="pg-sub">Estimativa, resumo financeiro, autorização e notas fiscais</div></div><div class="est"><span class="eyebrow">' + (fechou ? "Outubro fechado" : "Estimativa de outubro") + '</span><b>' + brl(tot) + "</b></div></div>" + aut + tabela + nf;
   }
 
   function pgOff() {
@@ -1466,6 +1469,7 @@ table.t .r{text-align:right}
       }).join("") + "</div>" + (txt ? '<div class="preview"><div class="bub out">' + esc(txt) + "</div></div>" : "") +
         '<div class="comp-f"><button class="btn btn-wa" data-act="enviarApres" id="btn-apres">Enviar ' + ic("arrow", 14) + "</button></div>";
     }
+    if (c === "avisos") return '<div class="wa-off">Grupo só de avisos: apenas a coordenação escreve aqui. Para falar com ela, use a conversa “Coordenação de professores”.</div>';
     if (m && m.id === "m1" && c === "coord" && !S.flags.grupo) return opts("grupo");
     if (m && m.id === "m2" && c === "felipe" && !S.flags.lembrete) return opts("lembrete");
     return '<div class="wa-off">Neste treino as mensagens já vêm prontas: aqui você lê as conversas e tira prints.</div>';
@@ -1523,7 +1527,7 @@ table.t .r{text-align:right}
     var m = M(); if (!m || m.id !== "m1" || S.flags.apresentacao) return;
     var sel = S.montagem, pecas = PECAS.filter(function (p) { return sel[p.id]; });
     if (!pecas.length) return aviso("wa", "Mensagem vazia", "Marque o que vai na mensagem de apresentação.");
-    if (sel.meet) return erro("wa", "Mensagem não enviada", "O link direto do Meet não vai na apresentação. O aluno entra pela plataforma do aluno, que abre o Meet premium na mesma sala que você. O link direto só vai se ele não aparecer nos primeiros 5 minutos de aula.");
+    if (sel.meet) return erro("wa", "Mensagem não enviada", "O link direto do Meet não vai na apresentação. O aluno entra pela plataforma do aluno, que abre o Meet premium na mesma sala que você. O link do Meet só vai se, passados 2 minutos do início, ele tiver dificuldade para entrar.");
     if (sel.nodia) return erro("wa", "Mensagem não enviada", "Aviso no dia não dá direito a reposição: a regra é avisar com pelo menos 24h de antecedência. Prometer outra coisa vira acordo — e a sua palavra passa a valer.");
     var falta = PECAS.filter(function (p) { return p.ok && !sel[p.id]; }).map(function (p) { return p.rot.toLowerCase(); });
     if (falta.length) return erro("wa", "Faltou informação", "A mensagem de apresentação tem quatro itens obrigatórios: quem é você, data e horário da 1ª aula, considerações gerais e como entrar na aula. Faltou: " + falta.join(", ") + ".");
@@ -1536,16 +1540,16 @@ table.t .r{text-align:right}
     var m = M(); if (!m) return;
     if (d.g === "grupo") {
       if (m.id !== "m1" || S.flags.grupo) return;
-      if (d.v === "vespera") return erro("wa", "Mensagem não enviada", "O contato é o quanto antes: até você se apresentar, o aluno não sabe quem é o professor. E o grupo recebe a confirmação do contato já feito, não a promessa de fazer.");
-      if (!S.flags.apresentacao) return erro("wa", "Ainda não houve contato", "Você ainda não falou com o Felipe. Confirmar no grupo é avisar que o contato aconteceu — primeiro mande a apresentação para ele.");
+      if (d.v === "vespera") return erro("wa", "Mensagem não enviada", "O contato é o quanto antes: até você se apresentar, o aluno não sabe quem é o professor. E a coordenação recebe a confirmação do contato já feito, não a promessa de fazer.");
+      if (!S.flags.apresentacao) return erro("wa", "Ainda não houve contato", "Você ainda não falou com o Felipe. O aviso à coordenação confirma um contato que já aconteceu: primeiro mande a apresentação para ele.");
       addMsg("coord", "eu", OPTS.grupo[0].txt, 1);
-      addMsg("coord", "coord", "Obrigada, teacher! Registrado 💙", 2);
+      addMsg("coord", "ele", "Obrigada, teacher! Registrado 💙", 2);
       S.flags.grupo = true;
       sucesso("wa", "Confirmação enviada", "A coordenação já sabe que o Felipe foi contatado.");
     }
     if (d.g === "lembrete") {
       if (m.id !== "m2" || S.flags.lembrete) return;
-      if (d.v === "meet") return erro("wa", "Não é esse", "O link direto do Meet só vai se o aluno não aparecer nos primeiros 5 minutos. O lembrete leva à plataforma do aluno — é por ela que ele entra no Meet premium, na mesma sala que você.");
+      if (d.v === "meet") return erro("wa", "Não é esse", "O link do Meet não vai antes da aula: só se, passados 2 minutos do início, o aluno tiver dificuldade para entrar. O lembrete leva à plataforma do aluno — é por ela que ele entra no Meet premium, na mesma sala que você.");
       if (d.v === "nada") return erro("wa", "O lembrete faz parte", "O lembrete 5 minutos antes é parte do processo: é por ele que o aluno entra na aula. Sem ele, a chance de desencontro na primeira aula é grande.");
       addMsg("felipe", "eu", OPTS.lembrete[1].txt, 0);
       S.flags.lembrete = true;
@@ -1629,7 +1633,7 @@ table.t .r{text-align:right}
   A.autorizar = function () {
     var m = M();
     if (!m || m.id !== "m8") return;
-    if (!S.conferi) return aviso("fin", "Confirme a conferência", "Marque que conferiu seus lançamentos e o Resumo Consolidado.");
+    if (!S.conferi) return aviso("fin", "Confirme a conferência", "Marque que conferiu seus lançamentos e o Resumo financeiro.");
     if (pendencias().length) return erro("fin", "Ainda há aula pendente", "A aula da Carla de 30/10 não foi lançada. Autorize só depois de lançar tudo e conferir o resumo: o valor autorizado é o que será pago. Havendo divergência, avise a coordenação antes de autorizar.");
     S.autorizado = true;
     sucesso("fin", "Pagamento autorizado", "O pagamento cai até o dia 7. Quem autoriza mais cedo recebe mais cedo.");

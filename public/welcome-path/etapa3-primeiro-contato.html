@@ -55,7 +55,7 @@
     estado: function () { return { sel: {}, enviada: false, grupo: false, aviso: null }; },
     progresso: function (s) { return (s.enviada ? 1 : 0) + (s.grupo ? 1 : 0) + " de 2 passos"; },
     completa: function (s) { return s.grupo; },
-    fecho: "Apresentação completa e contato confirmado no grupo: o aluno sabe quem é o professor, e a coordenação sabe que o contato aconteceu.",
+    fecho: "Apresentação completa e contato confirmado no WhatsApp da coordenação: o aluno sabe quem é o professor, e a coordenação sabe que o contato aconteceu.",
     corpo: function (s) {
       var h = '<div class="wa"><div class="wa-h"><span class="av2" style="background:#7c3aed;width:26px;height:26px;font-size:10px">LP</span>Lívia Prado</div>';
       var txt = PECAS.filter(function (p) { return s.sel[p.id]; }).map(function (p) { return p.txt; }).join("\n\n");
@@ -72,7 +72,7 @@
           return '<button class="pc" role="checkbox" aria-checked="' + !!s.sel[p.id] + '" id="pc-' + p.id + '" data-act="peca" data-v="' + p.id + '">' + (s.sel[p.id] ? ic("check", 12) : "") + esc(p.rot) + "</button>";
         }).join("") + '</div><div class="acoes"><button class="btn btn-wa" id="enviar" data-act="enviar">Enviar ' + ic("arrow", 14) + "</button></div>";
       } else if (!s.grupo) {
-        h += '<div class="passo-h">Agora, no grupo da coordenação:</div><div class="opcoes">' +
+        h += '<div class="passo-h">Agora, no WhatsApp da coordenação:</div><div class="opcoes">' +
           '<button class="opcao" id="g-vespera" data-act="grupo" data-v="vespera"><span class="mk"></span><span>“Aceitei a Lívia! Vou falar com ela na véspera da primeira aula.”</span></button>' +
           '<button class="opcao" id="g-ok" data-act="grupo" data-v="ok"><span class="mk"></span><span>“Contato com a aluna Lívia Prado feito ✅ Primeira aula: terça, 13/10, às 18h30.”</span></button></div>';
       }
@@ -84,7 +84,7 @@
       enviar: function (d, s) {
         var sel = s.sel, marcadas = PECAS.filter(function (p) { return sel[p.id]; });
         if (!marcadas.length) { s.aviso = ["info", "", "Marque o que vai na mensagem."]; return; }
-        if (sel.meet) { s.aviso = ["err", "Tire o link do Meet.", "A aluna entra pela plataforma do aluno, que abre a mesma sala que você. O link direto só vai se ela não aparecer nos primeiros 5 minutos de aula."]; return; }
+        if (sel.meet) { s.aviso = ["err", "Tire o link do Meet.", "A aluna entra pela plataforma do aluno, que abre a mesma sala que você. O link do Meet só vai se, passados 2 minutos do início, ela tiver dificuldade para entrar."]; return; }
         if (sel.nodia) { s.aviso = ["err", "Tire o “me avise no dia”.", "Aviso no dia não dá direito a reposição: a regra é avisar com 24h de antecedência. O que você promete vira acordo."]; return; }
         var falta = PECAS.filter(function (p) { return p.ok && !sel[p.id]; }).map(function (p) { return p.rot.toLowerCase(); });
         if (falta.length) { s.aviso = ["err", "Faltou informação.", "A apresentação tem quatro itens obrigatórios. Faltou: " + falta.join(", ") + "."]; return; }
@@ -92,7 +92,7 @@
         s.enviada = true; s.aviso = ["ok", "Enviada.", "A Lívia já sabe quem é o professor dela."];
       },
       grupo: function (d, s) {
-        if (d.v === "vespera") { s.aviso = ["err", "Não é isso.", "O contato é o quanto antes, e você já fez. O grupo recebe a confirmação do contato feito, não a promessa de fazer."]; return; }
+        if (d.v === "vespera") { s.aviso = ["err", "Não é isso.", "O contato é o quanto antes, e você já fez. A coordenação recebe a confirmação do contato feito, não a promessa de fazer."]; return; }
         s.grupo = true; s.aviso = null;
       }
     }
@@ -129,11 +129,11 @@
 
   /* ═════════ 3. Do aceite à primeira aula ═════════ */
   var CARTAS = [
-    { id: "grupo", n: 3, t: "Confirmar no grupo da coordenação que o contato foi feito", hora: "seg 10h10", cedo: "O grupo recebe a confirmação de um contato que já aconteceu. Primeiro, fale com a aluna." },
+    { id: "grupo", n: 3, t: "Avisar a coordenação, pelo WhatsApp dela, que o contato foi feito", hora: "seg 10h10", cedo: "A coordenação recebe a confirmação de um contato que já aconteceu. Primeiro, fale com a aluna." },
     { id: "espera", n: 0, t: "Esperar a aluna mandar a primeira mensagem", porque: "Até você se apresentar, ela nem sabe quem é o professor. O contato é seu, e o quanto antes." },
-    { id: "lembrete", n: 4, t: "Mandar o lembrete com o link da plataforma do aluno", hora: "ter 18h25", cedo: "O lembrete vai 5 minutos antes da aula. Antes dele vêm o contato e a confirmação no grupo." },
+    { id: "lembrete", n: 4, t: "Mandar o lembrete com o link da plataforma do aluno", hora: "ter 18h25", cedo: "O lembrete vai 5 minutos antes da aula. Antes dele vêm o contato e o aviso à coordenação." },
     { id: "aceite", n: 1, t: "Dar o aceite no contrato, na Home", hora: "seg 10h00" },
-    { id: "meet", n: 5, t: "Ela não entrou até 18h35: mandar o link direto do Meet", hora: "ter 18h35", cedo: "O link direto do Meet é o último recurso: só depois do lembrete, se ela não entrar nos primeiros 5 minutos." },
+    { id: "meet", n: 5, t: "Às 18h32 ela ainda não conseguiu entrar: mandar o link do Meet", hora: "ter 18h32", cedo: "O link do Meet é o último recurso: só depois do lembrete, se, passados 2 minutos do início, ela tiver dificuldade para entrar." },
     { id: "junto", n: 0, t: "Mandar o link do Meet junto com a apresentação", porque: "O link direto não vai com a apresentação: a aluna entra pela plataforma do aluno, na mesma sala que você." },
     { id: "apres", n: 2, t: "Mandar a mensagem de apresentação", hora: "seg 10h05", cedo: "Antes, o aceite: é ele que libera o início das aulas." }
   ];
@@ -144,7 +144,7 @@
     estado: function () { return { feitos: [], fora: {}, aviso: null }; },
     progresso: function (s) { return s.feitos.length + " de 5"; },
     completa: function (s) { return s.feitos.length === 5; },
-    fecho: "Aceite, apresentação o quanto antes, confirmação no grupo, lembrete 5 minutos antes, e o link do Meet só se ela não entrar em 5 minutos.",
+    fecho: "Aceite, apresentação o quanto antes, aviso à coordenação pelo WhatsApp, lembrete 5 minutos antes com a plataforma do aluno, e o link do Meet só se, passados 2 minutos do início, ela não conseguir entrar.",
     corpo: function (s) {
       var h = '<div class="tl">' + ORDEM.map(function (c, i) {
         var on = s.feitos.indexOf(c.id) >= 0;

@@ -187,6 +187,7 @@ export function Home() {
             token={token}
             etapaId={etapaAberta}
             onVoltar={() => setEtapaAberta(null)}
+            numero={(trilha.data?.etapas.findIndex(e => e.id === etapaAberta) ?? -1) + 1}
             totalEtapas={trilha.data?.etapas.length ?? 0}
             etapasConcluidas={trilha.data?.etapas.filter(e => e.estado === 'concluida').length ?? 0}
           />

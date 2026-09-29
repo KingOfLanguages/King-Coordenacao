@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Em sala · Prática</title>
+<!-- Atividades do módulo "Em sala: espera, desencontros e aluno sumido"
+     (Welcome Path 2.0, Fase 2), cada uma por ?parte=<id>: chamada, sumido,
+     registro.
+     Fontes: MAPA 0 (comunicação e conduta em aula), MAPA 3 seções 6 a 8
+     (retenção, registro de presença, regra dos 15 minutos) e vídeos 15 e 20.
+     Decisões do João em 29/09: o link do Meet não vai antes da aula, só o da
+     plataforma do aluno; passados 2 minutos do início, se o aluno não entrou
+     ou tem dificuldade, o professor manda o link do Meet; a espera é de 15
+     minutos; contato com a coordenação é pelo WhatsApp dela.
+     Aluno fictício. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+.momento{display:grid; grid-template-columns:62px minmax(0,1fr); gap:12px; align-items:start}
+.relogio{font:600 15px "Geist Mono",monospace; color:var(--accent); background:var(--info-bg); border:1px solid var(--info-bd); border-radius:9px; padding:6px 0; text-align:center}
+.relogio.fim{color:var(--fg-muted); background:var(--bg-subtle); border-color:var(--border-soft); font-size:12px; padding:8px 0}
+.cena{font-size:13.5px; line-height:1.55; margin-bottom:10px}
+.fundo-wa{background:var(--wa-bg); border-radius:10px; padding:9px; margin-bottom:10px}
+.wa{display:grid; gap:4px; max-width:44ch; background:var(--wa-in); color:var(--wa-text); border-radius:4px 10px 10px 10px; padding:7px 10px 6px; box-shadow:0 1px .5px rgba(11,20,26,.13); font-size:13.5px; line-height:1.45}
+.wa .de{font:600 12px Geist,sans-serif; color:var(--wa-green)}
+.wa .h{justify-self:end; font:400 10.5px Geist,sans-serif; color:var(--wa-meta); margin-top:-2px}
+.passo{border-top:1px solid var(--border-soft); margin-top:16px; padding-top:16px}
+.aula-bar{display:flex; height:10px; border-radius:99px; overflow:hidden; background:var(--bg-muted); margin:4px 0 6px}
+.aula-bar span{display:block; height:100%}
+.aula-leg{display:flex; justify-content:space-between; font:500 11px "Geist Mono",monospace; color:var(--fg-muted)}
+@media (max-width:480px){ .momento{grid-template-columns:1fr; gap:8px} .relogio{justify-self:start; padding:5px 12px} }
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc;
+  function wa(de, txt, hora) {
+    return '<div class="fundo-wa"><div class="wa"><span class="de">' + esc(de) + "</span><span>" + esc(txt) + '</span><span class="h">' + esc(hora) + "</span></div></div>";
+  }
+
+  /* ═════════ 1. A chamada das 19h ═════════ */
+  var MOMENTOS = [
+    { q: "antes", hora: "18h55", cena: "Faltam 5 minutos para a aula do Felipe, das 19h às 19h30." },
+    { q: "dois", hora: "19h02", cena: "Você está na chamada desde as 19h. O Felipe ainda não entrou e não mandou mensagem." },
+    { q: "quinze", hora: "19h15", cena: "Você mandou o link às 19h02, seguiu na chamada, e nada de resposta até agora." },
+    { q: "volta", hora: "19h22", cena: "", msg: ["Felipe Andrade", "Teacher, desculpa!! Fiquei preso no trânsito. Ainda dá pra entrar?", "19:22"] },
+    { q: "fim", hora: "19h30", cena: "Vocês trabalharam números e preços. A conversa está boa, e o Felipe pergunta se dá para continuar um pouco." },
+    { q: "lanca", hora: "depois", cena: "Hora de lançar a aula de hoje." }
+  ];
+  var chamada = {
+    tag: "Pratique",
+    titulo: "A chamada das 19h",
+    instrucao: "O relógio avança. Em cada momento, decida o que fazer.",
+    progresso: function (s, a) { return MOMENTOS.filter(function (m) { return a.qOk(m.q); }).length + " de " + MOMENTOS.length; },
+    completa: function (s, a) { return MOMENTOS.every(function (m) { return a.qOk(m.q); }); },
+    fecho: "Lembrete com a plataforma do aluno 5 minutos antes, link do Meet aos 2 minutos se ele não entrou, pelo menos 15 minutos de espera, volta se ele aparecer dentro do horário, e a aula termina no horário de sempre. Tudo registrado no lançamento.",
+    corpo: function (s, a) {
+      var h = "", aberto = true;
+      MOMENTOS.forEach(function (m, i) {
+        if (!aberto) return;
+        h += '<div class="' + (i ? "passo " : "") + 'momento"><div class="relogio' + (m.hora === "depois" ? " fim" : "") + '">' + esc(m.hora) + "</div><div>" +
+          (m.cena ? '<div class="cena">' + esc(m.cena) + "</div>" : "") + (m.msg ? wa(m.msg[0], m.msg[1], m.msg[2]) : "") + a.q(m.q) + "</div></div>";
+        aberto = a.qOk(m.q);
+      });
+      if (a.qOk("fim")) h += '<div class="passo"><div class="lbl">Como ficou a aula</div><div class="aula-bar" aria-label="Aula das 19h às 19h30: o Felipe participou das 19h22 às 19h30">' +
+        '<span style="width:73.3%;background:var(--border-strong)"></span><span style="width:26.7%;background:var(--ok-fg)"></span></div>' +
+        '<div class="aula-leg"><span>19h00</span><span>19h22</span><span>19h30</span></div></div>';
+      return h;
+    },
+    perguntas: {
+      antes: {
+        pergunta: "O que você manda?",
+        opcoes: [
+          { t: "O link direto do Meet.", porque: "O link do Meet não vai antes da aula. O aluno entra pela plataforma do aluno, que abre a sala certa." },
+          { t: "O lembrete com o link da plataforma do aluno.", ok: true, porque: "O lembrete 5 minutos antes, com a plataforma do aluno, é hábito de toda aula. Se quiser, lembre o que vocês vão trabalhar: mostra que você se preparou para ele." },
+          { t: "Nada: ele já sabe o dia e o horário.", porque: "O lembrete reduz desencontro e é também o seu registro de que a aula estava de pé." }
+        ]
+      },
+      dois: {
+        pergunta: "E agora?",
+        opcoes: [
+          { t: "Esperar em silêncio até as 19h15.", porque: "Não espere: passados 2 minutos, mande o link do Meet. Problema de acesso, link errado ou distração se resolvem com uma mensagem rápida." },
+          { t: "Mandar o link do Meet pelo WhatsApp e seguir na chamada.", ok: true, porque: "Passados 2 minutos do início, se o aluno não entrou ou tem dificuldade, o link do Meet vai pelo WhatsApp. E a mensagem fica como registro da sua tentativa." },
+          { t: "Sair da chamada e lançar falta.", porque: "Ainda é cedo. Você fica na chamada por pelo menos 15 minutos." }
+        ]
+      },
+      quinze: {
+        pergunta: "O que você pode fazer?",
+        opcoes: [
+          { t: "Sair da chamada, sabendo que a aula não acabou: se ele aparecer até 19h30, você volta.", ok: true, porque: "Depois de 15 minutos sem retorno você está liberado para sair. Mas o aluno sempre tem direito ao tempo que resta da aula." },
+          { t: "Sair e avisar que a aula acabou.", porque: "Sair da chamada não encerra a aula. Se ele pedir para entrar dentro do horário, você volta." },
+          { t: "Sair e marcar uma reposição para ele.", porque: "Faltou sem avisar não dá direito a reposição. E ele ainda pode entrar até 19h30." }
+        ]
+      },
+      volta: {
+        pergunta: "O que você responde?",
+        opcoes: [
+          { t: "\"Pode entrar!\" e volta para a chamada pelos 8 minutos que restam.", ok: true, porque: "O aluno tem direito ao tempo que resta da aula, independentemente do atraso." },
+          { t: "\"A aula já acabou: passaram os 15 minutos.\"", porque: "Os 15 minutos liberam você para sair da chamada, mas não encerram a aula. Ainda há 8 minutos." },
+          { t: "\"Pode entrar! Fazemos a aula inteira, até 19h52.\"", porque: "O atraso não estica a aula. Ele tem direito ao tempo que resta, não a uma aula cheia depois do horário." }
+        ]
+      },
+      fim: {
+        pergunta: "O que fazer?",
+        opcoes: [
+          { t: "Continuar mais 10 minutos para compensar o atraso.", porque: "O atraso partiu do aluno: a aula termina no horário de sempre. Estender desorganiza a sua agenda e ensina que o horário não importa." },
+          { t: "Encerrar no horário e retomar na próxima aula.", ok: true, porque: "A aula termina às 19h30. É assim que o aluno entende a importância do compromisso." }
+        ]
+      },
+      lanca: {
+        pergunta: "Como lançar?",
+        opcoes: [
+          { t: "Falta, porque ele chegou atrasado.", porque: "Ele participou da aula, ainda que por 8 minutos: é presença." },
+          { t: "Presença, com a observação \"aula realizada\".", porque: "Observação genérica não diz nada. Registre o atraso e o que foi trabalhado." },
+          { t: "Presença, com a observação do atraso e do que foi trabalhado nos 8 minutos.", ok: true, porque: "Por exemplo: \"Entrou às 19h22 (trânsito); link do Meet enviado às 19h02. Revisamos números e preços; ainda troca thirteen e thirty.\" É o registro que protege você e o aluno." }
+        ]
+      }
+    }
+  };
+
+  /* ═════════ 2. O aluno sumiu ═════════ */
+  var sumido = {
+    tag: "Pratique",
+    titulo: "O aluno sumiu",
+    instrucao: "O Diego faltou 3 dias úteis seguidos e não responde às mensagens. O que você faz, e o que não pode fazer?",
+    progresso: function (s, a) { return a.gCertos("sm") + " de 7"; },
+    completa: function (s, a) { return a.gOk("sm"); },
+    fecho: "Continue aparecendo, esperando 15 minutos, mandando o link e tentando contato, e avise a coordenação. Presença lançada para quem sumiu é lançamento deliberadamente incorreto, e isso encerra a parceria.",
+    corpo: function (s, a) { return a.g("sm"); },
+    grupos: { sm: {
+      rotulos: [{ v: "sim", r: "Faça" }, { v: "nao", r: "Não faça" }],
+      itens: [
+        { t: "Entrar na chamada em cada horário e esperar pelo menos 15 minutos.", certo: "sim",
+          porque: "Você segue comparecendo normalmente, como faria com qualquer aluno que está faltando.",
+          dica: "O aluno ainda está na sua agenda." },
+        { t: "Mandar o link no horário de cada aula e continuar tentando contato.", certo: "sim",
+          porque: "Manter o contato é parte do acompanhamento, e cada mensagem fica como registro.",
+          dica: "Pense no que prova que você estava lá." },
+        { t: "Avisar a coordenação, pelo WhatsApp dela.", certo: "sim",
+          porque: "Aluno sumido foge do normal: a coordenação precisa saber cedo para agir junto.",
+          dica: "Tudo que foge do padrão é comunicado." },
+        { t: "Lançar presença, para não perder o valor das aulas.", certo: "nao",
+          porque: "Registrar presença sabendo que o aluno sumiu é lançamento deliberadamente incorreto, e é motivo para o encerramento da parceria.",
+          dica: "O lançamento é o registro oficial do que aconteceu." },
+        { t: "Lançar cada aula como falta sem direito, com o print da tentativa de contato.", certo: "sim",
+          porque: "Ele faltou sem avisar: falta sem direito a reposição, e o print da conversa vai junto.",
+          dica: "Faltou sem aviso: qual é o lançamento?" },
+        { t: "Tirar o Diego da sua agenda por conta própria.", certo: "nao",
+          porque: "Você acompanha até o aluno voltar ou até ele ser retirado da sua agenda pela escola.",
+          dica: "Quem decide a saída do aluno não é você." },
+        { t: "Parar de entrar nas aulas até ele responder.", certo: "nao",
+          porque: "Enquanto o aluno estiver na sua agenda, você comparece no horário. Sem isso, a falta passa a ser sua.",
+          dica: "O compromisso com o horário continua." }
+      ]
+    } }
+  };
+
+  /* ═════════ 3. Deixe registrado ═════════ */
+  var registro = {
+    tag: "Pratique",
+    titulo: "Deixe registrado",
+    instrucao: "Como prestador de serviço, o ônus da prova é seu. Três situações em que o registro faz a diferença.",
+    progresso: function (s, a) { return ["reclama", "desencontro", "combinado"].filter(a.qOk).length + " de 3"; },
+    completa: function (s, a) { return ["reclama", "desencontro", "combinado"].every(a.qOk); },
+    fecho: "O WhatsApp é o canal oficial para o que é importante. Lembrete, link, tentativas de contato e combinados por escrito são o que mostra que você estava lá e fez a sua parte.",
+    corpo: function (s, a) { return '<div style="display:grid;gap:20px">' + a.q("reclama") + a.q("desencontro") + a.q("combinado") + "</div>"; },
+    perguntas: {
+      reclama: {
+        pergunta: "Um aluno diz à escola que você faltou numa aula. O que mostra o que aconteceu?",
+        opcoes: [
+          { t: "A sua palavra: você sabe que estava lá.", porque: "A reclamação do aluno não prova que você faltou, mas a sua palavra também não prova que você estava. O que conta é o registro." },
+          { t: "As mensagens no WhatsApp no horário da aula: o lembrete, o link e as tentativas de contato.", ok: true, porque: "Mensagens no horário, tentativas de contato e avisos mostram que você estava presente e fez o que era preciso. Mesmo sem resposta, o print da tentativa conta." },
+          { t: "Nada: a coordenação sempre fica do lado do aluno.", porque: "A coordenação procura entender o que aconteceu, e para isso usa os registros. Por isso eles importam tanto." }
+        ]
+      },
+      desencontro: {
+        pergunta: "Você está na chamada, e o aluno escreve que está esperando em outra sala. O que fazer?",
+        opcoes: [
+          { t: "Esperar: ele vai acabar achando a sala certa.", porque: "Desencontro se resolve na hora. Sem tentativa registrada, fica difícil saber de quem foi a aula que não aconteceu." },
+          { t: "Mandar o link do Meet pelo WhatsApp na hora e registrar a tentativa; se não resolver, avisar a coordenação.", ok: true, porque: "Não basta estar na chamada: tente contato imediatamente, guarde o registro e comunique a coordenação em qualquer problema técnico." },
+          { t: "Lançar falta do aluno, porque ele estava no link errado.", porque: "Antes de qualquer lançamento, tente resolver na hora. E um desencontro vai para a coordenação, com os registros." }
+        ]
+      },
+      combinado: {
+        pergunta: "No fim da aula, você e o aluno combinaram a reposição para quinta às 8h. E agora?",
+        opcoes: [
+          { t: "Nada: vocês combinaram na aula.", porque: "Combinado falado não fica registrado. Se houver dúvida depois, não há como mostrar o que foi acertado." },
+          { t: "Confirmar por escrito no WhatsApp e agendar a reposição na plataforma.", ok: true, porque: "Reposição, confirmação de aula e aviso importante precisam estar por escrito no WhatsApp. O registro é a sua proteção." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ chamada: chamada, sumido: sumido, registro: registro });
+})();
+</script>
+</body>
+</html>

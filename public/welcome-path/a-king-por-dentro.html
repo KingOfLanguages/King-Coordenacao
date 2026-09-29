@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>A King por dentro · Prática</title>
+<!-- Atividades do módulo "A King por dentro" (Welcome Path 2.0, Fase 1), cada
+     uma por ?parte=<id>: jornada, times, mensagens, canais.
+     Fontes: MAPA 0 (metodologia e Masterclass), MAPA 19 (Nossos times), MAPA 21
+     (plataforma do aluno) e os vídeos 1, 2, 3, 4, 5 e 10 do roteiro do suporte
+     (propósito, comunicação, times, recursos, plataforma, primeiros passos).
+     O Kit Professor deixou de existir (decisão de 28/09). Sem telefones nem
+     links reais aqui: o repositório é público. Alunos fictícios. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/welcome-path/kit/kit.css">
+<style>
+/* mensagem de WhatsApp dentro do item */
+.wa{display:grid; gap:4px; max-width:46ch; background:var(--wa-in); color:var(--wa-text); border-radius:4px 10px 10px 10px; padding:7px 10px 6px; box-shadow:0 1px .5px rgba(11,20,26,.13); font-size:13.5px; line-height:1.45}
+.wa .de{font:600 12px Geist,sans-serif; color:var(--wa-green)}
+.wa .h{justify-self:end; font:400 10.5px Geist,sans-serif; color:var(--wa-meta); margin-top:-2px}
+.fundo-wa{background:var(--wa-bg); border-radius:9px; padding:9px}
+.sit{display:flex; gap:9px; align-items:flex-start; font-size:13.5px; line-height:1.5}
+.sit .ic{color:var(--fg-muted); margin-top:3px}
+.sit b{display:block; font:600 10.5px Geist,sans-serif; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-muted); margin-bottom:1px}
+</style>
+</head>
+<body>
+<main id="app" class="wrap"></main>
+<script src="/welcome-path/kit/kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var K = window.Kit, esc = K.esc, ic = K.ic;
+
+  function wa(de, txt, hora) {
+    return '<div class="fundo-wa"><div class="wa"><span class="de">' + esc(de) + "</span><span>" + esc(txt) + '</span><span class="h">' + esc(hora) + "</span></div></div>";
+  }
+  function sit(txt) { return '<div class="sit">' + ic("info", 15) + "<div><b>Situação</b>" + esc(txt) + "</div></div>"; }
+
+  /* ═════════ 1. A jornada do aluno ═════════ */
+  var jornada = {
+    tag: "Pratique",
+    titulo: "Como o aluno chega até você",
+    instrucao: "Coloque em ordem o caminho do aluno, do primeiro contato com a King até a primeira aula com você.",
+    progresso: function (s, a) { return a.oFeitos("jor") + " de 6"; },
+    completa: function (s, a) { return a.oOk("jor"); },
+    fecho: "Vendas traz o aluno e agenda a experimental, a escola fecha a matrícula e o aluno chega a você pela agenda, como oferta de contrato. Depois do aceite, ele é seu. Pausa, transferência e cancelamento passam pelo Suporte ao Aluno.",
+    corpo: function (s, a) { return a.o("jor"); },
+    ordens: { jor: {
+      passos: [
+        { id: "vendas", t: "O time de vendas encontra o aluno e agenda uma aula experimental", rot: "1", cedo: "Tudo começa antes da matrícula: alguém precisa encontrar o aluno." },
+        { id: "exp", t: "O aluno faz a aula experimental", rot: "2", cedo: "A experimental vem antes da matrícula: é nela que o aluno conhece a King." },
+        { id: "matricula", t: "O aluno se matricula, e o pós-vendas libera os acessos dele", rot: "3", cedo: "O aluno só chega a um professor depois de se matricular." },
+        { id: "oferta", t: "O aluno aparece na sua agenda como oferta, e você aceita o contrato", rot: "4", cedo: "Antes do primeiro contato, o aluno precisa ser seu: isso acontece no aceite do contrato." },
+        { id: "contato", t: "Você faz o primeiro contato com o aluno pelo WhatsApp", rot: "5", cedo: "O primeiro contato vem depois do aceite e antes da primeira aula." },
+        { id: "aula", t: "Primeira aula, com nivelamento e alinhamento de expectativas", rot: "6", cedo: "A primeira aula fecha o caminho." }
+      ],
+      extras: [
+        { id: "prospecta", t: "Você procura alunos e agenda a experimental com eles", porque: "Quem traz alunos para a escola é o time de vendas. O aluno chega a você pela agenda." },
+        { id: "preco", t: "Você combina o valor da mensalidade com o aluno", porque: "Mensalidade e matrícula são assunto do aluno com a escola. Pergunta sobre valor vai para o Suporte ao Aluno." }
+      ],
+      mostra: ["contato", "prospecta", "exp", "aula", "oferta", "preco", "vendas", "matricula"]
+    } }
+  };
+
+  /* ═════════ 2. Quem faz o quê ═════════ */
+  var times = {
+    tag: "Pratique",
+    titulo: "Quem faz o quê na King",
+    instrucao: "Cada frase descreve o trabalho de um time. Diga de qual.",
+    progresso: function (s, a) { return a.gCertos("times") + " de 8"; },
+    completa: function (s, a) { return a.gOk("times"); },
+    fecho: "Recrutamento trouxe você; a coordenação acompanha você no dia a dia; o Suporte ao Aluno é o único que atende o aluno; vendas traz alunos novos e as experimentais; o pós-vendas integra o aluno que acabou de chegar.",
+    corpo: function (s, a) { return a.g("times"); },
+    grupos: { times: {
+      rotulos: [{ v: "rec", r: "Recrutamento" }, { v: "coord", r: "Coordenação" }, { v: "sup", r: "Suporte ao Aluno" }, { v: "ven", r: "Vendas" }, { v: "pos", r: "Pós-vendas" }],
+      itens: [
+        { t: "Conduziu o seu processo seletivo e o treinamento inicial, liberou os seus acessos e definiu os seus horários.", certo: "rec",
+          porque: "O recrutamento faz a integração de professores novos: seleção, acessos e horários.",
+          dica: "Pense em quem cuidou de você antes da primeira aula, ainda na seleção." },
+        { t: "Recebe a indicação de um amigo seu que também quer dar aula na King.", certo: "rec",
+          porque: "Indicação de professor vai para o recrutamento.",
+          dica: "É sobre um professor novo, não sobre um aluno." },
+        { t: "Tira as suas dúvidas pelo WhatsApp, das 9h às 18h, e faz o Plantão de Dúvidas.", certo: "coord",
+          porque: "A coordenação faz o suporte direto ao professor: WhatsApp, Plantão de Dúvidas e reunião.",
+          dica: "É o seu contato direto com a escola no dia a dia." },
+        { t: "Acompanha a qualidade das aulas e cuida do material didático.", certo: "coord",
+          porque: "A coordenação faz parte do time de qualidade, que acompanha as aulas e cuida do material.",
+          dica: "Qualidade das aulas é o time que acompanha você." },
+        { t: "Cuida de cancelamento, transferência, inadimplência e matrícula nova.", certo: "sup",
+          porque: "Tudo do aluno com a escola é com o Suporte ao Aluno.",
+          dica: "São assuntos do aluno com a escola, não seus." },
+        { t: "Avisa você quando um aluno desiste e manda alunos que vieram de outro professor.", certo: "sup",
+          porque: "Desistências e alunos transferidos chegam a você pelo Suporte ao Aluno, o time mais próximo dos professores depois da coordenação.",
+          dica: "Quem cuida da transferência do aluno é quem avisa você dela." },
+        { t: "Encontra alunos novos, agenda as aulas experimentais e lança essas aulas na plataforma.", certo: "ven",
+          porque: "Vendas traz alunos para a escola e manda as experimentais para você.",
+          dica: "É o começo da jornada do aluno, antes da matrícula." },
+        { t: "Integra o aluno que acabou de se matricular e libera os acessos dele.", certo: "pos",
+          porque: "O pós-vendas recebe o aluno novo na escola e cuida dos acessos dele.",
+          dica: "É o que acontece logo depois da venda." }
+      ]
+    } }
+  };
+
+  /* ═════════ 3. Para quem vai? ═════════ */
+  var mensagens = {
+    tag: "Pratique",
+    titulo: "Para quem vai?",
+    instrucao: "Mensagens e situações da sua semana. Decida: você mesmo responde, fala com a coordenação ou encaminha o aluno ao Suporte ao Aluno.",
+    progresso: function (s, a) { return a.gCertos("msg") + " de 6"; },
+    completa: function (s, a) { return a.gOk("msg"); },
+    fecho: "Assunto do aluno com a escola vai para o Suporte ao Aluno: é o único time que atende o aluno. Dúvida sua vai para a coordenação. E o que é da sua aula, como a reposição com direito, você mesmo resolve.",
+    corpo: function (s, a) { return a.g("msg"); },
+    grupos: { msg: {
+      rotulos: [{ v: "eu", r: "Você responde" }, { v: "coord", r: "Coordenação" }, { v: "sup", r: "Suporte ao Aluno" }],
+      itens: [
+        { html: wa("Rafael Nunes", "Teacher, esqueci a senha da plataforma do aluno 😕", "08:12"), certo: "sup",
+          porque: "Acesso do aluno é com o Suporte ao Aluno. Oriente o Rafael a falar com eles.",
+          dica: "Quem presta suporte ao aluno é um time só." },
+        { html: wa("Carla Souza", "Quanto fica a mensalidade para eu matricular minha filha também?", "10:47"), certo: "sup",
+          porque: "Matrícula nova e valores são com o Suporte ao Aluno. Você não negocia mensalidade.",
+          dica: "Valor e matrícula são do aluno com a escola." },
+        { html: wa("Beatriz Lima", "Faltei ontem, mas avisei na sexta. Quando consigo repor?", "12:30"), certo: "eu",
+          porque: "Ela avisou com mais de 24h: tem direito. Você agenda a reposição num horário livre seu, em até 30 dias.",
+          dica: "Reposição com direito é agendada por você mesmo." },
+        { html: sit("Você ficou em dúvida sobre como lançar a reposição de um aluno que veio de outro professor."), certo: "coord",
+          porque: "Dúvida de processo é com a coordenação: WhatsApp das 9h às 18h, Plantão de Dúvidas ou reunião.",
+          dica: "A dúvida é sua, sobre o seu trabalho." },
+        { html: wa("Diego Ramos", "Meu cartão foi recusado e chegou uma cobrança. Você consegue ver isso pra mim?", "16:05"), certo: "sup",
+          porque: "Cobrança e inadimplência são com o Suporte ao Aluno.",
+          dica: "Pagamento do aluno não passa por você." },
+        { html: wa("Diego Ramos", "Pensando bem, vou cancelar no fim do mês. Obrigado por tudo!", "16:09"), certo: "sup",
+          porque: "Cancelamento é com o Suporte ao Aluno. É ele que avisa você quando um aluno desiste.",
+          dica: "Cancelamento é assunto do aluno com a escola." }
+      ]
+    } }
+  };
+
+  /* ═════════ 4. Onde pedir ajuda ═════════ */
+  var canais = {
+    tag: "Pratique",
+    titulo: "Onde pedir ajuda",
+    instrucao: "Quatro dúvidas comuns da primeira semana.",
+    progresso: function (s, a) { return ["grupo", "horario", "aovivo", "onde"].filter(a.qOk).length + " de 4"; },
+    completa: function (s, a) { return ["grupo", "horario", "aovivo", "onde"].every(a.qOk); },
+    fecho: "WhatsApp da coordenação das 9h às 18h, Plantão de Dúvidas 3 vezes ao dia ou reunião com um coordenador. O grupo central é só de avisos. E as regras estão no MAPA, dentro da plataforma.",
+    corpo: function (s, a) { return '<div style="display:grid;gap:18px">' + a.q("grupo") + a.q("horario") + a.q("aovivo") + a.q("onde") + "</div>"; },
+    perguntas: {
+      grupo: {
+        pergunta: "Chegou um aviso no grupo central da coordenação e você ficou com uma dúvida sobre ele. Onde pergunta?",
+        opcoes: [
+          { t: "No próprio grupo central, respondendo ao aviso.", porque: "O grupo central é só de avisos: ninguém consegue mandar mensagem nele." },
+          { t: "No WhatsApp da coordenação.", ok: true, porque: "O grupo central só dá avisos. Dúvida, sobre o aviso ou qualquer outra coisa, vai para o WhatsApp da coordenação." },
+          { t: "Com o Suporte ao Aluno.", porque: "O Suporte ao Aluno atende o aluno. Dúvida sua vai para a coordenação." }
+        ]
+      },
+      horario: {
+        pergunta: "Em que horário a coordenação atende pelo WhatsApp?",
+        opcoes: [
+          { t: "A qualquer hora, inclusive de madrugada.", porque: "A coordenação atende das 9h às 18h. Fora disso, a resposta vem no próximo horário de atendimento." },
+          { t: "Só no horário das suas aulas.", porque: "O atendimento não depende das suas aulas: é das 9h às 18h." },
+          { t: "Das 9h às 18h.", ok: true, porque: "Aproveite esse horário para tirar as dúvidas. Fora dele, a resposta vem no próximo horário de atendimento." }
+        ]
+      },
+      aovivo: {
+        pergunta: "Você prefere tirar uma dúvida conversando, ao vivo. Quais são os caminhos?",
+        opcoes: [
+          { t: "Ir a um Plantão de Dúvidas, que acontece 3 vezes ao dia, ou pedir a agenda de um coordenador para marcar uma reunião.", ok: true, porque: "Os dois existem para isso. Você sempre tem acesso direto à coordenação." },
+          { t: "Esperar a reunião de acompanhamento do mês.", porque: "Não precisa esperar: o Plantão de Dúvidas acontece 3 vezes ao dia, e dá para marcar uma reunião com um coordenador." },
+          { t: "Ligar para o Suporte ao Aluno.", porque: "O Suporte ao Aluno atende o aluno. Para você, o caminho é o Plantão de Dúvidas ou uma reunião com um coordenador." }
+        ]
+      },
+      onde: {
+        pergunta: "Onde você confere uma regra da escola, como o prazo de uma reposição?",
+        opcoes: [
+          { t: "No Kit Professor, a pasta do Google Drive.", porque: "O Kit Professor deixou de existir. O que importava foi para a plataforma do professor." },
+          { t: "No MAPA, o manual de procedimentos, em Materiais › Módulos na plataforma do professor.", ok: true, porque: "O MAPA tem todos os processos e procedimentos da King. Na dúvida sobre uma regra, é lá que você confere." },
+          { t: "Na plataforma do aluno.", porque: "A plataforma do aluno é onde o aluno entra na aula, vê o material e avisa falta. As regras para você estão no MAPA." }
+        ]
+      }
+    }
+  };
+
+  K.iniciar({ jornada: jornada, times: times, mensagens: mensagens, canais: canais });
+})();
+</script>
+</body>
+</html>

@@ -17,6 +17,7 @@
      acoes {nome(dataset, s, el)} → cliques em [data-act="nome"]
      entrada {nome(el, s)}         → digitação em [data-inp="nome"] (sem redesenhar)
      mudanca {nome(el, s)}         → change em [data-chg="nome"]
+     soltar(de, para, s)           → arrastar [data-arr="de"] e soltar em [data-solta="para"]
 
    Prática não conta nota (decisão da coordenação, 2026-09-24): nada é
    gravado nem enviado. O gabarito fica aqui de propósito.
@@ -213,6 +214,36 @@
       var el = e.target, n = el.dataset && el.dataset.chg;
       if (n && def.mudanca && def.mudanca[n]) { def.mudanca[n](el, s); draw(); }
     });
+    if (def.soltar) {
+      var arr = null;
+      var alvo = function (e) { return arr && e.target.closest ? e.target.closest("[data-solta]") : null; };
+      var limpa = function () { root.querySelectorAll(".sobre").forEach(function (n) { n.classList.remove("sobre"); }); };
+      root.addEventListener("dragstart", function (e) {
+        var el = e.target.closest && e.target.closest("[data-arr]");
+        if (!el) return;
+        arr = el.dataset.arr;
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", arr); } catch (_) {}
+      });
+      ["dragenter", "dragover"].forEach(function (tipo) {
+        root.addEventListener(tipo, function (e) {
+          var el = alvo(e);
+          if (!el) return;
+          e.preventDefault();
+          if (!el.classList.contains("sobre")) { limpa(); el.classList.add("sobre"); }
+        });
+      });
+      root.addEventListener("dragend", function () { arr = null; limpa(); });
+      root.addEventListener("drop", function (e) {
+        var el = alvo(e);
+        if (!el) return;
+        e.preventDefault();
+        var de = arr;
+        arr = null;
+        def.soltar(de, el.dataset.solta, s);
+        draw();
+      });
+    }
     draw();
   }
 
