@@ -178,6 +178,7 @@ export function TrilhaView({
                           <span>
                             Etapa {i + 1}
                             {!etapa.obrigatoria && ' · opcional'}
+                            {etapa.desativada && ' · desativada'}
                           </span>
                           {etapa.minutos != null && etapa.estado !== 'concluida' && (
                             <span className="flex items-center gap-1 font-medium normal-case tracking-normal">

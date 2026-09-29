@@ -30,6 +30,7 @@ function paraTrilha(e: EtapaAdmin): EtapaTrilha {
     id: e.id, ordem: e.ordem, titulo: e.titulo, descricao: e.descricao,
     minutos: e.minutos_estimados, obrigatoria: e.obrigatoria, notaMinima: e.nota_minima,
     notasCoordenacao: e.notas_coordenacao,
+    desativada: !e.ativa,
     // Tudo liberado: a coordenação precisa abrir qualquer etapa.
     estado: 'liberada', motivoBloqueio: null, abreEm: null, prazoEm: null,
     nota: null, tentativas: 0, iniciadaEm: null, concluidaEm: null, tempoSegundos: 0, revisaoPendente: false,
@@ -38,7 +39,11 @@ function paraTrilha(e: EtapaAdmin): EtapaTrilha {
 
 export function VisaoProfessorTab() {
   const { data, isLoading } = useEtapasAdmin()
-  const etapas = useMemo(() => (data ?? []).filter(e => e.ativa), [data])
+  // Com as desativadas, a coordenação revisa um módulo antes de ativar; sem
+  // elas, a lista é exatamente a que o professor vê hoje.
+  const [comDesativadas, setComDesativadas] = useState(true)
+  const etapas = useMemo(() => (data ?? []).filter(e => comDesativadas || e.ativa), [data, comDesativadas])
+  const nDesativadas = (data ?? []).filter(e => !e.ativa).length
   const [aberta, setAberta] = useState<string | null>(null)
   // Trocar a chave remonta a etapa: é o "refazer" da pré-visualização.
   const [rodada, setRodada] = useState(0)
@@ -53,6 +58,7 @@ export function VisaoProfessorTab() {
           key={`${etapa.id}-${rodada}`}
           etapa={etapa}
           numero={etapas.indexOf(etapa) + 1}
+          desativada={!etapa.ativa}
           totalEtapas={etapas.length}
           onVoltar={() => { setAberta(null); window.scrollTo({ top: 0 }) }}
           onRefazer={() => setRodada(r => r + 1)}
@@ -64,6 +70,17 @@ export function VisaoProfessorTab() {
   return (
     <div className="space-y-6">
       <FaixaPrevia texto="É a tela inicial do portal do professor. Aqui todas as etapas ficam abertas, para você conferir qualquer uma." />
+      {nDesativadas > 0 && (
+        <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink-secondary">
+          <input
+            type="checkbox"
+            checked={comDesativadas}
+            onChange={e => setComDesativadas(e.target.checked)}
+            className="h-4 w-4 accent-current"
+          />
+          Mostrar também as {nDesativadas} etapas desativadas, que o professor ainda não vê
+        </label>
+      )}
       <div className="flex justify-center">
         <TrilhaView
           nome="Professor"
@@ -115,10 +132,11 @@ function corrigir(questoes: QuestaoAdmin[], respostas: RespostaEnviada[], notaMi
 }
 
 function EtapaPrevia({
-  etapa, numero, totalEtapas, onVoltar, onRefazer,
+  etapa, numero, desativada, totalEtapas, onVoltar, onRefazer,
 }: {
   etapa: EtapaAdmin
   numero: number
+  desativada: boolean
   totalEtapas: number
   onVoltar: () => void
   onRefazer: () => void
@@ -164,7 +182,9 @@ function EtapaPrevia({
       enviando={false}
       erroEnvio={null}
       onVoltar={onVoltar}
-      aviso={<FaixaPrevia texto="Esta é a etapa como o professor vê, com as práticas funcionando." />}
+      aviso={<FaixaPrevia texto={desativada
+        ? 'Esta etapa está desativada: o professor ainda não a vê. Aqui ela aparece como vai ficar, com as práticas funcionando.'
+        : 'Esta é a etapa como o professor vê, com as práticas funcionando.'} />}
       aposQuestao={gabarito ? q => <Gabarito questao={porId.get(q.id)} /> : undefined}
       trilho={
         <div className="space-y-4 rounded-2xl border border-line-soft bg-surface-canvas px-5 py-5">

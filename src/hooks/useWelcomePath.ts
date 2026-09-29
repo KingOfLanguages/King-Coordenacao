@@ -52,6 +52,9 @@ export type EtapaTrilha = {
   obrigatoria: boolean
   notaMinima: number
   notasCoordenacao: string | null
+  /** Só na Visão do professor (/onboarding): etapa com ativa = false, que o
+   *  professor ainda não vê. O portal nunca recebe etapa desativada. */
+  desativada?: boolean
   estado: EstadoEtapa
   /** Só quando bloqueada: 'anterior' (falta concluir a anterior) ou 'data'. */
   motivoBloqueio: 'anterior' | 'data' | null
