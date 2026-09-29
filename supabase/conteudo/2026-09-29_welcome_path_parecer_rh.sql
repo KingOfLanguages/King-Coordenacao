@@ -200,8 +200,11 @@ WITH alvo(chave, nova_ordem) AS (VALUES
   ('Aulas experimentais', 16),
   ('b17ff7e4-15c7-4cde-89d9-22f8be0723dc', 17)   -- Encerramento
 )
+-- Casa pelo id (etapas antigas) ou pelo título (novas), ATIVAS OU NÃO: em 29/09
+-- as 8 novas foram ativadas pelo editor antes deste arquivo rodar, e a versão
+-- que exigia ativa = false deixou 5 posições repetidas por ~2 minutos.
 UPDATE welcome_path_etapas e SET ordem = a.nova_ordem
 FROM alvo a
-WHERE e.id::text = a.chave OR (e.titulo = a.chave AND e.ativa = false);
+WHERE e.id::text = a.chave OR e.titulo = a.chave;
 
 COMMIT;
