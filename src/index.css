@@ -66,6 +66,13 @@
     --aviso-warn-fg: #ae1122;
     --aviso-warn-bd: #f2aeb6;
 
+    /* Blocos do calendário de reuniões em grupo — um tom por grupo do
+       coordenador (Red/Yellow/Blue), com par claro/escuro como os avisos. */
+    --coord-red-bg:    #fde2e4;  --coord-red-fg:    #9c1325;  --coord-red-bd:    #f1a9b2;
+    --coord-yellow-bg: #fdf0c8;  --coord-yellow-fg: #7a5200;  --coord-yellow-bd: #ecd17a;
+    --coord-blue-bg:   #dde8ff;  --coord-blue-fg:   #1c3f9e;  --coord-blue-bd:   #a9c0fb;
+    --coord-neutral-bg:#eceef3;  --coord-neutral-fg:#3b4253;  --coord-neutral-bd:#c9cdd8;
+
     /* shadcn */
     --background:           var(--bg-app);
     --foreground:           var(--fg-primary);
@@ -121,6 +128,11 @@
     --aviso-warn-bg: #331419;
     --aviso-warn-fg: #ff9aa4;
     --aviso-warn-bd: #5d2630;
+
+    --coord-red-bg:    #3a161c;  --coord-red-fg:    #ffa3ad;  --coord-red-bd:    #6b2832;
+    --coord-yellow-bg: #33280c;  --coord-yellow-fg: #f5d27a;  --coord-yellow-bd: #5e4a17;
+    --coord-blue-bg:   #121f3f;  --coord-blue-fg:   #a8c1ff;  --coord-blue-bd:   #2c4382;
+    --coord-neutral-bg:#232836;  --coord-neutral-fg:#c4c9d6;  --coord-neutral-bd:#3a4152;
   }
 
   html, body, #root {

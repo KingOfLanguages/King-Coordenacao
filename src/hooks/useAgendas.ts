@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import type { Ocorrencia } from '@/lib/sugestaoAgenda'
 
 export type OcorrenciaComLink = {
   id: string
@@ -340,5 +341,75 @@ export function useAgendaReunioesPeriodo(coordId: string | null, inicio: Date, f
     enabled: !!coordId,
     queryFn: () => fetchAgendaOcorrencias(coordId!, inicio.toISOString(), fim.toISOString()),
     staleTime: 60 * 1000,
+  })
+}
+
+// ─── Participação nas reuniões em grupo (base das sugestões de horário) ──────
+
+/** Janela do histórico usado nas sugestões de dia/horário. */
+export const DIAS_HISTORICO_PARTICIPACAO = 180
+
+const fmtDiaHoraSP = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Sao_Paulo', weekday: 'short', hour: 'numeric', hourCycle: 'h23',
+})
+const DOW_EN: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+
+/** Dia da semana e hora cheia de um instante, no horário de Brasília. */
+function diaHoraSP(iso: string): { dia: number; hora: number } {
+  const partes = fmtDiaHoraSP.formatToParts(new Date(iso))
+  const wd = partes.find(p => p.type === 'weekday')?.value ?? 'Sun'
+  const h = Number(partes.find(p => p.type === 'hour')?.value ?? 0)
+  return { dia: DOW_EN[wd] ?? 0, hora: h }
+}
+
+/**
+ * Cada horário de reunião em grupo que já passou (últimos
+ * DIAS_HISTORICO_PARTICIPACAO dias), de todos os coordenadores, com inscritos e
+ * presentes. Presente = participante com status 'realizada' na reunião gerada
+ * pelo horário. Horário sem inscrito nenhum entra com 0/0 — também é dado.
+ */
+export function useParticipacaoAgendas() {
+  return useQuery({
+    queryKey: ['agendas-participacao'],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<Ocorrencia[]> => {
+      const agora = new Date()
+      const desde = new Date(agora.getTime() - DIAS_HISTORICO_PARTICIPACAO * 86_400_000)
+      const { data, error } = await supabase
+        .from('agenda_horarios')
+        .select(`
+          id, data_hora, recorrencia_id,
+          agenda:agenda_reunioes!agenda_id (coordenador_id),
+          inscricoes:agenda_inscricoes (status),
+          reuniao:reunioes!reuniao_id (
+            participantes:reuniao_professores (status)
+          )
+        `)
+        .eq('ativo', true)
+        .gte('data_hora', desde.toISOString())
+        .lt('data_hora', agora.toISOString())
+        .order('data_hora')
+        .limit(5000)
+      if (error) throw error
+
+      type Raw = {
+        data_hora: string
+        recorrencia_id: string | null
+        agenda: { coordenador_id: string | null } | { coordenador_id: string | null }[] | null
+        inscricoes: { status: string }[]
+        reuniao: { participantes: { status: string }[] } | { participantes: { status: string }[] }[] | null
+      }
+      return ((data ?? []) as unknown as Raw[]).map(h => {
+        const agenda = Array.isArray(h.agenda) ? h.agenda[0] : h.agenda
+        const reuniao = Array.isArray(h.reuniao) ? h.reuniao[0] : h.reuniao
+        return {
+          ...diaHoraSP(h.data_hora),
+          recorrenciaId: h.recorrencia_id,
+          coordenadorId: agenda?.coordenador_id ?? null,
+          inscritos: h.inscricoes.filter(i => i.status === 'confirmada').length,
+          presentes: (reuniao?.participantes ?? []).filter(p => p.status === 'realizada').length,
+        }
+      })
+    },
   })
 }
