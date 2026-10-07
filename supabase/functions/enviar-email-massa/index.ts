@@ -136,7 +136,28 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  // ── 1. Body ──────────────────────────────────────────────────────────────────
+  const url        = Deno.env.get('SUPABASE_URL')!
+  const anonKey    = Deno.env.get('SUPABASE_ANON_KEY')!
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+  // ── 1. Quem está chamando? (coordenação/admin/líder) ─────────────────────────
+  // Antes de tudo: nem a validação do corpo responde a anônimo.
+  const authHeader = req.headers.get('Authorization') ?? ''
+  const userClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } })
+  const { data: { user }, error: userErr } = await userClient.auth.getUser()
+  if (userErr || !user) return json({ error: 'Não autenticado.' }, 401)
+
+  const { data: perfil } = await userClient
+    .from('profiles')
+    .select('role, is_admin, is_lider')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const podeEnviar = perfil?.role === 'admin' || perfil?.role === 'coordenacao'
+    || perfil?.is_admin === true || perfil?.is_lider === true
+  if (!podeEnviar) return json({ error: 'Sem permissão para disparar e-mails.' }, 403)
+
+  // ── 2. Body ──────────────────────────────────────────────────────────────────
   let body: { assunto?: unknown; tipo?: unknown; remetente_nome?: unknown; mensagens?: unknown }
   try { body = await req.json() } catch { return json({ error: 'JSON inválido.' }, 400) }
 
@@ -160,26 +181,6 @@ serve(async (req) => {
   if (mensagens.length > MAX_DESTINATARIOS) {
     return json({ error: `Máximo de ${MAX_DESTINATARIOS} destinatários por disparo.` }, 422)
   }
-
-  const url        = Deno.env.get('SUPABASE_URL')!
-  const anonKey    = Deno.env.get('SUPABASE_ANON_KEY')!
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-  // ── 2. Quem está chamando? (coordenação/admin/líder) ─────────────────────────
-  const authHeader = req.headers.get('Authorization') ?? ''
-  const userClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } })
-  const { data: { user }, error: userErr } = await userClient.auth.getUser()
-  if (userErr || !user) return json({ error: 'Não autenticado.' }, 401)
-
-  const { data: perfil } = await userClient
-    .from('profiles')
-    .select('role, is_admin, is_lider')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const podeEnviar = perfil?.role === 'admin' || perfil?.role === 'coordenacao'
-    || perfil?.is_admin === true || perfil?.is_lider === true
-  if (!podeEnviar) return json({ error: 'Sem permissão para disparar e-mails.' }, 403)
 
   // ── 3. Resolve nomes + e-mails no servidor (nunca confia no client) ──────────
   const admin = createClient(url, serviceKey)

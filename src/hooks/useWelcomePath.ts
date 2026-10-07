@@ -1,39 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { invocarFuncao } from '@/lib/invocarFuncao'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Portal público do Welcome Path. Tudo passa pela Edge Function
 // `portal-welcome-path` — o professor não tem sessão do Supabase, então o
-// front nunca fala com as tabelas direto.
+// front nunca fala com as tabelas direto. O token vem de `portal-identidade`
+// (ver usePortalIdentidade).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * supabase-js só expõe `error.message` genérico ("non-2xx status code") em erro
- * HTTP de Edge Function — o corpo real ({ error: "…" }) vem em `error.context`.
- * As mensagens aqui são escritas para o professor ler, então perdê-las custa
- * caro. Mesma armadilha documentada em usePortalPausa.ts e useBookMeeting.ts:
- * a extração acontece DENTRO do try, mas o throw é FORA — lançar lá dentro
- * seria capturado pelo próprio catch e devolveria o genérico.
- */
-async function invocar<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('portal-welcome-path', { body })
-
-  if (error) {
-    const ctx = (error as { context?: Response }).context
-    let mensagem: string | null = null
-    if (ctx?.clone) {
-      try {
-        const parsed = await ctx.clone().json()
-        if (parsed?.error) mensagem = parsed.error
-      } catch { /* corpo não era JSON — cai na mensagem genérica */ }
-    }
-    throw new Error(mensagem ?? error.message)
-  }
-
-  const corpo = data as (T & { error?: string }) | null
-  if (corpo?.error) throw new Error(corpo.error)
-  return corpo as T
-}
+const invocar = <T,>(body: Record<string, unknown>) => invocarFuncao<T>('portal-welcome-path', body)
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -139,42 +114,6 @@ export type ResultadoEnvio = {
   revisaoPendente: boolean
   tentativas: number
   resultado: { questaoId: string; correta: boolean | null; explicacao: string | null }[]
-}
-
-export type LookupResult = {
-  professor: ProfessorPortal | null
-  ambiguo: boolean
-  token: string | null
-  expiraEm?: string
-}
-
-// ─── Identificação ────────────────────────────────────────────────────────────
-
-export type LookupInput = {
-  email?: string
-  nome?: string
-  mesInicio?: number
-  anoInicio?: number
-  /** Id direto — reenviado com o e-mail confirmado para cadastrá-lo. */
-  professorId?: string
-}
-
-/** Mesma identificação do /pausa: e-mail exato → nome completo → mês/ano. */
-export function useWelcomePathLookup() {
-  return useMutation({
-    mutationFn: (input: LookupInput) => invocar<LookupResult>({ acao: 'lookup', ...input }),
-  })
-}
-
-/** Revalida o token guardado no dispositivo. */
-export function useWelcomePathSessao(token: string | null) {
-  return useQuery({
-    queryKey: ['wp', 'sessao', token],
-    enabled: !!token,
-    retry: false,
-    staleTime: Infinity,
-    queryFn: () => invocar<{ professor: ProfessorPortal }>({ acao: 'sessao', token }),
-  })
 }
 
 // ─── Trilha e etapa ───────────────────────────────────────────────────────────

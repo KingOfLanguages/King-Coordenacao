@@ -102,21 +102,12 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  // ── 1. Body ──────────────────────────────────────────────────────────────────
-  let body: { contato_id?: unknown; corpo?: unknown; assunto?: unknown; remetente_nome?: unknown }
-  try { body = await req.json() } catch { return json({ error: 'JSON inválido.' }, 400) }
-
-  const contatoId = typeof body.contato_id === 'string' ? body.contato_id.trim() : ''
-  const corpo     = typeof body.corpo === 'string' ? body.corpo : ''
-  const assunto   = typeof body.assunto === 'string' && body.assunto.trim() ? body.assunto.trim() : 'Reunião de acompanhamento — King'
-  const remetente = typeof body.remetente_nome === 'string' && body.remetente_nome.trim() ? body.remetente_nome.trim() : 'Coordenação'
-  if (!contatoId || !corpo.trim()) return json({ error: 'contato_id e corpo são obrigatórios.' }, 400)
-
   const url        = Deno.env.get('SUPABASE_URL')!
   const anonKey    = Deno.env.get('SUPABASE_ANON_KEY')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-  // ── 2. Quem está chamando? (precisa ser coordenação/admin/líder) ─────────────
+  // ── 1. Quem está chamando? (precisa ser coordenação/admin/líder) ─────────────
+  // Antes de tudo: nem a validação do corpo responde a anônimo.
   const authHeader = req.headers.get('Authorization') ?? ''
   const userClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } })
   const { data: { user }, error: userErr } = await userClient.auth.getUser()
@@ -131,6 +122,16 @@ serve(async (req) => {
   const podeEnviar = perfil?.role === 'admin' || perfil?.role === 'coordenacao'
     || perfil?.is_admin === true || perfil?.is_lider === true
   if (!podeEnviar) return json({ error: 'Sem permissão para enviar e-mails.' }, 403)
+
+  // ── 2. Body ──────────────────────────────────────────────────────────────────
+  let body: { contato_id?: unknown; corpo?: unknown; assunto?: unknown; remetente_nome?: unknown }
+  try { body = await req.json() } catch { return json({ error: 'JSON inválido.' }, 400) }
+
+  const contatoId = typeof body.contato_id === 'string' ? body.contato_id.trim() : ''
+  const corpo     = typeof body.corpo === 'string' ? body.corpo : ''
+  const assunto   = typeof body.assunto === 'string' && body.assunto.trim() ? body.assunto.trim() : 'Reunião de acompanhamento — King'
+  const remetente = typeof body.remetente_nome === 'string' && body.remetente_nome.trim() ? body.remetente_nome.trim() : 'Coordenação'
+  if (!contatoId || !corpo.trim()) return json({ error: 'contato_id e corpo são obrigatórios.' }, 400)
 
   // ── 3. Resolve o destino no servidor (nunca confia no client) ────────────────
   const admin = createClient(url, serviceKey)

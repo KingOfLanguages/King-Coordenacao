@@ -5,6 +5,11 @@
 //   - Sem reuniao_id → envia para TODAS as reuniões pendentes de hoje
 //   - Com reuniao_id → envia apenas para aquela reunião específica
 //
+// Segurança: exige usuário logado com cargo de coordenação/suporte/admin/líder.
+// Até o pentest de 05/10/2026 não exigia nada — um POST vazio com a anon key
+// (pública no bundle) disparou 14 lembretes reais. O cron que chamava esta
+// function foi removido em 20260424, então não há chamada sem usuário.
+//
 // Secrets necessários (Supabase Dashboard > Edge Functions > Secrets):
 //   BREVO_API_KEY    — chave da API do Brevo
 //   BREVO_FROM_EMAIL — email remetente verificado no Brevo
@@ -14,17 +19,10 @@
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { jsonPara, preflight } from '../_shared/portal.ts'
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-}
+/** Cargos que mandam lembrete — os mesmos que operam a tela de Reuniões. */
+const ROLES_PODEM = new Set(['admin', 'coordenacao', 'suporte'])
 
 // ─── Email template ───────────────────────────────────────────────────────────
 
@@ -110,7 +108,26 @@ function buildHtml({
 // ─── Servidor ─────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
+  if (req.method !== 'POST') return json({ error: 'Método não permitido.' }, 405)
+
+  // ── Quem está chamando? ──────────────────────────────────────────────────────
+  const url     = Deno.env.get('SUPABASE_URL')!
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+  const userClient = createClient(url, anonKey, {
+    global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+  })
+  const { data: { user }, error: userErr } = await userClient.auth.getUser()
+  if (userErr || !user) return json({ error: 'Não autenticado.' }, 401)
+
+  const { data: perfil } = await userClient
+    .from('profiles')
+    .select('role, is_admin, is_lider')
+    .eq('id', user.id)
+    .maybeSingle()
+  const pode = ROLES_PODEM.has(perfil?.role ?? '') || perfil?.is_admin === true || perfil?.is_lider === true
+  if (!pode) return json({ error: 'Sem permissão para enviar lembretes.' }, 403)
 
   const brevoKey = Deno.env.get('BREVO_API_KEY')
   if (!brevoKey) {
@@ -120,14 +137,11 @@ serve(async (req) => {
   const fromEmail = Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking.agenda@gmail.com'
   const fromName  = Deno.env.get('BREVO_FROM_NAME')  ?? 'KOL - King Of Languages'
 
-  const admin = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  )
+  const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
   // Body opcional: { reuniao_id?: string }
   const body       = await req.json().catch(() => ({}))
-  const reuniaoId  = body?.reuniao_id ?? null
+  const reuniaoId  = typeof body?.reuniao_id === 'string' ? body.reuniao_id : null
 
   const hoje      = new Date()
   const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0,  0,  0, 0).toISOString()
@@ -151,7 +165,7 @@ serve(async (req) => {
 
   if (error) {
     console.error('[send-reminders] Erro na query:', error.message)
-    return json({ error: error.message }, 500)
+    return json({ error: 'Erro ao buscar as reuniões.' }, 500)
   }
 
   let sent    = 0
@@ -197,6 +211,6 @@ serve(async (req) => {
   }
 
   const result = { sent, skipped, date: hoje.toISOString() }
-  console.log('[send-reminders] Concluído:', result)
+  console.log('[send-reminders] Concluído:', { ...result, por: user.id })
   return json(result)
 })

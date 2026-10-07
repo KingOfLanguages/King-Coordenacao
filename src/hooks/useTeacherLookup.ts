@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { invocarFuncao } from '@/lib/invocarFuncao'
 
 export type HorarioDisponivel = {
   id: string
@@ -24,15 +24,10 @@ export type TeacherLookupResult = {
   agendas: AgendaDisponivel[]
 }
 
-/** Identifica o professor (por e-mail ou por id já resolvido) e retorna as agendas coletivas disponíveis para ele. */
+/** Agendas coletivas disponíveis para o professor da sessão do portal. */
 export function useTeacherLookup() {
   return useMutation({
-    mutationFn: async (input: { email: string } | { professorId: string }) => {
-      const { data, error } = await supabase.functions.invoke('teacher-lookup', {
-        body: input,
-      })
-      if (error) throw new Error(error.message)
-      return data as TeacherLookupResult
-    },
+    mutationFn: (input: { token: string }) =>
+      invocarFuncao<TeacherLookupResult>('teacher-lookup', input),
   })
 }

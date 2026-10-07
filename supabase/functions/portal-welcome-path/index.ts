@@ -2,11 +2,10 @@
 // Portal público do WELCOME PATH — o professor percorre a trilha de onboarding
 // sem login, pelo link enviado pela coordenação (/welcome-path).
 //
-// A identificação é a MESMA dos outros portais (portal-pausa,
-// portal-agendamento-lookup): e-mail exato → nome completo exato → desempate por
-// mês/ano de início → contato da coordenação. A lógica está duplicada aqui de
-// propósito: o projeto não usa pasta `_shared` entre edge functions e cada
-// function é publicada isolada.
+// Desde o pentest de 05/10/2026 a identificação mora em `portal-identidade`
+// (código de 6 dígitos no e-mail oficial do professor). Aqui só entra quem tem
+// a sessão que ela emite — a antiga ação `lookup`, que dava token a quem
+// soubesse o nome de alguém, foi removida.
 //
 // Duas coisas que o app original (Lovable) fazia no navegador e aqui ficam no
 // servidor, porque lá eram contornáveis com o DevTools aberto:
@@ -16,8 +15,6 @@
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-welcome-path   { "acao": "…", … }
 //
-//   lookup      { email?, nome?, mesInicio?, anoInicio?, professorId? }
-//                 → { professor, ambiguo, token, expiraEm }
 //   sessao      { token }                    → { professor }
 //   trilha      { token }                    → { professor, etapas[] }
 //   etapa       { token, etapaId }           → { etapa, blocos[], questoes[], progresso }
@@ -34,16 +31,11 @@
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import {
+  jsonPara, preflight, resolverSessao, semSufixoInicio, textoLimpo,
+  type ProfessorSessao, MSG_SESSAO,
+} from '../_shared/portal.ts'
 
-const NOME_MIN_CHARS = 3
-const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-
-/** Validade da sessão do dispositivo. Deslizante: cada uso empurra pra frente. */
-const SESSAO_DIAS = 30
 /** Teto do incremento de tempo por batida — uma aba esquecida aberta não pode
  *  virar "8 horas de estudo". O front bate a cada ~30s enquanto está visível. */
 const TEMPO_MAX_POR_BATIDA = 120
@@ -51,50 +43,6 @@ const TEMPO_MAX_POR_BATIDA = 120
  *  quiz vira força-bruta do gabarito. */
 const TENTATIVAS_MAX = 20
 const TEXTO_MAX = 5000
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-}
-
-function norm(s: string): string {
-  // \p{M} = marcas combinantes. portal-pausa usa a faixa equivalente escrita com
-  // os caracteres crus no fonte; aqui o padrão é só ASCII, então sobrevive a
-  // qualquer troca de codificação do arquivo. Mesmo resultado em nomes PT-BR.
-  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
- *  professor por uma falha no procedimento de cadastro da escola — ex.:
- *  "Fulano de Tal - inicio 18/09", "Fulano (início: 18/09/2025)". Sem tirar
- *  isso, o casamento por nome exato barraria o professor (que digita só o nome).
- *  Conservador: só corta quando vê o marcador "início" ou uma data solta no fim
- *  — nunca mexe num nome comum (inclusive "Inácio"/"Vinícius", que não têm a
- *  sequência "iníci-o"). */
-function semSufixoInicio(nome: string): string {
-  return nome
-    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
-    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** Match EXATO do nome completo — só caixa, acentuação e o sufixo de
- *  "início/data" (ver semSufixoInicio) são ignorados. */
-function nomeExato(informado: string, real: string): boolean {
-  const a = norm(semSufixoInicio(informado))
-  return a.length > 0 && a === norm(semSufixoInicio(real))
-}
-
-/** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
-function dataInicioBate(dataInicio: string | null, mes: number, ano: number): boolean {
-  if (!dataInicio) return false
-  const d = new Date(dataInicio)
-  const diffMeses = (d.getUTCFullYear() - ano) * 12 + (d.getUTCMonth() - (mes - 1))
-  return Math.abs(diffMeses) <= 1
-}
 
 /** Dias inteiros decorridos desde uma data ISO (YYYY-MM-DD) até hoje, em UTC. */
 function diasDesde(iso: string): number {
@@ -111,74 +59,10 @@ function somarDias(iso: string, dias: number): string {
   return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10)
 }
 
-// ─── Sessão do dispositivo ────────────────────────────────────────────────────
-
-function novoToken(): string {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-async function hashToken(token: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-function validadeISO(): string {
-  return new Date(Date.now() + SESSAO_DIAS * 86400000).toISOString()
-}
-
-type ProfRow = { id: string; nome: string; status: string; data_inicio: string | null }
+type ProfRow = ProfessorSessao
 
 // deno-lint-ignore no-explicit-any
 type Admin = any
-
-/** Cria a sessão e devolve o token CRU — é a única vez que ele existe fora do
- *  navegador do professor; o banco guarda só o SHA-256. */
-async function criarSessao(admin: Admin, professorId: string) {
-  const token = novoToken()
-  const expiraEm = validadeISO()
-  await admin.from('welcome_path_sessoes').insert({
-    professor_id: professorId,
-    token_hash:   await hashToken(token),
-    expira_em:    expiraEm,
-  })
-  return { token, expiraEm }
-}
-
-/** Troca o token pelo professor. Renova a validade (deslizante) a cada uso. */
-async function resolverSessao(admin: Admin, token: unknown): Promise<ProfRow | null> {
-  if (typeof token !== 'string' || token.length < 20) return null
-
-  const { data: sess } = await admin
-    .from('welcome_path_sessoes')
-    .select('id, professor_id, expira_em')
-    .eq('token_hash', await hashToken(token))
-    .maybeSingle()
-
-  if (!sess) return null
-  if (new Date(sess.expira_em).getTime() < Date.now()) {
-    await admin.from('welcome_path_sessoes').delete().eq('id', sess.id)
-    return null
-  }
-
-  const { data: p } = await admin
-    .from('professores')
-    .select('id, nome, status, data_inicio')
-    .eq('id', sess.professor_id)
-    .maybeSingle()
-
-  // Diferente do portal de pausa, que exige status 'ativo': a trilha dura dias e
-  // quem entra em pausa no meio não pode ficar trancado fora do onboarding.
-  if (!p || p.status === 'desligado') return null
-
-  await admin.from('welcome_path_sessoes')
-    .update({ ultimo_uso_em: new Date().toISOString(), expira_em: validadeISO() })
-    .eq('id', sess.id)
-
-  return p as ProfRow
-}
 
 // ─── Estado da trilha ─────────────────────────────────────────────────────────
 
@@ -291,7 +175,8 @@ function mesmoConjunto(a: number[], b: number[]): boolean {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
   let body: Record<string, unknown>
@@ -306,100 +191,17 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  const acao = typeof body.acao === 'string' ? body.acao : 'lookup'
+  const acao = typeof body.acao === 'string' ? body.acao : ''
 
-  // ══ lookup ═════════════════════════════════════════════════════════════════
+  // A identificação saiu daqui (ver portal-identidade). Página antiga em cache
+  // ainda pode chamar — responde com o que fazer em vez de um erro genérico.
   if (acao === 'lookup') {
-    const nome  = typeof body.nome  === 'string' ? body.nome.trim()  : ''
-    const email = typeof body.email === 'string' ? body.email.trim() : ''
-    const professorIdInput = typeof body.professorId === 'string' ? body.professorId.trim() : ''
-    const emailValido = EMAILRE.test(email.toLowerCase())
-    const temNome     = nome.length >= NOME_MIN_CHARS
-
-    if (!temNome && !emailValido && !professorIdInput) {
-      return json({ error: `Informe seu e-mail ou ao menos ${NOME_MIN_CHARS} caracteres do seu nome.` }, 400)
-    }
-
-    const mesInicio = typeof body.mesInicio === 'number' ? body.mesInicio : null
-    const anoInicio = typeof body.anoInicio === 'number' ? body.anoInicio : null
-
-    const vazio = (ambiguo: boolean) => json({ professor: null, ambiguo, token: null })
-
-    let professor: ProfRow | null = null
-
-    // ── 1. Id direto (2º passo: cadastro do e-mail depois de achar pelo nome)
-    if (professorIdInput) {
-      const { data: p } = await admin
-        .from('professores')
-        .select('id, nome, status, data_inicio')
-        .eq('id', professorIdInput)
-        .maybeSingle()
-      if (p && p.status !== 'desligado') {
-        professor = p as ProfRow
-        if (emailValido) {
-          const { data: jaTem } = await admin
-            .from('professor_emails')
-            .select('id')
-            .ilike('email', email)
-            .limit(1)
-            .maybeSingle()
-          if (!jaTem) {
-            await admin.from('professor_emails').insert({ professor_id: p.id, email, origem: 'portal' })
-          }
-        }
-      }
-    }
-
-    // ── 2. E-mail exato
-    if (!professor && emailValido) {
-      const { data: emailRow } = await admin
-        .from('professor_emails')
-        .select('professor_id')
-        .ilike('email', email)
-        .maybeSingle()
-      if (emailRow) {
-        const { data: p } = await admin
-          .from('professores')
-          .select('id, nome, status, data_inicio')
-          .eq('id', emailRow.professor_id)
-          .maybeSingle()
-        if (p && p.status !== 'desligado') professor = p as ProfRow
-      }
-    }
-
-    // ── 3. Nome completo exato (+ desempate por mês/ano)
-    if (!professor) {
-      if (!temNome) return vazio(false)
-
-      const { data: ativos } = await admin
-        .from('professores')
-        .select('id, nome, status, data_inicio')
-        .neq('status', 'desligado')
-
-      let candidatos = ((ativos ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
-
-      if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
-        candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
-      }
-
-      if (candidatos.length === 0) return vazio(false)
-      if (candidatos.length > 1)   return vazio(true)
-
-      professor = candidatos[0]
-    }
-
-    const { token, expiraEm } = await criarSessao(admin, professor.id)
-    return json({
-      professor: { id: professor.id, nome: semSufixoInicio(professor.nome) },
-      ambiguo: false,
-      token,
-      expiraEm,
-    })
+    return json({ error: 'Atualize a página para entrar com o código enviado ao seu e-mail.' }, 410)
   }
 
   // ══ Daqui pra baixo, tudo exige sessão válida ══════════════════════════════
   const prof = await resolverSessao(admin, body.token)
-  if (!prof) return json({ error: 'Sessão expirada. Identifique-se novamente.' }, 401)
+  if (!prof) return json({ error: MSG_SESSAO }, 401)
 
   if (acao === 'sessao') {
     return json({ professor: { id: prof.id, nome: semSufixoInicio(prof.nome) } })
@@ -522,7 +324,7 @@ serve(async (req) => {
   }
 
   if (acao === 'observacao') {
-    const texto = typeof body.texto === 'string' ? body.texto.trim().slice(0, TEXTO_MAX) : ''
+    const texto = textoLimpo(body.texto, TEXTO_MAX)
     const progresso = await garantirProgresso(admin, prof.id, etapaId)
     await admin.from('welcome_path_progresso')
       .update({ observacao: texto || null })
@@ -571,7 +373,7 @@ serve(async (req) => {
       const enviada = porQuestao.get(q.id)
 
       if (q.tipo === 'dissertativa') {
-        const texto = typeof enviada?.texto === 'string' ? enviada.texto.trim().slice(0, TEXTO_MAX) : ''
+        const texto = textoLimpo(enviada?.texto, TEXTO_MAX)
         if (!texto) {
           if (q.obrigatoria) return json({ error: 'Responda todas as atividades obrigatórias.' }, 400)
           continue

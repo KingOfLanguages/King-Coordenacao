@@ -1,17 +1,13 @@
 import { useMemo, useState } from 'react'
 import {
-  UserCog, Phone, CheckCircle2, AlertTriangle, ChevronLeft, Users, Clock,
+  UserCog, CheckCircle2, AlertTriangle, ChevronLeft, Users, Clock,
   CalendarClock,
   type LucideIcon,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  CabecalhoPortal, CartaoPortal, AvisoErro, BotaoPrimario, BotaoWhatsApp,
-  FundoPortal, AvatarPortal,
+  CartaoPortal, AvisoErro, BotaoPrimario, FundoPortal, AvatarPortal,
 } from '@/components/portal/PortalUI'
 import {
   MOTIVOS_TRANSFERENCIA, diasUteisLabel,
@@ -22,19 +18,13 @@ import {
 import { diasUteisEntre, hojeLocal, parseISODate } from '@/lib/diasUteis'
 import { dataBR } from '@/lib/formato'
 import {
-  useTransferenciaLookup, useSolicitarTransferencia,
-  type TransferenciaLookupResult, type AlunoPortal,
+  useTransferenciaEstado, useSolicitarTransferencia, type AlunoPortal,
 } from '@/hooks/usePortalTransferencia'
+import { usePortalSessao } from '@/hooks/usePortalIdentidade'
+import { IdentificacaoPortal } from '@/components/portal/IdentificacaoPortal'
+import { sessaoRecusada } from '@/lib/invocarFuncao'
 import { cn } from '@/lib/utils'
 
-const MESES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
-]
-const ANO_ATUAL = new Date().getFullYear()
-const ANOS = Array.from({ length: 9 }, (_, i) => ANO_ATUAL - i)
-
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const DETALHE_MIN = 15
 
 
@@ -52,13 +42,8 @@ function isoEmDias(n: number): string {
 type AlunoEscolhido = { nome: string }
 
 type Step =
-  | { tipo: 'identificacao-email'; email: string; erro: string }
-  // tentativa: 1ª ou 2ª tentativa de nome. desempate: pede mês/ano (nomes idênticos).
-  | { tipo: 'identificacao'; tentativa: 1 | 2; desempate: boolean; nome: string; erro: string; emailInformado: string }
-  // Achou pelo nome → pede o e-mail pra cadastrar antes de seguir.
-  | { tipo: 'cadastro-email'; resultado: TransferenciaLookupResult; email: string; erro: string }
-  | { tipo: 'confirmar-identidade'; resultado: TransferenciaLookupResult }
-  | { tipo: 'contato-coordenacao' }
+  // Logo depois de entrar: vira 'nome-aluno' assim que a carteira chega.
+  | { tipo: 'inicio' }
   // Nome do aluno: o professor DIGITA o nome completo. A API do King só nos dá
   // o primeiro nome, então é aqui que o nome completo entra no sistema. O
   // vínculo com o cadastro (aluno_id) é deduzido no servidor, pelo primeiro nome.
@@ -79,29 +64,28 @@ type Step =
   | { tipo: 'confirmacao'; nome: string; alunoNome: string; dataUltimaAula: string }
 
 export function Home() {
-  const [step, setStep] = useState<Step>({ tipo: 'identificacao-email', email: '', erro: '' })
-  const [mes, setMes] = useState<number | null>(null)
-  const [ano, setAno] = useState<number | null>(null)
-
-  const lookup    = useTransferenciaLookup()
+  const { token, entrar, sair: sairSessao, invalidar } = usePortalSessao()
+  const estado    = useTransferenciaEstado(token)
   const solicitar = useSolicitarTransferencia()
 
-  function recomecar() {
-    setMes(null)
-    setAno(null)
-    setStep({ tipo: 'identificacao-email', email: '', erro: '' })
-  }
+  const [stepBruto, setStep] = useState<Step>({ tipo: 'inicio' })
 
-  /** Ponto único de entrada na identificação do aluno. */
-  function seguirParaEscolha(resultado: TransferenciaLookupResult) {
-    if (!resultado.professor) return
-    setStep({
-      tipo: 'nome-aluno',
-      professorId: resultado.professor.id,
-      nome: resultado.professor.nome,
-      alunos: resultado.alunos,
-      digitado: '', erro: '',
-    })
+  if (token && estado.isError && sessaoRecusada(estado.error)) invalidar()
+
+  // Primeira tela depois de entrar: o nome do aluno, com a carteira do servidor.
+  const step: Step = stepBruto.tipo === 'inicio' && estado.data
+    ? {
+        tipo: 'nome-aluno',
+        professorId: estado.data.professor.id,
+        nome: estado.data.professor.nome,
+        alunos: estado.data.alunos,
+        digitado: '', erro: '',
+      }
+    : stepBruto
+
+  function recomecar() {
+    setStep({ tipo: 'inicio' })
+    void sairSessao()
   }
 
   function escolherAluno(aluno: AlunoEscolhido) {
@@ -119,94 +103,9 @@ export function Home() {
     })
   }
 
-  async function handleSubmitEmail(e: React.FormEvent) {
-    e.preventDefault()
-    if (step.tipo !== 'identificacao-email') return
-    const emailAtual = step.email.trim()
-    if (!EMAIL_RE.test(emailAtual)) {
-      setStep({ ...step, erro: 'Digite um e-mail válido.' })
-      return
-    }
-
-    try {
-      const resultado = await lookup.mutateAsync({ email: emailAtual })
-      if (resultado.professor) {
-        setStep({ tipo: 'confirmar-identidade', resultado })
-        return
-      }
-      setStep({ tipo: 'identificacao', tentativa: 1, desempate: false, nome: '', erro: '', emailInformado: emailAtual })
-    } catch {
-      setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
-    }
-  }
-
-  async function handleSubmitNome(e: React.FormEvent) {
-    e.preventDefault()
-    if (step.tipo !== 'identificacao') return
-    const nomeAtual = step.nome.trim()
-    if (nomeAtual.length < 3) {
-      setStep({ ...step, erro: 'Digite ao menos 3 letras do seu nome.' })
-      return
-    }
-    if (step.desempate && (mes == null || ano == null)) {
-      setStep({ ...step, erro: 'Selecione o mês e o ano em que você começou.' })
-      return
-    }
-
-    try {
-      const resultado = await lookup.mutateAsync({
-        nome: nomeAtual,
-        ...(step.emailInformado ? { email: step.emailInformado } : {}),
-        ...(step.desempate && mes != null && ano != null ? { mesInicio: mes, anoInicio: ano } : {}),
-      })
-
-      if (resultado.professor) {
-        setStep({ tipo: 'cadastro-email', resultado, email: step.emailInformado, erro: '' })
-        return
-      }
-
-      if (resultado.ambiguo) {
-        if (!step.desempate) {
-          setStep({ ...step, nome: nomeAtual, desempate: true, erro: '' })
-        } else {
-          setStep({ tipo: 'contato-coordenacao' })
-        }
-        return
-      }
-
-      if (step.desempate || step.tentativa >= 2) {
-        setStep({ tipo: 'contato-coordenacao' })
-      } else {
-        setStep({ ...step, nome: nomeAtual, tentativa: 2, erro: 'reforco' })
-      }
-    } catch {
-      setStep({ ...step, erro: 'Não foi possível verificar seu cadastro agora. Tente novamente em instantes.' })
-    }
-  }
-
-  async function handleCadastroEmail(e: React.FormEvent) {
-    e.preventDefault()
-    if (step.tipo !== 'cadastro-email' || !step.resultado.professor) return
-    const emailAtual = step.email.trim()
-    if (!EMAIL_RE.test(emailAtual)) {
-      setStep({ ...step, erro: 'Digite um e-mail válido.' })
-      return
-    }
-    try {
-      const resultado = await lookup.mutateAsync({ professorId: step.resultado.professor.id, email: emailAtual })
-      if (resultado.professor) {
-        seguirParaEscolha(resultado)
-      } else {
-        setStep({ ...step, erro: 'Não foi possível concluir agora. Tente novamente.' })
-      }
-    } catch {
-      setStep({ ...step, erro: 'Não foi possível concluir agora. Tente novamente.' })
-    }
-  }
-
   async function handleEnviar(e: React.FormEvent) {
     e.preventDefault()
-    if (step.tipo !== 'formulario') return
+    if (step.tipo !== 'formulario' || !token) return
 
     if (!step.motivo) {
       setStep({ ...step, erro: 'Escolha o motivo da transferência.' })
@@ -239,7 +138,7 @@ export function Home() {
 
     try {
       await solicitar.mutateAsync({
-        professorId: step.professorId,
+        token,
         alunoNome: step.aluno.nome,
         motivo: step.motivo,
         detalhe: step.detalhe.trim(),
@@ -255,6 +154,7 @@ export function Home() {
         dataUltimaAula: step.dataUltimaAula,
       })
     } catch (err) {
+      if (sessaoRecusada(err)) { invalidar(); return }
       setStep({ ...step, erro: err instanceof Error ? err.message : 'Não foi possível registrar agora. Tente novamente.' })
     }
   }
@@ -264,237 +164,22 @@ export function Home() {
       <FundoPortal />
 
       <div className="relative z-10 flex items-center justify-center w-full">
-        {step.tipo === 'identificacao-email' && (
-          <div className="w-full max-w-sm space-y-6 animate-fade-up">
-            <CabecalhoPortal
-              icone={UserCog}
-              titulo="Transferência de aluno"
-              descricao="Informe seu e-mail cadastrado para pedir a transferência de um aluno da sua agenda."
-            />
-            <CartaoPortal>
-              <form onSubmit={handleSubmitEmail} className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-[12px] text-ink-secondary font-medium">
-                    E-mail
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    inputMode="email"
-                    value={step.email}
-                    onChange={ev => setStep({ ...step, email: ev.target.value })}
-                    required
-                    autoComplete="email"
-                    placeholder="seu.email@exemplo.com"
-                    className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
-                  />
-                </div>
-
-                {step.erro && <AvisoErro>{step.erro}</AvisoErro>}
-
-                <BotaoPrimario pending={lookup.isPending} pendingLabel="Buscando…">
-                  Continuar
-                </BotaoPrimario>
-              </form>
-            </CartaoPortal>
-          </div>
+        {!token && (
+          <IdentificacaoPortal
+            icone={UserCog}
+            titulo="Transferência de aluno"
+            descricao="Informe seu e-mail cadastrado para pedir a transferência de um aluno da sua agenda."
+            onEntrar={entrar}
+          />
         )}
 
-        {step.tipo === 'identificacao' && (
-          <div className="w-full max-w-sm space-y-6 animate-fade-up">
-            <CabecalhoPortal
-              icone={UserCog}
-              titulo="Transferência de aluno"
-              descricao={step.desempate
-                ? 'Encontramos mais de uma pessoa com esse nome. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'
-                : 'Não encontramos esse e-mail no cadastro. Digite seu nome completo, exatamente como aparece na plataforma da King.'}
-            />
-            <CartaoPortal>
-              <form onSubmit={handleSubmitNome} className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="nome" className="text-[12px] text-ink-secondary font-medium">
-                    Nome completo
-                  </Label>
-                  <Input
-                    id="nome"
-                    type="text"
-                    value={step.nome}
-                    onChange={ev => setStep({ ...step, nome: ev.target.value })}
-                    required
-                    autoComplete="name"
-                    placeholder="Seu nome completo, como no cadastro"
-                    className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
-                  />
-                  <p className="text-[11.5px] text-ink-muted">
-                    Digite o nome completo, igual ao que aparece na plataforma da King (sem abreviações nem apelido).
-                  </p>
-                </div>
-
-                {step.desempate && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-[12px] text-ink-secondary font-medium">Mês de início</Label>
-                      <Select value={mes ? String(mes) : undefined} onValueChange={v => setMes(Number(v))}>
-                        <SelectTrigger className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl">
-                          <SelectValue placeholder="Mês" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MESES.map((m, i) => (
-                            <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[12px] text-ink-secondary font-medium">Ano de início</Label>
-                      <Select value={ano ? String(ano) : undefined} onValueChange={v => setAno(Number(v))}>
-                        <SelectTrigger className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl">
-                          <SelectValue placeholder="Ano" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ANOS.map(a => (
-                            <SelectItem key={a} value={String(a)}>{a}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-
-                {step.erro === 'reforco' ? (
-                  <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5
-                                  text-[12.5px] text-brand-strong font-medium space-y-1">
-                    <p className="font-semibold">Ainda não encontramos você.</p>
-                    <p>Confira: precisa ser o <strong>nome completo</strong>, exatamente igual ao cadastro na plataforma — sem abreviações e sem apelido.</p>
-                  </div>
-                ) : step.erro ? (
-                  <AvisoErro>{step.erro}</AvisoErro>
-                ) : null}
-
-                <BotaoPrimario pending={lookup.isPending} pendingLabel="Buscando…">
-                  Continuar
-                </BotaoPrimario>
-
-                <button
-                  type="button"
-                  onClick={recomecar}
-                  className="btn-press w-full text-[12px] text-ink-muted hover:text-ink-secondary"
-                >
-                  Voltar e usar o e-mail
-                </button>
-              </form>
-            </CartaoPortal>
-          </div>
+        {token && step.tipo === 'inicio' && (
+          estado.isError
+            ? <div className="w-full max-w-sm"><AvisoErro>Não foi possível carregar seus dados agora. Recarregue a página em instantes.</AvisoErro></div>
+            : <p className="text-[13px] text-ink-muted">Carregando…</p>
         )}
 
-        {step.tipo === 'cadastro-email' && step.resultado.professor && (
-          <div className="w-full max-w-sm space-y-6 animate-fade-up">
-            <div className="flex flex-col items-center gap-3.5 text-center">
-              <AvatarPortal nome={step.resultado.professor.nome} />
-              <div className="space-y-1.5">
-                <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-                  Encontramos você, {step.resultado.professor.nome.split(' ')[0]}!
-                </h1>
-                <p className="text-[13px] text-ink-muted">
-                  Confirme seu e-mail para cadastrarmos — é por ele que o suporte vai te retornar.
-                </p>
-              </div>
-            </div>
-
-            <CartaoPortal>
-              <form onSubmit={handleCadastroEmail} className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cadastro-email" className="text-[12px] text-ink-secondary font-medium">
-                    Seu e-mail
-                  </Label>
-                  <Input
-                    id="cadastro-email"
-                    type="email"
-                    inputMode="email"
-                    value={step.email}
-                    onChange={ev => setStep({ ...step, email: ev.target.value })}
-                    required
-                    autoComplete="email"
-                    placeholder="seu.email@exemplo.com"
-                    className="h-10 bg-surface-subtle border-line-soft text-[13px] rounded-xl"
-                  />
-                </div>
-
-                {step.erro && <AvisoErro>{step.erro}</AvisoErro>}
-
-                <BotaoPrimario pending={lookup.isPending} pendingLabel="Salvando…">
-                  Continuar
-                </BotaoPrimario>
-
-                <button
-                  type="button"
-                  onClick={recomecar}
-                  className="btn-press w-full text-[12px] text-ink-muted hover:text-ink-secondary"
-                >
-                  Não sou eu
-                </button>
-              </form>
-            </CartaoPortal>
-          </div>
-        )}
-
-        {step.tipo === 'confirmar-identidade' && step.resultado.professor && (
-          <div className="w-full max-w-sm space-y-6 text-center animate-fade-up">
-            <div className="flex flex-col items-center gap-3.5">
-              <AvatarPortal nome={step.resultado.professor.nome} />
-              <div className="space-y-1.5">
-                <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-                  Você é {step.resultado.professor.nome}?
-                </h1>
-                <p className="text-[13px] text-ink-muted">Confirme para escolher o aluno.</p>
-              </div>
-            </div>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={recomecar}
-                className="btn-press h-10 px-5 rounded-full border border-line-soft text-[13px] font-medium text-ink-secondary hover:bg-surface-subtle"
-              >
-                Não sou eu
-              </button>
-              <button
-                onClick={() => seguirParaEscolha(step.resultado)}
-                className="btn-press h-10 px-5 rounded-full bg-ink text-ink-inverse text-[13px] font-medium hover:bg-ink/90"
-              >
-                Sim, sou eu
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step.tipo === 'contato-coordenacao' && (
-          <div className="w-full max-w-sm space-y-6 text-center animate-fade-up">
-            <div className="flex flex-col items-center gap-3.5">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand shadow-inner-top">
-                <Phone className="h-6 w-6" />
-              </span>
-              <div className="space-y-1.5">
-                <h1 className="text-[1.4rem] font-bold tracking-[-0.03em] text-ink leading-tight">
-                  Vamos te ajudar pessoalmente
-                </h1>
-                <p className="text-[13.5px] text-ink-muted leading-relaxed">
-                  Não conseguimos te identificar pelo e-mail nem pelo nome. Fale com a coordenação
-                  para registrar o pedido de transferência.
-                </p>
-              </div>
-            </div>
-
-            <BotaoWhatsApp />
-
-            <button
-              onClick={recomecar}
-              className="btn-press w-full h-10 rounded-full border border-line-soft text-[13px] font-medium text-ink-secondary hover:bg-surface-subtle"
-            >
-              Tentar de novo
-            </button>
-          </div>
-        )}
-
-        {step.tipo === 'nome-aluno' && (
+        {token && step.tipo === 'nome-aluno' && (
           <NomeDoAluno
             step={step}
             onDigitar={v => setStep({ ...step, digitado: v, erro: '' })}
@@ -504,7 +189,7 @@ export function Home() {
           />
         )}
 
-        {step.tipo === 'formulario' && (
+        {token && step.tipo === 'formulario' && (
           <div className="w-full max-w-md space-y-6 animate-fade-up">
             <div className="flex flex-col items-center gap-3.5 text-center">
               <AvatarPortal nome={step.nome} />

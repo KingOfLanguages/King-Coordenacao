@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function: teacher-lookup
 //
-// Usada pela tela pública /agendar (sem login). Recebe o e-mail informado
-// pelo professor, identifica-o via professor_emails e retorna as ocorrências
+// Usada pela tela pública /agendar (sem login). Identifica o professor pela
+// sessão do portal (`portal-identidade`, código no e-mail) e retorna as ocorrências
 // futuras (próximas semanas) das agendas recorrentes coletivas disponíveis
 // para ele (público autorizado, com vagas).
 //
@@ -18,35 +18,23 @@
 // direto às tabelas de agendamento (ver migrations 20260630_agendamentos.sql
 // e 20260702_agenda_recorrencias.sql).
 //
-// Aceita `email` (fluxo antigo, via professor_emails) OU `professorId`
-// (usado pelo novo Portal de Agendamento, que identifica o professor só
-// pelo nome — a maioria não tem e-mail cadastrado — em
-// portal-agendamento-lookup e repassa o id já resolvido).
+// Até o pentest de 05/10/2026 aceitava `email` ou `professorId` soltos no
+// corpo — e devolvia os links do Meet de todas as agendas a quem pedisse.
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/teacher-lookup
-//   Body: { "email": "professor@exemplo.com" } OU { "professorId": "uuid" }
+//   Body: { "token": "<sessão do portal-identidade>" }   → 401 sem sessão válida
 //   Retorna: { professor: {id, nome} | null, agendas: AgendaComHorarios[] }
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { jsonPara, preflight, resolverSessao, semSufixoInicio, MSG_SESSAO } from '../_shared/portal.ts'
 
 const DIAS_JANELA_AGENDAMENTO = 7 // professor só vê/reserva ocorrências até 7 dias à frente
 const BR_OFFSET = '-03:00' // Brasil não observa horário de verão desde 2019.
 const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-}
 
 /** Dias completos desde data_inicio (meia-noite UTC). null se sem data / inválida. */
 function diasDeCasa(dataIso: string | null): number | null {
@@ -67,19 +55,6 @@ function comHttps(link: string | null): string | null {
   const l = link.trim()
   if (!l) return null
   return /^https?:\/\//i.test(l) ? l : `https://${l}`
-}
-
-/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
- *  professor por uma falha no procedimento de cadastro da escola — ex.:
- *  "Fulano de Tal - inicio 18/09". Aqui é só exibição (o professor já foi
- *  identificado por e-mail/id): mostra o nome limpo no cabeçalho das agendas.
- *  Conservador: só corta com o marcador "início" ou uma data solta no fim. */
-function semSufixoInicio(nome: string): string {
-  return nome
-    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
-    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 /** Ocorrências em que `diaSemana` (0=dom…6=sáb) cai no horário `hora` (HH:MM:SS),
@@ -111,47 +86,26 @@ function proximasOcorrencias(diaSemana: number, hora: string, dias: number): str
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { email?: unknown; professorId?: unknown }
+  let body: { token?: unknown }
   try {
     body = await req.json()
   } catch {
     return json({ error: 'JSON inválido.' }, 400)
   }
 
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-  const professorId = typeof body.professorId === 'string' ? body.professorId : ''
-  if (!email && !professorId) return json({ error: 'E-mail ou professorId é obrigatório.' }, 400)
-
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // ── 1. Identifica o professor pelo e-mail ou pelo id já resolvido ────────────
-  let idProfessor = professorId
-  if (!idProfessor) {
-    const { data: emailRow } = await admin
-      .from('professor_emails')
-      .select('professor_id')
-      .ilike('email', email)
-      .maybeSingle()
-
-    if (!emailRow) return json({ professor: null, agendas: [] })
-    idProfessor = emailRow.professor_id
-  }
-
-  const { data: professor } = await admin
-    .from('professores')
-    .select('id, nome, status, data_inicio')
-    .eq('id', idProfessor)
-    .maybeSingle()
-
-  if (!professor || professor.status !== 'ativo') {
-    return json({ professor: null, agendas: [] })
-  }
+  // ── 1. Professor da sessão ───────────────────────────────────────────────────
+  const professor = await resolverSessao(admin, body.token)
+  if (!professor) return json({ error: MSG_SESSAO }, 401)
+  if (professor.status !== 'ativo') return json({ professor: null, agendas: [] })
 
   // Nome sem o resíduo de "início/data" do cadastro, só pra exibição.
   const nomeExibicao = semSufixoInicio(professor.nome)

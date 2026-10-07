@@ -3,13 +3,12 @@
 // de um aluno da carteira dele sem login, pelo link enviado pela coordenação
 // (/transferencia).
 //
-// A identificação é a MESMA do portal de pausa e do de agendamento: e-mail
-// exato → nome completo exato → desempate por mês/ano de início → contato da
-// coordenação. A lógica está duplicada aqui de propósito: o projeto não usa
-// pasta `_shared` entre edge functions (portal-pausa e teacher-lookup também
-// duplicam), e cada function é publicada isolada.
+// Quem é o professor vem SÓ da sessão emitida por `portal-identidade` (código no
+// e-mail oficial) — desde o pentest de 05/10/2026. Antes, o nome completo e um
+// `professorId` no corpo bastavam para ver a carteira e pedir transferência em
+// nome de qualquer pessoa.
 //
-// A diferença em relação à pausa: o lookup devolve TAMBÉM a carteira de alunos
+// A diferença em relação à pausa: o `estado` devolve TAMBÉM a carteira de alunos
 // do professor. É isso que faz o pedido nascer com `aluno_id` em vez de um nome
 // digitado — e é o `aluno_id` que liga o pedido ao histórico do aluno
 // (professor_ciclo_vida_alunos) no dossiê que o Suporte ao Aluno lê depois.
@@ -17,10 +16,10 @@
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-transferencia
 //
-//   { "acao": "lookup", "email"?, "nome"?, "mesInicio"?, "anoInicio"?, "professorId"? }
-//     → { professor: { id, nome } | null, ambiguo, alunos: [...], jaPausado }
+//   { "acao": "estado", "token" }
+//     → { professor: { id, nome }, alunos: [...], jaPausado }
 //
-//   { "acao": "solicitar", "professorId", "alunoNome" (COMPLETO), "motivo",
+//   { "acao": "solicitar", "token", "alunoNome" (COMPLETO), "motivo",
 //     "detalhe", "dataUltimaAula", "horarioAtual", "querMudarHorario",
 //     "horarioDesejado"?, "jaConversou"?, "aceitaManter"? }
 //     → { ok: true, transferenciaId }  |  { error: "…" } com 400/409
@@ -35,19 +34,16 @@
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import {
+  jsonPara, preflight, resolverSessao, semSufixoInicio, norm, textoLimpo, MSG_SESSAO,
+} from '../_shared/portal.ts'
 
-const NOME_MIN_CHARS    = 3
 const DETALHE_MIN_CHARS = 15
 const DETALHE_MAX_CHARS = 2000
 /** Horário é texto curto ("terça e quinta, 19h"). O mínimo baixo é de propósito:
  *  "9h" é resposta válida. */
 const HORARIO_MIN_CHARS = 2
 const HORARIO_MAX_CHARS = 200
-const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const DATARE  = /^\d{4}-\d{2}-\d{2}$/
 
 /** Antecedência mínima: o professor pode pedir até com 1 dia. Menos que isso
@@ -71,17 +67,6 @@ const MOTIVOS = new Set([
   'outro',
 ])
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-}
-
-function norm(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
 /** Data ISO (YYYY-MM-DD) → dias de calendário até hoje. Negativo = passado. */
 function diasAte(iso: string): number {
   const [a, m, d] = iso.split('-').map(Number)
@@ -90,35 +75,6 @@ function diasAte(iso: string): number {
   const hoje  = Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())
   return Math.round((alvo - hoje) / 86400000)
 }
-
-/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
- *  professor por uma falha no procedimento de cadastro da escola — ex.:
- *  "Fulano de Tal - inicio 18/09". Sem tirar isso, o casamento por nome exato
- *  barraria o professor (que digita só o nome). Ver ktm-nome-sufixo-inicio. */
-function semSufixoInicio(nome: string): string {
-  return nome
-    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
-    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** Match EXATO do nome completo — só caixa, acentuação e o sufixo de
- *  "início/data" são ignorados. Nada de nome parcial. */
-function nomeExato(informado: string, real: string): boolean {
-  const a = norm(semSufixoInicio(informado))
-  return a.length > 0 && a === norm(semSufixoInicio(real))
-}
-
-/** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
-function dataInicioBate(dataInicio: string | null, mes: number, ano: number): boolean {
-  if (!dataInicio) return false
-  const d = new Date(dataInicio)
-  const diffMeses = (d.getUTCFullYear() - ano) * 12 + (d.getUTCMonth() - (mes - 1))
-  return Math.abs(diffMeses) <= 1
-}
-
-type ProfRow = { id: string; nome: string; status: string; data_inicio: string | null }
 
 type AlunoPortal = {
   alunoId: number
@@ -129,12 +85,9 @@ type AlunoPortal = {
   pedidoAberto: boolean
 }
 
-function respostaVazia(ambiguo: boolean) {
-  return { professor: null, ambiguo, alunos: [], jaPausado: false }
-}
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
   let body: Record<string, unknown>
@@ -149,22 +102,28 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  const acao = typeof body.acao === 'string' ? body.acao : 'lookup'
+  const acao = typeof body.acao === 'string' ? body.acao : ''
+
+  if (acao === 'lookup') {
+    return json({ error: 'Atualize a página para entrar com o código enviado ao seu e-mail.' }, 410)
+  }
+
+  const sessao = await resolverSessao(admin, body.token)
+  if (!sessao) return json({ error: MSG_SESSAO }, 401)
+  const professorId = sessao.id
 
   // ══ Ação: solicitar ════════════════════════════════════════════════════════
   if (acao === 'solicitar') {
-    const professorId = typeof body.professorId === 'string' ? body.professorId.trim() : ''
-    const alunoNome   = typeof body.alunoNome   === 'string' ? body.alunoNome.trim()   : ''
+    const alunoNome   = textoLimpo(body.alunoNome, 121)
     const motivo      = typeof body.motivo      === 'string' ? body.motivo.trim()      : ''
-    const detalhe     = typeof body.detalhe     === 'string' ? body.detalhe.trim()     : ''
+    const detalhe     = textoLimpo(body.detalhe, DETALHE_MAX_CHARS + 1)
     const dataUltimaAula = typeof body.dataUltimaAula === 'string' ? body.dataUltimaAula.trim() : ''
-    const horarioAtual = typeof body.horarioAtual === 'string' ? body.horarioAtual.trim() : ''
+    const horarioAtual = textoLimpo(body.horarioAtual, HORARIO_MAX_CHARS + 1)
     const querMudarHorario = typeof body.querMudarHorario === 'boolean' ? body.querMudarHorario : null
-    const horarioDesejadoBruto = typeof body.horarioDesejado === 'string' ? body.horarioDesejado.trim() : ''
+    const horarioDesejadoBruto = textoLimpo(body.horarioDesejado, HORARIO_MAX_CHARS + 1)
     const jaConversou  = typeof body.jaConversou  === 'boolean' ? body.jaConversou  : null
     const aceitaManter = typeof body.aceitaManter === 'boolean' ? body.aceitaManter : null
 
-    if (!professorId) return json({ error: 'Identificação perdida. Recomece o preenchimento.' }, 400)
     if (!alunoNome)   return json({ error: 'Escreva o nome do aluno que você quer transferir.' }, 400)
     // Nome COMPLETO é o ponto da mudança: a API do King só nos manda o
     // primeiro nome, então é o professor quem fecha essa lacuna. Sem sobrenome
@@ -303,84 +262,9 @@ serve(async (req) => {
     return json({ ok: true, transferenciaId: criada.id })
   }
 
-  // ══ Ação: lookup ═══════════════════════════════════════════════════════════
-  const nome  = typeof body.nome  === 'string' ? body.nome.trim()  : ''
-  const email = typeof body.email === 'string' ? body.email.trim() : ''
-  const professorIdInput = typeof body.professorId === 'string' ? body.professorId.trim() : ''
-  const emailValido = EMAILRE.test(email.toLowerCase())
-  const temNome     = nome.length >= NOME_MIN_CHARS
-
-  if (!temNome && !emailValido && !professorIdInput) {
-    return json({ error: `Informe seu e-mail ou ao menos ${NOME_MIN_CHARS} caracteres do seu nome.` }, 400)
-  }
-
-  const mesInicio = typeof body.mesInicio === 'number' ? body.mesInicio : null
-  const anoInicio = typeof body.anoInicio === 'number' ? body.anoInicio : null
-
-  let professor: ProfRow | null = null
-
-  // ── 1. Id direto (2º passo do fluxo: cadastro do e-mail depois de achar pelo nome)
-  if (professorIdInput) {
-    const { data: p } = await admin
-      .from('professores')
-      .select('id, nome, status, data_inicio')
-      .eq('id', professorIdInput)
-      .maybeSingle()
-    if (p && p.status === 'ativo') {
-      professor = p as ProfRow
-      if (emailValido) {
-        const { data: jaTem } = await admin
-          .from('professor_emails')
-          .select('id')
-          .ilike('email', email)
-          .limit(1)
-          .maybeSingle()
-        if (!jaTem) {
-          await admin.from('professor_emails').insert({ professor_id: p.id, email, origem: 'portal' })
-        }
-      }
-    }
-  }
-
-  // ── 2. E-mail exato
-  if (!professor && emailValido) {
-    const { data: emailRow } = await admin
-      .from('professor_emails')
-      .select('professor_id')
-      .ilike('email', email)
-      .maybeSingle()
-    if (emailRow) {
-      const { data: p } = await admin
-        .from('professores')
-        .select('id, nome, status, data_inicio')
-        .eq('id', emailRow.professor_id)
-        .maybeSingle()
-      if (p && p.status === 'ativo') professor = p as ProfRow
-    }
-  }
-
-  // ── 3. Nome completo exato (+ desempate por mês/ano)
-  if (!professor) {
-    if (!temNome) return json(respostaVazia(false))
-
-    const { data: ativos } = await admin
-      .from('professores')
-      .select('id, nome, status, data_inicio')
-      .eq('status', 'ativo')
-
-    let candidatos = ((ativos ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
-
-    if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
-      candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
-    }
-
-    if (candidatos.length === 0) return json(respostaVazia(false))
-    if (candidatos.length > 1)   return json(respostaVazia(true))
-
-    professor = candidatos[0]
-  }
-
-  if (!professor) return json(respostaVazia(false))
+  // ══ Ação: estado ═══════════════════════════════════════════════════════════
+  if (acao !== 'estado') return json({ error: 'Ação desconhecida.' }, 400)
+  const professor = sessao
 
   // ── Carteira do professor + quais alunos já têm pedido aberto ──────────────
   // Só vínculos de aluno individual: `tipo_vinculo = 'turma'` (aluno_id 0) não é
@@ -421,7 +305,6 @@ serve(async (req) => {
 
   return json({
     professor: { id: professor.id, nome: semSufixoInicio(professor.nome) },
-    ambiguo:   false,
     alunos,
     jaPausado: professor.status === 'pausa',
   })

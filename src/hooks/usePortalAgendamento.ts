@@ -1,5 +1,5 @@
-import { useMutation } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { invocarFuncao } from '@/lib/invocarFuncao'
 
 export type OpcaoLink = { elegivel: boolean; link: string | null }
 export type OpcaoGrupo = { elegivel: boolean; recomendada: boolean }
@@ -14,14 +14,9 @@ export type AvisoAgendamentoRecente = {
   janela: { min: number; max: number }
 }
 
-export type SugestaoProfessor = { id: string; nome: string }
-
 export type PortalLookupResult = {
-  professor: { id: string; nome: string } | null
+  professor: { id: string; nome: string }
   coordenador: { id: string; nome: string } | null
-  ambiguo: boolean
-  /** Nomes próximos quando a busca por nome não bateu exato (fuzzy). */
-  sugestoes: SugestaoProfessor[]
   opcoes: {
     primeira_reuniao: OpcaoLink
     acompanhamento: OpcaoLink
@@ -30,33 +25,17 @@ export type PortalLookupResult = {
   avisoAgendamentoRecente: AvisoAgendamentoRecente | null
 }
 
-export type PortalLookupInput = {
-  /** E-mail informado pelo professor — caminho primário (exato). */
-  email?: string
-  /** Nome — usado quando o e-mail não veio ou não bateu com nenhum cadastro. */
-  nome?: string
-  mesInicio?: number
-  anoInicio?: number
-  /** Id direto — usado quando o professor escolhe um nome da lista de sugestões (resolve sem ambiguidade). */
-  professorId?: string
-}
-
 /**
- * Identifica o professor PRIMEIRO pelo e-mail (exato) e, como reserva, pelo nome.
- * Quando resolvido pelo nome com um `email` válido junto, o e-mail é aprendido
- * (origem 'portal'). Se `ambiguo` voltar true, reenviar com nome mais completo
- * e/ou mesInicio+anoInicio como desempate — ver portal-agendamento-lookup/index.ts.
- * Pelo menos um entre `email` e `nome` precisa ir preenchido.
+ * Opções de agendamento do professor da sessão (`portal-agendamento-lookup`).
+ * Quem é o professor vem do token (`portal-identidade`), nunca de um nome ou
+ * e-mail mandado daqui.
  */
-export function usePortalLookup() {
-  return useMutation({
-    mutationFn: async (input: PortalLookupInput) => {
-      const { data, error } = await supabase.functions.invoke('portal-agendamento-lookup', {
-        body: input,
-      })
-      if (error) throw new Error(error.message)
-      return data as PortalLookupResult
-    },
+export function useOpcoesAgendamento(token: string | null) {
+  return useQuery({
+    queryKey: ['portal', 'agendamento', token],
+    enabled: !!token,
+    retry: false,
+    queryFn: () => invocarFuncao<PortalLookupResult>('portal-agendamento-lookup', { token }),
   })
 }
 
@@ -64,12 +43,7 @@ export function usePortalLookup() {
  *  recente) não aconteceu de fato — libera um novo agendamento imediato. */
 export function useDeclararNaoFezReuniao() {
   return useMutation({
-    mutationFn: async (input: { professorId: string; reuniaoProfessorId: string }) => {
-      const { data, error } = await supabase.functions.invoke('portal-agendamento-declarar-nao-fez', {
-        body: input,
-      })
-      if (error) throw new Error(error.message)
-      return data as { ok: true }
-    },
+    mutationFn: (input: { token: string; reuniaoProfessorId: string }) =>
+      invocarFuncao<{ ok: true }>('portal-agendamento-declarar-nao-fez', input),
   })
 }

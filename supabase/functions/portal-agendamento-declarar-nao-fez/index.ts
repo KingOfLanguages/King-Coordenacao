@@ -10,56 +10,50 @@
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-declarar-nao-fez
-//   Body: { "professorId": "uuid", "reuniaoProfessorId": "uuid" }
+//   Body: { "token": "<sessão do portal-identidade>", "reuniaoProfessorId": "uuid" }
 //   Retorna: { ok: true } ou { error: string }
+//
+// O professor vem da sessão (código no e-mail), nunca do corpo — antes bastava
+// saber o id de alguém para cancelar a reunião dele (pentest 05/10/2026).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-}
+import { jsonPara, preflight, resolverSessao, MSG_SESSAO } from '../_shared/portal.ts'
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { professorId?: unknown; reuniaoProfessorId?: unknown }
+  let body: { token?: unknown; reuniaoProfessorId?: unknown }
   try {
     body = await req.json()
   } catch {
     return json({ error: 'JSON inválido.' }, 400)
   }
 
-  const professorId = typeof body.professorId === 'string' ? body.professorId : ''
   const reuniaoProfessorId = typeof body.reuniaoProfessorId === 'string' ? body.reuniaoProfessorId : ''
-  if (!professorId || !reuniaoProfessorId) {
-    return json({ error: 'professorId e reuniaoProfessorId são obrigatórios.' }, 400)
-  }
+  if (!reuniaoProfessorId) return json({ error: 'reuniaoProfessorId é obrigatório.' }, 400)
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // Confere que a reunião pertence mesmo ao professor informado — o portal é
-  // público/sem login, então não dá pra confiar cegamente nos IDs recebidos.
+  const sessao = await resolverSessao(admin, body.token)
+  if (!sessao) return json({ error: MSG_SESSAO }, 401)
+  const professorId = sessao.id
+
+  // Confere que a reunião pertence ao professor da sessão.
   const { data: linha, error: erroBusca } = await admin
     .from('reuniao_professores')
     .select('id, professor_id, observacao, status')
     .eq('id', reuniaoProfessorId)
     .maybeSingle()
 
-  if (erroBusca) return json({ error: erroBusca.message }, 500)
+  if (erroBusca) return json({ error: 'Não foi possível consultar a reunião agora.' }, 500)
   if (!linha || linha.professor_id !== professorId) {
     return json({ error: 'Reunião não encontrada para este professor.' }, 404)
   }
@@ -72,7 +66,7 @@ serve(async (req) => {
     .update({ status: 'cancelada', observacao: observacaoAtualizada })
     .eq('id', reuniaoProfessorId)
 
-  if (erroUpdate) return json({ error: erroUpdate.message }, 500)
+  if (erroUpdate) return json({ error: 'Não foi possível registrar agora. Tente de novo.' }, 500)
 
   return json({ ok: true })
 })

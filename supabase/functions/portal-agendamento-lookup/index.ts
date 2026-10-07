@@ -1,36 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function: portal-agendamento-lookup
 //
-// Usada pela tela pública /agendar (sem login) como primeiro passo do Portal
-// de Agendamento. A tela pede E-MAIL **OU** NOME COMPLETO de uma vez só: o
-// professor preenche o que souber (ou os dois) e basta UM bater pra ser
-// identificado. Antes eram dois passos em série — e-mail primeiro e, só se
-// falhasse, nome — o que transformava qualquer furo no e-mail num funil
-// obrigatório pelo casamento exato de nome, que é bem mais fácil de errar.
-//
-// A ordem de resolução continua a mesma (e-mail é mais confiável que nome):
-//   1. `professorId` — escolha explícita já resolvida.
-//   2. E-mail exato — `professor_emails` E `professores.email` (ver
-//      professorIdPorEmail).
-//   3. Nome completo exato.
-//
-// Quando o professor é resolvido pelo NOME e mandou um e-mail válido junto,
-// esse e-mail é APRENDIDO (origem 'portal') — assim o portal vai preenchendo
-// sozinho quem ainda não tem e-mail, e na próxima vez o e-mail já resolve.
-//
-// O casamento por nome exige o NOME COMPLETO EXATO (letra por letra); só caixa
-// (maiúscula/minúscula) e acentuação não precisam bater. Nada de nome parcial —
-// evita casar "João" com dezenas de "João …" e a atribuição errada que isso dava.
-//
-//   • Bateu exatamente 1 professor  → resolvido (front confirma "Você é X?").
-//   • Bateu >1 (nomes idênticos, raro) → o front pede mês/ano de início e reenvia
-//     com `mesInicio`/`anoInicio`, usados como desempate (± 1 mês) contra data_inicio.
-//   • Não bateu exato → não encontrado. Sem sugestões fuzzy de propósito:
-//     devolver "nomes próximos" viraria um jeito de escanear o roster.
-//
-// Em qualquer caso de ambiguidade ou não-encontrado, a resposta é genérica
-// (`professor: null`) — nunca revela quantos bateram nem o motivo exato,
-// pra não virar um jeito de "escanear" nomes cadastrados no sistema.
+// Usada pela tela pública /agendar (sem login). Quem é o professor vem SÓ da
+// sessão emitida por `portal-identidade` (código no e-mail oficial) — desde o
+// pentest de 05/10/2026. Antes a tela resolvia por e-mail OU nome completo e
+// ainda "aprendia" o e-mail digitado sem prova nenhuma, o que deixava qualquer
+// pessoa trocar o canal de contato de qualquer professor.
 //
 // Depois de resolver um professor único, resolve o coordenador responsável
 // pelo seu grupo e retorna só as opções de agendamento elegíveis — nunca
@@ -76,14 +51,10 @@
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
-//   Body: { "email"?: "prof@exemplo.com", "nome"?: "Fulano de Tal",
-//           "mesInicio"?: 3, "anoInicio"?: 2026 }
-//   (e-mail e nome são opcionais isoladamente, mas pelo menos um é obrigatório;
-//    mandar os dois é o caso normal e dobra a chance de identificar)
+//   Body: { "token": "<sessão do portal-identidade>" }  → 401 sem sessão válida
 //   Retorna: {
-//     professor:   { id, nome } | null,
+//     professor:   { id, nome },
 //     coordenador: { id, nome } | null,
-//     ambiguo:     boolean,   // true = mais de 1 professor bateu com o nome informado
 //     opcoes: {
 //       primeira_reuniao: { elegivel: boolean, link: string | null },
 //       acompanhamento:   { elegivel: boolean, link: string | null },
@@ -101,12 +72,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import {
+  jsonPara, preflight, resolverSessao, semSufixoInicio, MSG_SESSAO,
+} from '../_shared/portal.ts'
 
 const SCORE_MINIMO_GRUPO = 1300
 const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
@@ -115,51 +85,6 @@ const DIAS_JANELA_ACOMPANHAMENTO_MENSAL = 90 // ~3 meses de casa — cadência m
 const CADENCIA_MIN_DIAS = 30
 const CADENCIA_MAX_DIAS_MENSAL    = 30 // professores 8-90 dias de casa: cadência fixa
 const CADENCIA_MAX_DIAS_FLEXIVEL  = 60 // professores >90 dias de casa: janela livre de 30-60 dias
-const NOME_MIN_CHARS = 3
-const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-}
-
-function norm(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
- *  professor por uma falha no procedimento de cadastro da escola — ex.:
- *  "Fulano de Tal - inicio 18/09", "Fulano (início: 18/09/2025)". Sem tirar
- *  isso, o casamento por nome exato barraria o professor (que digita só o nome).
- *  Conservador: só corta quando vê o marcador "início" ou uma data solta no fim
- *  — nunca mexe num nome comum (inclusive "Inácio"/"Vinícius", que não têm a
- *  sequência "iníci-o"). */
-function semSufixoInicio(nome: string): string {
-  return nome
-    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
-    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** Match EXATO do nome completo: o texto informado precisa ser idêntico ao nome
- *  cadastrado letra por letra — só caixa (maiúscula/minúscula), acentuação e o
- *  sufixo de "início/data" (ver semSufixoInicio) NÃO precisam bater. Nada de
- *  nome parcial: evita casar "João" com vários "João …". */
-function nomeExato(informado: string, real: string): boolean {
-  const a = norm(semSufixoInicio(informado))
-  return a.length > 0 && a === norm(semSufixoInicio(real))
-}
-
-/** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
-function dataInicioBate(dataInicio: string | null, mes: number, ano: number): boolean {
-  if (!dataInicio) return false
-  const d = new Date(dataInicio)
-  const diffMeses = (d.getUTCFullYear() - ano) * 12 + (d.getUTCMonth() - (mes - 1))
-  return Math.abs(diffMeses) <= 1
-}
 
 /** Dias completos desde uma data ISO, normalizando pra meia-noite UTC (evita erro de fuso/hora do dia).
  *  Negativo quando a data é no futuro. */
@@ -175,173 +100,32 @@ function diasDesde(dataIso: string | null): number | null {
 
 const diasDeCasa = diasDesde
 
-/** Resolve o professor a partir do e-mail informado, casando de forma EXATA
- *  (só a caixa não precisa bater). Duas fontes, nesta ordem:
- *
- *    1. `professor_emails` — identificadores aprendidos (cadastro/calendar/portal).
- *    2. `professores.email` — e-mail CANÔNICO do cadastro, mantido pelo
- *       kms-api-sync via `perfil.email`.
- *
- *  A fonte 2 só era consultada pelo daily-import. Sem ela aqui, todo professor
- *  cujo e-mail chegou pela API depois do backfill único de 20260629 respondia
- *  "não encontramos esse e-mail" mesmo digitando o e-mail certo — e era jogado
- *  no casamento por nome exato sem necessidade.
- *
- *  O filtro vai como `ilike` e a igualdade é RECONFERIDA em JS de propósito:
- *  `_` e `%` são curinga no LIKE e aparecem em e-mail de verdade
- *  (fulano_tal@…), então o banco pode devolver linhas a mais — nunca a menos.
- *  Por isso também nada de `.maybeSingle()` aqui: com curinga ele daria 406 e
- *  o e-mail viraria "não encontrado" em silêncio. */
-async function professorIdPorEmail(
-  admin: SupabaseClient,
-  email: string,
-): Promise<string | null> {
-  const alvo = email.toLowerCase().trim()
-
-  const { data: vinculos } = await admin
-    .from('professor_emails')
-    .select('professor_id, email')
-    .ilike('email', email)
-    .limit(50)
-  for (const v of (vinculos ?? []) as { professor_id: string; email: string | null }[]) {
-    if (v.email?.toLowerCase().trim() === alvo) return v.professor_id
-  }
-
-  const { data: cadastro } = await admin
-    .from('professores')
-    .select('id, email')
-    .ilike('email', email)
-    .limit(50)
-  for (const p of (cadastro ?? []) as { id: string; email: string | null }[]) {
-    if (p.email?.toLowerCase().trim() === alvo) return p.id
-  }
-
-  return null
-}
-
-/** Guarda o e-mail informado como identificador do professor, se ainda não
- *  pertencer a ninguém. `professor_emails` tem índice único em lower(email),
- *  então checamos antes — um e-mail pertence a no máximo um professor. */
-async function aprenderEmail(
-  admin: SupabaseClient,
-  professorId: string,
-  email: string,
-): Promise<void> {
-  if (await professorIdPorEmail(admin, email)) return
-  await admin.from('professor_emails').insert({ professor_id: professorId, email, origem: 'portal' })
-}
-
-/** Professor identificável pelo portal. `pausa` entra: quem está pausado
- *  continua sendo professor da casa e pode precisar falar com a coordenação —
- *  barrá-lo dava exatamente a mesma tela de "não encontramos você" que um nome
- *  errado, sem nenhuma pista do motivo real. Só `desligado` fica de fora.
- *  (É o mesmo critério que o portal-welcome-path já usava.) */
-const STATUS_FORA = 'desligado'
-
 const OPCOES_VAZIAS = {
   primeira_reuniao: { elegivel: false, link: null },
   acompanhamento:   { elegivel: false, link: null },
   reuniao_grupo:    { elegivel: false, recomendada: false },
 }
 
-function respostaVazia(ambiguo: boolean, sugestoes: { id: string; nome: string }[] = []) {
-  return { professor: null, coordenador: null, ambiguo, sugestoes, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null }
-}
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { nome?: unknown; email?: unknown; mesInicio?: unknown; anoInicio?: unknown; professorId?: unknown }
+  let body: { token?: unknown }
   try {
     body = await req.json()
   } catch {
     return json({ error: 'JSON inválido.' }, 400)
   }
 
-  const nome  = typeof body.nome  === 'string' ? body.nome.trim()  : ''
-  const email = typeof body.email === 'string' ? body.email.trim() : ''
-  const professorIdInput = typeof body.professorId === 'string' ? body.professorId.trim() : ''
-  const emailValido = EMAILRE.test(email.toLowerCase())
-  const temNome     = nome.length >= NOME_MIN_CHARS
-
-  if (!temNome && !emailValido && !professorIdInput) {
-    return json({ error: `Informe seu e-mail ou ao menos ${NOME_MIN_CHARS} caracteres do seu nome.` }, 400)
-  }
-
-  const mesInicio = typeof body.mesInicio === 'number' ? body.mesInicio : null
-  const anoInicio = typeof body.anoInicio === 'number' ? body.anoInicio : null
-
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  type ProfRow = { id: string; nome: string; status: string; coordenador_id: string | null; data_inicio: string | null }
-
-  // ── 1. Identificação: id direto (escolha de sugestão) > e-mail (exato) > nome ─
-  let professor: ProfRow | null = null
-
-  if (professorIdInput) {
-    const { data: p } = await admin
-      .from('professores')
-      .select('id, nome, status, coordenador_id, data_inicio')
-      .eq('id', professorIdInput)
-      .maybeSingle()
-    if (p && p.status !== STATUS_FORA) {
-      professor = p as ProfRow
-      // Cadastro do e-mail do professor (passo "solicita e-mail" quando ele foi
-      // achado pelo nome sem informar e-mail): o front reenvia professorId + o
-      // e-mail confirmado e a gente guarda.
-      if (emailValido) await aprenderEmail(admin, p.id, email)
-    }
-  }
-
-  if (!professor && emailValido) {
-    const professorId = await professorIdPorEmail(admin, email)
-    if (professorId) {
-      const { data: p } = await admin
-        .from('professores')
-        .select('id, nome, status, coordenador_id, data_inicio')
-        .eq('id', professorId)
-        .maybeSingle()
-      if (p && p.status !== STATUS_FORA) professor = p as ProfRow
-    }
-  }
-
-  // ── 2. Caminho do nome (quando o e-mail não veio ou não bateu) ───────────────
-  if (!professor) {
-    // Nem e-mail nem nome resolveram → não encontrado.
-    if (!temNome) return json(respostaVazia(false))
-
-    const { data: naCasa } = await admin
-      .from('professores')
-      .select('id, nome, status, coordenador_id, data_inicio')
-      .neq('status', STATUS_FORA)
-
-    let candidatos = ((naCasa ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
-
-    // Desempate por mês/ano de início, só quando ainda ambíguo.
-    if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
-      candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
-    }
-
-    // Não bateu exato → não achado (o front reforça "nome completo como na
-    // plataforma" e, persistindo, direciona pro contato da coordenação). Sem
-    // sugestões fuzzy: o casamento por nome é exato de propósito.
-    if (candidatos.length === 0) return json(respostaVazia(false))
-    if (candidatos.length > 1)   return json(respostaVazia(true))
-
-    professor = candidatos[0]
-
-    // Resolvido pelo NOME com um e-mail válido junto: agora os dois vêm no mesmo
-    // envio (a tela de identificação pede e-mail OU nome numa vez só), então o
-    // e-mail que ele acabou de digitar é aprendido aqui mesmo — sem a tela extra
-    // de "confirme seu e-mail". Da próxima vez o e-mail sozinho já resolve.
-    if (emailValido) await aprenderEmail(admin, professor.id, email)
-  }
-
-  if (!professor) return json(respostaVazia(false))
+  // ── 1. Identificação: só pela sessão ─────────────────────────────────────────
+  const professor = await resolverSessao(admin, body.token)
+  if (!professor) return json({ error: MSG_SESSAO }, 401)
 
   // Nome limpo pra exibição: o professor vê o próprio nome sem o resíduo de
   // "início/data" do cadastro (senão "Você é Fulano - inicio 18/09?" confunde e
@@ -349,7 +133,7 @@ serve(async (req) => {
   const nomeExibicao = semSufixoInicio(professor.nome)
 
   if (!professor.coordenador_id) {
-    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 3. Coordenador responsável e seus links ──────────────────────────────────
@@ -360,7 +144,7 @@ serve(async (req) => {
     .maybeSingle()
 
   if (!coordenador) {
-    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, ambiguo: false, sugestoes: [], opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 4. Já teve reunião realizada? ────────────────────────────────────────────
@@ -457,8 +241,6 @@ serve(async (req) => {
   return json({
     professor: { id: professor.id, nome: nomeExibicao },
     coordenador: { id: coordenador.id, nome: coordenador.nome },
-    ambiguo: false,
-    sugestoes: [],
     opcoes: {
       primeira_reuniao: {
         elegivel: primeiraReuniaoElegivel,

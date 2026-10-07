@@ -1,36 +1,10 @@
-import { useMutation } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { invocarFuncao } from '@/lib/invocarFuncao'
 import type { MotivoTransferencia } from '@/lib/transferenciaLabels'
 
-/**
- * supabase-js só expõe `error.message` genérico ("non-2xx status code") em erro
- * HTTP de Edge Function — o corpo real ({ error: "…" }) vem em `error.context`.
- * As mensagens deste portal são escritas para o professor ler, então perdê-las
- * custa caro.
- *
- * A extração acontece DENTRO do try, mas o throw é FORA: lançar lá dentro seria
- * capturado pelo próprio catch e o professor veria só o genérico (mesma
- * armadilha já documentada em useBookMeeting.ts e usePortalPausa.ts).
- */
-async function invocarPortalTransferencia<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('portal-transferencia', { body })
-
-  if (error) {
-    const ctx = (error as { context?: Response }).context
-    let mensagem: string | null = null
-    if (ctx?.clone) {
-      try {
-        const parsed = await ctx.clone().json()
-        if (parsed?.error) mensagem = parsed.error
-      } catch { /* corpo não era JSON — cai na mensagem genérica */ }
-    }
-    throw new Error(mensagem ?? error.message)
-  }
-
-  const corpo = data as (T & { error?: string }) | null
-  if (corpo?.error) throw new Error(corpo.error)
-  return corpo as T
-}
+// Portal de transferência (`portal-transferencia`). Quem é o professor vem do
+// token da sessão (`portal-identidade`), nunca de um id mandado daqui.
+const invocar = <T,>(body: Record<string, unknown>) => invocarFuncao<T>('portal-transferencia', body)
 
 /** Um aluno da carteira do professor, como o portal o enxerga. */
 export type AlunoPortal = {
@@ -42,38 +16,26 @@ export type AlunoPortal = {
   pedidoAberto: boolean
 }
 
-export type TransferenciaLookupResult = {
-  professor: { id: string; nome: string } | null
-  /** true = mais de um professor com o mesmo nome; o front pede mês/ano de início. */
-  ambiguo: boolean
+export type TransferenciaEstado = {
+  professor: { id: string; nome: string }
   /** Carteira do professor (só vínculos individuais, turmas ficam de fora). */
   alunos: AlunoPortal[]
   jaPausado: boolean
 }
 
-export type TransferenciaLookupInput = {
-  email?: string
-  nome?: string
-  mesInicio?: number
-  anoInicio?: number
-  /** Id direto — reenviado com o e-mail confirmado para cadastrá-lo. */
-  professorId?: string
-}
-
-/**
- * Identifica o professor pelo e-mail (exato) e, como reserva, pelo nome completo
- * — mesmos parâmetros do portal de pausa — e já devolve a carteira de alunos
- * dele, que é o que o formulário usa para o professor escolher quem transferir.
- */
-export function useTransferenciaLookup() {
-  return useMutation({
-    mutationFn: (input: TransferenciaLookupInput) =>
-      invocarPortalTransferencia<TransferenciaLookupResult>({ acao: 'lookup', ...input }),
+/** Professor da sessão + carteira de alunos, que o formulário usa para deduzir
+ *  o vínculo do aluno digitado. */
+export function useTransferenciaEstado(token: string | null) {
+  return useQuery({
+    queryKey: ['portal', 'transferencia', token],
+    enabled: !!token,
+    retry: false,
+    queryFn: () => invocar<TransferenciaEstado>({ acao: 'estado', token }),
   })
 }
 
 export type SolicitarTransferenciaInput = {
-  professorId: string
+  token: string
   /** O professor digita o nome completo; o vínculo com o cadastro (aluno_id) é
    *  deduzido no servidor pelo primeiro nome — por isso não vai daqui. */
   alunoNome: string
@@ -98,7 +60,7 @@ export type SolicitarTransferenciaInput = {
 export function useSolicitarTransferencia() {
   return useMutation({
     mutationFn: (input: SolicitarTransferenciaInput) =>
-      invocarPortalTransferencia<{ ok: true; transferenciaId: string }>({
+      invocar<{ ok: true; transferenciaId: string }>({
         acao: 'solicitar', ...input,
       }),
   })

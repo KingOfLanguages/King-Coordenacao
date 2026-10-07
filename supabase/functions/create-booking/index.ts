@@ -19,28 +19,26 @@
 // Secrets necessários (Supabase Dashboard > Edge Functions > Secrets):
 //   BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME   (mesmos de send-reminders)
 //
-// Aceita `email` (fluxo antigo) OU `professor_id` (novo Portal de
-// Agendamento, que identifica o professor só pelo nome — a maioria não tem
-// e-mail cadastrado). Quando não há e-mail real disponível, grava um
-// placeholder sintético em agenda_inscricoes.email_usado (coluna NOT NULL)
-// e pula o envio de e-mail de confirmação.
+// O professor vem da sessão do portal (`portal-identidade`, código no e-mail
+// oficial). Até o pentest de 05/10/2026 bastava mandar `email` ou `professor_id`
+// soltos no corpo para reservar — e disparar e-mail — em nome de qualquer um.
+// A confirmação vai sempre para professores.email; sem e-mail no cadastro,
+// gravamos um placeholder em agenda_inscricoes.email_usado (coluna NOT NULL) e
+// pulamos o envio.
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/create-booking
-//   Body: { "email": "professor@exemplo.com", "horario_id": "..." }
-//      OU { "professor_id": "uuid", "horario_id": "..." }
+//   Body: { "token": "<sessão do portal-identidade>", "horario_id": "..." }
 //   Retorna: { reuniao: { titulo, data_hora, coordenador_nome, meet_link } }
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { jsonPara, preflight, resolverSessao, MSG_SESSAO } from '../_shared/portal.ts'
 
 const DIAS_MIN_GRUPO = 60 // reunião em grupo só para quem já tem >= 2 meses de casa
+const SCORE_MINIMO_GRUPO = 1300 // mesmo corte do portal-agendamento-lookup
 const DIAS_JANELA_AGENDAMENTO = 7 // professor só reserva ocorrências até 7 dias à frente
 
 /** Link TEMPLATE do Google Calendar — abre o formulário "adicionar evento" no
@@ -77,13 +75,6 @@ function comHttps(link: string | null): string | null {
   const l = link.trim()
   if (!l) return null
   return /^https?:\/\//i.test(l) ? l : `https://${l}`
-}
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
 }
 
 function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome, calendarUrl }: {
@@ -172,53 +163,51 @@ function buildHtml({ professorNome, titulo, dataHoraFmt, meetLink, coordNome, ca
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
-  let body: { email?: unknown; professor_id?: unknown; horario_id?: unknown }
+  let body: { token?: unknown; horario_id?: unknown }
   try {
     body = await req.json()
   } catch {
     return json({ error: 'JSON inválido.' }, 400)
   }
 
-  const emailInformado = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-  const professorId    = typeof body.professor_id === 'string' ? body.professor_id.trim() : ''
-  const horarioId      = typeof body.horario_id === 'string' ? body.horario_id.trim() : ''
-  if ((!emailInformado && !professorId) || !horarioId) {
-    return json({ error: 'Professor e horário são obrigatórios.' }, 400)
-  }
-
-  // Log de correlação: identifica QUAL professor/horário em cada request, para
-  // que os console.error de falha abaixo (token Google, materialização, insert)
-  // possam ser rastreados até a reserva específica que quebrou. Sem isso, o
-  // relato "professor X não consegue agendar" não tinha como ser diagnosticado.
-  console.log(`[create-booking] req professor_id=${professorId || '(via email)'} email=${emailInformado || '—'} horario_id=${horarioId}`)
+  const horarioId = typeof body.horario_id === 'string' ? body.horario_id.trim() : ''
+  if (!horarioId) return json({ error: 'Horário é obrigatório.' }, 400)
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // ── 1. Professor existe e está ativo? ────────────────────────────────────────
-  let idProfessor = professorId
-  if (!idProfessor) {
-    const { data: emailRow } = await admin
-      .from('professor_emails')
-      .select('professor_id')
-      .ilike('email', emailInformado)
-      .maybeSingle()
-    if (!emailRow) return json({ error: 'Professor não encontrado para este e-mail.' }, 404)
-    idProfessor = emailRow.professor_id
-  }
+  // ── 1. Professor da sessão, ativo ────────────────────────────────────────────
+  const sessao = await resolverSessao(admin, body.token)
+  if (!sessao) return json({ error: MSG_SESSAO }, 401)
+
+  // Log de correlação: identifica QUAL professor/horário em cada request, para
+  // que os console.error de falha abaixo (materialização, insert) possam ser
+  // rastreados até a reserva específica que quebrou.
+  console.log(`[create-booking] req professor_id=${sessao.id} horario_id=${horarioId}`)
 
   const { data: professor } = await admin
     .from('professores')
     .select('id, nome, status, email, data_inicio')
-    .eq('id', idProfessor)
+    .eq('id', sessao.id)
     .maybeSingle()
   if (!professor || professor.status !== 'ativo') {
-    return json({ error: 'Professor não encontrado.' }, 404)
+    return json({ error: 'Seu cadastro não está ativo. Fale com a coordenação.' }, 403)
+  }
+
+  // Score mínimo — o portal só mostra a opção a quem tem, mas a regra vale aqui.
+  const { data: acomp } = await admin
+    .from('professor_acompanhamento')
+    .select('score_atual')
+    .eq('professor_id', professor.id)
+    .maybeSingle()
+  if ((acomp?.score_atual ?? 0) < SCORE_MINIMO_GRUPO) {
+    return json({ error: 'As reuniões em grupo ainda não estão liberadas para você.' }, 403)
   }
 
   // Trava dos 2 meses: create-booking só reserva reunião em grupo, então a regra
@@ -230,11 +219,10 @@ serve(async (req) => {
     return json({ error: 'As reuniões em grupo ficam disponíveis a partir de 2 meses de casa.' }, 403)
   }
 
-  // E-mail real pra registrar/enviar confirmação: o informado no request,
-  // senão o cadastrado em professores.email (legado), senão nenhum — nesse
-  // caso usamos um placeholder só pra satisfazer a coluna NOT NULL e pulamos
-  // o envio de confirmação (ver passo 5).
-  const emailReal = emailInformado || (professor.email ? professor.email.trim().toLowerCase() : '')
+  // E-mail real pra registrar/enviar confirmação: o do cadastro, senão nenhum —
+  // nesse caso usamos um placeholder só pra satisfazer a coluna NOT NULL e
+  // pulamos o envio de confirmação (ver passo 5).
+  const emailReal = professor.email ? professor.email.trim().toLowerCase() : ''
   const emailParaRegistro = emailReal || `sem-email-${professor.id}@king.internal`
 
   // ── 2. Resolve o horário: linha real já materializada, ou ocorrência virtual

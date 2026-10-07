@@ -2,19 +2,17 @@
 // Portal público de PAUSA — o professor oficializa a pausa sem login, pelo link
 // enviado pela coordenação (/pausa).
 //
-// A identificação é a MESMA do portal de agendamento (portal-agendamento-lookup):
-// e-mail exato → nome completo exato → desempate por mês/ano de início → contato
-// da coordenação. A lógica está duplicada aqui de propósito: o projeto não usa
-// pasta `_shared` entre edge functions (teacher-lookup também duplica), e cada
-// function é publicada isolada.
+// Quem é o professor vem SÓ da sessão emitida por `portal-identidade` (código no
+// e-mail oficial) — desde o pentest de 05/10/2026. Antes, o nome completo e um
+// `professorId` no corpo bastavam para pedir pausa em nome de qualquer pessoa.
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-pausa
 //
-//   { "acao": "lookup", "email"?, "nome"?, "mesInicio"?, "anoInicio"?, "professorId"? }
-//     → { professor: { id, nome } | null, ambiguo: boolean, pausaAberta: boolean, jaPausado: boolean }
+//   { "acao": "estado", "token" }
+//     → { professor: { id, nome }, pausaAberta: boolean, jaPausado: boolean }
 //
-//   { "acao": "solicitar", "professorId", "motivo", "dataInicio", "dataFim" }
+//   { "acao": "solicitar", "token", "motivo", "dataInicio", "dataFim" }
 //     → { ok: true, pausaId }  |  { error: "…" } com 400/409
 //
 // Escreve em `pausas` com a service_role (a tabela não tem policy de INSERT —
@@ -24,15 +22,12 @@
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import {
+  jsonPara, preflight, resolverSessao, semSufixoInicio, textoLimpo, MSG_SESSAO,
+} from '../_shared/portal.ts'
 
-const NOME_MIN_CHARS = 3
 const MOTIVO_MIN_CHARS = 5
 const MOTIVO_MAX_CHARS = 2000
-const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const DATARE  = /^\d{4}-\d{2}-\d{2}$/
 
 /** Quanto tempo pra trás aceitamos como data de início (o professor pode estar
@@ -40,48 +35,6 @@ const DATARE  = /^\d{4}-\d{2}-\d{2}$/
 const DIAS_RETROATIVO_MAX = 30
 /** Teto de duração da pausa — evita erro de digitação virar pausa de 10 anos. */
 const DIAS_DURACAO_MAX = 365
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-}
-
-function norm(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-/** Remove o sufixo de "início/data" que a plataforma às vezes gruda no nome do
- *  professor por uma falha no procedimento de cadastro da escola — ex.:
- *  "Fulano de Tal - inicio 18/09", "Fulano (início: 18/09/2025)". Sem tirar
- *  isso, o casamento por nome exato barraria o professor (que digita só o nome).
- *  Conservador: só corta quando vê o marcador "início" ou uma data solta no fim
- *  — nunca mexe num nome comum (inclusive "Inácio"/"Vinícius", que não têm a
- *  sequência "iníci-o"). */
-function semSufixoInicio(nome: string): string {
-  return nome
-    .replace(/[\s\-–—(|,:;]+in[íi]cio.*$/i, '')
-    .replace(/[\s\-–—(|,:;]+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\)?\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** Match EXATO do nome completo — só caixa, acentuação e o sufixo de
- *  "início/data" (ver semSufixoInicio) são ignorados. Nada de nome parcial:
- *  evita casar "João" com vários "João …". */
-function nomeExato(informado: string, real: string): boolean {
-  const a = norm(semSufixoInicio(informado))
-  return a.length > 0 && a === norm(semSufixoInicio(real))
-}
-
-/** Mês/ano de início dentro de ±1 mês de tolerância (memória imprecisa é normal). */
-function dataInicioBate(dataInicio: string | null, mes: number, ano: number): boolean {
-  if (!dataInicio) return false
-  const d = new Date(dataInicio)
-  const diffMeses = (d.getUTCFullYear() - ano) * 12 + (d.getUTCMonth() - (mes - 1))
-  return Math.abs(diffMeses) <= 1
-}
 
 /** Data ISO (YYYY-MM-DD) → dias de diferença para hoje, em UTC. Negativo = passado. */
 function diasAte(iso: string): number {
@@ -92,14 +45,9 @@ function diasAte(iso: string): number {
   return Math.round((alvo - hoje) / 86400000)
 }
 
-type ProfRow = { id: string; nome: string; status: string; data_inicio: string | null }
-
-function respostaVazia(ambiguo: boolean) {
-  return { professor: null, ambiguo, pausaAberta: false, jaPausado: false }
-}
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (req.method === 'OPTIONS') return preflight(req)
+  const json = jsonPara(req)
   if (req.method !== 'POST')    return json({ error: 'Método não permitido.' }, 405)
 
   let body: Record<string, unknown>
@@ -114,16 +62,22 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  const acao = typeof body.acao === 'string' ? body.acao : 'lookup'
+  const acao = typeof body.acao === 'string' ? body.acao : ''
+
+  if (acao === 'lookup') {
+    return json({ error: 'Atualize a página para entrar com o código enviado ao seu e-mail.' }, 410)
+  }
+
+  const sessao = await resolverSessao(admin, body.token)
+  if (!sessao) return json({ error: MSG_SESSAO }, 401)
+  const professorId = sessao.id
 
   // ══ Ação: solicitar ════════════════════════════════════════════════════════
   if (acao === 'solicitar') {
-    const professorId = typeof body.professorId === 'string' ? body.professorId.trim() : ''
-    const motivo      = typeof body.motivo      === 'string' ? body.motivo.trim()      : ''
+    const motivo      = textoLimpo(body.motivo, MOTIVO_MAX_CHARS + 1)
     const dataInicio  = typeof body.dataInicio  === 'string' ? body.dataInicio.trim()  : ''
     const dataFim     = typeof body.dataFim     === 'string' ? body.dataFim.trim()     : ''
 
-    if (!professorId) return json({ error: 'Identificação perdida. Recomece o preenchimento.' }, 400)
     if (motivo.length < MOTIVO_MIN_CHARS) {
       return json({ error: 'Conte o motivo da pausa com um pouco mais de detalhe.' }, 400)
     }
@@ -193,101 +147,21 @@ serve(async (req) => {
     return json({ ok: true, pausaId: criada.id })
   }
 
-  // ══ Ação: lookup ═══════════════════════════════════════════════════════════
-  const nome  = typeof body.nome  === 'string' ? body.nome.trim()  : ''
-  const email = typeof body.email === 'string' ? body.email.trim() : ''
-  const professorIdInput = typeof body.professorId === 'string' ? body.professorId.trim() : ''
-  const emailValido = EMAILRE.test(email.toLowerCase())
-  const temNome     = nome.length >= NOME_MIN_CHARS
-
-  if (!temNome && !emailValido && !professorIdInput) {
-    return json({ error: `Informe seu e-mail ou ao menos ${NOME_MIN_CHARS} caracteres do seu nome.` }, 400)
-  }
-
-  const mesInicio = typeof body.mesInicio === 'number' ? body.mesInicio : null
-  const anoInicio = typeof body.anoInicio === 'number' ? body.anoInicio : null
-
-  let professor: ProfRow | null = null
-
-  // ── 1. Id direto (2º passo do fluxo: cadastro do e-mail depois de achar pelo nome)
-  if (professorIdInput) {
-    const { data: p } = await admin
-      .from('professores')
-      .select('id, nome, status, data_inicio')
-      .eq('id', professorIdInput)
-      .maybeSingle()
-    if (p && p.status === 'ativo') {
-      professor = p as ProfRow
-      if (emailValido) {
-        const { data: jaTem } = await admin
-          .from('professor_emails')
-          .select('id')
-          .ilike('email', email)
-          .limit(1)
-          .maybeSingle()
-        if (!jaTem) {
-          await admin.from('professor_emails').insert({ professor_id: p.id, email, origem: 'portal' })
-        }
-      }
-    }
-  }
-
-  // ── 2. E-mail exato
-  if (!professor && emailValido) {
-    const { data: emailRow } = await admin
-      .from('professor_emails')
-      .select('professor_id')
-      .ilike('email', email)
-      .maybeSingle()
-    if (emailRow) {
-      const { data: p } = await admin
-        .from('professores')
-        .select('id, nome, status, data_inicio')
-        .eq('id', emailRow.professor_id)
-        .maybeSingle()
-      if (p && p.status === 'ativo') professor = p as ProfRow
-    }
-  }
-
-  // ── 3. Nome completo exato (+ desempate por mês/ano)
-  if (!professor) {
-    if (!temNome) return json(respostaVazia(false))
-
-    const { data: ativos } = await admin
-      .from('professores')
-      .select('id, nome, status, data_inicio')
-      .eq('status', 'ativo')
-
-    let candidatos = ((ativos ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
-
-    if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
-      candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
-    }
-
-    if (candidatos.length === 0) return json(respostaVazia(false))
-    if (candidatos.length > 1)   return json(respostaVazia(true))
-
-    professor = candidatos[0]
-  }
-
-  if (!professor) return json(respostaVazia(false))
-
-  // Nome sem o resíduo de "início/data" do cadastro — o professor vê o próprio nome.
-  const nomeExibicao = semSufixoInicio(professor.nome)
+  // ══ Ação: estado ═══════════════════════════════════════════════════════════
+  if (acao !== 'estado') return json({ error: 'Ação desconhecida.' }, 400)
 
   // Avisos que o front usa pra não deixar o professor preencher à toa.
   const { data: aberta } = await admin
     .from('pausas')
     .select('id')
-    .eq('professor_id', professor.id)
+    .eq('professor_id', professorId)
     .in('status', ['pendente', 'em_atendimento'])
     .limit(1)
     .maybeSingle()
 
   return json({
-    professor:   { id: professor.id, nome: nomeExibicao },
-    ambiguo:     false,
+    professor:   { id: sessao.id, nome: semSufixoInicio(sessao.nome) },
     pausaAberta: !!aberta,
-    jaPausado:   professor.status === 'pausa',
+    jaPausado:   sessao.status === 'pausa',
   })
 })
