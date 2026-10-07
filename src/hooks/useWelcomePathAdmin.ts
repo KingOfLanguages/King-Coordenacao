@@ -452,8 +452,9 @@ export type AcompanhamentoTrilha = {
 export function useAcompanhamentoTrilha() {
   return useQuery({
     queryKey: ['wp-admin', 'acompanhamento'],
-    // A tela é de acompanhamento ao vivo: recarrega sozinha a cada minuto.
-    refetchInterval: 60_000,
+    // Recarrega sozinha a cada 5 min (o contador da tela anda a cada 30 s sem
+    // precisar do servidor). Mais que isso só gastaria a cota de log do plano.
+    refetchInterval: 5 * 60_000,
     queryFn: async (): Promise<AcompanhamentoTrilha[]> => {
       const { data, error } = await supabase.rpc('wp_acompanhamento')
       if (error) throw error

@@ -152,8 +152,9 @@ export function useTrilha(token: string | null) {
     // Professor bloqueado que voltou do WhatsApp: ao trocar de aba de volta, o
     // desbloqueio feito pelo suporte já aparece sem recarregar a página.
     refetchOnWindowFocus: true,
-    // E quem ficou parado na tela de bloqueio esperando resposta também vê.
-    refetchInterval: q => (q.state.data?.jornada?.bloqueada ? 60_000 : false),
+    // E quem ficou parado na tela de bloqueio esperando resposta também vê. A
+    // cada 3 min, não 1: no plano gratuito cada chamada vira log.
+    refetchInterval: q => (q.state.data?.jornada?.bloqueada ? 180_000 : false),
     queryFn: () => invocar<TrilhaPortal>({ acao: 'trilha', token }),
   })
 }
@@ -183,6 +184,21 @@ export function useRegistrarTempo() {
     mutationFn: (v: { token: string; etapaId: string; segundos: number }) =>
       invocar<{ ok: true }>({ acao: 'tempo', ...v }),
   })
+}
+
+/** O mesmo envio de tempo, para quando a página está indo embora (aba fechada,
+ *  celular trocando de app): `keepalive` deixa a requisição terminar depois que
+ *  a página some, coisa que o supabase-js não expõe. Melhor esforço — perder
+ *  alguns segundos de estudo não muda nada. */
+export function registrarTempoAoSair(v: { token: string; etapaId: string; segundos: number }) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/portal-welcome-path`
+  const chave = import.meta.env.VITE_SUPABASE_ANON_KEY
+  fetch(url, {
+    method: 'POST',
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json', apikey: chave, Authorization: `Bearer ${chave}` },
+    body: JSON.stringify({ acao: 'tempo', ...v }),
+  }).catch(() => { /* página já foi embora */ })
 }
 
 export function useSalvarObservacao() {

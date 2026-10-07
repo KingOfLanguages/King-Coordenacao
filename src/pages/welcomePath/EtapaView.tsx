@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { dataBR, fmtDuracao } from '@/lib/formato'
 import { BotaoWhatsApp } from '@/components/portal/PortalUI'
 import {
-  useEtapa, useIniciarEtapa, useRegistrarTempo, useResponderEtapa, useSalvarObservacao,
+  useEtapa, useIniciarEtapa, useRegistrarTempo, useResponderEtapa, useSalvarObservacao, registrarTempoAoSair,
   type RespostaEnviada, type ResultadoEnvio, type QuestaoEtapa, type MinhaResposta,
   type EtapaDetalhe, type BlocoEtapa,
 } from '@/hooks/useWelcomePath'
@@ -26,8 +26,14 @@ import { ChipPrazo } from './JornadaViews'
 /** De quanto em quanto tempo o tempo de estudo é reportado ao servidor. Bater
  *  de tempos em tempos (em vez de medir só na hora do envio) é o que faz o
  *  número sobreviver a fechar a aba no meio — e a Edge Function limita o delta
- *  aceito por chamada, então uma aba esquecida aberta não infla o total. */
-const BATIDA_SEGUNDOS = 30
+ *  aceito por chamada (120 s), então uma aba esquecida aberta não infla o total.
+ *  Eram 30 s até 07/10/2026: no plano gratuito do Supabase cada chamada vira
+ *  log, e a trilha sozinha passaria da cota de 1 GB por mês. */
+const BATIDA_SEGUNDOS = 120
+/** Ao esconder a aba (trocar de app no celular, que pode ser o fim da visita),
+ *  manda o acumulado se já passou disso — trocas rápidas de aba ficam para a
+ *  próxima batida, sem chamada a mais. */
+const MIN_ENVIO_AO_ESCONDER = 30
 
 // Constantes, e não `?? []` na chamada: um literal novo a cada render faria o
 // useQuizEtapa achar que as respostas mudaram e ressincronizar o estado em
@@ -41,12 +47,48 @@ function useBatidaDeTempo(token: string, etapaId: string) {
   const { mutate } = useRegistrarTempo()
 
   useEffect(() => {
-    const id = setInterval(() => {
-      // Aba em segundo plano não conta como tempo de estudo.
-      if (document.visibilityState !== 'visible') return
-      mutate({ token, etapaId, segundos: BATIDA_SEGUNDOS })
-    }, BATIDA_SEGUNDOS * 1000)
-    return () => clearInterval(id)
+    // Só conta o tempo com a aba visível: aba em segundo plano não é estudo.
+    let acumulado = 0
+    let visivelDesde: number | null = document.visibilityState === 'visible' ? Date.now() : null
+
+    function fecharTrecho() {
+      if (visivelDesde == null) return
+      const agora = Date.now()
+      acumulado += (agora - visivelDesde) / 1000
+      visivelDesde = agora
+    }
+
+    function enviar(minimo: number, saindo: boolean) {
+      fecharTrecho()
+      if (acumulado < minimo) return
+      const segundos = Math.min(Math.round(acumulado), BATIDA_SEGUNDOS)
+      acumulado = 0
+      if (saindo) registrarTempoAoSair({ token, etapaId, segundos })
+      else mutate({ token, etapaId, segundos })
+    }
+
+    const id = setInterval(() => enviar(5, false), BATIDA_SEGUNDOS * 1000)
+
+    function aoMudarVisibilidade() {
+      if (document.visibilityState === 'visible') {
+        visivelDesde = Date.now()
+      } else {
+        fecharTrecho()
+        visivelDesde = null
+        enviar(MIN_ENVIO_AO_ESCONDER, true)
+      }
+    }
+    const aoSairDaPagina = () => enviar(5, true)
+
+    document.addEventListener('visibilitychange', aoMudarVisibilidade)
+    window.addEventListener('pagehide', aoSairDaPagina)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', aoMudarVisibilidade)
+      window.removeEventListener('pagehide', aoSairDaPagina)
+      // Voltou para a trilha: manda o que ficou desde a última batida.
+      enviar(5, false)
+    }
   }, [mutate, token, etapaId])
 }
 

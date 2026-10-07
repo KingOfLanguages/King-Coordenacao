@@ -19,7 +19,7 @@
 //   trilha      { token }                    → { professor, etapas[], jornada, primeiraReuniao }
 //   etapa       { token, etapaId }           → { etapa, blocos[], questoes[], progresso }
 //   iniciar     { token, etapaId }           → { ok: true }
-//   tempo       { token, etapaId, segundos } → { ok: true }
+//   tempo       { token, etapaId, segundos } → { ok: true }   (caminho curto, sem trilha)
 //   responder   { token, etapaId, respostas[] }
 //                 → { nota, aprovado, notaMinima, revisaoPendente, resultado[] }
 //   observacao  { token, etapaId, texto }    → { ok: true }
@@ -45,7 +45,8 @@ import {
 } from '../_shared/portal.ts'
 
 /** Teto do incremento de tempo por batida — uma aba esquecida aberta não pode
- *  virar "8 horas de estudo". O front bate a cada ~30s enquanto está visível. */
+ *  virar "8 horas de estudo". O front bate a cada 2 min enquanto está visível
+ *  (e manda o resto ao sair); o mesmo teto vale em `wp_registrar_tempo`. */
 const TEMPO_MAX_POR_BATIDA = 120
 /** Tentativas por etapa antes de mandar falar com a coordenação. Sem isso, o
  *  quiz vira força-bruta do gabarito. */
@@ -265,6 +266,23 @@ serve(async (req) => {
     return json({ professor: { id: prof.id, nome: semSufixoInicio(prof.nome) } })
   }
 
+  // ── Batida de tempo: caminho curto ────────────────────────────────────────
+  // É a ação mais frequente do portal (uma a cada 2 min por professor
+  // estudando), e no plano gratuito cada consulta vira registro de log. Por
+  // isso não carrega a trilha nem passa pelo gate: uma chamada só ao banco
+  // (`wp_registrar_tempo`), que já ignora prazo esgotado e etapa não aberta.
+  if (acao === 'tempo') {
+    const etapaTempo = typeof body.etapaId === 'string' ? body.etapaId.trim() : ''
+    const bruto = typeof body.segundos === 'number' ? Math.floor(body.segundos) : 0
+    const delta = Math.max(0, Math.min(bruto, TEMPO_MAX_POR_BATIDA))
+    if (etapaTempo && delta > 0) {
+      await admin.rpc('wp_registrar_tempo', {
+        p_professor_id: prof.id, p_etapa_id: etapaTempo, p_segundos: delta,
+      })
+    }
+    return json({ ok: true })
+  }
+
   // A 1ª carga da trilha é o "1º acesso" que liga o relógio de 120h.
   const jornada = await abrirJornada(admin, prof.id)
 
@@ -388,18 +406,6 @@ serve(async (req) => {
         .update({ iniciada_em: new Date().toISOString() })
         .eq('id', progresso.id)
     }
-    return json({ ok: true })
-  }
-
-  if (acao === 'tempo') {
-    const bruto = typeof body.segundos === 'number' ? Math.floor(body.segundos) : 0
-    const delta = Math.max(0, Math.min(bruto, TEMPO_MAX_POR_BATIDA))
-    if (delta === 0) return json({ ok: true })
-
-    const progresso = await garantirProgresso(admin, prof.id, etapaId)
-    await admin.from('welcome_path_progresso')
-      .update({ tempo_segundos: (progresso?.tempo_segundos ?? 0) + delta })
-      .eq('id', progresso.id)
     return json({ ok: true })
   }
 
