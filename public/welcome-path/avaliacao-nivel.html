@@ -29,7 +29,7 @@
 .notas{border-left:3px solid var(--border-strong); padding:4px 0 4px 11px; font-size:13px; line-height:1.55; margin-bottom:12px}
 .notas small{display:block; font:600 10.5px Geist,sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-muted)}
 .passo{border-top:1px solid var(--border-soft); margin-top:16px; padding-top:16px}
-/* réplica do Perfil dos Alunos */
+/* réplica do Histórico do Aluno (antigo Perfil dos Alunos) */
 .card-al{border:1px solid var(--border-default); border-radius:12px; padding:14px; display:grid; gap:10px}
 .card-al .topo{display:flex; gap:12px; align-items:center}
 .card-al .topo b{display:block; font-size:15px}
@@ -125,7 +125,7 @@
   var nivel = {
     tag: "Pratique",
     titulo: "Trocar nível e liberar material",
-    instrucao: "O Rafael acabou de fazer a primeira aula. O nivelamento deu A1, mas ele ainda não vê o livro na plataforma dele. Resolva no Perfil dos Alunos.",
+    instrucao: "O Rafael acabou de fazer a primeira aula. O nivelamento deu A1, mas ele ainda não vê o livro na plataforma dele. Resolva no Histórico do Aluno.",
     estado: function () { return { aberto: false, origem: "", nivel: "", modulo: "", salvo: null, toast: null }; },
     progresso: function (s, a) { return ((s.salvo ? 1 : 0) + ["sem", "quando"].filter(a.qOk).length) + " de 3"; },
     completa: function (s, a) { return !!s.salvo && a.qOk("sem") && a.qOk("quando"); },
@@ -174,7 +174,7 @@
         opcoes: [
           { t: "Nada: o material aparece sozinho depois do nivelamento.", porque: "Sem essa configuração, o aluno não consegue acessar o material na plataforma dele." },
           { t: "O Rafael não conseguiria acessar o material na plataforma dele.", ok: true, porque: "É o nível e o módulo salvos que liberam o material. Por isso essa é uma das tarefas mais importantes do seu dia a dia." },
-          { t: "A coordenação liberaria no fim do mês.", porque: "Quem configura é você, no Perfil dos Alunos. Sem isso, o aluno fica sem material." }
+          { t: "A coordenação liberaria no fim do mês.", porque: "Quem configura é você, no Histórico do Aluno. Sem isso, o aluno fica sem material." }
         ]
       },
       quando: {

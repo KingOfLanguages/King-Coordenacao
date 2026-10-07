@@ -575,7 +575,7 @@ table.t .r{text-align:right}
     { id: "nome", ok: true, rot: "Quem é você", txt: "Oi, Felipe! Tudo bem? Aqui é o(a) teacher [seu nome], da King of Languages — vou ser seu professor(a) de inglês 😊" },
     { id: "data", ok: true, rot: "Data e horário da 1ª aula", txt: "Nossa primeira aula será na quarta-feira, 07/10, às 19h (horário de Brasília)." },
     { id: "consid", ok: true, rot: "Considerações gerais", txt: "Alguns combinados: pontualidade (começamos e terminamos no horário), tempo de espera na sala e as regras de faltas e reposições — faltas avisadas com pelo menos 24h de antecedência dão direito a reposição." },
-    { id: "plataforma", ok: true, rot: "Como entrar na aula", txt: "Para entrar, é só acessar a sua plataforma do aluno — o link da aula fica lá. Cinco minutinhos antes eu te mando um lembrete!" },
+    { id: "plataforma", ok: true, rot: "Link da plataforma do aluno", txt: "Você entra na aula pela sua plataforma do aluno: [link da plataforma do aluno]. Cinco minutinhos antes de cada aula eu te mando o link de novo, como lembrete!" },
     { id: "meet", ok: false, rot: "Link direto do Google Meet", txt: "Já deixo aqui o link da nossa sala: meet.google.com/kgx-rtpa-wqe" },
     { id: "nodia", ok: false, rot: "Como avisar faltas", txt: "Se precisar faltar, é só me avisar no dia, tá bom?" }
   ];
@@ -625,7 +625,7 @@ table.t .r{text-align:right}
           ok: function () { return S.contrato === "aceito"; } },
         { id: "apresentacao", texto: "Mandar a mensagem de apresentação ao Felipe (aba WhatsApp)",
           dica: "Não pode faltar: seu nome, data e horário da 1ª aula (horário de Brasília), as considerações gerais e o lembrete de entrar pela plataforma do aluno.",
-          solucao: "WhatsApp › Felipe › marque Quem é você, Data e horário, Considerações gerais e Como entrar na aula. Deixe de fora o link do Meet e o “avise no dia”. Enviar.",
+          solucao: "WhatsApp › Felipe › marque Quem é você, Data e horário, Considerações gerais e Link da plataforma do aluno. Deixe de fora o link do Meet e o “avise no dia”. Enviar.",
           ok: function () { return S.flags.apresentacao; } },
         { id: "grupo", texto: "Avisar a coordenação, pelo WhatsApp dela, que o contato foi feito",
           dica: "A conversa “Coordenação de professores” está na lista do WhatsApp. O grupo de avisos é só para a coordenação escrever.",
@@ -1530,7 +1530,7 @@ table.t .r{text-align:right}
     if (sel.meet) return erro("wa", "Mensagem não enviada", "O link direto do Meet não vai na apresentação. O aluno entra pela plataforma do aluno, que abre o Meet premium na mesma sala que você. O link do Meet só vai se, passados 2 minutos do início, ele tiver dificuldade para entrar.");
     if (sel.nodia) return erro("wa", "Mensagem não enviada", "Aviso no dia não dá direito a reposição: a regra é avisar com pelo menos 24h de antecedência. Prometer outra coisa vira acordo — e a sua palavra passa a valer.");
     var falta = PECAS.filter(function (p) { return p.ok && !sel[p.id]; }).map(function (p) { return p.rot.toLowerCase(); });
-    if (falta.length) return erro("wa", "Faltou informação", "A mensagem de apresentação tem quatro itens obrigatórios: quem é você, data e horário da 1ª aula, considerações gerais e como entrar na aula. Faltou: " + falta.join(", ") + ".");
+    if (falta.length) return erro("wa", "Faltou informação", "A mensagem de apresentação tem quatro itens obrigatórios: quem é você, data e horário da 1ª aula, considerações gerais e o link da plataforma do aluno. Faltou: " + falta.join(", ") + ".");
     addMsg("felipe", "eu", pecas.map(function (p) { return p.txt; }).join("\n\n"), 1);
     addMsg("felipe", "ele", "Oi, teacher! Tudo ótimo 😄 Combinado: quarta às 19h estarei lá!", 4);
     S.flags.apresentacao = true; S.montagem = {};
