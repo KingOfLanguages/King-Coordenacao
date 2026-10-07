@@ -24,6 +24,9 @@ export type TipoNotificacao =
   | 'projeto_decidido'
   | 'projeto_info_pedido'
   | 'projeto_info_respondido'
+  /** Disparo de e-mail em massa saiu (enviar-email-massa). Só o João e o Igor
+   *  recebem — item 13 do pentest de 05/10/2026. */
+  | 'email_disparo_massa'
 
 export interface Notificacao {
   id: string

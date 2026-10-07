@@ -24,20 +24,22 @@
 //
 // Contrato (POST /functions/v1/portal-identidade):
 //   solicitar { email?, nome?, mesInicio?, anoInicio? }
-//     → { status: 'enviado', desafio, destino }    destino = e-mail mascarado
-//     | { status: 'nao_encontrado' | 'ambiguo' | 'sem_email' }
+//     → { status: 'enviado', desafio } | { status: 'ambiguo' }
+//     "enviado" vem igual exista o cadastro ou não (item 8 do pentest): sem
+//     professor, ou sem e-mail, o desafio é uma isca que nunca confere.
 //   verificar { desafio, codigo } → { token, expiraEm, professor: { id, nome } }
 //   sessao    { token }           → { professor: { id, nome } }
 //   sair      { token }           → { ok: true }
 //
-// Limites: por IP (pedidos e verificações) e por professor (códigos por hora).
+// Limites: por IP (pedidos e verificações), pelo que foi digitado (códigos a
+// cada 15 min / por dia) e um teto diário silencioso por professor.
 // Secrets: BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  type Admin, jsonPara, preflight, ipDe, sha256, nomeExato, dataInicioBate,
+  type Admin, jsonPara, preflight, ipDe, sha256, novoToken, norm, nomeExato, dataInicioBate,
   semSufixoInicio, estourouLimite, criarSessao, resolverSessao, encerrarSessao,
   MSG_SESSAO,
 } from '../_shared/portal.ts'
@@ -47,9 +49,11 @@ const EMAILRE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 const CODIGO_MINUTOS = 10
 const CODIGO_TENTATIVAS = 5
-/** Códigos por professor: 3 a cada 15 min, 8 por dia. */
+/** Códigos pelo mesmo e-mail/nome digitado: 3 a cada 15 min, 8 por dia. */
 const CODIGOS_JANELA = 3
 const CODIGOS_DIA = 8
+/** Teto diário por professor, somando todos os jeitos de chegar nele. */
+const CODIGOS_PROFESSOR_DIA = 12
 
 type ProfRow = { id: string; nome: string; status: string; data_inicio: string | null; email: string | null }
 
@@ -58,16 +62,6 @@ function codigoAleatorio(): string {
   const buf = new Uint32Array(1)
   do { crypto.getRandomValues(buf) } while (buf[0] >= 4_294_000_000)
   return String(buf[0] % 1_000_000).padStart(6, '0')
-}
-
-function mascarar(email: string): string {
-  const [u, d] = email.split('@')
-  const dom = d ?? ''
-  const ponto = dom.lastIndexOf('.')
-  const nomeDom = ponto > 0 ? dom.slice(0, ponto) : dom
-  const tld = ponto > 0 ? dom.slice(ponto) : ''
-  const m = (s: string) => s.length <= 2 ? s[0] + '*' : s.slice(0, 2) + '*'.repeat(Math.min(6, s.length - 2))
-  return `${m(u)}@${m(nomeDom)}${tld}`
 }
 
 function iguais(a: string, b: string): boolean {
@@ -167,6 +161,21 @@ serve(async (req) => {
     const mesInicio = typeof body.mesInicio === 'number' ? body.mesInicio : null
     const anoInicio = typeof body.anoInicio === 'number' ? body.anoInicio : null
 
+    // Limite pelo que foi DIGITADO — vale igual para quem existe e quem não
+    // existe, então a mensagem de "muitos pedidos" não denuncia o cadastro.
+    const agora = Date.now()
+    const chaveHash = await sha256(emailValido ? `email:${email.toLowerCase()}` : `nome:${norm(semSufixoInicio(nome))}`)
+    const { data: recentesChave } = await admin
+      .from('portal_codigos')
+      .select('created_at')
+      .eq('chave_hash', chaveHash)
+      .gte('created_at', new Date(agora - 86_400_000).toISOString())
+    const daChave = (recentesChave ?? []) as { created_at: string }[]
+    const naJanela = daChave.filter(c => new Date(c.created_at).getTime() > agora - 15 * 60_000).length
+    if (naJanela >= CODIGOS_JANELA || daChave.length >= CODIGOS_DIA) {
+      return json({ error: 'Muitos pedidos de código seguidos. Use o último que chegou no seu e-mail ou espere alguns minutos.' }, 429)
+    }
+
     let prof: ProfRow | null = null
     let destino: string | null = null
 
@@ -187,39 +196,36 @@ serve(async (req) => {
       if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
         candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
       }
+      // Homônimo continua pedindo mês/ano: nomes são públicos, e sem o
+      // desempate o professor não teria como entrar.
       if (candidatos.length > 1) return json({ status: 'ambiguo' })
       prof = candidatos[0] ?? null
     }
 
-    if (!prof) return json({ status: 'nao_encontrado' })
+    if (prof) destino = destino ?? (prof.email?.trim().toLowerCase() || null)
+    if (destino && !EMAILRE.test(destino)) destino = null
 
-    destino = destino ?? (prof.email?.trim().toLowerCase() || null)
-    if (!destino || !EMAILRE.test(destino)) return json({ status: 'sem_email' })
-
-    // Teto por professor — sem ele, o portal vira bomba de e-mail contra uma
-    // pessoa específica, só de saber o nome dela.
-    const agora = Date.now()
-    const { data: recentes } = await admin
-      .from('portal_codigos')
-      .select('created_at')
-      .eq('professor_id', prof.id)
-      .gte('created_at', new Date(agora - 86_400_000).toISOString())
-    const lista = (recentes ?? []) as { created_at: string }[]
-    const naJanela = lista.filter(c => new Date(c.created_at).getTime() > agora - 15 * 60_000).length
-    if (naJanela >= CODIGOS_JANELA || lista.length >= CODIGOS_DIA) {
-      return json({ error: 'Já enviamos códigos demais para este cadastro. Use o último que chegou no seu e-mail ou espere alguns minutos.' }, 429)
+    // Teto diário por professor (vários e-mails/nomes levam à mesma pessoa).
+    // Estourou = vira isca, em silêncio: um erro aqui denunciaria o cadastro.
+    if (prof && destino) {
+      const { count } = await admin
+        .from('portal_codigos')
+        .select('id', { count: 'exact', head: true })
+        .eq('professor_id', prof.id)
+        .gte('created_at', new Date(agora - 86_400_000).toISOString())
+      if ((count ?? 0) >= CODIGOS_PROFESSOR_DIA) destino = null
     }
 
-    const brevoKey = Deno.env.get('BREVO_API_KEY')
-    if (!brevoKey) return json({ error: 'Envio de e-mail indisponível. Fale com a coordenação.' }, 503)
-
+    const real = !!(prof && destino)
     const codigo = codigoAleatorio()
     const { data: criado, error: errCod } = await admin
       .from('portal_codigos')
       .insert({
-        professor_id:  prof.id,
-        codigo_hash:   await sha256(`${prof.id}:${codigo}`),
-        email_destino: destino,
+        professor_id:  real ? prof!.id : null,
+        // Isca: hash de bytes aleatórios — nenhum código de 6 dígitos confere.
+        codigo_hash:   real ? await sha256(`${prof!.id}:${codigo}`) : await sha256(novoToken()),
+        email_destino: real ? destino : '',
+        chave_hash:    chaveHash,
         expira_em:     new Date(agora + CODIGO_MINUTOS * 60_000).toISOString(),
         ip,
       })
@@ -230,7 +236,17 @@ serve(async (req) => {
       return json({ error: 'Não foi possível gerar o código agora. Tente de novo.' }, 500)
     }
 
-    const primeiroNome = semSufixoInicio(prof.nome).split(' ')[0] || 'professor(a)'
+    if (!real) {
+      // O envio real leva o tempo de uma chamada ao Brevo; sem esta espera, a
+      // isca responderia rápido demais e o relógio denunciaria o cadastro.
+      await new Promise(r => setTimeout(r, 350 + Math.random() * 450))
+      return json({ status: 'enviado', desafio: criado.id })
+    }
+
+    const brevoKey = Deno.env.get('BREVO_API_KEY')
+    if (!brevoKey) return json({ error: 'Envio de e-mail indisponível. Fale com a coordenação.' }, 503)
+
+    const primeiroNome = semSufixoInicio(prof!.nome).split(' ')[0] || 'professor(a)'
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -250,7 +266,7 @@ serve(async (req) => {
       return json({ error: 'Não conseguimos enviar o código agora. Tente de novo em instantes ou fale com a coordenação.' }, 503)
     }
 
-    return json({ status: 'enviado', desafio: criado.id, destino: mascarar(destino) })
+    return json({ status: 'enviado', desafio: criado.id })
   }
 
   // ══ verificar ══════════════════════════════════════════════════════════════

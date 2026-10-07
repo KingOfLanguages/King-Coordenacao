@@ -130,6 +130,14 @@ const CARENCIA_DIAS = 15   // espelha email_carencia() — só p/ o caso "mesmo 
  *  queima quota. Ver a trava no passo 3. */
 const STATUS_QUE_RECEBEM = new Set(['ativo', 'pausa'])
 
+/** Quem é avisado no sino a cada disparo em massa (pentest 05/10/2026, item 13):
+ *  João Marcos Duarte e Igor Hebling Sallowicz — decisão do João em 07/10. Só
+ *  este disparo; convite 1-a-1 e lembrete de reunião não avisam. */
+const AVISAR_DISPARO = [
+  'a7c2aa59-aa92-46a4-abdd-2bf8984b1091', // João Marcos Duarte
+  '50dde148-99d3-4448-aaa0-1e0367ea2ae9', // Igor Hebling Sallowicz
+]
+
 // ─── Servidor ─────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -326,6 +334,23 @@ serve(async (req) => {
   const semEmail  = resultados.filter(r => r.status === 'sem_email').length
   const inativos  = resultados.filter(r => r.status === 'inativo').length
   const emCarencia = resultados.filter(r => r.status === 'carencia').length
+
+  // ── 7. Aviso no sino (best-effort) ──────────────────────────────────────────
+  // Disparo que saiu de verdade avisa quem cuida da conta de e-mail — sem isso
+  // um disparo indevido só aparecia quando alguém reclamava.
+  if (enviados > 0) {
+    const { data: quem } = await admin.from('profiles').select('nome').eq('id', user.id).maybeSingle()
+    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+    const { error: notErr } = await admin.from('notificacoes').insert(AVISAR_DISPARO.map(id => ({
+      user_id: id,
+      tipo:    'email_disparo_massa',
+      titulo:  `Disparo de e-mail: ${enviados} enviado${enviados > 1 ? 's' : ''}`,
+      corpo:   `${quem?.nome ?? 'Alguém'} às ${hora} · "${assunto.slice(0, 80)}"`
+        + (falhas ? ` · ${falhas} falha${falhas > 1 ? 's' : ''}` : ''),
+      link:    '/acompanhamento',
+    })))
+    if (notErr) console.error('[enviar-email-massa] falhou ao avisar no sino:', notErr.message)
+  }
 
   console.log(`[enviar-email-massa] lote ${loteId}: ${enviados} enviados, ${falhas} falhas, ${semEmail} sem e-mail, ${inativos} inativos, ${emCarencia} em carência`)
   return json({ lote_id: loteId, total: resultados.length, enviados, falhas, sem_email: semEmail, inativos, em_carencia: emCarencia, resultados })

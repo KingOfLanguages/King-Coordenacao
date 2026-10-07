@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Bell, AlertTriangle, Hand, CheckCircle2, FileText, UserCog, Hourglass, Clock } from 'lucide-react'
+import { Bell, AlertTriangle, Hand, CheckCircle2, FileText, UserCog, Hourglass, Clock, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   useNotificacoes, useMarcarNotificacaoLida, useMarcarTodasLidas,
@@ -20,6 +20,7 @@ const ICONE: Record<string, typeof Bell> = {
   incidente_sem_acao:  Hourglass,
   incidente_atrasado:  Clock,
   transferencia_atrasada: UserCog,
+  email_disparo_massa: Mail,
 }
 
 const COR: Record<string, string> = {
@@ -30,6 +31,7 @@ const COR: Record<string, string> = {
   incidente_sem_acao:  'text-urg-critFg',
   incidente_atrasado:  'text-urg-critFg',
   transferencia_atrasada: 'text-urg-critFg',
+  email_disparo_massa: 'text-accentBlue',
 }
 
 function tempoRelativo(iso: string): string {

@@ -16,8 +16,12 @@ import { ErroFuncao } from '@/lib/invocarFuncao'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Entrada dos portais do professor (/welcome-path, /pausa, /transferencia,
-// /agendar). E-mail → (se não achar) nome completo → (se houver homônimo)
-// mês/ano de início → CÓDIGO no e-mail oficial do cadastro.
+// /agendar). E-mail (ou nome completo; homônimo pede mês/ano de início) →
+// CÓDIGO no e-mail oficial do cadastro.
+//
+// A tela nunca diz se o cadastro existe: o servidor responde "enviado" sempre
+// (item 8 do pentest) e, se nada chegar, o professor tenta pelo nome ou fala
+// com a coordenação.
 //
 // O código é o que prova quem é a pessoa: o nome é público, e até o pentest de
 // 05/10/2026 ele bastava para operar como qualquer professor. Por isso também
@@ -37,9 +41,9 @@ const ERRO_REDE = 'Não foi possível verificar seu cadastro agora. Tente novame
 
 type Step =
   | { tipo: 'email'; email: string; erro: string }
-  | { tipo: 'nome'; tentativa: 1 | 2; desempate: boolean; nome: string; erro: string }
-  | { tipo: 'codigo'; desafio: string; destino: string; codigo: string; erro: string; expirado: boolean; pedido: SolicitarCodigoInput }
-  | { tipo: 'contato'; motivo: 'nao_encontrado' | 'sem_email' }
+  | { tipo: 'nome'; desempate: boolean; nome: string; erro: string }
+  | { tipo: 'codigo'; via: 'email' | 'nome'; desafio: string; codigo: string; erro: string; expirado: boolean; pedido: SolicitarCodigoInput }
+  | { tipo: 'contato' }
 
 function mensagemDe(e: unknown): string {
   return e instanceof ErroFuncao && e.status && e.status !== 500 ? e.message : ERRO_REDE
@@ -67,19 +71,18 @@ export function IdentificacaoPortal({
     setStep({ tipo: 'email', email: '', erro: '' })
   }
 
-  /** Pede o código. Devolve o resultado para quem chamou decidir o próximo passo
-   *  quando não foi enviado. */
-  async function pedirCodigo(pedido: SolicitarCodigoInput) {
+  /** Pede o código. Devolve true quando o servidor pede mês/ano (homônimo). */
+  async function pedirCodigo(pedido: SolicitarCodigoInput, via: 'email' | 'nome') {
     const r = await solicitar.mutateAsync(pedido)
-    if (r.status === 'enviado') {
-      setStep({ tipo: 'codigo', desafio: r.desafio, destino: r.destino, codigo: '', erro: '', expirado: false, pedido })
-      return null
-    }
-    if (r.status === 'sem_email') {
-      setStep({ tipo: 'contato', motivo: 'sem_email' })
-      return null
-    }
-    return r.status
+    if (r.status === 'ambiguo') return true
+    setStep({ tipo: 'codigo', via, desafio: r.desafio, codigo: '', erro: '', expirado: false, pedido })
+    return false
+  }
+
+  function irParaNome() {
+    setMes(null)
+    setAno(null)
+    setStep({ tipo: 'nome', desempate: false, nome: '', erro: '' })
   }
 
   async function handleEmail(e: React.FormEvent) {
@@ -91,8 +94,7 @@ export function IdentificacaoPortal({
       return
     }
     try {
-      const resto = await pedirCodigo({ email })
-      if (resto) setStep({ tipo: 'nome', tentativa: 1, desempate: false, nome: '', erro: '' })
+      await pedirCodigo({ email }, 'email')
     } catch (err) {
       setStep({ ...step, erro: mensagemDe(err) })
     }
@@ -112,23 +114,12 @@ export function IdentificacaoPortal({
     }
 
     try {
-      const resto = await pedirCodigo({
+      const ambiguo = await pedirCodigo({
         nome,
         ...(step.desempate && mes != null && ano != null ? { mesInicio: mes, anoInicio: ano } : {}),
-      })
-      if (!resto) return
-
-      if (resto === 'ambiguo') {
-        // Homônimo: pede mês/ano; se ainda empatar, só a coordenação resolve.
-        setStep(step.desempate
-          ? { tipo: 'contato', motivo: 'nao_encontrado' }
-          : { ...step, nome, desempate: true, erro: '' })
-        return
-      }
-
-      setStep(step.desempate || step.tentativa >= 2
-        ? { tipo: 'contato', motivo: 'nao_encontrado' }
-        : { ...step, nome, tentativa: 2, erro: 'reforco' })
+      }, 'nome')
+      // Homônimo: pede mês/ano; se ainda empatar, só a coordenação resolve.
+      if (ambiguo) setStep(step.desempate ? { tipo: 'contato' } : { ...step, nome, desempate: true, erro: '' })
     } catch (err) {
       setStep({ ...step, erro: mensagemDe(err) })
     }
@@ -154,7 +145,7 @@ export function IdentificacaoPortal({
   async function reenviar() {
     if (step.tipo !== 'codigo') return
     try {
-      await pedirCodigo(step.pedido)
+      await pedirCodigo(step.pedido, step.via)
     } catch (err) {
       setStep({ ...step, erro: mensagemDe(err) })
     }
@@ -205,7 +196,7 @@ export function IdentificacaoPortal({
             titulo={titulo}
             descricao={step.desempate
               ? 'Encontramos mais de uma pessoa com esse nome. Pra confirmar quem é você, informe também o mês e o ano em que começou na King.'
-              : 'Não encontramos esse e-mail no cadastro. Digite seu nome completo, exatamente como aparece na plataforma da King — o código vai para o e-mail que está no seu cadastro.'}
+              : 'Digite seu nome completo, exatamente como aparece na plataforma da King. O código vai para o e-mail que está no seu cadastro.'}
           />
           <CartaoPortal>
             <form onSubmit={handleNome} className="space-y-4">
@@ -246,14 +237,7 @@ export function IdentificacaoPortal({
                 </div>
               )}
 
-              {step.erro === 'reforco' ? (
-                <div className="space-y-1 rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5 text-[12.5px] font-medium text-brand-strong">
-                  <p className="font-semibold">Ainda não encontramos você.</p>
-                  <p>Confira: precisa ser o <strong>nome completo</strong>, exatamente igual ao cadastro na plataforma — sem abreviações e sem apelido.</p>
-                </div>
-              ) : step.erro ? (
-                <AvisoErro>{step.erro}</AvisoErro>
-              ) : null}
+              {step.erro && <AvisoErro>{step.erro}</AvisoErro>}
 
               <BotaoPrimario pending={solicitar.isPending} pendingLabel="Buscando…">
                 Continuar
@@ -277,8 +261,8 @@ export function IdentificacaoPortal({
                 Confira seu e-mail
               </h1>
               <p className="text-[13px] leading-relaxed text-ink-muted">
-                Mandamos um código de 6 números para <strong className="text-ink-secondary">{step.destino}</strong>.
-                Ele vale por 10 minutos. Olhe também a caixa de spam.
+                Se encontramos seu cadastro, mandamos um código de 6 números para o
+                e-mail registrado na King. Ele vale por 10 minutos — olhe também a caixa de spam.
               </p>
             </div>
           </div>
@@ -316,8 +300,17 @@ export function IdentificacaoPortal({
                   Não chegou? Enviar outro código
                 </button>
               )}
+              {step.via === 'email' ? (
+                <button type="button" onClick={irParaNome} className={linkDiscreto}>
+                  Não chegou nada? Entrar com o nome completo
+                </button>
+              ) : (
+                <button type="button" onClick={() => setStep({ tipo: 'contato' })} className={linkDiscreto}>
+                  Não chegou nada? Falar com a coordenação
+                </button>
+              )}
               <button type="button" onClick={recomecar} className={linkDiscreto}>
-                Não reconheço este e-mail
+                Voltar ao início
               </button>
             </form>
           </CartaoPortal>
@@ -335,9 +328,8 @@ export function IdentificacaoPortal({
                 Vamos te ajudar pessoalmente
               </h1>
               <p className="text-[13.5px] leading-relaxed text-ink-muted">
-                {step.motivo === 'sem_email'
-                  ? 'Encontramos seu cadastro, mas ele está sem e-mail para enviarmos o código de acesso. Fale com a coordenação de professores para atualizar.'
-                  : 'Não conseguimos te identificar pelo e-mail nem pelo nome. Fale com a coordenação de professores.'}
+                Se o código não chega, pode ser que o seu cadastro esteja sem e-mail ou com
+                um e-mail antigo. Fale com a coordenação de professores para conferir.
               </p>
             </div>
           </div>

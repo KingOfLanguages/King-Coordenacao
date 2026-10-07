@@ -18,9 +18,11 @@ export type SolicitarCodigoInput = {
   anoInicio?: number
 }
 
+/** "enviado" vem igual exista o cadastro ou não — o servidor não diz quem
+ *  existe. Só o homônimo ("ambiguo") pede o mês/ano de início. */
 export type SolicitarCodigoResult =
-  | { status: 'enviado'; desafio: string; destino: string }
-  | { status: 'nao_encontrado' | 'ambiguo' | 'sem_email' }
+  | { status: 'enviado'; desafio: string }
+  | { status: 'ambiguo' }
 
 export function useSolicitarCodigo() {
   return useMutation({
