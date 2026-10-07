@@ -18,8 +18,8 @@ import {
   useReunioesPeriodo, useReunioesPendentes, useDadosVinculo, useVincularProfessor,
   useConfirmarParticipacao, useEditarReuniao, useExcluirReuniao, useConfirmarReuniaoInterna,
   usePerfisPorEmail, useDesvincularProfessor, useConfirmarReuniaoGrupo, sugerirVinculos,
-  isReuniaoGrupo, isPendenteLancamento, isNaoLancadaAntesDoCorte, ehReuniaoDeDuvida, useDefinirNaturezaReuniao,
-  type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo, type NaturezaReuniao,
+  isReuniaoGrupo, useDefinirNaturezaReuniao, statusReuniao, placarDoDia,
+  type EventoStatus, type ReuniaoCard, type ParticipanteCard, type CandidatoVinculo, type NaturezaReuniao,
 } from '@/hooks/useReunioesDia'
 import { useAgendaReunioesPeriodo, type AgendaOcorrenciaCard } from '@/hooks/useAgendas'
 import { useSendLembretesGeral } from '@/hooks/useSendLembrete'
@@ -92,8 +92,6 @@ const PX_POR_HORA       = 52
 
 // ─── Status visual das reuniões (feito / a fazer / atrasada) ──────────────────
 
-type EventoStatus = 'realizada' | 'a_fazer' | 'atrasada' | 'nao_lancada' | 'cancelada'
-
 const STATUS_VISUAL: Record<EventoStatus, {
   label: string; dot: string; bar: string; blocoBg: string; blocoText: string; chip: string
 }> = {
@@ -103,28 +101,6 @@ const STATUS_VISUAL: Record<EventoStatus, {
   // Sem lançamento, mas de antes de 1º/08/2026: não conta como pendente (ver LANCAMENTO_CONTA_DESDE).
   nao_lancada: { label: 'Não lançada', dot: 'bg-ink-subtle', bar: 'bg-ink-subtle', blocoBg: 'bg-surface-subtle',  blocoText: 'text-ink-muted',  chip: 'bg-surface-subtle text-ink-muted' },
   cancelada: { label: 'Não realizada', dot: 'bg-ink-subtle', bar: 'bg-ink-subtle', blocoBg: 'bg-surface-subtle',  blocoText: 'text-ink-muted',  chip: 'bg-surface-subtle text-ink-muted' },
-}
-
-/** Status de uma reunião a partir dos participantes (professor) ou de reunioes.status (interna) + data. */
-function statusReuniao(r: ReuniaoCard): EventoStatus {
-  // "Atrasada" (= pendente de lançamento) tem uma fonte única de verdade, para
-  // a aba de pendências e o status visual nunca divergirem.
-  if (isPendenteLancamento(r)) return 'atrasada'
-  // Antes do corte de lançamento: não é "atrasada" nem "a fazer".
-  if (isNaoLancadaAntesDoCorte(r)) return 'nao_lancada'
-
-  if (r.tipo_reuniao === 'interna') {
-    if (r.status === 'cancelada') return 'cancelada'
-    return r.status === 'concluida' ? 'realizada' : 'a_fazer'
-  }
-
-  const parts = r.participantes
-  if (parts.length > 0) {
-    if (parts.some(p => p.status === 'pendente'))  return 'a_fazer' // futura (se passasse, seria atrasada)
-    if (parts.some(p => p.status === 'realizada')) return 'realizada'
-    return 'cancelada' // todos cancelados
-  }
-  return r.status === 'concluida' ? 'realizada' : 'a_fazer'
 }
 
 /** Status de uma ocorrência de agenda (feedback coletivo): baseada só na data —
@@ -447,15 +423,8 @@ function DiaView({ dia, coordenadorId, carregando, lista, listaAgenda, dados }: 
   const total = lista.length + listaAgenda.length
   const hoje  = isMesmoDia(dia, new Date())
 
-  // Placar do dia contra a meta. Reunião interna não conta: a meta é de contato
-  // com professor. Reunião de grupo conta como UMA — é um horário da agenda,
-  // por mais professores que caibam nele.
-  // Interna não conta (a meta é de contato com professor) e reunião de dúvida
-  // também não — ela é o encontro extra que "não implica em nada".
-  const comProfessor = lista.filter(r => r.tipo_reuniao !== 'interna' && !ehReuniaoDeDuvida(r))
-  const agendadas    = comProfessor.filter(r => statusReuniao(r) !== 'cancelada').length + listaAgenda.length
-  const realizadas   = comProfessor.filter(r => statusReuniao(r) === 'realizada').length
-                     + listaAgenda.filter(o => statusOcorrencia(o) === 'realizada').length
+  // Placar do dia contra a meta — a regra de contagem mora em placarDoDia.
+  const { comProfessor, agendadas, realizadas } = placarDoDia(lista, listaAgenda)
   const idsDoDia = new Set(
     comProfessor.flatMap(r => r.participantes.map(p => p.professor?.id).filter((id): id is string => !!id)),
   )

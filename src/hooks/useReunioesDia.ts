@@ -88,6 +88,46 @@ export function ehReuniaoDeDuvida(r: Pick<ReuniaoCard, 'natureza' | 'tipo_reunia
   return r.tipo_reuniao === 'professor' && r.natureza === 'duvida'
 }
 
+/** Status visual de uma reunião (a agenda do KTM e a tela Hoje do Hub). */
+export type EventoStatus = 'realizada' | 'a_fazer' | 'atrasada' | 'nao_lancada' | 'cancelada'
+
+/** Status de uma reunião a partir dos participantes (professor) ou de reunioes.status (interna) + data. */
+export function statusReuniao(r: ReuniaoCard): EventoStatus {
+  // "Atrasada" (= pendente de lançamento) tem uma fonte única de verdade, para
+  // a aba de pendências e o status visual nunca divergirem.
+  if (isPendenteLancamento(r)) return 'atrasada'
+  // Antes do corte de lançamento: não é "atrasada" nem "a fazer".
+  if (isNaoLancadaAntesDoCorte(r)) return 'nao_lancada'
+
+  if (r.tipo_reuniao === 'interna') {
+    if (r.status === 'cancelada') return 'cancelada'
+    return r.status === 'concluida' ? 'realizada' : 'a_fazer'
+  }
+
+  const parts = r.participantes
+  if (parts.length > 0) {
+    if (parts.some(p => p.status === 'pendente'))  return 'a_fazer' // futura (se passasse, seria atrasada)
+    if (parts.some(p => p.status === 'realizada')) return 'realizada'
+    return 'cancelada' // todos cancelados
+  }
+  return r.status === 'concluida' ? 'realizada' : 'a_fazer'
+}
+
+/** Placar do dia contra a meta (agenda do KTM e tela Hoje do Hub).
+ *  Interna não conta (a meta é de contato com professor) e reunião de dúvida
+ *  também não — é o encontro extra que "não implica em nada". Reunião de grupo
+ *  conta como UMA — é um horário da agenda, por mais professores que caibam
+ *  nele. Ocorrência de agenda sem reunião gerada conta pela hora: passou, foi. */
+export function placarDoDia(lista: ReuniaoCard[], ocorrencias: { data_hora: string }[], agora: Date = new Date()) {
+  const comProfessor = lista.filter(r => r.tipo_reuniao !== 'interna' && !ehReuniaoDeDuvida(r))
+  return {
+    comProfessor,
+    agendadas:  comProfessor.filter(r => statusReuniao(r) !== 'cancelada').length + ocorrencias.length,
+    realizadas: comProfessor.filter(r => statusReuniao(r) === 'realizada').length
+              + ocorrencias.filter(o => new Date(o.data_hora) < agora).length,
+  }
+}
+
 export type ProfVinculo = { id: string; nome: string; data_inicio: string | null; email: string | null }
 
 export type CandidatoVinculo = {
