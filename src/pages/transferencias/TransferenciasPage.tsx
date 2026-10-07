@@ -244,7 +244,7 @@ function CardLinkPublico() {
         <div className="min-w-0 space-y-0.5">
           <p className="text-[13px] font-medium text-ink">Link do formulário de transferência</p>
           <p className="truncate text-[11.5px] text-ink-muted">
-            O professor se identifica por e-mail ou nome completo e escolhe o aluno da própria agenda.
+            O professor entra com um código enviado ao e-mail do cadastro e informa o nome completo do aluno.
           </p>
           <code className="break-all text-[11.5px] text-ink-secondary">{link}</code>
         </div>

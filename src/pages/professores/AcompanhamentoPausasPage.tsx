@@ -218,7 +218,7 @@ function CardLinkPublico() {
         <div className="min-w-0 space-y-0.5">
           <p className="text-[13px] font-medium text-ink">Link do formulário de pausa</p>
           <p className="text-[11.5px] text-ink-muted truncate">
-            Envie para o professor oficializar a pausa — ele se identifica por e-mail ou nome completo.
+            Envie para o professor oficializar a pausa — ele entra com um código enviado ao e-mail do cadastro.
           </p>
           <code className="text-[11.5px] text-ink-secondary break-all">{link}</code>
         </div>
