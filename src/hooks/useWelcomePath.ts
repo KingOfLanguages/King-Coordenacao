@@ -31,8 +31,9 @@ export type EtapaTrilha = {
    *  professor ainda não vê. O portal nunca recebe etapa desativada. */
   desativada?: boolean
   estado: EstadoEtapa
-  /** Só quando bloqueada: 'anterior' (falta concluir a anterior) ou 'data'. */
-  motivoBloqueio: 'anterior' | 'data' | null
+  /** Só quando bloqueada: 'anterior' (falta concluir a anterior), 'data' ou
+   *  'prazo' (as 120h da trilha acabaram sem desbloqueio). */
+  motivoBloqueio: 'anterior' | 'data' | 'prazo' | null
   /** ISO — quando a etapa abre, se estiver esperando data. */
   abreEm: string | null
   /** ISO — prazo sugerido pela coordenação. */
@@ -113,7 +114,32 @@ export type ResultadoEnvio = {
   notaMinima: number
   revisaoPendente: boolean
   tentativas: number
+  /** Esta era a última etapa que faltava: a trilha inteira foi concluída. */
+  trilhaConcluida?: boolean
   resultado: { questaoId: string; correta: boolean | null; explicacao: string | null }[]
+}
+
+/** Relógio da trilha: 120h desde o 1º acesso (migration 20260794). */
+export type JornadaPortal = {
+  primeiroAcessoEm: string
+  prazoEm: string
+  concluidaEm: string | null
+  desbloqueios: number
+  /** O prazo acabou e o professor precisa pedir desbloqueio. */
+  bloqueada: boolean
+  /** Hora do servidor na resposta — acerta o contador do navegador. */
+  agora: string
+}
+
+/** Link da 1ª reunião com a coordenação, que aparece nos parabéns. */
+export type PrimeiraReuniao = { coordenador: string | null; link: string | null }
+
+export type TrilhaPortal = {
+  professor: ProfessorPortal & { dataInicio: string | null }
+  etapas: EtapaTrilha[]
+  /** Ausente se a função do servidor for de antes do prazo. */
+  jornada?: JornadaPortal | null
+  primeiraReuniao?: PrimeiraReuniao | null
 }
 
 // ─── Trilha e etapa ───────────────────────────────────────────────────────────
@@ -123,10 +149,12 @@ export function useTrilha(token: string | null) {
     queryKey: ['wp', 'trilha', token],
     enabled: !!token,
     retry: false,
-    queryFn: () => invocar<{
-      professor: ProfessorPortal & { dataInicio: string | null }
-      etapas: EtapaTrilha[]
-    }>({ acao: 'trilha', token }),
+    // Professor bloqueado que voltou do WhatsApp: ao trocar de aba de volta, o
+    // desbloqueio feito pelo suporte já aparece sem recarregar a página.
+    refetchOnWindowFocus: true,
+    // E quem ficou parado na tela de bloqueio esperando resposta também vê.
+    refetchInterval: q => (q.state.data?.jornada?.bloqueada ? 60_000 : false),
+    queryFn: () => invocar<TrilhaPortal>({ acao: 'trilha', token }),
   })
 }
 

@@ -16,7 +16,7 @@
 //   POST /functions/v1/portal-welcome-path   { "acao": "…", … }
 //
 //   sessao      { token }                    → { professor }
-//   trilha      { token }                    → { professor, etapas[] }
+//   trilha      { token }                    → { professor, etapas[], jornada, primeiraReuniao }
 //   etapa       { token, etapaId }           → { etapa, blocos[], questoes[], progresso }
 //   iniciar     { token, etapaId }           → { ok: true }
 //   tempo       { token, etapaId, segundos } → { ok: true }
@@ -26,6 +26,14 @@
 //
 // Escreve com a service_role: `welcome_path_progresso` e `_respostas` não têm
 // policy de INSERT/UPDATE (mesmo desenho de `pausas`).
+//
+// ── Prazo (2026-10-07) ───────────────────────────────────────────────────────
+// A trilha tem 120h desde o 1º acesso (`wp_abrir_jornada`, migration 20260794).
+// Esgotou sem concluir → toda etapa não concluída vira 'bloqueada' com motivo
+// 'prazo', e o mesmo gate que já barrava etapa fora de ordem barra o resto. As
+// concluídas continuam abertas para revisão. Exceção: se tudo o que falta já
+// foi enviado e só espera revisão da coordenação, não trava — a demora não é
+// do professor.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -43,6 +51,10 @@ const TEMPO_MAX_POR_BATIDA = 120
  *  quiz vira força-bruta do gabarito. */
 const TENTATIVAS_MAX = 20
 const TEXTO_MAX = 5000
+/** Quem estava no meio do quiz quando o relógio zerou ainda consegue enviar. */
+const TOLERANCIA_ENVIO_MS = 15 * 60_000
+const MSG_PRAZO =
+  'Seu prazo para concluir a trilha terminou. Fale com o suporte ao professor pelo WhatsApp para pedir o desbloqueio.'
 
 /** Dias inteiros decorridos desde uma data ISO (YYYY-MM-DD) até hoje, em UTC. */
 function diasDesde(iso: string): number {
@@ -108,9 +120,11 @@ async function carregarTrilha(admin: Admin, prof: ProfRow) {
     const liberadaPorData =
       e.liberacao_dia == null || dias == null || dias + 1 >= e.liberacao_dia
 
-    const estado = p?.concluida_em
+    const estado: 'concluida' | 'liberada' | 'bloqueada' = p?.concluida_em
       ? 'concluida'
       : liberadaPorOrdem && liberadaPorData ? 'liberada' : 'bloqueada'
+    const motivoBloqueio: 'anterior' | 'data' | 'prazo' | null =
+      estado !== 'bloqueada' ? null : (liberadaPorOrdem ? 'data' : 'anterior')
 
     return {
       id: e.id,
@@ -122,7 +136,7 @@ async function carregarTrilha(admin: Admin, prof: ProfRow) {
       notaMinima: e.nota_minima,
       notasCoordenacao: e.notas_coordenacao,
       estado,
-      motivoBloqueio: estado !== 'bloqueada' ? null : (liberadaPorOrdem ? 'data' : 'anterior'),
+      motivoBloqueio,
       abreEm: e.liberacao_dia != null && prof.data_inicio && !liberadaPorData
         ? somarDias(prof.data_inicio, e.liberacao_dia - 1)
         : null,
@@ -137,6 +151,50 @@ async function carregarTrilha(admin: Admin, prof: ProfRow) {
       revisaoPendente: p?.revisao_pendente ?? false,
     }
   })
+}
+
+type EtapaEstado = Awaited<ReturnType<typeof carregarTrilha>>[number]
+
+type JornadaRow = {
+  primeiro_acesso_em: string; prazo_em: string; concluida_em: string | null; desbloqueios: number
+}
+
+/** Abre (1ª vez) ou toca (demais) o relógio do professor. Idempotente. */
+async function abrirJornada(admin: Admin, professorId: string): Promise<JornadaRow | null> {
+  const { data, error } = await admin.rpc('wp_abrir_jornada', { p_professor_id: professorId })
+  if (error) return null
+  return data as JornadaRow
+}
+
+/** Aplica o prazo sobre a trilha calculada. `toleranciaMs` empurra o fim do
+ *  prazo (só o envio de respostas usa). Sem jornada — RPC falhou — não trava:
+ *  um erro nosso não pode trancar o professor. */
+function aplicarPrazo(etapas: EtapaEstado[], jornada: JornadaRow | null, toleranciaMs = 0) {
+  if (!jornada || jornada.concluida_em) return { etapas, bloqueada: false }
+
+  const esgotou = new Date(jornada.prazo_em).getTime() + toleranciaMs < Date.now()
+  const pendentes = etapas.filter(e => e.obrigatoria && e.estado !== 'concluida')
+  const soFaltaRevisao = pendentes.length > 0 && pendentes.every(e => e.revisaoPendente)
+  if (!esgotou || soFaltaRevisao) return { etapas, bloqueada: false }
+
+  return {
+    bloqueada: true,
+    etapas: etapas.map(e => e.estado === 'concluida'
+      ? e
+      : { ...e, estado: 'bloqueada' as const, motivoBloqueio: 'prazo' as const }),
+  }
+}
+
+/** Link de 1ª reunião (Koalendar) do coordenador do professor — o mesmo que o
+ *  /agendar oferece na opção "1ª reunião". */
+async function linkPrimeiraReuniao(admin: Admin, coordenadorId: string | null) {
+  if (!coordenadorId) return { coordenador: null, link: null }
+  const { data } = await admin
+    .from('profiles')
+    .select('nome, koalendar_link')
+    .eq('id', coordenadorId)
+    .maybeSingle()
+  return { coordenador: (data?.nome as string | null) ?? null, link: (data?.koalendar_link as string | null) ?? null }
 }
 
 /** Garante a linha de progresso (professor × etapa) e devolve o estado atual. */
@@ -207,10 +265,27 @@ serve(async (req) => {
     return json({ professor: { id: prof.id, nome: semSufixoInicio(prof.nome) } })
   }
 
+  // A 1ª carga da trilha é o "1º acesso" que liga o relógio de 120h.
+  const jornada = await abrirJornada(admin, prof.id)
+
   if (acao === 'trilha') {
+    const { etapas, bloqueada } = aplicarPrazo(await carregarTrilha(admin, prof), jornada)
     return json({
       professor: { id: prof.id, nome: semSufixoInicio(prof.nome), dataInicio: prof.data_inicio },
-      etapas: await carregarTrilha(admin, prof),
+      etapas,
+      // `agora` deixa o contador do navegador acertar o relógio pelo servidor:
+      // celular com hora errada não ganha nem perde prazo.
+      jornada: jornada && {
+        primeiroAcessoEm: jornada.primeiro_acesso_em,
+        prazoEm:          jornada.prazo_em,
+        concluidaEm:      jornada.concluida_em,
+        desbloqueios:     jornada.desbloqueios,
+        bloqueada,
+        agora:            new Date().toISOString(),
+      },
+      primeiraReuniao: jornada?.concluida_em
+        ? await linkPrimeiraReuniao(admin, prof.coordenador_id)
+        : null,
     })
   }
 
@@ -218,12 +293,17 @@ serve(async (req) => {
   const etapaId = typeof body.etapaId === 'string' ? body.etapaId.trim() : ''
   if (!etapaId) return json({ error: 'Etapa não informada.' }, 400)
 
-  const trilha = await carregarTrilha(admin, prof)
+  // Anotação não faz a trilha andar: fica liberada mesmo com o prazo esgotado.
+  const tolerancia = acao === 'responder' ? TOLERANCIA_ENVIO_MS : 0
+  const { etapas: trilha } = aplicarPrazo(await carregarTrilha(admin, prof), acao === 'observacao' ? null : jornada, tolerancia)
   const etapaEstado = trilha.find(e => e.id === etapaId)
   if (!etapaEstado) return json({ error: 'Etapa não encontrada.' }, 404)
 
   // O gate mora aqui, não no React: no app original bastava trocar a URL.
   if (etapaEstado.estado === 'bloqueada') {
+    if (etapaEstado.motivoBloqueio === 'prazo') {
+      return json({ error: MSG_PRAZO, codigo: 'prazo_esgotado' }, 403)
+    }
     return json({
       error: etapaEstado.motivoBloqueio === 'data'
         ? 'Esta etapa ainda não abriu. Volte na data indicada.'
@@ -429,12 +509,21 @@ serve(async (req) => {
       .eq('id', progresso.id)
       .maybeSingle()
 
+    // O gatilho trg_wp_conclusao_jornada carimba a trilha quando esta era a
+    // última etapa que faltava — aí o front leva o professor aos parabéns.
+    const { data: jFinal } = await admin
+      .from('welcome_path_jornada')
+      .select('concluida_em')
+      .eq('professor_id', prof.id)
+      .maybeSingle()
+
     return json({
       nota: final?.nota ?? null,
       aprovado: !!final?.concluida_em,
       notaMinima: etapaEstado.notaMinima,
       revisaoPendente: final?.revisao_pendente ?? false,
       tentativas: final?.tentativas ?? tentativa,
+      trilhaConcluida: !!jFinal?.concluida_em,
       resultado,
     })
   }

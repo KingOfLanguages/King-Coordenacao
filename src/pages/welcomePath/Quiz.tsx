@@ -148,7 +148,33 @@ export function QuestaoView({
   )
 }
 
-export function PainelResultado({ envio }: { envio: ResultadoEnvio }) {
+export function PainelResultado({
+  envio, onVerProximoPasso,
+}: {
+  envio: ResultadoEnvio
+  /** Esta etapa fechou a trilha: botão para a tela de parabéns. */
+  onVerProximoPasso?: () => void
+}) {
+  if (envio.aprovado && onVerProximoPasso) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-aviso-okBd bg-aviso-okBg px-4 py-3.5">
+        <div>
+          <p className="text-[13.5px] font-semibold text-aviso-okFg">Você concluiu a trilha inteira!</p>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-secondary">
+            Falta só um passo para liberar sua agenda.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onVerProximoPasso}
+          className="btn-press h-10 rounded-full bg-ink px-5 text-[13px] font-medium text-ink-inverse hover:bg-ink/90"
+        >
+          Ver o próximo passo
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className={cn(
       'rounded-2xl border px-4 py-3.5',

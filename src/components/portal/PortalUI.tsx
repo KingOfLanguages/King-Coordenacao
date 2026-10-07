@@ -101,10 +101,11 @@ export function FundoPortal() {
   )
 }
 
-export function BotaoWhatsApp({ children }: { children?: React.ReactNode }) {
+/** `mensagem` já chega escrita na conversa — o professor só aperta enviar. */
+export function BotaoWhatsApp({ children, mensagem }: { children?: React.ReactNode; mensagem?: string }) {
   return (
     <a
-      href={`https://wa.me/${COORD_WHATSAPP_NUM}`}
+      href={`https://wa.me/${COORD_WHATSAPP_NUM}${mensagem ? `?text=${encodeURIComponent(mensagem)}` : ''}`}
       target="_blank"
       rel="noopener noreferrer"
       className="btn-press flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand text-white text-[13.5px] font-medium hover:bg-brand-strong"

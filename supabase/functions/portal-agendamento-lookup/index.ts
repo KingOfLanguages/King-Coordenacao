@@ -12,7 +12,8 @@
 // links de outro coordenador.
 //
 //   Opção 1 — "1ª reunião":     elegível só pro professor recém-chegado (até
-//                                 7 dias de casa, por professores.data_inicio)
+//                                 7 dias de casa, por professores.data_inicio,
+//                                 ou que concluiu o Welcome Path)
 //                                 que nunca teve reunião com status='realizada'.
 //                                 Aponta para o koalendar_link do coordenador.
 //   Opção 2 — "Acompanhamento": elegível pra todo o resto — quem já passou
@@ -158,7 +159,16 @@ serve(async (req) => {
 
   // ── 5. Recém-chegado? (até 7 dias de casa) ───────────────────────────────────
   const dias = diasDeCasa(professor.data_inicio)
-  const recemChegado = dias != null && dias >= 0 && dias <= DIAS_JANELA_PRIMEIRA_REUNIAO
+  // Quem concluiu o Welcome Path também é "recém-chegado" para a 1ª reunião:
+  // a trilha tem 5 dias contados do 1º acesso, então muita gente termina depois
+  // do 7º dia de casa — e a tela de parabéns manda agendar justamente a 1ª.
+  const { data: jornadaTrilha } = await admin
+    .from('welcome_path_jornada')
+    .select('concluida_em')
+    .eq('professor_id', professor.id)
+    .maybeSingle()
+  const concluiuTrilha = !!jornadaTrilha?.concluida_em
+  const recemChegado = (dias != null && dias >= 0 && dias <= DIAS_JANELA_PRIMEIRA_REUNIAO) || concluiuTrilha
 
   const primeiraReuniaoElegivel = recemChegado && !teveReuniaoRealizada && !!coordenador.koalendar_link
   // Todo mundo que não se enquadra na 1ª reunião cai aqui — nunca deixa o professor sem nenhuma opção.

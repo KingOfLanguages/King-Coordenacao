@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Eye, KeyRound, RotateCcw, ExternalLink } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { linkWelcomePathPublico } from '@/lib/portal'
+import { useAuth } from '@/contexts/AuthContext'
+import { useLinksCoordenador } from '@/hooks/useMeusLinksAgendamento'
 import { TrilhaView } from '@/pages/welcomePath/TrilhaView'
 import { EtapaLayout } from '@/pages/welcomePath/EtapaView'
 import { useQuizEtapa } from '@/pages/welcomePath/useQuizEtapa'
@@ -8,8 +11,37 @@ import {
   useEtapasAdmin, useBlocosAdmin, useQuestoesAdmin, type EtapaAdmin, type QuestaoAdmin,
 } from '@/hooks/useWelcomePathAdmin'
 import type {
-  EtapaTrilha, BlocoEtapa, MinhaResposta, RespostaEnviada, ResultadoEnvio,
+  EtapaTrilha, BlocoEtapa, MinhaResposta, RespostaEnviada, ResultadoEnvio, JornadaPortal,
 } from '@/hooks/useWelcomePath'
+
+/** Estados do prazo que a coordenação pode simular na prévia (2026-10-07). */
+type Simulacao = 'andamento' | 'acabando' | 'bloqueado' | 'concluiu'
+
+const SIMULACOES: { id: Simulacao; label: string }[] = [
+  { id: 'andamento', label: 'Em andamento' },
+  { id: 'acabando',  label: 'Menos de 24h' },
+  { id: 'bloqueado', label: 'Prazo esgotado' },
+  { id: 'concluiu',  label: 'Concluiu tudo' },
+]
+
+const HORA = 3_600_000
+
+/** Relógio de mentira para a prévia: quanto falta em cada simulação. */
+function jornadaSimulada(sim: Simulacao, base: number): JornadaPortal {
+  const iso = (ms: number) => new Date(ms).toISOString()
+  const prazo = sim === 'andamento' ? base + 76 * HORA
+    : sim === 'acabando' ? base + 5.2 * HORA
+      : sim === 'bloqueado' ? base - 2 * HORA
+        : base + 30 * HORA
+  return {
+    primeiroAcessoEm: iso(prazo - 120 * HORA),
+    prazoEm: iso(prazo),
+    concluidaEm: sim === 'concluiu' ? iso(base - HORA) : null,
+    desbloqueios: 0,
+    bloqueada: sim === 'bloqueado',
+    agora: iso(base),
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Visão do professor: a trilha exatamente como o professor vê no portal, para a
@@ -47,6 +79,26 @@ export function VisaoProfessorTab() {
   const [aberta, setAberta] = useState<string | null>(null)
   // Trocar a chave remonta a etapa: é o "refazer" da pré-visualização.
   const [rodada, setRodada] = useState(0)
+  const [simulacao, setSimulacao] = useState<Simulacao>('andamento')
+  // Hora fixa da prévia: o relógio simulado não precisa andar.
+  const [base] = useState(() => Date.now())
+  // Nos parabéns, o link de quem está olhando: um coordenador vê o próprio
+  // Koalendar, como o professor do grupo dele vai ver.
+  const { profile } = useAuth()
+  const { data: meusLinks } = useLinksCoordenador(profile?.id ?? null)
+
+  const trilhaSimulada = useMemo(() => {
+    const todas = etapas.map(paraTrilha)
+    if (simulacao === 'concluiu') return todas.map(e => ({ ...e, estado: 'concluida' as const }))
+    if (simulacao === 'bloqueado') {
+      // Concluiu um terço; o resto fica travado pelo prazo, como no portal.
+      const feitas = Math.max(1, Math.floor(todas.length / 3))
+      return todas.map((e, i) => i < feitas
+        ? { ...e, estado: 'concluida' as const }
+        : { ...e, estado: 'bloqueada' as const, motivoBloqueio: 'prazo' as const })
+    }
+    return todas
+  }, [etapas, simulacao])
 
   if (isLoading) return <p className="py-16 text-center text-[13px] text-ink-muted">Carregando a trilha…</p>
 
@@ -81,11 +133,31 @@ export function VisaoProfessorTab() {
           Mostrar também as {nDesativadas} etapas desativadas, que o professor ainda não vê
         </label>
       )}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12.5px] text-ink-secondary">Simular o prazo:</span>
+        <div className="flex items-center gap-1 rounded-full border border-line-soft p-0.5" role="group" aria-label="Simular o prazo">
+          {SIMULACOES.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setSimulacao(s.id)}
+              className={cn(
+                'btn-press rounded-full px-3 py-1 text-[11.5px] font-medium transition-colors',
+                simulacao === s.id ? 'bg-ink text-ink-inverse' : 'text-ink-secondary hover:text-ink',
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="flex justify-center">
         <TrilhaView
           nome="Professor"
-          etapas={etapas.map(paraTrilha)}
+          etapas={trilhaSimulada}
           onAbrir={id => { setAberta(id); window.scrollTo({ top: 0 }) }}
+          jornada={jornadaSimulada(simulacao, base)}
+          primeiraReuniao={{ coordenador: profile?.nome ?? null, link: meusLinks?.koalendar_link ?? null }}
         />
       </div>
     </div>

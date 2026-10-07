@@ -35,6 +35,10 @@ export function Home() {
   // ── Já identificado ────────────────────────────────────────────────────────
   if (token) {
     const carregando = trilha.isLoading
+    const jornada = trilha.data?.jornada ?? null
+    // Hora do servidor − hora do navegador no instante em que a trilha chegou.
+    const offsetMs = jornada ? new Date(jornada.agora).getTime() - trilha.dataUpdatedAt : 0
+    const recarregar = () => { void trilha.refetch() }
     return (
       <Moldura larga>
         {carregando ? (
@@ -43,10 +47,13 @@ export function Home() {
           <EtapaView
             token={token}
             etapaId={etapaAberta}
-            onVoltar={() => setEtapaAberta(null)}
+            // Volta sempre com a trilha recarregada: a etapa pode ter concluído
+            // a trilha, ou o prazo pode ter acabado enquanto ele estudava.
+            onVoltar={() => { setEtapaAberta(null); recarregar() }}
             numero={(trilha.data?.etapas.findIndex(e => e.id === etapaAberta) ?? -1) + 1}
             totalEtapas={trilha.data?.etapas.length ?? 0}
             etapasConcluidas={trilha.data?.etapas.filter(e => e.estado === 'concluida').length ?? 0}
+            prazo={jornada && !jornada.concluidaEm ? { prazoEm: jornada.prazoEm, offsetMs } : null}
           />
         ) : trilha.isError ? (
           <p className="py-16 text-center text-[13px] text-ink-muted">
@@ -58,6 +65,10 @@ export function Home() {
             etapas={trilha.data.etapas}
             onAbrir={setEtapaAberta}
             onSair={sair}
+            jornada={jornada}
+            offsetMs={offsetMs}
+            primeiraReuniao={trilha.data.primeiraReuniao}
+            onExpirar={recarregar}
           />
         ) : null}
       </Moldura>

@@ -173,18 +173,9 @@ function LinhaEtapa({
           dica="Percentual de acerto para concluir a etapa e liberar a próxima."
           onSalvar={v => patch({ nota_minima: Math.min(100, Math.max(0, v ?? 80)) })}
         />
-        <CampoNumero
-          label="Prazo (dias)"
-          valor={etapa.prazo_dias}
-          dica="Prazo contado do primeiro dia do professor. Vazio = sem prazo. Alimenta o alerta de atraso."
-          onSalvar={v => patch({ prazo_dias: v == null ? null : Math.max(1, v) })}
-        />
-        <CampoNumero
-          label="Abre no dia"
-          valor={etapa.liberacao_dia}
-          dica="Dia mínimo (desde o início do professor) em que a etapa abre, mesmo com a anterior concluída. Vazio = abre assim que a anterior conclui."
-          onSalvar={v => patch({ liberacao_dia: v == null ? null : Math.max(1, v) })}
-        />
+        {/* "Prazo (dias)" e "Abre no dia" por etapa saíram em 07/10/2026: o
+            prazo agora é da trilha inteira (120h desde o 1º acesso, migration
+            20260794). As colunas continuam no banco, todas vazias. */}
         <CampoNumero
           label="Tempo (min)"
           valor={etapa.minutos_estimados}

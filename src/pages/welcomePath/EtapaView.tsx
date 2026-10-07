@@ -14,6 +14,7 @@ import {
 import { BlocoView } from './Blocos'
 import { QuestaoView, PainelResultado, BotoesQuiz } from './Quiz'
 import { useQuizEtapa, type QuizEtapa } from './useQuizEtapa'
+import { ChipPrazo } from './JornadaViews'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Uma etapa da trilha, na linguagem editorial/control-room dos painéis do KTM:
@@ -193,7 +194,7 @@ function ObservacaoPessoal({
 }
 
 export function EtapaView({
-  token, etapaId, onVoltar, numero, totalEtapas, etapasConcluidas,
+  token, etapaId, onVoltar, numero, totalEtapas, etapasConcluidas, prazo,
 }: {
   token: string
   etapaId: string
@@ -202,6 +203,8 @@ export function EtapaView({
   numero: number
   totalEtapas: number
   etapasConcluidas: number
+  /** Prazo da trilha para o contador do cabeçalho; null depois de concluir. */
+  prazo?: { prazoEm: string; offsetMs: number } | null
 }) {
   const { data, isLoading, error } = useEtapa(token, etapaId)
   const iniciar  = useIniciarEtapa()
@@ -274,6 +277,7 @@ export function EtapaView({
       enviando={responder.isPending}
       erroEnvio={erroEnvio}
       onVoltar={onVoltar}
+      metaExtra={prazo ? <ChipPrazo prazoEm={prazo.prazoEm} offsetMs={prazo.offsetMs} /> : null}
       trilho={
         <>
           <ObservacaoPessoal token={token} etapaId={etapaId} inicial={progresso.observacao} />
@@ -300,7 +304,7 @@ export function EtapaView({
  *  as respostas ali mesmo, sem gravar. Mudar o layout aqui muda os dois. */
 export function EtapaLayout({
   etapa, blocos, questoes, progresso, numero, totalEtapas, etapasConcluidas, quiz,
-  enviando, erroEnvio, onVoltar, trilho, aviso, aposQuestao,
+  enviando, erroEnvio, onVoltar, trilho, aviso, aposQuestao, metaExtra,
 }: {
   etapa: EtapaDetalhe['etapa']
   blocos: BlocoEtapa[]
@@ -320,6 +324,8 @@ export function EtapaLayout({
   aviso?: ReactNode
   /** Algo depois de cada questão (o gabarito, na pré-visualização). */
   aposQuestao?: (q: QuestaoEtapa) => ReactNode
+  /** Chip a mais no cabeçalho (o contador do prazo da trilha, no portal). */
+  metaExtra?: ReactNode
 }) {
   const concluida = !!progresso.concluidaEm
   const pctTrilha = totalEtapas > 0 ? Math.round((etapasConcluidas / totalEtapas) * 100) : 0
@@ -402,8 +408,9 @@ export function EtapaLayout({
               {etapa.descricao && (
                 <p className="max-w-prose text-[14px] leading-relaxed text-ink-muted">{etapa.descricao}</p>
               )}
-              {(etapa.prazoEm || progresso.tempoSegundos > 0 || progresso.tentativas > 0) && (
+              {(metaExtra || etapa.prazoEm || progresso.tempoSegundos > 0 || progresso.tentativas > 0) && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {metaExtra}
                   {etapa.prazoEm && <MetaChip icone={CalendarClock}>Prazo {dataBR(etapa.prazoEm)}</MetaChip>}
                   {progresso.tempoSegundos > 0 && (
                     <MetaChip icone={Clock3}>{fmtDuracao(progresso.tempoSegundos)} nesta etapa</MetaChip>
@@ -481,7 +488,12 @@ export function EtapaLayout({
 
                     {soltas.map(renderQuestao)}
 
-                    {quiz.envio && <PainelResultado envio={quiz.envio} />}
+                    {quiz.envio && (
+                      <PainelResultado
+                        envio={quiz.envio}
+                        onVerProximoPasso={quiz.envio.trilhaConcluida ? onVoltar : undefined}
+                      />
+                    )}
 
                     {erroEnvio && (
                       <div className="rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5 text-[12.5px] font-medium text-brand-strong">

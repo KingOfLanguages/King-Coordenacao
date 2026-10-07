@@ -418,6 +418,104 @@ export function useRespostasProfessor(professorId: string | null, etapaId: strin
   })
 }
 
+// ─── Prazo e acompanhamento (migration 20260794) ──────────────────────────────
+
+/** Uma linha por professor no acompanhamento da trilha — `wp_acompanhamento()`.
+ *  Quem entra: ativo que entrou na King desde 07/10/2026 ou que já abriu a
+ *  trilha. A situação (bloqueado, acabando…) é decidida na tela, porque depende
+ *  do relógio de quem olha. */
+export type AcompanhamentoTrilha = {
+  professor_id: string
+  nome: string
+  telefone: string | null
+  data_inicio: string | null
+  grupo: string | null
+  coordenador: string | null
+  primeiro_acesso_em: string | null
+  prazo_em: string | null
+  concluida_em: string | null
+  ultima_atividade_em: string | null
+  desbloqueios: number
+  etapas_obrigatorias: number
+  etapas_concluidas: number
+  etapas_visiveis: number
+  etapa_atual_numero: number | null
+  etapa_atual_titulo: string | null
+  tempo_segundos: number
+  nota_media: number | null
+  revisao_pendente: boolean
+  so_falta_revisao: boolean
+  primeira_reuniao_em: string | null
+  reuniao_marcada_em: string | null
+}
+
+export function useAcompanhamentoTrilha() {
+  return useQuery({
+    queryKey: ['wp-admin', 'acompanhamento'],
+    // A tela é de acompanhamento ao vivo: recarrega sozinha a cada minuto.
+    refetchInterval: 60_000,
+    queryFn: async (): Promise<AcompanhamentoTrilha[]> => {
+      const { data, error } = await supabase.rpc('wp_acompanhamento')
+      if (error) throw error
+      return (data ?? []) as AcompanhamentoTrilha[]
+    },
+  })
+}
+
+export type DesbloqueioTrilha = {
+  id: string
+  dias: number
+  prazo_anterior: string
+  prazo_novo: string
+  observacao: string | null
+  feito_por: string | null
+  feito_por_nome: string | null
+  created_at: string
+}
+
+/** Histórico de desbloqueios de um professor, com o nome de quem fez. O nome
+ *  vem de `perfis_publicos` em outra consulta: join em `profiles` volta NULL
+ *  por causa da RLS (ver ktm-perfis-publicos-rls). */
+export function useDesbloqueiosProfessor(professorId: string | null) {
+  return useQuery({
+    queryKey: ['wp-admin', 'desbloqueios', professorId],
+    enabled: !!professorId,
+    queryFn: async (): Promise<DesbloqueioTrilha[]> => {
+      const { data, error } = await supabase
+        .from('welcome_path_desbloqueios')
+        .select('id, dias, prazo_anterior, prazo_novo, observacao, feito_por, created_at')
+        .eq('professor_id', professorId!)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      const linhas = (data ?? []) as Omit<DesbloqueioTrilha, 'feito_por_nome'>[]
+      const ids = [...new Set(linhas.map(l => l.feito_por).filter((x): x is string => !!x))]
+      const nomes = new Map<string, string>()
+      if (ids.length) {
+        const { data: perfis } = await supabase.from('perfis_publicos').select('id, nome').in('id', ids)
+        for (const p of (perfis ?? []) as { id: string; nome: string }[]) nomes.set(p.id, p.nome)
+      }
+      return linhas.map(l => ({ ...l, feito_por_nome: l.feito_por ? nomes.get(l.feito_por) ?? null : null }))
+    },
+  })
+}
+
+/** Dá N dias a mais de prazo. Vencido: conta de agora; correndo: soma ao prazo. */
+export function useDesbloquearPrazo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (v: { professorId: string; dias: number; observacao?: string }) => {
+      const { data, error } = await supabase.rpc('wp_desbloquear_prazo', {
+        p_professor_id: v.professorId,
+        p_dias: v.dias,
+        p_observacao: v.observacao ?? null,
+      })
+      if (error) throw new Error(error.message)
+      return data as string
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
+  })
+}
+
 function useAcaoProgresso<T>(rpc: string, args: (input: T) => Record<string, unknown>) {
   const qc = useQueryClient()
   return useMutation({

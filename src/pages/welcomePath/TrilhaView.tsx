@@ -1,7 +1,8 @@
 import { Check, Lock, Play, RotateCw, CalendarClock, Clock3, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { dataBR, diasAte, fmtDuracao } from '@/lib/formato'
-import type { EtapaTrilha } from '@/hooks/useWelcomePath'
+import type { EtapaTrilha, JornadaPortal, PrimeiraReuniao } from '@/hooks/useWelcomePath'
+import { ContadorTrilha, PainelBloqueio, PainelConclusao } from './JornadaViews'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A trilha: a lista de etapas com o estado de cada uma. Metáfora de caminho —
@@ -77,19 +78,29 @@ function LinhaMeta({ etapa }: { etapa: EtapaTrilha }) {
 }
 
 export function TrilhaView({
-  nome, etapas, onAbrir, onSair,
+  nome, etapas, onAbrir, onSair, jornada, offsetMs = 0, primeiraReuniao, onExpirar,
 }: {
   nome: string
   etapas: EtapaTrilha[]
   onAbrir: (etapaId: string) => void
   /** Sem ele, não mostra o "Sair deste dispositivo" (visão da coordenação). */
   onSair?: () => void
+  /** Relógio das 120h. Sem ele (função antiga, prévia sem simulação), a
+   *  trilha aparece como antes do prazo existir. */
+  jornada?: JornadaPortal | null
+  /** Hora do servidor − hora do navegador (ver JornadaViews). */
+  offsetMs?: number
+  primeiraReuniao?: PrimeiraReuniao | null
+  onExpirar?: () => void
 }) {
   const concluidas = etapas.filter(e => e.estado === 'concluida').length
   const total = etapas.length
   const pct = total ? Math.round((concluidas / total) * 100) : 0
   const atual = etapas.find(e => e.estado === 'liberada')
-  const tudoFeito = total > 0 && concluidas === total
+  // A conclusão que vale é a do banco (carimbada uma vez); a contagem local só
+  // serve quando a resposta ainda não traz a jornada.
+  const tudoFeito = jornada ? !!jornada.concluidaEm : total > 0 && concluidas === total
+  const bloqueada = !!jornada?.bloqueada && !tudoFeito
   const primeiroNome = nome.split(' ')[0]
   // Só soma o que a coordenação estimou; etapa sem estimativa não entra na conta.
   const minutosRestantes = etapas
@@ -98,7 +109,15 @@ export function TrilhaView({
 
   return (
     <div className="w-full max-w-2xl space-y-7 animate-fade-up">
-      {/* Cabeçalho com o progresso */}
+      {tudoFeito && jornada ? (
+        <>
+          <PainelConclusao primeiraReuniao={primeiraReuniao} />
+          <p className="label-micro text-ink-muted">Revise qualquer etapa quando quiser</p>
+        </>
+      ) : bloqueada && jornada ? (
+        <PainelBloqueio nome={nome} jornada={jornada} etapas={etapas} />
+      ) : (
+      /* Cabeçalho com o progresso */
       <header className="space-y-4">
         <div className="space-y-1.5">
           <span className="label-micro flex items-center gap-1.5 text-accentBlue">
@@ -111,11 +130,16 @@ export function TrilhaView({
           <p className="text-[14px] leading-relaxed text-ink-muted">
             {tudoFeito
               ? 'Você passou por todas as etapas do onboarding. Pode voltar aqui quando quiser para revisar o conteúdo.'
-              : 'Sua trilha de boas-vindas à King. Cada etapa libera a próxima — faça no seu ritmo.'}
+              : jornada
+                ? 'Sua trilha de boas-vindas à King. Cada etapa libera a próxima, e você tem 5 dias desde o primeiro acesso para concluir todas.'
+                : 'Sua trilha de boas-vindas à King. Cada etapa libera a próxima — faça no seu ritmo.'}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4">
+        <div className="overflow-hidden rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4">
+          {jornada && !tudoFeito && (
+            <ContadorTrilha jornada={jornada} offsetMs={offsetMs} onExpirar={onExpirar} />
+          )}
           <div className="flex items-baseline justify-between">
             <span className="text-[12.5px] font-medium text-ink-secondary">
               {concluidas} de {total} etapas concluídas
@@ -133,6 +157,7 @@ export function TrilhaView({
           </div>
         </div>
       </header>
+      )}
 
       {/* Etapas */}
       <ol className="relative space-y-2.5">
@@ -212,6 +237,11 @@ export function TrilhaView({
                     {etapa.estado === 'bloqueada' && etapa.motivoBloqueio === 'anterior' && (
                       <p className="pt-1.5 text-[11.5px] text-ink-subtle">
                         Conclua a etapa {i} para liberar.
+                      </p>
+                    )}
+                    {etapa.estado === 'bloqueada' && etapa.motivoBloqueio === 'prazo' && (
+                      <p className="pt-1.5 text-[11.5px] text-ink-subtle">
+                        Prazo encerrado. Peça o desbloqueio para continuar.
                       </p>
                     )}
 

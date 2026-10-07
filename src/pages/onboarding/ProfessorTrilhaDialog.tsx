@@ -9,20 +9,176 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { dataBR, fmtDuracao } from '@/lib/formato'
+import { useAuth } from '@/contexts/AuthContext'
+import { canEdit } from '@/lib/permissions'
+import { dataHoraBR, fmtHaQuanto, fmtRestante, fmtRestanteCurto } from '@/lib/prazoTrilha'
 import {
   useRespostasProfessor, useLiberarEtapa, useResetarEtapa, useRevisarResposta,
+  useDesbloqueiosProfessor, useDesbloquearPrazo,
   type EtapaAdmin, type RespostaAdmin,
 } from '@/hooks/useWelcomePathAdmin'
-import type { LinhaTrilha } from './WelcomePathTab'
+import { ChipSituacao, type LinhaTrilha } from './WelcomePathTab'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Detalhe de um professor na trilha: etapa a etapa, com as respostas que ele
-// deu e as ações da coordenação (liberar fora de ordem, resetar, corrigir
-// dissertativa).
+// Detalhe de um professor na trilha: o prazo (com o desbloqueio), e etapa a
+// etapa as respostas que ele deu e as ações da coordenação (liberar fora de
+// ordem, resetar, corrigir dissertativa).
 //
 // É aqui que a dissertativa vira nota: enquanto ninguém revisa, a etapa fica
 // pendurada em `revisao_pendente` e o professor não destrava a próxima.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const DIA_MS = 86_400_000
+/** Opções do desbloqueio; a decisão (João, 07/10) foi o suporte escolher, com 2 sugerido. */
+const OPCOES_DIAS = [1, 2, 3, 5]
+
+/** Linha do tempo do prazo + desbloqueio. */
+function SecaoPrazo({ linha, agora }: { linha: LinhaTrilha; agora: number }) {
+  const { profile } = useAuth()
+  const podeDesbloquear = canEdit(profile)
+  const { data: historico = [] } = useDesbloqueiosProfessor(linha.professor_id)
+  const desbloquear = useDesbloquearPrazo()
+  const [dias, setDias] = useState(2)
+  const [obs, setObs] = useState('')
+
+  if (!linha.primeiro_acesso_em || !linha.prazo_em) {
+    return (
+      <div className="rounded-xl border border-line-soft bg-surface-subtle px-4 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+        Ainda não abriu a trilha. Os 5 dias de prazo começam a contar no primeiro acesso.
+      </div>
+    )
+  }
+
+  const prazoMs = new Date(linha.prazo_em).getTime()
+  const restante = prazoMs - agora
+  const novoPrazo = new Date(Math.max(agora, prazoMs) + dias * DIA_MS).toISOString()
+
+  function confirmar() {
+    desbloquear.mutate(
+      { professorId: linha.professor_id, dias, observacao: obs },
+      {
+        onSuccess: prazo => {
+          setObs('')
+          toast.success(`Trilha liberada até ${dataHoraBR(prazo)}`)
+        },
+        onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível desbloquear.'),
+      },
+    )
+  }
+
+  // Do mais antigo para o mais novo, como uma linha do tempo.
+  const eventos = [...historico].reverse()
+
+  return (
+    <div className="space-y-3 rounded-xl border border-line-soft px-4 py-3.5">
+      <ol className="space-y-2.5 text-[12.5px]">
+        <Marco titulo="1º acesso" quando={dataHoraBR(linha.primeiro_acesso_em)} />
+        {eventos.map(d => (
+          <Marco
+            key={d.id}
+            titulo={`Desbloqueio de ${d.dias} ${d.dias === 1 ? 'dia' : 'dias'}`}
+            quando={dataHoraBR(d.created_at)}
+            detalhe={[
+              d.feito_por_nome && `por ${d.feito_por_nome}`,
+              `prazo foi para ${dataHoraBR(d.prazo_novo)}`,
+              d.observacao && `“${d.observacao}”`,
+            ].filter(Boolean).join(' · ')}
+          />
+        ))}
+        <Marco
+          titulo="Prazo"
+          quando={dataHoraBR(linha.prazo_em)}
+          detalhe={linha.concluida_em
+            ? undefined
+            : restante > 0 ? `faltam ${fmtRestante(restante)}` : `esgotou ${fmtHaQuanto(-restante)}`}
+          tom={!linha.concluida_em && restante <= 0 ? 'alerta' : undefined}
+        />
+        {linha.concluida_em && (
+          <Marco
+            titulo="Concluiu a trilha"
+            quando={dataHoraBR(linha.concluida_em)}
+            detalhe={`levou ${fmtRestanteCurto(new Date(linha.concluida_em).getTime() - new Date(linha.primeiro_acesso_em).getTime())}`}
+            tom="ok"
+          />
+        )}
+        {(linha.concluida_em || linha.primeira_reuniao_em || linha.reuniao_marcada_em) && (
+          <Marco
+            titulo="1ª reunião"
+            quando={linha.primeira_reuniao_em
+              ? `feita em ${dataBR(linha.primeira_reuniao_em)}`
+              : linha.reuniao_marcada_em ? `marcada para ${dataHoraBR(linha.reuniao_marcada_em)}` : 'ainda não agendou'}
+            tom={linha.primeira_reuniao_em ? 'ok' : undefined}
+          />
+        )}
+      </ol>
+
+      {!linha.concluida_em && podeDesbloquear && (
+        <div className="space-y-2.5 border-t border-line-soft pt-3">
+          <p className="text-[12px] font-semibold text-ink">
+            {restante > 0 ? 'Dar mais prazo' : 'Desbloquear a trilha'}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {OPCOES_DIAS.map(n => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setDias(n)}
+                className={cn(
+                  'btn-press h-8 rounded-full px-3 text-[12px] font-medium transition-colors',
+                  dias === n ? 'bg-ink text-ink-inverse' : 'border border-line text-ink-secondary hover:bg-surface-subtle',
+                )}
+              >
+                +{n} {n === 1 ? 'dia' : 'dias'}
+              </button>
+            ))}
+            <span className="ml-1 text-[11.5px] text-ink-muted">novo prazo: {dataHoraBR(novoPrazo)}</span>
+          </div>
+          <input
+            value={obs}
+            onChange={e => setObs(e.target.value)}
+            maxLength={300}
+            placeholder="Observação (opcional): ex. pediu pelo WhatsApp, estava doente…"
+            className="h-9 w-full rounded-xl border border-line-soft bg-surface-canvas px-3 text-[12.5px] text-ink
+                       placeholder:text-ink-subtle focus:border-accentBlue focus:outline-none focus:ring-2 focus:ring-accentBlue-soft"
+          />
+          <div className="flex justify-end">
+            <Button size="sm" className="btn-press h-8 gap-1.5 text-[12px]" disabled={desbloquear.isPending} onClick={confirmar}>
+              <Unlock className="h-3.5 w-3.5" />
+              {desbloquear.isPending ? 'Salvando…' : restante > 0 ? `Estender +${dias} ${dias === 1 ? 'dia' : 'dias'}` : `Desbloquear +${dias} ${dias === 1 ? 'dia' : 'dias'}`}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Marco({
+  titulo, quando, detalhe, tom,
+}: {
+  titulo: string
+  quando: string
+  detalhe?: string
+  tom?: 'alerta' | 'ok'
+}) {
+  return (
+    <li className="flex gap-2.5">
+      <span className={cn(
+        'mt-1.5 h-2 w-2 flex-shrink-0 rounded-full',
+        tom === 'alerta' ? 'bg-aviso-warnFg' : tom === 'ok' ? 'bg-aviso-okFg' : 'bg-line',
+      )} />
+      <div className="min-w-0">
+        <p className="text-ink">
+          <span className="font-medium">{titulo}</span>
+          <span className="text-ink-muted"> · {quando}</span>
+        </p>
+        {detalhe && (
+          <p className={cn('text-[11.5px]', tom === 'alerta' ? 'font-medium text-aviso-warnFg' : 'text-ink-muted')}>{detalhe}</p>
+        )}
+      </div>
+    </li>
+  )
+}
 
 function RespostaObjetiva({ r }: { r: RespostaAdmin }) {
   const opcoes = r.questao?.opcoes ?? []
@@ -140,7 +296,7 @@ function RevisaoDissertativa({ resposta }: { resposta: RespostaAdmin }) {
 }
 
 function DetalheEtapa({ linha, etapa }: { linha: LinhaTrilha; etapa: EtapaAdmin }) {
-  const { data: respostas = [], isLoading } = useRespostasProfessor(linha.professorId, etapa.id)
+  const { data: respostas = [], isLoading } = useRespostasProfessor(linha.professor_id, etapa.id)
   const p = linha.porEtapa.get(etapa.id)
 
   // Só a última tentativa importa para a revisão; as anteriores ficam no banco
@@ -200,10 +356,11 @@ function DetalheEtapa({ linha, etapa }: { linha: LinhaTrilha; etapa: EtapaAdmin 
 }
 
 export function ProfessorTrilhaDialog({
-  linha, etapas, onFechar,
+  linha, etapas, agora, onFechar,
 }: {
   linha: LinhaTrilha
   etapas: EtapaAdmin[]
+  agora: number
   onFechar: () => void
 }) {
   const [expandida, setExpandida] = useState<string | null>(null)
@@ -217,15 +374,22 @@ export function ProfessorTrilhaDialog({
           `sm:` aqui, o dialog encolhe para 384px a partir de 640px de tela. */}
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-[15px]">{linha.nome}</DialogTitle>
+          <DialogTitle className="flex flex-wrap items-center gap-2 text-[15px]">
+            {linha.nome} <ChipSituacao situacao={linha.situacao} />
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-muted">
-          {linha.dataInicio && <span>Início: {dataBR(linha.dataInicio)}</span>}
-          <span>{linha.concluidas} de {linha.totalObrigatorias} etapas obrigatórias</span>
-          {linha.notaMedia != null && <span>Nota média: {Math.round(linha.notaMedia)}%</span>}
-          <span>Tempo total: {fmtDuracao(linha.tempoTotal)}</span>
+          {linha.data_inicio && <span>Entrou na King: {dataBR(linha.data_inicio)}</span>}
+          {(linha.grupo || linha.coordenador) && (
+            <span>Coordenação: {[linha.grupo, linha.coordenador].filter(Boolean).join(' · ')}</span>
+          )}
+          <span>{linha.etapas_concluidas} de {linha.etapas_obrigatorias} etapas</span>
+          {linha.nota_media != null && <span>Nota média: {Math.round(Number(linha.nota_media))}%</span>}
+          <span>Tempo de estudo: {fmtDuracao(linha.tempo_segundos)}</span>
         </div>
+
+        <SecaoPrazo linha={linha} agora={agora} />
 
         <ul className="space-y-2">
           {etapas.map((etapa, i) => {
@@ -249,13 +413,15 @@ export function ProfessorTrilhaDialog({
                           : 'bg-surface-subtle text-ink-subtle',
                   )}>
                     {p?.concluida_em ? <Check className="h-3.5 w-3.5" />
-                      : destravada ? etapa.ordem
+                      : destravada ? i + 1
                         : <Lock className="h-3 w-3" />}
                   </span>
 
+                  {/* Número = posição entre as ativas, igual ao que o professor
+                      vê e à coluna Progresso da tabela (`ordem` pula rascunhos). */}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium text-ink">
-                      Etapa {etapa.ordem} · {etapa.titulo}
+                      Etapa {i + 1} · {etapa.titulo}
                     </span>
                     <span className="block text-[11.5px] text-ink-muted">
                       {p?.concluida_em
@@ -298,7 +464,7 @@ export function ProfessorTrilhaDialog({
                           className="btn-press h-8 gap-1.5 border-line text-[12px]"
                           disabled={liberar.isPending}
                           onClick={() => liberar.mutate(
-                            { professorId: linha.professorId, etapaId: etapa.id },
+                            { professorId: linha.professor_id, etapaId: etapa.id },
                             {
                               onSuccess: () => toast.success('Etapa liberada para este professor'),
                               onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível liberar.'),
@@ -314,9 +480,9 @@ export function ProfessorTrilhaDialog({
                           className="btn-press h-8 gap-1.5 border-line text-[12px]"
                           disabled={resetar.isPending}
                           onClick={() => {
-                            if (!confirm(`Zerar a etapa ${etapa.ordem} de ${linha.nome}? As respostas dele serão apagadas.`)) return
+                            if (!confirm(`Zerar esta etapa de ${linha.nome}? As respostas dele serão apagadas.`)) return
                             resetar.mutate(
-                              { professorId: linha.professorId, etapaId: etapa.id },
+                              { professorId: linha.professor_id, etapaId: etapa.id },
                               {
                                 onSuccess: () => toast.success('Etapa zerada — o professor pode refazer'),
                                 onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível resetar.'),
