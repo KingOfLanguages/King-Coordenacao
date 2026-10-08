@@ -28,7 +28,11 @@
 //     "enviado" vem igual exista o cadastro ou não (item 8 do pentest): sem
 //     professor, ou sem e-mail, o desafio é uma isca que nunca confere.
 //   verificar { desafio, codigo } → { token, expiraEm, professor: { id, nome } }
-//   sessao    { token }           → { professor: { id, nome } }
+//   identificar { email?, nome?, mesInicio?, anoInicio? }  — só o /agendar
+//     → { status: 'ok', token, expiraEm, professor } | { status: 'nao_encontrado' | 'ambiguo' }
+//     Sem código: a sessão sai com escopo 'agendamento' (2 h), que os outros
+//     portais recusam e que não vê o link do Meet. Decisão do João em 08/10.
+//   sessao    { token }           → { professor: { id, nome } }   (só escopo completo)
 //   sair      { token }           → { ok: true }
 //
 // Limites: por IP (pedidos e verificações), pelo que foi digitado (códigos a
@@ -316,6 +320,48 @@ serve(async (req) => {
 
     const { token, expiraEm } = await criarSessao(admin, p.id, ip)
     return json({ token, expiraEm, professor: { id: p.id, nome: semSufixoInicio(p.nome) } })
+  }
+
+  // ══ identificar (só /agendar, sem código) ══════════════════════════════════
+  // Decisão do João em 08/10: o agendamento abre só com e-mail OU nome. A
+  // sessão sai com escopo 'agendamento' — 2 horas, recusada pelos outros
+  // portais, sem link do Meet na tela. Nada é gravado no cadastro.
+  if (acao === 'identificar') {
+    if (await estourouLimite(admin, ip, 'identificar', 20, 15)
+     || await estourouLimite(admin, ip, 'identificar_dia', 80, 24 * 60)) {
+      return json({ error: 'Muitas tentativas seguidas. Espere alguns minutos e tente de novo.' }, 429)
+    }
+
+    const nome  = typeof body.nome  === 'string' ? body.nome.trim().slice(0, 200)  : ''
+    const email = typeof body.email === 'string' ? body.email.trim().slice(0, 200) : ''
+    const emailValido = EMAILRE.test(email.toLowerCase())
+    const temNome = nome.length >= NOME_MIN_CHARS
+    if (!emailValido && !temNome) {
+      return json({ error: 'Informe seu e-mail ou seu nome completo.' }, 400)
+    }
+    const mesInicio = typeof body.mesInicio === 'number' ? body.mesInicio : null
+    const anoInicio = typeof body.anoInicio === 'number' ? body.anoInicio : null
+
+    let prof: ProfRow | null = null
+    if (emailValido) prof = (await localizarPorEmail(admin, email))?.prof ?? null
+
+    if (!prof && temNome) {
+      const { data: naCasa } = await admin
+        .from('professores')
+        .select('id, nome, status, data_inicio, email')
+        .neq('status', 'desligado')
+      let candidatos = ((naCasa ?? []) as ProfRow[]).filter(p => nomeExato(nome, p.nome))
+      if (candidatos.length > 1 && mesInicio != null && anoInicio != null) {
+        candidatos = candidatos.filter(p => dataInicioBate(p.data_inicio, mesInicio, anoInicio))
+      }
+      if (candidatos.length > 1) return json({ status: 'ambiguo' })
+      prof = candidatos[0] ?? null
+    }
+
+    if (!prof) return json({ status: 'nao_encontrado' })
+
+    const { token, expiraEm } = await criarSessao(admin, prof.id, ip, 'agendamento')
+    return json({ status: 'ok', token, expiraEm, professor: { id: prof.id, nome: semSufixoInicio(prof.nome) } })
   }
 
   // ══ sessao ═════════════════════════════════════════════════════════════════

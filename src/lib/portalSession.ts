@@ -39,3 +39,31 @@ export function limparToken(): void {
     localStorage.removeItem(CHAVE)
   } catch { /* nada a fazer */ }
 }
+
+// ─── Sessão só do /agendar ────────────────────────────────────────────────────
+// Desde 08/10 o agendamento abre sem o código do e-mail: a sessão sai com escopo
+// 'agendamento' (2 horas, recusada pelos outros portais — ver 20260794). Fica no
+// sessionStorage, separada do token completo: fechou a aba, acabou; e nunca
+// sobrescreve a sessão completa que o professor tenha no dispositivo.
+const CHAVE_AGENDAMENTO = 'king.portal.agendamento'
+
+export function lerTokenAgendamento(): string | null {
+  try {
+    const t = sessionStorage.getItem(CHAVE_AGENDAMENTO)
+    return t && t.length > 20 ? t : null
+  } catch {
+    return null
+  }
+}
+
+export function gravarTokenAgendamento(token: string): void {
+  try {
+    sessionStorage.setItem(CHAVE_AGENDAMENTO, token)
+  } catch { /* sem storage: vale enquanto a página estiver aberta */ }
+}
+
+export function limparTokenAgendamento(): void {
+  try {
+    sessionStorage.removeItem(CHAVE_AGENDAMENTO)
+  } catch { /* nada a fazer */ }
+}

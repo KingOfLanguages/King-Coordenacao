@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import { AvisoErro, FundoPortal } from '@/components/portal/PortalUI'
-import { IdentificacaoPortal } from '@/components/portal/IdentificacaoPortal'
 import { sessaoRecusada } from '@/lib/invocarFuncao'
+import {
+  lerTokenAgendamento, gravarTokenAgendamento, limparTokenAgendamento,
+} from '@/lib/portalSession'
 import { usePortalSessao } from '@/hooks/usePortalIdentidade'
 import { useOpcoesAgendamento, useDeclararNaoFezReuniao } from '@/hooks/usePortalAgendamento'
 import { useTeacherLookup, type AgendaDisponivel as AgendaDisponivelType } from '@/hooks/useTeacherLookup'
@@ -11,11 +12,14 @@ import { useBookMeeting, type ReuniaoConfirmada } from '@/hooks/useBookMeeting'
 import { OpcoesPortal } from '@/pages/agendamentos/OpcoesPortal'
 import { AgendaDisponivel } from '@/pages/agendamentos/AgendaDisponivel'
 import { Confirmacao } from '@/pages/agendamentos/Confirmacao'
+import { IdentificacaoAgendamento } from '@/pages/agendamentos/IdentificacaoAgendamento'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Portal público de agendamento (/agendar). A entrada é a de todos os portais
-// do professor (código no e-mail oficial — ver IdentificacaoPortal); as opções,
-// as agendas em grupo e a reserva saem do servidor pela sessão.
+// Portal público de agendamento (/agendar). Desde 08/10 é o único portal que
+// abre SEM o código do e-mail: e-mail ou nome completo dão uma sessão de escopo
+// 'agendamento' (2 h, só aqui, sem link do Meet na tela — ver 20260794). Se o
+// professor já tem a sessão completa no dispositivo (entrou com código em outro
+// portal), ela vale aqui também e nada é pedido.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Step =
@@ -24,7 +28,27 @@ type Step =
   | { tipo: 'confirmacao'; reuniao: ReuniaoConfirmada }
 
 export function Home() {
-  const { token, entrar, sair, invalidar } = usePortalSessao()
+  const completa = usePortalSessao()
+  const [tokenAgendamento, setTokenAgendamento] = useState<string | null>(() => lerTokenAgendamento())
+  // A sessão completa tem precedência: com ela o professor vê também o link do Meet.
+  const token = completa.token ?? tokenAgendamento
+
+  function entrar(novo: string) {
+    gravarTokenAgendamento(novo)
+    setTokenAgendamento(novo)
+  }
+
+  /** O servidor recusou o token em uso (expirou, foi revogado). */
+  function invalidar() {
+    if (completa.token) completa.invalidar()
+    else { limparTokenAgendamento(); setTokenAgendamento(null) }
+  }
+
+  async function sair() {
+    limparTokenAgendamento()
+    setTokenAgendamento(null)
+    if (completa.token) await completa.sair()
+  }
   const [step, setStep] = useState<Step>({ tipo: 'opcoes' })
   /** A faixa "já fez o acompanhamento do mês" some depois do "não aconteceu". */
   const [avisoDispensado, setAvisoDispensado] = useState(false)
@@ -92,14 +116,7 @@ export function Home() {
       <FundoPortal />
 
       <div className="relative z-10 flex items-center justify-center w-full">
-        {!token && (
-          <IdentificacaoPortal
-            icone={CalendarClock}
-            titulo="Agendamento de Reuniões"
-            descricao="Pra ver suas opções de agendamento, informe seu e-mail cadastrado."
-            onEntrar={entrar}
-          />
-        )}
+        {!token && <IdentificacaoAgendamento onEntrar={entrar} />}
 
         {token && step.tipo === 'opcoes' && (
           opcoes.isLoading ? (

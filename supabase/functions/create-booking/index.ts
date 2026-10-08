@@ -29,7 +29,9 @@
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/create-booking
 //   Body: { "token": "<sessão do portal-identidade>", "horario_id": "..." }
-//   Retorna: { reuniao: { titulo, data_hora, coordenador_nome, meet_link } }
+//   Retorna: { reuniao: { titulo, data_hora, coordenador_nome, meet_link, email_enviado, link_por_email } }
+//   Sessão sem código (escopo 'agendamento'): meet_link = null e o link vai só
+//   pelo e-mail do cadastro (link_por_email = true).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -183,7 +185,7 @@ serve(async (req) => {
   )
 
   // ── 1. Professor da sessão, ativo ────────────────────────────────────────────
-  const sessao = await resolverSessao(admin, body.token)
+  const sessao = await resolverSessao(admin, body.token, { aceitaAgendamento: true })
   if (!sessao) return json({ error: MSG_SESSAO }, 401)
 
   // Log de correlação: identifica QUAL professor/horário em cada request, para
@@ -223,6 +225,12 @@ serve(async (req) => {
   // nesse caso usamos um placeholder só pra satisfazer a coluna NOT NULL e
   // pulamos o envio de confirmação (ver passo 5).
   const emailReal = professor.email ? professor.email.trim().toLowerCase() : ''
+  // Sessão sem código (escopo 'agendamento'): o link só chega por e-mail.
+  // Sem e-mail no cadastro não há como entregá-lo — melhor não reservar.
+  const linkSoPorEmail = sessao.escopo === 'agendamento'
+  if (linkSoPorEmail && !emailReal) {
+    return json({ error: 'Seu cadastro está sem e-mail, e é por ele que mandamos o link da reunião. Fale com a coordenação.' }, 409)
+  }
   const emailParaRegistro = emailReal || `sem-email-${professor.id}@king.internal`
 
   // ── 2. Resolve o horário: linha real já materializada, ou ocorrência virtual
@@ -482,8 +490,9 @@ serve(async (req) => {
       titulo:           agenda.titulo,
       data_hora:         horario.data_hora,
       coordenador_nome: coordNome,
-      meet_link:        meetLink,
+      meet_link:        linkSoPorEmail ? null : meetLink,
       email_enviado:    !!emailReal,
+      link_por_email:   linkSoPorEmail,
     },
   })
 })

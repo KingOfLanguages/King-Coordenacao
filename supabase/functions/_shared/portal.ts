@@ -149,11 +149,19 @@ export async function estourouLimite(
 
 // ─── Sessão ───────────────────────────────────────────────────────────────────
 
-/** Validade deslizante: cada uso empurra para a frente, até o teto absoluto. */
-export const SESSAO_DIAS = 14
-export const SESSAO_MAX_DIAS = 30
-/** Dispositivos simultâneos por professor. O mais antigo cai quando passa. */
-export const SESSOES_MAX = 5
+/** Escopo da sessão (migration 20260794):
+ *  - 'completo': nasceu do código no e-mail; vale nos 4 portais.
+ *  - 'agendamento': nasceu só de e-mail/nome (sem código); só o /agendar aceita.
+ *    Decisão do João em 08/10 — o pentest de 05/10 fechou os 4 portais, e o
+ *    agendamento voltou a abrir sem código, com o que ele expõe contido. */
+export type EscopoSessao = 'completo' | 'agendamento'
+
+const VALIDADE: Record<EscopoSessao, { janelaMs: number; tetoMs: number; maxPorProfessor: number }> = {
+  // Deslizante: cada uso empurra para a frente, até o teto absoluto.
+  completo:    { janelaMs: 14 * 86_400_000, tetoMs: 30 * 86_400_000, maxPorProfessor: 5 },
+  // Curta e sem renovação: só o tempo de marcar uma reunião.
+  agendamento: { janelaMs: 2 * 3_600_000,   tetoMs: 2 * 3_600_000,   maxPorProfessor: 10 },
+}
 
 export type ProfessorSessao = {
   id: string
@@ -161,28 +169,36 @@ export type ProfessorSessao = {
   status: string
   data_inicio: string | null
   coordenador_id: string | null
+  escopo: EscopoSessao
 }
 
-export async function criarSessao(admin: Admin, professorId: string, ip: string) {
+export async function criarSessao(
+  admin: Admin, professorId: string, ip: string, escopo: EscopoSessao = 'completo',
+) {
+  const v = VALIDADE[escopo]
   const token = novoToken()
   const agora = Date.now()
-  const expiraEm = new Date(agora + SESSAO_DIAS * 86_400_000).toISOString()
-  const expiraMaxEm = new Date(agora + SESSAO_MAX_DIAS * 86_400_000).toISOString()
+  const expiraEm = new Date(agora + v.janelaMs).toISOString()
+  const expiraMaxEm = new Date(agora + v.tetoMs).toISOString()
 
   await admin.from('portal_sessoes').insert({
     professor_id:  professorId,
     token_hash:    await sha256(token),
     expira_em:     expiraEm,
     expira_max_em: expiraMaxEm,
+    escopo,
     ip,
   })
 
+  // O excedente cai DENTRO do mesmo escopo: abrir sessões de agendamento (que
+  // não pedem código) nunca pode derrubar a sessão completa do professor.
   const { data: todas } = await admin
     .from('portal_sessoes')
     .select('id')
     .eq('professor_id', professorId)
+    .eq('escopo', escopo)
     .order('created_at', { ascending: false })
-  const sobrando = ((todas ?? []) as { id: string }[]).slice(SESSOES_MAX).map(s => s.id)
+  const sobrando = ((todas ?? []) as { id: string }[]).slice(v.maxPorProfessor).map(s => s.id)
   if (sobrando.length) await admin.from('portal_sessoes').delete().in('id', sobrando)
 
   return { token, expiraEm }
@@ -190,17 +206,22 @@ export async function criarSessao(admin: Admin, professorId: string, ip: string)
 
 /** Troca o token pelo professor. `null` = sem sessão válida (responda 401).
  *  Só `desligado` fica de fora aqui; barrar quem está em pausa é decisão de
- *  cada portal. */
-export async function resolverSessao(admin: Admin, token: unknown): Promise<ProfessorSessao | null> {
+ *  cada portal. Sessão de escopo 'agendamento' só passa com `aceitaAgendamento`
+ *  — as functions do /agendar pedem isso; as dos outros portais, não. */
+export async function resolverSessao(
+  admin: Admin, token: unknown, opcoes: { aceitaAgendamento?: boolean } = {},
+): Promise<ProfessorSessao | null> {
   if (typeof token !== 'string' || token.length < 20 || token.length > 200) return null
 
   const { data: sess } = await admin
     .from('portal_sessoes')
-    .select('id, professor_id, expira_em, expira_max_em')
+    .select('id, professor_id, expira_em, expira_max_em, escopo')
     .eq('token_hash', await sha256(token))
     .maybeSingle()
 
   if (!sess) return null
+  const escopo: EscopoSessao = sess.escopo === 'agendamento' ? 'agendamento' : 'completo'
+  if (escopo === 'agendamento' && !opcoes.aceitaAgendamento) return null
   const agora = Date.now()
   if (new Date(sess.expira_em).getTime() < agora || new Date(sess.expira_max_em).getTime() < agora) {
     await admin.from('portal_sessoes').delete().eq('id', sess.id)
@@ -215,12 +236,12 @@ export async function resolverSessao(admin: Admin, token: unknown): Promise<Prof
 
   if (!p || p.status === 'desligado') return null
 
-  const deslizada = Math.min(agora + SESSAO_DIAS * 86_400_000, new Date(sess.expira_max_em).getTime())
+  const deslizada = Math.min(agora + VALIDADE[escopo].janelaMs, new Date(sess.expira_max_em).getTime())
   await admin.from('portal_sessoes')
     .update({ ultimo_uso_em: new Date(agora).toISOString(), expira_em: new Date(deslizada).toISOString() })
     .eq('id', sess.id)
 
-  return p as ProfessorSessao
+  return { ...(p as Omit<ProfessorSessao, 'escopo'>), escopo }
 }
 
 export async function encerrarSessao(admin: Admin, token: unknown): Promise<void> {
@@ -229,3 +250,4 @@ export async function encerrarSessao(admin: Admin, token: unknown): Promise<void
 }
 
 export const MSG_SESSAO = 'Sua sessão expirou. Entre de novo com o código enviado ao seu e-mail.'
+export const MSG_SESSAO_AGENDAMENTO = 'Sua sessão expirou. Informe de novo seu e-mail ou nome completo.'

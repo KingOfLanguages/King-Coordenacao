@@ -42,7 +42,10 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  const sessao = await resolverSessao(admin, body.token)
+  // Aceita a sessão de agendamento (sem código) — ver 20260794. O efeito é
+  // pequeno e rastreável: só a última reunião do próprio professor, com a
+  // marca "[via portal]" na observação.
+  const sessao = await resolverSessao(admin, body.token, { aceitaAgendamento: true })
   if (!sessao) return json({ error: MSG_SESSAO }, 401)
   const professorId = sessao.id
 

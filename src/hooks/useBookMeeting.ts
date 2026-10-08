@@ -7,6 +7,9 @@ export type ReuniaoConfirmada = {
   coordenador_nome: string
   meet_link: string | null
   email_enviado: boolean
+  /** Sessão sem código (escopo 'agendamento'): o link do Meet não vem aqui,
+   *  só no e-mail do cadastro. */
+  link_por_email?: boolean
 }
 
 export type BookMeetingInput = { token: string; horarioId: string }

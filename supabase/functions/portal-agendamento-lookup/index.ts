@@ -53,6 +53,7 @@
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
 //   Body: { "token": "<sessão do portal-identidade>" }  → 401 sem sessão válida
+//   (escopo completo OU agendamento — este portal abre sem código desde 08/10)
 //   Retorna: {
 //     professor:   { id, nome },
 //     coordenador: { id, nome } | null,
@@ -125,7 +126,8 @@ serve(async (req) => {
   )
 
   // ── 1. Identificação: só pela sessão ─────────────────────────────────────────
-  const professor = await resolverSessao(admin, body.token)
+  // Aceita a sessão de agendamento (sem código) — ver 20260794.
+  const professor = await resolverSessao(admin, body.token, { aceitaAgendamento: true })
   if (!professor) return json({ error: MSG_SESSAO }, 401)
 
   // Nome limpo pra exibição: o professor vê o próprio nome sem o resíduo de

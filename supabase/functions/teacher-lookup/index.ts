@@ -103,7 +103,7 @@ serve(async (req) => {
   )
 
   // ── 1. Professor da sessão ───────────────────────────────────────────────────
-  const professor = await resolverSessao(admin, body.token)
+  const professor = await resolverSessao(admin, body.token, { aceitaAgendamento: true })
   if (!professor) return json({ error: MSG_SESSAO }, 401)
   if (professor.status !== 'ativo') return json({ professor: null, agendas: [] })
 
@@ -171,7 +171,7 @@ serve(async (req) => {
   const resultado = agendasAutorizadas
     .map(a => {
       const horariosExistentes = (a.horarios as HorarioRow[]).filter(h => h.ativo)
-      const materializadosPorRecorrencia = new Map<string, Set<string>>() // recorrencia_id -> set de data_hora já materializadas
+      const materializadosPorRecorrencia = new Map<string, Set<number>>() // recorrencia_id -> instantes (ms) já materializados
       // Link canônico por recorrência: fonte única da verdade do link da reunião.
       const linkPorRecorrencia = new Map<string, string | null>(
         (a.recorrencias as { id: string; meet_link: string | null }[]).map(r => [r.id, r.meet_link]),
@@ -241,5 +241,12 @@ serve(async (req) => {
     })
     .filter(a => a.horarios.length > 0)
 
-  return json({ professor: { id: professor.id, nome: nomeExibicao }, agendas: resultado })
+  // Sessão sem código (escopo 'agendamento'): o link do Meet não sai na tela —
+  // só no e-mail de confirmação, que vai para o e-mail do cadastro. Sem isso,
+  // saber o nome de um professor bastaria para entrar nas reuniões em grupo.
+  const agendasSaida = professor.escopo === 'agendamento'
+    ? resultado.map(a => ({ ...a, meet_link: null, horarios: a.horarios.map(h => ({ ...h, meet_link: null })) }))
+    : resultado
+
+  return json({ professor: { id: professor.id, nome: nomeExibicao }, agendas: agendasSaida })
 })

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Calendar, Check, Copy, Link2 } from 'lucide-react'
+import { Calendar, Check, Copy, Link2, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import type { ReuniaoConfirmada } from '@/hooks/useBookMeeting'
@@ -103,15 +103,29 @@ export function Confirmacao({ reuniao }: { reuniao: ReuniaoConfirmada }) {
 
       {reuniao.meet_link && <CopiarLink link={reuniao.meet_link} />}
 
-      <p className="text-[12px] text-ink-secondary">
-        Este link é só desta reunião (<span className="capitalize">{dataFmt}</span>). Cada data tem um link diferente — entre por este.
-      </p>
+      {reuniao.link_por_email ? (
+        // Entrou sem o código do e-mail: o link do Meet não aparece na tela,
+        // só no e-mail do cadastro (ver create-booking / 20260794).
+        <div className="flex items-start gap-2.5 rounded-xl border border-aviso-infoBd bg-aviso-infoBg px-4 py-3 text-left">
+          <Mail className="mt-0.5 h-4 w-4 flex-shrink-0 text-accentBlue" />
+          <p className="text-[12.5px] leading-relaxed text-ink-secondary">
+            O link da reunião foi para o <strong>e-mail do seu cadastro na King</strong>. Cada data tem
+            um link diferente — entre pelo link desse e-mail. Não achou? Olhe também a caixa de spam.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="text-[12px] text-ink-secondary">
+            Este link é só desta reunião (<span className="capitalize">{dataFmt}</span>). Cada data tem um link diferente — entre por este.
+          </p>
 
-      <p className="text-[12px] text-ink-muted">
-        {reuniao.email_enviado
-          ? 'Você também receberá um e-mail com esta confirmação.'
-          : 'Salve o link acima — não temos um e-mail cadastrado pra te enviar esta confirmação.'}
-      </p>
+          <p className="text-[12px] text-ink-muted">
+            {reuniao.email_enviado
+              ? 'Você também receberá um e-mail com esta confirmação.'
+              : 'Salve o link acima — não temos um e-mail cadastrado pra te enviar esta confirmação.'}
+          </p>
+        </>
+      )}
     </div>
   )
 }

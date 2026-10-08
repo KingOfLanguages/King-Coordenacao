@@ -31,6 +31,19 @@ export function useSolicitarCodigo() {
   })
 }
 
+/** Só o /agendar: e-mail ou nome completo abrem uma sessão de escopo
+ *  'agendamento' (2 h) sem código. Os outros portais recusam essa sessão. */
+export type IdentificarResult =
+  | { status: 'ok'; token: string; expiraEm: string; professor: ProfessorPortal }
+  | { status: 'nao_encontrado' | 'ambiguo' }
+
+export function useIdentificarAgendamento() {
+  return useMutation({
+    mutationFn: (input: SolicitarCodigoInput) =>
+      invocarFuncao<IdentificarResult>('portal-identidade', { acao: 'identificar', ...input }),
+  })
+}
+
 export function useVerificarCodigo() {
   return useMutation({
     mutationFn: (input: { desafio: string; codigo: string }) =>
