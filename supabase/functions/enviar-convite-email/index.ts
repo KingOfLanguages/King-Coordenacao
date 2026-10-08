@@ -147,7 +147,7 @@ serve(async (req) => {
   }
   if (!contato) return json({ error: 'Contato não encontrado.' }, 404)
 
-  const prof  = contato.professor as { nome: string | null; email: string | null; status: string | null } | null
+  const prof  = contato.professor as unknown as { nome: string | null; email: string | null; status: string | null } | null
   const email = prof?.email?.trim() ?? ''
   const nome  = prof?.nome ?? 'Professor(a)'
 

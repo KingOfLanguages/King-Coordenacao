@@ -172,7 +172,7 @@ serve(async (req) => {
   let skipped = 0
 
   for (const r of reunioes ?? []) {
-    const prof      = r.professores as { nome: string; email: string | null; status: string | null } | null
+    const prof      = r.professores as unknown as { nome: string; email: string | null; status: string | null } | null
     const destEmail = (r.professor_email as string | null) ?? prof?.email ?? null
     const destNome  = prof?.nome ?? 'Professor(a)'
 
@@ -187,7 +187,7 @@ serve(async (req) => {
     }
 
     const hora      = new Date(r.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
-    const coordNome = (r.coordenador as { nome: string } | null)?.nome ?? 'Coordenação'
+    const coordNome = (r.coordenador as unknown as { nome: string } | null)?.nome ?? 'Coordenação'
     const titulo    = (r.titulo as string | null) ?? `1:1 com ${coordNome}`
     const html      = buildHtml({ professorNome: destNome, titulo, hora, meetLink: r.meet_link as string | null, coordNome })
 
