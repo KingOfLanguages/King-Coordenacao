@@ -15,6 +15,7 @@ import { PRIORIDADE_META, normalizarPrioridade, duracaoCurta } from '@/lib/incid
 import { buildMensagemIncidente } from '@/lib/incidenteMensagem'
 import { idKing, rotuloAluno } from '@/lib/incidenteRelato'
 import { atributosChamadoTi } from '@/lib/chamadoTi'
+import { ChamadoBitrix } from '@/components/incidentes/ChamadoBitrix'
 import { useAgora } from '@/hooks/useAgora'
 
 const STATUS_DETALHE: Record<string, { label: string; cls: string }> = {
@@ -288,6 +289,9 @@ export function IncidenteDetalheDialog({ open, onOpenChange, incidente, podeEdit
               </div>
             </div>
           )}
+
+          {/* Chamado para o suporte ao aluno no Bitrix (prioridade Média ou acima). */}
+          <ChamadoBitrix incidente={incidente} podeAbrir={!!podeEditar} />
 
           <div className="flex flex-wrap justify-end gap-2 pt-1">
             {/* Ponto de encaixe do botão "Abrir chamado no TI" da extensão. */}
