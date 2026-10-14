@@ -36,6 +36,19 @@ export interface OpcoesBitrix {
   todos?: PessoaBitrix[]
 }
 
+/** Prioridades em que o incidente pode virar chamado no Bitrix. */
+export const PRIORIDADES_COM_CHAMADO = ['Média', 'Alta', 'Urgente'] as const
+
+/** Observadores do chamado: quem abre e a(s) líder(es) do time de quem recebe
+ *  são fixos; os extras vêm da escolha. Quem recebe nunca observa. */
+export function montarObservadores(opcoes: OpcoesBitrix, responsavelId: number | null, extras: number[]) {
+  const responsavel = opcoes.equipe.find(p => p.id === responsavelId) ?? null
+  const fixos = [...new Set([...(opcoes.eu ? [opcoes.eu.id] : []), ...(responsavel?.lideres ?? [])])]
+    .filter(id => id !== responsavel?.id)
+  const todos = [...new Set([...fixos, ...extras])].filter(id => id !== responsavel?.id)
+  return { responsavel, fixos, todos }
+}
+
 export function useChamadoDoIncidente(incidenteId: string | null | undefined) {
   return useQuery({
     queryKey: ['chamado-bitrix', incidenteId],

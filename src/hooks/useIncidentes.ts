@@ -338,8 +338,9 @@ export function useCriarIncidente() {
       }
 
       const nowIso = new Date().toISOString()
+      const id = crypto.randomUUID()
       const { error } = await supabase.from('nexus_incidents').insert({
-        id: crypto.randomUUID(),
+        id,
         teacher_name: teacherName,
         aluno_nome: input.aluno_nome?.trim() || null,
         aluno_id: input.aluno_id ?? null,
@@ -366,6 +367,8 @@ export function useCriarIncidente() {
         synced_at: nowIso,
       })
       if (error) throw error
+      // O chamado no Bitrix aberto junto com o incidente precisa do id.
+      return id
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['incidentes'] })

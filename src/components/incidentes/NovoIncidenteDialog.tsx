@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Search, X, GraduationCap, ImagePlus, Info, Flag, FileText, ArrowLeft, CalendarClock } from 'lucide-react'
+import { Search, X, GraduationCap, ImagePlus, Info, Flag, FileText, ArrowLeft, CalendarClock, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,11 @@ import {
   type Aba, type Natureza,
 } from '@/hooks/useIncidentes'
 import { useAuth } from '@/contexts/AuthContext'
-import { podeVerCategoriasCoordOnly } from '@/lib/permissions'
+import { canEditIncidente, podeVerCategoriasCoordOnly } from '@/lib/permissions'
+import {
+  useOpcoesBitrix, useAbrirChamadoBitrix, montarObservadores, PRIORIDADES_COM_CHAMADO,
+} from '@/hooks/useChamadoBitrix'
+import { EscolhaChamado, QuemSouEu, ResumoChamado, type EscolhaChamadoValor } from '@/components/incidentes/ChamadoBitrix'
 import { prazoSugeridoInput, prazoInputParaISO } from '@/lib/incidentePrazo'
 import {
   faltasDoRelato, relatoCompletoObrigatorio, datetimeLocalParaISO, agoraDatetimeLocal, idKing,
@@ -86,6 +90,9 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const [ocorridoEm, setOcorridoEm] = useState('')
   const [imagens, setImagens] = useState<File[]>([])
   const [enviandoImagens, setEnviandoImagens] = useState(false)
+  // Chamado no Bitrix junto com o incidente (Média ou acima; quem pode assumir incidente).
+  const [comChamado, setComChamado] = useState(false)
+  const [escolhaChamado, setEscolhaChamado] = useState<EscolhaChamadoValor>({ responsavelId: null, extras: [] })
 
   // Na aba Geral o incidente não tem professor, mesmo que um tenha ficado
   // selecionado antes da troca de aba — a sugestão de aluno segue essa regra.
@@ -101,6 +108,11 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
 
   // Informe é registro puro: sem prazo. A prioridade dele vira importância de leitura.
   const temPrazo = natureza === 'desafio'
+
+  const podeChamado = canEditIncidente(profile) && (PRIORIDADES_COM_CHAMADO as readonly string[]).includes(urgencia)
+  const vaiChamado = podeChamado && comChamado
+  const opcoesBitrix = useOpcoesBitrix(open && vaiChamado)
+  const abrirChamado = useAbrirChamadoBitrix()
 
   // URLs de preview locais — revogadas quando a lista muda ou o diálogo desmonta.
   const previews = useMemo(() => imagens.map(f => URL.createObjectURL(f)), [imagens])
@@ -158,6 +170,8 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
     setPassos('')
     setOcorridoEm('')
     setImagens([])
+    setComChamado(false)
+    setEscolhaChamado({ responsavelId: null, extras: [] })
   }, [open, professorFixo])
 
   /** Trocar o nome à mão invalida o ID que veio da lista — sem isso o incidente
@@ -223,10 +237,16 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
   const faltas = faltasDoRelato({ aba, descricao, passos, ocorridoEm })
   if (aba === 'professor' && !selecionado) faltas.push('escolher o professor')
   if (urgencia === 'Urgente' && !justificativa.trim()) faltas.push('dizer por que é urgente')
+  if (vaiChamado) {
+    if (opcoesBitrix.isLoading) faltas.push('esperar a equipe do Bitrix carregar')
+    else if (opcoesBitrix.error) faltas.push('desmarcar o chamado no Bitrix (o Bitrix não respondeu)')
+    else if (opcoesBitrix.data && !opcoesBitrix.data.eu) faltas.push('dizer quem você é no Bitrix')
+    else if (!escolhaChamado.responsavelId) faltas.push('escolher quem recebe o chamado')
+  }
   const podeConfirmar = faltas.length === 0
 
   async function handleConfirmar() {
-    if (!podeConfirmar || criar.isPending || enviandoImagens) return
+    if (!podeConfirmar || criar.isPending || enviandoImagens || abrirChamado.isPending) return
     if (alunoBlurTimeout.current) clearTimeout(alunoBlurTimeout.current)
     setAlunoBusca(false)
     try {
@@ -235,7 +255,7 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         setEnviandoImagens(true)
         imageUrls = await Promise.all(imagens.map(uploadImagemIncidente))
       }
-      await criar.mutateAsync({
+      const incidenteId = await criar.mutateAsync({
         problem_type: categoria,
         urgency: urgencia,
         urgencia_justificativa: urgencia === 'Urgente' ? justificativa : null,
@@ -252,7 +272,25 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
         ti_status: aba === 'plataforma' ? 'chamado_aberto' : null,
         prazo_resolucao: temPrazo ? prazoInputParaISO(prazo) : null,
       })
-      toast.success(natureza === 'informe' ? 'Informe registrado.' : 'Chamado aberto.')
+      if (vaiChamado && opcoesBitrix.data && escolhaChamado.responsavelId) {
+        const { todos } = montarObservadores(opcoesBitrix.data, escolhaChamado.responsavelId, escolhaChamado.extras)
+        try {
+          const r = await abrirChamado.mutateAsync({
+            incidenteId, responsavelId: escolhaChamado.responsavelId, observadores: todos,
+          })
+          toast.success(`${natureza === 'informe' ? 'Informe registrado' : 'Chamado aberto'} e enviado ao Bitrix (tarefa #${r.taskId}).`)
+          if (r.falhasAnexo > 0) toast.warning(`${r.falhasAnexo} imagem(ns) não anexou no Bitrix: os links estão na descrição da tarefa.`)
+        } catch (e) {
+          // O incidente já existe: não perde nada, só o chamado fica para depois.
+          toast.error(
+            `O incidente foi salvo, mas o chamado no Bitrix não abriu: ${e instanceof Error ? e.message : 'erro inesperado.'} `
+            + 'Dá para tentar de novo no painel do incidente.',
+            { duration: 10000 },
+          )
+        }
+      } else {
+        toast.success(natureza === 'informe' ? 'Informe registrado.' : 'Chamado aberto.')
+      }
       onOpenChange(false)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao registrar incidente.')
@@ -625,6 +663,48 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             />
           </div>
 
+          {podeChamado && (
+            <div className="space-y-3 rounded-lg border border-line px-3 py-3">
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={comChamado}
+                  onChange={e => setComChamado(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--accent-blue)]"
+                />
+                <span className="space-y-0.5">
+                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-ink">
+                    <Send className="h-3.5 w-3.5 text-ink-muted" />Gerar chamado no Bitrix
+                  </span>
+                  <span className="block text-[11.5px] leading-snug text-ink-muted">
+                    Para quando precisa de ação do suporte ao aluno. A tarefa sai junto ao salvar.
+                  </span>
+                </span>
+              </label>
+              {comChamado && (
+                opcoesBitrix.isLoading ? (
+                  <p className="text-[12px] text-ink-muted">Buscando a equipe no Bitrix…</p>
+                ) : opcoesBitrix.error ? (
+                  <p className="text-[12px] text-urg-highFg">
+                    {opcoesBitrix.error instanceof Error ? opcoesBitrix.error.message : 'Não foi possível falar com o Bitrix.'}
+                  </p>
+                ) : opcoesBitrix.data && !opcoesBitrix.data.eu ? (
+                  <QuemSouEu opcoes={opcoesBitrix.data} />
+                ) : opcoesBitrix.data ? (
+                  <>
+                    <EscolhaChamado opcoes={opcoesBitrix.data} valor={escolhaChamado} onChange={setEscolhaChamado} />
+                    <ResumoChamado
+                      opcoes={opcoesBitrix.data}
+                      nivel={urgencia}
+                      prazo={temPrazo ? prazoInputParaISO(prazo) : null}
+                      imagens={imagens.length}
+                    />
+                  </>
+                ) : null
+              )}
+            </div>
+          )}
+
           {faltas.length > 0 && (
             <p className="text-[11.5px] text-ink-muted">
               Falta preencher: <span className="text-ink-secondary">{faltas.join(', ')}</span>.
@@ -637,10 +717,11 @@ export function NovoIncidenteDialog({ open, onOpenChange, professorFixo }: Props
             </Button>
             <Button
               onClick={handleConfirmar}
-              disabled={!podeConfirmar || criar.isPending || enviandoImagens}
+              disabled={!podeConfirmar || criar.isPending || enviandoImagens || abrirChamado.isPending}
               className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white"
             >
-              {enviandoImagens ? 'Enviando imagens…' : criar.isPending ? 'Salvando…' : meta.verbo}
+              {enviandoImagens ? 'Enviando imagens…' : criar.isPending ? 'Salvando…'
+                : abrirChamado.isPending ? 'Abrindo no Bitrix…' : meta.verbo}
             </Button>
           </div>
         </div>
