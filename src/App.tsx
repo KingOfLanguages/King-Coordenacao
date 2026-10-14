@@ -20,7 +20,6 @@ import { MinhaAreaPage } from '@/pages/minhaArea/MinhaAreaPage'
 import { Redirecionar } from '@/components/Redirecionar'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { ReunioesPage } from '@/pages/reunioes/ReunioesPage'
-import { SolicitacoesPage } from '@/pages/solicitacoes/SolicitacoesPage'
 import { HojePage } from '@/pages/hoje/HojePage'
 import { ProjetoDetalhePage } from '@/pages/projetos/ProjetoDetalhePage'
 import { IncidentesPage } from '@/pages/incidentes/IncidentesPage'
@@ -28,8 +27,7 @@ import { ConfiabilidadePage } from '@/pages/comercial/ConfiabilidadePage'
 import { UsuariosPage } from '@/pages/admin/UsuariosPage'
 import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
-import { Home as PausaPublicaPage } from '@/pages/pausas/Home'
-import { Home as TransferenciaPublicaPage } from '@/pages/transferencias/Home'
+import { PortalDesativado } from '@/pages/PortalDesativado'
 import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
 import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
 
@@ -107,8 +105,10 @@ export default function App() {
             {/* Retorno do OAuth (Google) — precisa da sessão viva pra decidir o destino. */}
             <Route path="/auth/callback"  element={<AuthCallback />} />
             <Route path="/agendar"        element={<AgendamentoPage />} />
-            <Route path="/pausa"          element={<PausaPublicaPage />} />
-            <Route path="/transferencia"  element={<TransferenciaPublicaPage />} />
+            {/* Formulários aposentados em 2026-10-14 (a pausa e a transferência
+                passaram para a plataforma da King): o link salvo mostra um aviso. */}
+            <Route path="/pausa"          element={<PortalDesativado portal="pausa" />} />
+            <Route path="/transferencia"  element={<PortalDesativado portal="transferencia" />} />
             <Route path="/welcome-path"   element={<WelcomePathPage />} />
 
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -181,17 +181,13 @@ export default function App() {
                   <OnboardingPage />
                 </ProtectedRoute>
               } />
-              {/* Solicitações dos professores: Pausas | Transferências (mesmo fluxo
-                  formulário público → fila → assumir → concluir). */}
-              <Route path="/solicitacoes" element={
-                <ProtectedRoute page="retorno-pausa">
-                  <SolicitacoesPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/pausas" element={<Redirecionar para="/solicitacoes" params={{ aba: 'pausas' }} />} />
-              <Route path="/retorno-pausa" element={<Redirecionar para="/solicitacoes" params={{ aba: 'pausas' }} />} />
-              {/* O aviso de transferência atrasada aponta para /transferencias?pedido=<id>. */}
-              <Route path="/transferencias" element={<Redirecionar para="/solicitacoes" params={{ aba: 'transferencias' }} />} />
+              {/* Solicitações (Pausas | Transferências) saiu em 2026-10-14 junto com
+                  os formulários públicos. Avisos antigos do sino ainda apontam
+                  para estas rotas: caem na tela Hoje. */}
+              <Route path="/solicitacoes" element={<Navigate to="/hoje" replace />} />
+              <Route path="/pausas" element={<Navigate to="/hoje" replace />} />
+              <Route path="/retorno-pausa" element={<Navigate to="/hoje" replace />} />
+              <Route path="/transferencias" element={<Navigate to="/hoje" replace />} />
               <Route path="/suporte/reunioes" element={<Redirecionar para="/reunioes" params={{ aba: 'buscar' }} />} />
               {/* Minha Área: Para fazer | Projetos (2026-09). Juntou Tarefas
                   (/convocacoes, antes /tarefas) e Projetos — os links antigos redirecionam. */}

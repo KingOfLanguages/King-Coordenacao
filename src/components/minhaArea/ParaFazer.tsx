@@ -362,9 +362,9 @@ function LinhaItem({ item, podeExcluir, podeEncerrarPausa, onAbrir, onResolver }
               {encerrar.isPending ? 'Encerrando…' : confirmandoPausa ? 'Confirmar' : 'Encerrar pausa'}
             </button>
           )}
-          {item.tipo === 'pausa' && !podeEncerrarPausa && (
-            <Link to="/solicitacoes" className="btn-press whitespace-nowrap rounded-md border border-line px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary hover:text-ink">
-              Ver pausa
+          {item.tipo === 'pausa' && !podeEncerrarPausa && item.pausa && (
+            <Link to={`/professores/${item.pausa.professor_id}`} className="btn-press whitespace-nowrap rounded-md border border-line px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary hover:text-ink">
+              Ver professor
             </Link>
           )}
           {item.tipo === 'incidente' && (

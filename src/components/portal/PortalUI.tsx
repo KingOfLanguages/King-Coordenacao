@@ -1,16 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Peças visuais compartilhadas pelos portais PÚBLICOS do professor (/pausa,
-// /welcome-path). São telas sem login, fora do AppLayout, e por isso não podem
+// Peças visuais compartilhadas pelos portais PÚBLICOS do professor
+// (/welcome-path e o aviso de /pausa e /transferencia, desativados em
+// 2026-10-14). São telas sem login, fora do AppLayout, e por isso não podem
 // contar com nada do chrome do app — o visual precisa se sustentar sozinho.
 //
-// Nasceram inline em pages/pausas/Home.tsx; foram extraídas quando o Welcome
-// Path passou a precisar exatamente do mesmo cabeçalho, cartão e botão.
+// Nasceram inline no antigo formulário de pausa; foram extraídas quando o
+// Welcome Path passou a precisar exatamente do mesmo cabeçalho, cartão e botão.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { LucideIcon } from 'lucide-react'
 import { MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { iniciais } from '@/lib/formato'
 import { COORD_TELEFONE, COORD_WHATSAPP_NUM } from './contato'
 
 export function CabecalhoPortal({
@@ -113,14 +113,5 @@ export function BotaoWhatsApp({ children, mensagem }: { children?: React.ReactNo
       <MessageCircle className="h-4 w-4" />
       {children ?? `Falar com a coordenação (${COORD_TELEFONE})`}
     </a>
-  )
-}
-
-/** Avatar redondo com as iniciais — abre as telas de "encontramos você". */
-export function AvatarPortal({ nome }: { nome: string }) {
-  return (
-    <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accentBlue-soft text-[19px] font-semibold text-accentBlue shadow-inner-top">
-      {iniciais(nome)}
-    </span>
   )
 }

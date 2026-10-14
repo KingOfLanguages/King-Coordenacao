@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Token de sessão dos portais do professor, guardado no dispositivo.
 //
-// Uma sessão só serve para os 4 portais (/welcome-path, /pausa, /transferencia,
-// /agendar): ela nasce em `portal-identidade`, depois que o professor digita o
+// Uma sessão só serve para os portais do professor (/welcome-path, /agendar;
+// /pausa e /transferencia saíram em 2026-10-14): ela nasce em `portal-identidade`, depois que o professor digita o
 // código enviado ao e-mail oficial. O token é opaco (32 bytes aleatórios) e o
 // banco guarda só o SHA-256 dele — ver a migration 20260791.
 //

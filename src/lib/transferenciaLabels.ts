@@ -1,14 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Rótulos da solicitação de transferência de aluno — compartilhados entre o
-// portal público (o professor escolhe), a fila do Suporte ao Aluno (agrupa e
-// filtra) e a seção do perfil do professor.
+// Rótulos dos pedidos de transferência de aluno. O formulário público e a fila
+// saíram em 2026-10-14 (a transferência passou para a plataforma da King); o
+// que sobra é a leitura do histórico na ficha do professor.
 //
-// As CHAVES são contrato com o banco: `portal-transferencia` valida contra a
-// mesma lista e a coluna `motivo` guarda a chave crua. Renomear uma chave
-// invalida os pedidos já gravados — acrescente uma nova em vez disso.
+// As CHAVES são as gravadas na coluna `motivo`/`desfecho` dos pedidos antigos.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type MotivoTransferencia =
+type MotivoTransferencia =
   | 'incompatibilidade_horario'
   | 'nao_adaptacao_metodo'
   | 'perfil_nivel'
@@ -19,9 +17,7 @@ export type MotivoTransferencia =
   | 'motivo_pessoal'
   | 'outro'
 
-/** Ordem = ordem de exibição no formulário. O texto de apoio é o que faz o
- *  professor escolher a categoria certa em vez de cair sempre em "Outro". */
-export const MOTIVOS_TRANSFERENCIA: {
+const MOTIVOS_TRANSFERENCIA: {
   value: MotivoTransferencia
   label: string
   ajuda: string
@@ -45,55 +41,7 @@ export function motivoTransferenciaLabel(m: string | null | undefined): string {
   return MOTIVO_LABEL[m] ?? m
 }
 
-/** Motivos que apontam para o VÍNCULO (professor↔aluno) e não para logística.
- *  A fila destaca esses: são os que valem uma conversa antes de transferir. */
-const MOTIVOS_RELACIONAIS = new Set<string>([
-  'nao_adaptacao_metodo', 'comportamento_aluno', 'pedido_do_aluno',
-])
-
-export function motivoEhRelacional(m: string | null | undefined): boolean {
-  return !!m && MOTIVOS_RELACIONAIS.has(m)
-}
-
 // ─── Prazo ───────────────────────────────────────────────────────────────────
-// A urgência não é mais declarada pelo professor: ela sai da data da última aula.
-// O compromisso da operação é transferir em até 7 dias úteis a partir do envio,
-// então avisar com menos que isso é pedir fora do acordado.
-
-/** Dias úteis de antecedência que a operação se compromete a cumprir. */
-export const PRAZO_DIAS_UTEIS = 7
-
-/** Antecedência mínima aceita no formulário (dias de calendário). */
-export const ANTECEDENCIA_MIN_DIAS = 1
-
-/** Teto de agendamento, para erro de digitação não virar pedido para 2031. */
-export const FUTURO_MAX_DIAS = 180
-
-/** Horário é texto curto ("terça e quinta, 19h"). O mínimo é 2 porque "9h" é
- *  resposta válida; o máximo só existe para o campo não virar um segundo relato.
- *  Espelha HORARIO_MIN/MAX_CHARS em portal-transferencia. */
-export const HORARIO_MIN_CHARS = 2
-export const HORARIO_MAX_CHARS = 200
-
-export type SituacaoPrazo = 'vencido' | 'fora_do_prazo' | 'no_prazo'
-
-export const PRAZO_META: Record<SituacaoPrazo, { label: string; cls: string }> = {
-  vencido:       { label: 'Última aula já passou', cls: 'bg-urg-critBg text-urg-critFg' },
-  fora_do_prazo: { label: 'Fora do prazo',         cls: 'bg-urg-highBg text-urg-highFg' },
-  no_prazo:      { label: 'No prazo',              cls: 'bg-urg-lowBg  text-urg-lowFg'  },
-}
-
-/**
- * Situação do pedido em relação ao prazo, a partir dos dias úteis restantes até
- * a última aula. `restantes` vindo de `diasUteisEntre(hoje, dataUltimaAula)`.
- *
- * 0 = a data já passou (a função de dias úteis devolve 0 para intervalo negativo)
- * — nesse caso o aluno já parou e ninguém processou, que é o pior cenário.
- */
-export function situacaoPrazo(restantes: number, dataJaPassou: boolean): SituacaoPrazo {
-  if (dataJaPassou) return 'vencido'
-  return restantes >= PRAZO_DIAS_UTEIS ? 'no_prazo' : 'fora_do_prazo'
-}
 
 /** "7 dias úteis" / "1 dia útil" — concordância no singular. */
 export function diasUteisLabel(n: number): string {
@@ -118,7 +66,7 @@ export const STATUS_TRANSFERENCIA_META: Record<StatusTransferencia, { label: str
 
 export type DesfechoTransferencia = 'transferido' | 'mantido' | 'saiu_da_escola' | 'outro'
 
-export const DESFECHOS_TRANSFERENCIA: {
+const DESFECHOS_TRANSFERENCIA: {
   value: DesfechoTransferencia
   label: string
   ajuda: string
@@ -136,20 +84,6 @@ const DESFECHO_META: Record<string, { label: string; cls: string }> =
 export function desfechoMeta(d: string | null | undefined): { label: string; cls: string } | null {
   if (!d) return null
   return DESFECHO_META[d] ?? { label: d, cls: 'bg-surface-subtle text-ink-secondary' }
-}
-
-// ─── Status do aluno no roster ───────────────────────────────────────────────
-
-export const STATUS_ALUNO_LABEL: Record<string, string> = {
-  ativo:        'Ativo',
-  pausado:      'Pausado',
-  saiu:         'Saiu',
-  desconhecido: 'Desconhecido',
-}
-
-export function statusAlunoLabel(s: string | null | undefined): string {
-  if (!s) return '—'
-  return STATUS_ALUNO_LABEL[s] ?? s
 }
 
 /** "há 3 meses" / "há 12 dias" — tempo do aluno com o professor, que é o número

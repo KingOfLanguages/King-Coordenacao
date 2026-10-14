@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeftRight, CalendarDays, Check, Copy, ExternalLink, GraduationCap, Link2, PauseCircle, Plus, Trash2,
+  CalendarDays, Check, Copy, ExternalLink, GraduationCap, Link2, Plus, Trash2,
   type LucideIcon,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -9,9 +9,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
-import {
-  linkAgendamentoPublico, linkPausaPublico, linkTransferenciaPublico, linkWelcomePathPublico,
-} from '@/lib/portal'
+import { linkAgendamentoPublico, linkWelcomePathPublico } from '@/lib/portal'
 import { useLinksUteis, useAdicionarLink, useRemoverLink, normalizarUrl } from '@/hooks/useLinksUteis'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,8 +21,6 @@ import { useLinksUteis, useAdicionarLink, useRemoverLink, normalizarUrl } from '
 
 const PORTAIS: { titulo: string; sub: string; url: string; icone: LucideIcon }[] = [
   { titulo: 'Agendar reunião',         sub: 'O professor marca a reunião',       url: linkAgendamentoPublico(),   icone: CalendarDays },
-  { titulo: 'Pedir pausa',             sub: 'O professor oficializa a pausa',    url: linkPausaPublico(),         icone: PauseCircle },
-  { titulo: 'Transferência de aluno',  sub: 'O professor pede a transferência',  url: linkTransferenciaPublico(), icone: ArrowLeftRight },
   { titulo: 'Welcome Path',            sub: 'Trilha de onboarding do professor', url: linkWelcomePathPublico(),   icone: GraduationCap },
 ]
 

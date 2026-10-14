@@ -11,8 +11,8 @@ import { EtapaView } from './EtapaView'
 // ─────────────────────────────────────────────────────────────────────────────
 // Portal público do Welcome Path (/welcome-path).
 //
-// A entrada é a mesma de /pausa, /transferencia e /agendar: o professor recebe
-// um código no e-mail oficial e a sessão vale para os quatro portais. Aqui a
+// A entrada é a mesma de /agendar: o professor recebe um código no e-mail
+// oficial e a sessão vale para os portais do professor. Aqui a
 // jornada dura dias, então a sessão fica guardada no dispositivo (validade
 // deslizante de 14 dias) e as visitas seguintes caem direto na trilha.
 // ─────────────────────────────────────────────────────────────────────────────

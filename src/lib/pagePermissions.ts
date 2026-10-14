@@ -88,13 +88,9 @@ export const PAGES: PageDef[] = [
   { key: 'acompanhamento',  path: '/acompanhamento', label: 'Acompanhamento',       section: 'Acompanhamento', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'], abas: ['pendencias', 'mes-analise', 'emails'] },
   { key: 'pendencias',      path: '/acompanhamento?aba=pendencias', label: 'Acompanhamento › Pendências do King', section: 'Acompanhamento', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
   { key: 'mes-analise',     path: '/acompanhamento?aba=mes-analise', label: 'Acompanhamento › Mês de Análise', section: 'Acompanhamento', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  // A chave continua 'retorno-pausa' de propósito: é ela que indexa os overrides
-  // de permissão já salvos no banco — renomear apagaria as configurações atuais.
-  // Uma tela, duas abas (2026-09): "Solicitações" dos professores. A chave
-  // 'retorno-pausa' é a aba Pausas e o item do menu; 'transferencias' libera a
-  // própria aba.
-  { key: 'retorno-pausa',   path: '/solicitacoes',   label: 'Solicitações',         section: 'Solicitações', nav: true, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'], abas: ['transferencias'] },
-  { key: 'transferencias',  path: '/solicitacoes?aba=transferencias', label: 'Solicitações › Transferências', section: 'Solicitações', nav: false, defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  // Solicitações (chaves 'retorno-pausa' e 'transferencias') saiu em 2026-10-14:
+  // a pausa e a transferência de aluno passaram para a plataforma da King. Os
+  // overrides antigos dessas chaves ficam no banco sem efeito.
 
   // ── Incidentes ──
   { key: 'incidentes',      path: '/incidentes',     label: 'Incidentes',           section: 'Incidentes', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },

@@ -31,7 +31,6 @@ const NAV: NavNode[] = [
   { kind: 'link', pageKey: 'reunioes-dia' },     // Agenda | Buscar | Configurar agendas
   { kind: 'link', pageKey: 'acompanhamento' },   // Índice de atenção | Pendências | Mês de Análise
   { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'confiabilidade'] },
-  { kind: 'link', pageKey: 'retorno-pausa' },    // Solicitações: Pausas | Transferências
   { kind: 'link', pageKey: 'incidentes' },       // Lista | Por aluno | Calendário
   { kind: 'link', pageKey: 'dashboard' },        // Coordenação | Geral | Turnover & Retenção
 ]

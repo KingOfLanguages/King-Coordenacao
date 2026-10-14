@@ -1,29 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { Pausa, PausaStatus } from '@/types'
 
-// ─── Modelo ───────────────────────────────────────────────────────────────────
-
-export type PausaComProfessor = Pausa & {
-  professor?: {
-    id: string
-    nome: string
-    status: string
-    telefone: string | null
-    grupo?: { id: string; nome: string } | null
-    coordenador?: { id: string; nome: string } | null
-  } | null
-  assumido_por_perfil?: { id: string; nome: string } | null
-  nota_perfil?: { id: string; nome: string } | null
-}
-
-/** Estágio da solicitação na fila, derivado das datas — é o que dá a ordem e o
- *  destaque visual da tela. `atrasada` é o caso que não pode acontecer: a data
- *  de início chegou e ninguém processou a retirada dos alunos. */
-export type FaixaPausa = 'atrasada' | 'hoje' | 'proxima' | 'futura'
-
-/** Quantos dias à frente ainda contam como "próximos dias" (faixa de atenção). */
-export const DIAS_PROXIMA = 7
+// ─────────────────────────────────────────────────────────────────────────────
+// Pausas (20260738). O formulário público e a fila saíram em 2026-10-14 — a
+// pausa passou para a plataforma da King. Sobra o fim das pausas que já estavam
+// em andamento: o cron king-cobrar-fim-pausa cria a tarefa "Encerrar pausa" na
+// data de retorno, e a ficha e a Minha Área encerram por aqui.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** Dias inteiros de hoje até uma data ISO (YYYY-MM-DD). Negativo = passado.
  *  Compara só a parte de data, sem hora — evita o resultado mudar conforme a
@@ -36,124 +19,8 @@ export function diasAte(iso: string): number {
   return Math.round((alvo - hoje) / 86_400_000)
 }
 
-export function faixaDaPausa(p: Pick<Pausa, 'data_inicio'>): FaixaPausa {
-  const dias = diasAte(p.data_inicio)
-  if (dias < 0) return 'atrasada'
-  if (dias === 0) return 'hoje'
-  if (dias <= DIAS_PROXIMA) return 'proxima'
-  return 'futura'
-}
-
-export const FAIXA_META: Record<FaixaPausa, { label: string; descricao: string }> = {
-  atrasada: { label: 'Atrasadas',      descricao: 'A data de início já passou e a pausa não foi processada.' },
-  hoje:     { label: 'Começam hoje',   descricao: 'Último dia de aula é hoje.' },
-  proxima:  { label: 'Próximos dias',  descricao: `Começam nos próximos ${DIAS_PROXIMA} dias.` },
-  futura:   { label: 'Mais adiante',   descricao: 'Ainda há tempo até o início.' },
-}
-
-export const STATUS_PAUSA_META: Record<PausaStatus, { label: string; cls: string }> = {
-  pendente:       { label: 'Pendente',      cls: 'bg-urg-medBg text-urg-medFg' },
-  em_atendimento: { label: 'Em atendimento', cls: 'bg-accentBlue-soft text-accentBlue' },
-  concluida:      { label: 'Concluída',     cls: 'bg-urg-lowBg text-urg-lowFg' },
-  recusada:       { label: 'Recusada',      cls: 'bg-surface-subtle text-ink-muted' },
-}
-
-const SELECT_PAUSA = `
-  *,
-  professor:professores!professor_id (
-    id, nome, status, telefone,
-    grupo:grupos!grupo_id (id, nome),
-    coordenador:profiles!coordenador_id (id, nome)
-  ),
-  assumido_por_perfil:profiles!assumido_por (id, nome),
-  nota_perfil:profiles!nota_por (id, nome)
-`
-
-// ─── Consultas ────────────────────────────────────────────────────────────────
-
-/** Fila de trabalho: pendentes e em atendimento, mais urgentes primeiro
- *  (proximidade da data de início). */
-export function usePausasFila() {
-  return useQuery({
-    queryKey: ['pausas', 'fila'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pausas')
-        .select(SELECT_PAUSA)
-        .in('status', ['pendente', 'em_atendimento'])
-        .order('data_inicio', { ascending: true })
-      if (error) throw error
-      return (data ?? []) as unknown as PausaComProfessor[]
-    },
-  })
-}
-
-/** Pausas já ativas (o professor está pausado) e ainda não encerradas. É aqui
- *  que aparece quem já passou da data de fim e está esperando o contato. */
-export function usePausasVigentes() {
-  return useQuery({
-    queryKey: ['pausas', 'vigentes'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pausas')
-        .select(SELECT_PAUSA)
-        .not('ativada_em', 'is', null)
-        .is('encerrada_em', null)
-        .order('data_fim', { ascending: true })
-      if (error) throw error
-      return (data ?? []) as unknown as PausaComProfessor[]
-    },
-  })
-}
-
-/** Histórico: concluídas/recusadas já finalizadas, para consulta. */
-export function usePausasFinalizadas() {
-  return useQuery({
-    queryKey: ['pausas', 'finalizadas'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pausas')
-        .select(SELECT_PAUSA)
-        .or('status.eq.recusada,and(status.eq.concluida,encerrada_em.not.is.null)')
-        .order('created_at', { ascending: false })
-        .limit(100)
-      if (error) throw error
-      return (data ?? []) as unknown as PausaComProfessor[]
-    },
-  })
-}
-
-/** Alunos vinculados (roster KMS) de vários professores numa query só —
- *  usado pra destacar quem está na agenda de cada professor na fila de pausas
- *  sem disparar uma query por card. Devolve um Map professor_id → nomes. */
-export function useAlunosDePausas(professorIds: string[]) {
-  const ids = [...new Set(professorIds)].sort()
-  return useQuery({
-    queryKey: ['pausas', 'alunos', ids.join(',')],
-    enabled: ids.length > 0,
-    staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<Map<string, string[]>> => {
-      const { data, error } = await supabase
-        .from('professor_alunos_kms')
-        .select('professor_id, primeiro_nome')
-        .in('professor_id', ids)
-        .order('primeiro_nome')
-      if (error) throw error
-      const mapa = new Map<string, string[]>()
-      for (const row of (data ?? []) as { professor_id: string; primeiro_nome: string | null }[]) {
-        const arr = mapa.get(row.professor_id) ?? []
-        if (row.primeiro_nome) arr.push(row.primeiro_nome)
-        mapa.set(row.professor_id, arr)
-      }
-      return mapa
-    },
-  })
-}
-
-// ─── Ações ────────────────────────────────────────────────────────────────────
 // Toda escrita passa por função SECURITY DEFINER: `pausas` não tem policy de
-// INSERT/UPDATE. É assim que o Suporte ao Aluno age sem ganhar UPDATE genérico
-// em `professores`. Ver 20260738_pausas.sql.
+// INSERT/UPDATE. Ver 20260738_pausas.sql.
 
 function useAcaoPausa<TInput>(rpc: string, args: (input: TInput) => Record<string, unknown>) {
   const qc = useQueryClient()
@@ -169,47 +36,6 @@ function useAcaoPausa<TInput>(rpc: string, args: (input: TInput) => Record<strin
       qc.invalidateQueries({ queryKey: ['tarefas'] })
     },
   })
-}
-
-/** Assume a solicitação — impede que duas pessoas processem a mesma pausa. */
-export function useAssumirPausa() {
-  return useAcaoPausa<string>('assumir_pausa', id => ({ p_id: id }))
-}
-
-/** Devolve a solicitação para a fila. */
-export function useLargarPausa() {
-  return useAcaoPausa<string>('largar_pausa', id => ({ p_id: id }))
-}
-
-/** Conclui: os alunos já foram retirados. Ativa a pausa se a data de início já
- *  chegou; senão o cron ativa no dia certo. */
-export function useConcluirPausa() {
-  return useAcaoPausa<string>('concluir_pausa', id => ({ p_id: id }))
-}
-
-/** Recusa a solicitação — sai da fila sem pausar o professor. */
-export function useRecusarPausa() {
-  return useAcaoPausa<{ id: string; motivo?: string }>(
-    'recusar_pausa',
-    ({ id, motivo }) => ({ p_id: id, p_motivo: motivo ?? null }),
-  )
-}
-
-/** Muda a data de retorno (o dia do contato da coordenação). Vale para a fila e
- *  para pausas já vigentes — o professor avisou que volta em outra data. */
-export function useAtualizarRetornoPausa() {
-  return useAcaoPausa<{ id: string; dataFim: string }>(
-    'atualizar_retorno_pausa',
-    ({ id, dataFim }) => ({ p_id: id, p_data_fim: dataFim }),
-  )
-}
-
-/** Grava a observação de acompanhamento da pausa (texto vazio apaga). */
-export function useAtualizarNotaPausa() {
-  return useAcaoPausa<{ id: string; nota: string }>(
-    'atualizar_nota_pausa',
-    ({ id, nota }) => ({ p_id: id, p_nota: nota }),
-  )
 }
 
 /** Encerra a pausa vigente do professor — o contato da coordenação aconteceu.

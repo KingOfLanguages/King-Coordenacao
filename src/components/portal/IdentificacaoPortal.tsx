@@ -15,8 +15,8 @@ import {
 import { ErroFuncao } from '@/lib/invocarFuncao'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Entrada dos portais do professor (/welcome-path, /pausa, /transferencia,
-// /agendar). E-mail (ou nome completo; homônimo pede mês/ano de início) →
+// Entrada dos portais do professor (/welcome-path, /agendar; /pausa e
+// /transferencia saíram em 2026-10-14). E-mail (ou nome completo; homônimo pede mês/ano de início) →
 // CÓDIGO no e-mail oficial do cadastro.
 //
 // A tela nunca diz se o cadastro existe: o servidor responde "enviado" sempre

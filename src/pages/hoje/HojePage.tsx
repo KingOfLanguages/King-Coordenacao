@@ -8,8 +8,6 @@ import { useCanView } from '@/hooks/usePagePermissions'
 import { useAgora } from '@/hooks/useAgora'
 import { useIncidentes, natureza as naturezaDe } from '@/hooks/useIncidentes'
 import { usePendenciasFila } from '@/hooks/usePendencias'
-import { usePausasFila } from '@/hooks/usePausas'
-import { useTransferenciasFila, prazoAtendimento } from '@/hooks/useTransferencias'
 import { useParaFazer } from '@/hooks/useParaFazer'
 import { useReunioesPeriodo, useReunioesPendentes, isReuniaoGrupo } from '@/hooks/useReunioesDia'
 import { compararPorPrioridade, estaAtrasado, estadoPrazo, normalizarPrioridade } from '@/lib/incidentePrioridade'
@@ -18,10 +16,10 @@ import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hoje — a tela de entrada. Junta, num lugar só, o que pede ação no dia:
-// incidentes urgentes/atrasados, as reuniões, a régua de pendências do King, os
-// pedidos de pausa e transferência e o resumo da Minha Área (tarefas e
-// Mensagens do dia). Antes,
-// ver isso tudo exigia abrir quatro ou cinco telas toda manhã.
+// incidentes urgentes/atrasados, as reuniões, a régua de pendências do King e o
+// resumo da Minha Área (tarefas e Mensagens do dia). Antes, ver isso tudo
+// exigia abrir quatro ou cinco telas toda manhã. (O cartão de Solicitações —
+// pausas e transferências — saiu em 2026-10-14, junto com a tela.)
 //
 // Não é um painel de números: cada card mostra os poucos itens que precisam de
 // alguém agora e leva direto ao lugar de agir. Cada card só aparece (e só
@@ -222,50 +220,6 @@ export function CardPendencias() {
   )
 }
 
-// ── Solicitações ────────────────────────────────────────────────────────────
-
-export function CardSolicitacoes({ vePausas, veTransf }: { vePausas: boolean; veTransf: boolean }) {
-  const { data: pausas = [], isLoading: l1 } = usePausasFila()
-  const { data: transf = [], isLoading: l2 } = useTransferenciasFila()
-  const pausasVis = vePausas ? pausas : []
-  const transfVis = veTransf ? transf : []
-  const transfItens = transfVis
-    .map(t => ({ t, prazo: prazoAtendimento(t) }))
-    .sort((a, b) => (a.prazo.faixa === 'atrasada' ? 0 : a.prazo.faixa === 'vence_hoje' ? 1 : 2)
-      - (b.prazo.faixa === 'atrasada' ? 0 : b.prazo.faixa === 'vence_hoje' ? 1 : 2))
-  const atrasadas = transfItens.filter(x => x.prazo.faixa === 'atrasada').length
-  const pausasNovas = pausasVis.filter(p => p.status === 'pendente')
-
-  return (
-    <Cartao
-      titulo="Solicitações" icone={Inbox} carregando={l1 || l2}
-      numero={pausasVis.length + transfVis.length}
-      legenda={[
-        vePausas && `${pausasVis.length} pausa${pausasVis.length === 1 ? '' : 's'}`,
-        veTransf && `${transfVis.length} transferência${transfVis.length === 1 ? '' : 's'}${atrasadas ? ` (${atrasadas} atrasada${atrasadas > 1 ? 's' : ''})` : ''}`,
-      ].filter(Boolean).join(' · ')}
-      alerta={atrasadas > 0}
-      vazio="Nenhum pedido esperando."
-      link="/solicitacoes" rotuloLink="Abrir solicitações"
-      itens={[
-        ...transfItens.map(({ t, prazo }) => ({
-          chave: `t-${t.id}`,
-          texto: `Transferência · ${t.aluno_nome}`,
-          detalhe: prazo.faixa === 'atrasada' ? 'atrasada' : prazo.faixa === 'vence_hoje' ? 'vence hoje' : undefined,
-          alerta: prazo.faixa !== 'no_prazo',
-          to: `/solicitacoes?aba=transferencias&pedido=${t.id}`,
-        })),
-        ...pausasNovas.map(p => ({
-          chave: `p-${p.id}`,
-          texto: `Pausa · ${p.professor?.nome ?? '—'}`,
-          detalhe: 'nova',
-          to: '/solicitacoes?aba=pausas',
-        })),
-      ]}
-    />
-  )
-}
-
 // ── Minha Área ──────────────────────────────────────────────────────────────
 // Um cartão só para o que é da pessoa (tarefas, fim de pausa, desafio
 // assumido, perguntas de projeto, Mensagens do dia) — mesmo hook da lista
@@ -312,9 +266,6 @@ export function HojePage() {
   const dataBruta = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
   const dataHoje = dataBruta.charAt(0).toUpperCase() + dataBruta.slice(1)
 
-  const vePausas = canView('retorno-pausa')
-  const veTransf = canView('transferencias')
-
   return (
     <div className="px-6 py-6 max-w-[1320px] mx-auto space-y-6">
       <header className="space-y-1">
@@ -327,7 +278,6 @@ export function HojePage() {
         {canView('incidentes') && <CardIncidentes meuId={meuId} />}
         {temAgendaPropria && meuId && canView('reunioes-dia') && <CardReunioes meuId={meuId} />}
         {canView('pendencias') && <CardPendencias />}
-        {(vePausas || veTransf) && <CardSolicitacoes vePausas={vePausas} veTransf={veTransf} />}
         {(canView('convocacoes') || canView('projetos')) && (
           <CardMinhaArea
             veTarefas={canView('convocacoes')}
