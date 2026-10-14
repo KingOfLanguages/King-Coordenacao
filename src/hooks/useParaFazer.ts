@@ -7,7 +7,10 @@ import { useTarefas, type Tarefa, type TarefaTime } from '@/hooks/useTarefas'
 import { useIncidentes, type Incidente } from '@/hooks/useIncidentes'
 import { useMeusProjetos, useProjetos, useSouLideranca, type PedidoInfo, type Projeto } from '@/hooks/useProjetos'
 import { useContatosHoje } from '@/hooks/useContatosDia'
+import { useSaidasAbertas, type SaidaProfessor } from '@/hooks/useSaidasProfessor'
 import { estadoPrazo } from '@/lib/incidentePrioridade'
+import { canEdit } from '@/lib/permissions'
+import { contagemSaida, prazoDaSaida } from '@/lib/saidaProfessor'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Para fazer — a lista única da Minha Área (2026-09). Junta o que estava em três
@@ -16,13 +19,17 @@ import { estadoPrazo } from '@/lib/incidentePrioridade'
 // líder, os projetos esperando decisão. As Mensagens do dia ficam num bloco
 // próprio acima da lista; aqui só entra a contagem delas.
 //
+// Saídas de professor (2026-10) são do time inteiro: toda saída sem
+// confirmação aparece para todo mundo da coordenação e do suporte, com o
+// prazo na data que o professor informou.
+//
 // Tudo é agrupado pelo prazo (Atrasado / Hoje / Próximos dias / Sem prazo), que
 // vem de onde já existe: o "para quando" da tarefa, a data de retorno da pausa,
 // o relógio do incidente. O card da tela Hoje usa o mesmo hook, então os
 // números batem.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type TipoItem = 'tarefa' | 'pausa' | 'incidente' | 'pergunta' | 'aprovacao'
+export type TipoItem = 'tarefa' | 'pausa' | 'incidente' | 'pergunta' | 'aprovacao' | 'saida'
 export type GrupoPrazo = 'atrasado' | 'hoje' | 'proximos' | 'sem_prazo'
 /** Minhas = comigo · Que eu pedi = criei para outra pessoa · Todas = tudo que a RLS mostra. */
 export type Escopo = 'minhas' | 'pedi' | 'todas'
@@ -51,6 +58,7 @@ export interface ItemParaFazer {
   pausa?: { id: string; professor_id: string }
   pedido?: PedidoInfo
   projeto?: Projeto
+  saida?: SaidaProfessor
 }
 
 // ── Datas (sempre no fuso local; prazo de tarefa é DATE "YYYY-MM-DD") ────────
@@ -124,6 +132,8 @@ export function useParaFazer({ tarefas: veTarefas, projetos: veProjetos, mensage
   const { profile } = useAuth()
   const meuId = profile?.id ?? null
   const meuTime = timeDoUsuario(profile?.role)
+  // Saída de professor: coordenação, suporte e admin (o mesmo grupo da RLS).
+  const veSaidas = canEdit(profile)
   const souLideranca = useSouLideranca()
   const agora = useAgora()
 
@@ -137,6 +147,7 @@ export function useParaFazer({ tarefas: veTarefas, projetos: veProjetos, mensage
   const meusProjetos = useMeusProjetos(veProjetos)
   const projetosQ = useProjetos(veProjetos)
   const contatosQ = useContatosHoje(veMensagens ? meuId : null)
+  const saidasQ = useSaidasAbertas(veSaidas)
 
   const resultado = useMemo(() => {
     const hojeIso = isoLocal(new Date(agora))
@@ -188,6 +199,24 @@ export function useParaFazer({ tarefas: veTarefas, projetos: veProjetos, mensage
       })
     }
 
+    // Saídas: de todo o time, então entram em "Minhas" e "Todas".
+    if (veSaidas && escopo !== 'pedi') {
+      for (const s of saidasQ.data ?? []) {
+        const prazo = prazoDaSaida(s)
+        itens.push({
+          chave: `s-${s.id}`, tipo: 'saida', saida: s,
+          titulo: s.professor?.nome ?? 'Professor',
+          contexto: [
+            s.data_saida ? `último dia ${dataCurta(s.data_saida)}` : 'data ainda não informada',
+            s.professor?.status === 'desligado' && 'o King já mostra desligado',
+          ].filter(Boolean).join(' · '),
+          grupo: grupoDaData(prazo, hojeIso),
+          prazoRotulo: contagemSaida(prazo, hojeIso),
+          ordem: new Date(`${prazo}T12:00:00`).getTime(),
+        })
+      }
+    }
+
     // Projetos: só na visão "Minhas" — são pedidos feitos a mim.
     if (veProjetos && escopo === 'minhas') {
       const tituloDe = new Map((projetosQ.data ?? []).map(p => [p.id, p.titulo]))
@@ -230,13 +259,15 @@ export function useParaFazer({ tarefas: veTarefas, projetos: veProjetos, mensage
       mensagens: { total: contatos.length, pendentes: contatos.filter(c => !c.enviado).length },
     }
   }, [agora, abertas, todasTarefas, escopo, meuId, meuTime, incidentesQ.data, pausasQ.data,
-      veProjetos, souLideranca, meusProjetos.pedidosAbertos, projetosQ.data, contatosQ.data])
+      veProjetos, souLideranca, meusProjetos.pedidosAbertos, projetosQ.data, contatosQ.data,
+      veSaidas, saidasQ.data])
 
   return {
     ...resultado,
     /** Itens abertos + mensagens ainda por enviar. */
     total: resultado.itens.length + resultado.mensagens.pendentes,
-    isLoading: (veTarefas && tarefasQ.isLoading) || (veProjetos && meusProjetos.isLoading) || (veMensagens && contatosQ.isLoading),
+    isLoading: (veTarefas && tarefasQ.isLoading) || (veProjetos && meusProjetos.isLoading) || (veMensagens && contatosQ.isLoading)
+      || (veSaidas && saidasQ.isLoading),
     souLideranca,
   }
 }

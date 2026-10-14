@@ -4,7 +4,7 @@ import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
   CalendarDays, Clock, DollarSign, Users, User, MapPin, GraduationCap,
   PlayCircle, CheckCircle2, MessageCircle, Mail, Lock, Hourglass, BadgeCheck,
-  Ban, Star, RefreshCw,
+  Ban, Star, RefreshCw, LogOut,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +30,9 @@ import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { ObservacaoSnapshotDetalhe } from '@/components/professores/ObservacaoSnapshotDetalhe'
 import { TransferenciasProfessorSection } from '@/components/professores/TransferenciasProfessorSection'
+import { RegistrarSaidaDialog, SaidaDetalheDialog } from '@/components/professores/SaidaProfessor'
+import { useSaidasDoProfessor } from '@/hooks/useSaidasProfessor'
+import { dataBR, situacaoSaida } from '@/lib/saidaProfessor'
 import { EditarReuniaoProfessorDialog } from '@/components/professores/EditarReuniaoProfessorDialog'
 import { ExcluirReuniaoProfessorDialog } from '@/components/professores/ExcluirReuniaoProfessorDialog'
 import { ColocarEmMesAnaliseDialog } from '@/components/mesAnalise/ColocarEmMesAnaliseDialog'
@@ -144,7 +147,11 @@ export function ProfessorDetalhePage() {
   const [excluirReuniaoAlvo, setExcluirReuniaoAlvo] = useState<string | null>(null)
   const [obsExpandidas, setObsExpandidas] = useState<Set<string>>(new Set())
   const [reunioesExpandidas, setReunioesExpandidas] = useState(false)
+  const [registrarSaidaAberto, setRegistrarSaidaAberto] = useState(false)
+  const [saidaDetalheAberto, setSaidaDetalheAberto] = useState(false)
   const [aba, setAba] = useAbaUrl<AbaProfessor>(ABAS_PROFESSOR, 'geral')
+  // Saída de professor (20260797): só coordenação, suporte e admin leem.
+  const { data: saidas = [] } = useSaidasDoProfessor(id, podeEditar)
 
   // Deriva do que useNexusDados já busca — sem query extra.
   const emMesAnalise = nexusData?.incidentes.find(i => i.problem_type === MES_ANALISE_PROBLEM_TYPE && !i.resolved) ?? null
@@ -177,6 +184,15 @@ export function ProfessorDetalhePage() {
     })
     .filter((r): r is typeof r & { data: string } => !!r.data)
     .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+
+  // Selo "De saída" enquanto não confirmada; depois, só se o King já o desligou
+  // (professor que volta não carrega o selo antigo).
+  const saidaAberta = saidas.find(s => s.status === 'aguardando') ?? null
+  const saidaConfirmada = !saidaAberta && professor.status === 'desligado'
+    ? saidas.find(s => s.status === 'concluida') ?? null
+    : null
+  const saidaDoSelo = saidaAberta ?? saidaConfirmada
+  const sitSaida = saidaAberta ? situacaoSaida(saidaAberta) : null
 
   const grupoNome = resolverNomePerfil(professor.grupo)
   const coordNome = resolverNomePerfil(professor.coordenador)
@@ -238,6 +254,28 @@ export function ProfessorDetalhePage() {
                 className="btn-press inline-flex items-center gap-1 rounded-full bg-urg-highBg text-urg-highFg px-2.5 py-1 text-[11px] font-medium disabled:cursor-default"
               >
                 <AlertTriangle className="h-3 w-3" />Em Mês de Análise
+              </button>
+            )}
+            {saidaAberta && sitSaida && (
+              <button
+                onClick={() => setSaidaDetalheAberto(true)}
+                title="Ver a saída, copiar a mensagem e confirmar"
+                className={cn(
+                  'btn-press inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium',
+                  sitSaida.vencida ? 'bg-urg-highBg text-urg-highFg' : 'bg-urg-medBg text-urg-medFg',
+                )}
+              >
+                <LogOut className="h-3 w-3" />
+                De saída · {saidaAberta.data_saida ? `último dia ${dataBR(saidaAberta.data_saida).slice(0, 5)}` : 'data a informar'}
+                <span className="tabular-nums opacity-80">({sitSaida.contagem})</span>
+              </button>
+            )}
+            {saidaConfirmada?.encerrada_em && (
+              <button
+                onClick={() => setSaidaDetalheAberto(true)}
+                className="btn-press inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-ink-secondary"
+              >
+                <LogOut className="h-3 w-3" />Saída confirmada em {new Date(saidaConfirmada.encerrada_em).toLocaleDateString('pt-BR')}
               </button>
             )}
           </div>
@@ -413,6 +451,15 @@ export function ProfessorDetalhePage() {
               onClick={() => setColocarMesAnaliseAberto(true)}
             >
               <AlertTriangle className="h-3.5 w-3.5" />Mês de Análise
+            </Button>
+          )}
+          {podeEditar && !saidaAberta && professor.status !== 'desligado' && (
+            <Button
+              variant="outline" size="sm"
+              className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
+              onClick={() => setRegistrarSaidaAberto(true)}
+            >
+              <LogOut className="h-3.5 w-3.5" />Solicitou saída
             </Button>
           )}
           {podeEditar && professor.status === 'pausa' && (
@@ -738,6 +785,17 @@ export function ProfessorDetalhePage() {
         open={obsAberta}
         onOpenChange={setObsAberta}
         professorId={professor.id}
+      />
+      <RegistrarSaidaDialog
+        open={registrarSaidaAberto}
+        onOpenChange={setRegistrarSaidaAberto}
+        professorId={professor.id}
+        professorNome={professor.nome}
+      />
+      <SaidaDetalheDialog
+        saida={saidaDoSelo}
+        open={saidaDetalheAberto}
+        onOpenChange={setSaidaDetalheAberto}
       />
       <ColocarEmMesAnaliseDialog
         open={colocarMesAnaliseAberto}

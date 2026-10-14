@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  Check, CheckCircle2, ChevronDown, CircleHelp, FolderKanban, PauseCircle, Plus, Send, Ticket, Trash2, Undo2,
+  Check, CheckCircle2, ChevronDown, CircleHelp, FolderKanban, LogOut, PauseCircle, Plus, Send, Ticket, Trash2, Undo2,
   NotebookPen, type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ import { useResponderInfo } from '@/hooks/useProjetos'
 import { TarefaDetalheDialog } from '@/components/tarefas/TarefaDetalheDialog'
 import { NovaTarefaDialog } from '@/components/tarefas/NovaTarefaDialog'
 import { ResolverDesafioDialog } from '@/components/tarefas/ResolverDesafioDialog'
+import { SaidaDetalheDialog } from '@/components/professores/SaidaProfessor'
 import { MensagensDoDia } from './MensagensDoDia'
 import { Anotacoes, ID_NOVA_ANOTACAO } from './Anotacoes'
 import { LinksUteis } from './LinksUteis'
@@ -31,17 +32,19 @@ import { LinksUteis } from './LinksUteis'
 // ─────────────────────────────────────────────────────────────────────────────
 // Para fazer — o miolo da Minha Área. Uma lista só, agrupada pelo prazo, em que
 // cada item se resolve ali mesmo (concluir, encerrar a pausa, resolver o
-// desafio, responder a pergunta). Substitui o quadro Aberto/Em andamento/
-// Concluído de Tarefas: das 36 tarefas até 2026-09, só 1 foi escrita à mão — o
-// resto o sistema criou, e cada tipo já tem a sua ação própria.
+// desafio, responder a pergunta, confirmar a saída do professor). Substitui o
+// quadro Aberto/Em andamento/Concluído de Tarefas: das 36 tarefas até 2026-09,
+// só 1 foi escrita à mão — o resto o sistema criou, e cada tipo já tem a sua
+// ação própria.
 // Na coluna ao lado: os Links úteis (para todo mundo) e as Anotações.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ICONE: Record<TipoItem, LucideIcon> = {
-  tarefa: Check, pausa: PauseCircle, incidente: Ticket, pergunta: CircleHelp, aprovacao: FolderKanban,
+  tarefa: Check, pausa: PauseCircle, incidente: Ticket, pergunta: CircleHelp, aprovacao: FolderKanban, saida: LogOut,
 }
 const TIPO_LABEL: Record<TipoItem, string> = {
   tarefa: 'Tarefa', pausa: 'Fim de pausa', incidente: 'Desafio assumido', pergunta: 'Pergunta da liderança', aprovacao: 'Projeto',
+  saida: 'Saída de professor',
 }
 const CHIP_PRAZO: Record<GrupoPrazo, string> = {
   atrasado: 'bg-urg-highBg text-urg-highFg',
@@ -71,6 +74,9 @@ export function ParaFazer({ veTarefas, veProjetos, veMensagens, veAnotacoes }: P
   const [detalhe, setDetalhe] = useState<Tarefa | null>(null)
   const [resolvendo, setResolvendo] = useState<Tarefa | null>(null)
   const [verConcluidas, setVerConcluidas] = useState(false)
+  // Pelo id: a saída vem fresca da lista a cada atualização e, confirmada, sai dela.
+  const [saidaId, setSaidaId] = useState<string | null>(null)
+  const saidaAberta = saidaId ? dados.itens.find(i => i.saida?.id === saidaId)?.saida ?? null : null
 
   const mover = useMoverTarefa()
   const assumir = useAssumirIncidente()
@@ -186,7 +192,7 @@ export function ParaFazer({ veTarefas, veProjetos, veMensagens, veAnotacoes }: P
                     item={it}
                     podeExcluir={!!it.tarefa && (it.tarefa.criado_por === meuId || ehAdmin)}
                     podeEncerrarPausa={canEdit(profile)}
-                    onAbrir={() => it.tarefa && setDetalhe(it.tarefa)}
+                    onAbrir={() => it.saida ? setSaidaId(it.saida.id) : it.tarefa && setDetalhe(it.tarefa)}
                     onResolver={() => it.tarefa && setResolvendo(it.tarefa)}
                   />
                 ))}
@@ -229,6 +235,13 @@ export function ParaFazer({ veTarefas, veProjetos, veMensagens, veAnotacoes }: P
         podeMover
         movendo={movendo}
         onMover={status => { if (detalhe) moverTarefa(detalhe, status) }}
+      />
+
+      <SaidaDetalheDialog
+        saida={saidaAberta}
+        open={!!saidaAberta}
+        onOpenChange={o => { if (!o) setSaidaId(null) }}
+        linkFicha
       />
 
       {resolvendo && (
@@ -370,6 +383,15 @@ function LinhaItem({ item, podeExcluir, podeEncerrarPausa, onAbrir, onResolver }
               className="btn-press whitespace-nowrap rounded-md border border-line px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary hover:text-ink"
             >
               Responder
+            </button>
+          )}
+          {item.tipo === 'saida' && (
+            <button
+              type="button"
+              onClick={onAbrir}
+              className="btn-press whitespace-nowrap rounded-md border border-line px-2.5 py-1 text-[11.5px] font-medium text-ink-secondary hover:text-ink"
+            >
+              Confirmar
             </button>
           )}
           {item.tipo === 'aprovacao' && linkProjeto && (
