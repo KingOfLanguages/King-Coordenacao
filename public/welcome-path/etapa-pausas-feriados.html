@@ -10,8 +10,9 @@
      sem direito a reposição, com a observação "Feriado nacional" e o print do
      aviso ao aluno (decisão de 24/09); pausa do aluno vai para a coordenação
      pelo WhatsApp (decisão de 25/09) e o aluno fala com o suporte ao aluno;
-     pausa do professor pelo formulário de pausa (portal /pausa: motivo, último
-     dia de aula e fim previsto). Corpus Christi não é feriado nacional
+     pausa do professor pela plataforma da King, aba Histórico do Aluno →
+     Solicitar pausa (desde 15/10/2026; o formulário /pausa do KTM foi
+     aposentado em 14/10). Corpus Christi não é feriado nacional
      (comunicado da King). Alunos fictícios. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -117,7 +118,7 @@
     instrucao: "Quatro situações que acontecem todo ano. Escolha o que fazer.",
     progresso: function (s, a) { return ["aluno", "prof", "saude", "fimano"].filter(a.qOk).length + " de 4"; },
     completa: function (s, a) { return ["aluno", "prof", "saude", "fimano"].every(a.qOk); },
-    fecho: "Pausa longa do aluno vai para o suporte ao aluno e a coordenação fica sabendo. A sua pausa é pelo formulário. E a de fim de ano é escolha sua, sabendo que os alunos podem não voltar.",
+    fecho: "Pausa longa do aluno vai para o suporte ao aluno e a coordenação fica sabendo. A sua pausa você pede na plataforma da King, em Histórico do Aluno → Solicitar pausa. E a de fim de ano é escolha sua, sabendo que os alunos podem não voltar.",
     corpo: function (s, a) { return '<div style="display:grid;gap:18px">' + a.q("aluno") + a.q("prof") + a.q("saude") + a.q("fimano") + "</div>"; },
     perguntas: {
       aluno: {
@@ -134,7 +135,7 @@
         opcoes: [
           { t: "Marcar todos os seus horários como Horário ocupado.", porque: "Horário ocupado só impede aluno novo. Os seus alunos continuam na sua agenda esperando aula." },
           { t: "Lançar falta do professor em todas as aulas do mês.", porque: "Cada falta sua gera uma reposição obrigatória, sem prazo para vencer. Isso vira um mês de reposições para dar na volta." },
-          { t: "Falar com a coordenação e preencher o formulário de pausa, com o motivo, o último dia de aula e o fim previsto.", ok: true, porque: "Com a pausa registrada, a agenda é bloqueada para alunos novos e os seus alunos são passados para outros professores antes do início. Você recebe por tudo o que deu até lá." },
+          { t: "Pedir a pausa na plataforma da King: aba Histórico do Aluno, botão Solicitar pausa, no cartão do topo da tela.", ok: true, porque: "Com a pausa pedida na plataforma, a agenda é bloqueada para alunos novos e os seus alunos são passados para outros professores antes do início. Você recebe por tudo o que deu até lá. Para voltar, fale com a coordenação para reabrir a agenda." },
           { t: "Avisar só os alunos e voltar quando puder.", porque: "Sem a coordenação saber, os alunos ficam sem aula e a sua agenda segue recebendo gente. A pausa tem que ser registrada." }
         ]
       },
