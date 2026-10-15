@@ -6,8 +6,10 @@
 <title>Etapa 2 · Prática</title>
 <!-- Atividades da etapa 2 (Recebendo alunos), cada uma por ?parte=<id>:
      oferta, portas. Regras: margem de 5 minutos e "recusar na Oferta não
-     gera ônus" (comunicado da King de 03/02/2026); negar contrato tranca a
-     agenda e faltar à 1ª aula bloqueia (MAPA e etapa 3). Alunos fictícios. -->
+     gera ônus" (comunicado da King de 03/02/2026); negar UM contrato não trava
+     a agenda, negar vários seguidos sem motivo trava (2 ou 3 no mesmo mês por
+     não poder dar a 1ª aula não travam; João, 15/10/2026); faltar à 1ª aula
+     bloqueia (MAPA e etapa 3). Alunos fictícios. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
@@ -86,15 +88,17 @@
   var portas = {
     tag: "Pratique", titulo: "O que trava a sua agenda?",
     instrucao: "Agenda travada é agenda sem alunos novos. Diga o que acontece em cada caso.",
-    progresso: function (s, a) { return a.gCertos("casos") + " de 3"; },
+    progresso: function (s, a) { return a.gCertos("casos") + " de 5"; },
     completa: function (s, a) { return a.gOk("casos"); },
-    fecho: "Recusar na Oferta é livre. Negar um contrato ou faltar à primeira aula trava a agenda, e só a coordenação destrava. Se um contrato não cabe, recusar ainda é o certo: faltar à primeira aula é pior.",
+    fecho: "Recusar na Oferta é livre, e negar um contrato com motivo também não trava: dois ou três no mesmo mês porque a primeira aula não cabia é normal. Trava a agenda negar vários contratos seguidos sem motivo ou faltar à primeira aula, e aí só a coordenação destrava. Se um contrato não cabe, negar é o certo: faltar à primeira aula é pior.",
     corpo: function (s, a) { return a.g("casos"); },
     grupos: { casos: {
-      rotulos: [{ v: "livre", r: "Sem consequência" }, { v: "trava", r: "Trava a agenda" }],
+      rotulos: [{ v: "livre", r: "Não trava" }, { v: "trava", r: "Trava a agenda" }],
       itens: [
         { t: "Recusar um aluno na tela Oferta de Alunos.", certo: "livre", porque: "Recusar na Oferta não gera nenhum ônus. O aluno volta para a lista e outro professor pode pegar.", dica: "Na Oferta, recusar é livre: é justamente para você escolher o que cabe." },
-        { t: "Negar o recebimento de um contrato que caiu na sua agenda.", certo: "trava", porque: "Negar um contrato tranca a agenda automaticamente, e só a coordenação destrava.", dica: "Contrato que caiu na agenda é diferente da Oferta: negar tranca a agenda." },
+        { t: "Negar um contrato que caiu na sua agenda porque você não consegue dar a primeira aula na data.", certo: "livre", porque: "Negar com motivo não trava a agenda. Se a primeira aula não cabe na data, negar é o certo: outro professor começa com o aluno sem atraso.", dica: "Olhe o motivo: não conseguir dar a primeira aula na data é razão para negar." },
+        { t: "Negar dois contratos no mesmo mês, os dois porque a primeira aula não cabia.", certo: "livre", porque: "Dois ou três contratos negados no mesmo mês, cada um com motivo, não travam a agenda.", dica: "Conta o motivo, não só o número: cada negativa aqui teve uma razão." },
+        { t: "Negar vários contratos seguidos, sem motivo, com os horários livres na agenda.", certo: "trava", porque: "Negar contrato atrás de contrato sem motivo trava a agenda. Se você não pode dar aula num horário, feche-o como Horário ocupado.", dica: "Horário livre é horário em que você recebe aluno. Negar em sequência, sem motivo, trava." },
         { t: "Aceitar um aluno e faltar à primeira aula.", certo: "trava", porque: "A agenda é bloqueada até você regularizar com a coordenação. Se isso se repete, a parceria pode acabar.", dica: "A primeira aula é um compromisso com a data do contrato. Faltar bloqueia a agenda." }
       ]
     } }

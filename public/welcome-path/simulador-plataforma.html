@@ -8,8 +8,9 @@
      Simulador da plataforma do professor — etapa 7 (Encerramento) do Welcome
      Path, embutido pelo bloco `embed` (ver src/pages/welcomePath/Blocos.tsx).
 
-     Uma cópia de TREINO da plataforma do professor da King (mesmo menu e as
-     mesmas rotas de app.kingmanagementsystem.com.br) e do WhatsApp, com oito
+     Uma cópia de TREINO da plataforma do professor da King (mesmo menu de cima
+     e as mesmas rotas de app.kingmanagementsystem.com.br, conferidos em
+     15/10/2026) e do WhatsApp, com oito
      missões que atravessam outubro de 2026. Nada sai daqui: não há rede, não
      há gravação. O gabarito fica neste arquivo de propósito — isto é treino;
      a nota que conta é a da prova final da etapa, corrigida no servidor.
@@ -170,15 +171,25 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 .kms-head{display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--kms-head); color:#fff}
 .kms-logo{font:700 15px Geist,sans-serif; letter-spacing:-.01em}
 .kms-tag{font-size:11.5px; opacity:.6}
-.kms-user{margin-left:auto; display:flex; align-items:center; gap:10px; opacity:.95}
+.kms-user{margin-left:auto; display:flex; align-items:center; gap:8px; opacity:.95}
+.kms-ico{position:relative; width:30px; height:30px; display:grid; place-items:center; border-radius:8px; border:1px solid rgba(255,255,255,.14); background:none; color:#fff; cursor:pointer}
+.kms-ico:hover{background:rgba(255,255,255,.08)}
+.kms-ico .nb{position:absolute; top:-6px; right:-7px}
 .av{width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font:600 11px Geist,sans-serif; background:rgba(255,255,255,.16); color:#fff}
-.kms-body{display:grid; grid-template-columns:176px minmax(0,1fr); min-height:560px}
-.kms-nav{border-right:1px solid var(--border-soft); padding:10px 8px; display:flex; flex-direction:column; gap:2px; background:var(--bg-subtle)}
-.nav-it{display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:8px; border:0; background:none; color:var(--fg-secondary); font:500 13px Geist,sans-serif; text-align:left; cursor:pointer; white-space:nowrap}
-.nav-it:hover{background:var(--bg-muted)}
-.nav-it[aria-current="page"]{background:var(--bg-canvas); color:var(--accent); box-shadow:var(--shadow-card)}
+/* menu de cima, como na plataforma desde out/2026: itens soltos e três menus
+   que abrem (Aulas e Reposições, Ranking, Histórico) */
+.kms-nav{position:relative; display:flex; flex-wrap:wrap; justify-content:center; gap:2px 4px; padding:2px 10px 9px; background:var(--kms-head); border-bottom:1px solid rgba(255,255,255,.08)}
+.nav-dd{position:relative}
+.nav-it{display:flex; align-items:center; gap:6px; padding:6px 9px; border-radius:7px; border:0; background:none; color:rgba(223,229,245,.85); font:500 12.5px Geist,sans-serif; text-align:left; cursor:pointer; white-space:nowrap}
+.nav-it:hover{background:rgba(255,255,255,.08); color:#fff}
+.nav-it[aria-current="page"]{background:rgba(255,255,255,.13); color:#fff}
 .nav-it.off{opacity:.55}
+.nav-it .chev{opacity:.7; transition:transform .15s}
+.nav-it[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.dd{position:absolute; left:0; top:calc(100% + 6px); z-index:5; min-width:200px; display:grid; gap:2px; padding:5px; border-radius:10px; background:var(--kms-head); border:1px solid rgba(255,255,255,.14); box-shadow:0 14px 30px -8px rgba(0,0,0,.45)}
+.dd .nav-it{width:100%; padding:8px 10px}
 .nb{margin-left:auto; min-width:18px; height:18px; border-radius:9px; background:var(--err-fg); color:var(--bg-canvas); font:600 10.5px Geist,sans-serif; display:grid; place-items:center; padding:0 5px}
+.kms-body{min-height:560px}
 .kms-main{padding:16px 18px 22px; min-width:0}
 .pg-h{display:flex; align-items:flex-end; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; margin-bottom:14px}
 .pg-h h3{font-size:17px}
@@ -377,9 +388,10 @@ table.t .r{text-align:right}
 .toast b{font-family:"Geist Mono",monospace; font-weight:500}
 
 @media (max-width:640px){
-  .kms-body{grid-template-columns:1fr}
-  .kms-nav{flex-direction:row; overflow-x:auto; border-right:0; border-bottom:1px solid var(--border-soft); padding:6px}
-  .nav-it{padding:7px 10px}
+  .kms-nav{justify-content:flex-start; padding:2px 8px 8px}
+  .nav-dd{position:static}
+  .dd{left:8px; right:8px}
+  .nav-it{padding:6px 8px; font-size:12px}
   .kms-main{padding:14px 12px 18px}
   .kms-tag{display:none}
   .grid3{grid-template-columns:1fr}
@@ -435,7 +447,12 @@ table.t .r{text-align:right}
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
     refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
     star: '<path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>',
-    down: '<path d="M12 5v14M19 12l-7 7-7-7"/>'
+    down: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
+    news: '<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/>',
+    userplus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
+    swap: '<path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/>',
+    scroll: '<path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4M15 8h-5M15 12h-5"/>',
+    chev: '<path d="m6 9 6 6 6-6"/>'
   };
   function ic(n, s) {
     s = s || 16;
@@ -1148,19 +1165,40 @@ table.t .r{text-align:right}
   }
 
   /* ═════════ HTML: janela ═════════ */
+  /* O menu do professor como está na plataforma (conferido em 15/10/2026):
+     ordem, rótulos e rotas iguais; "off" = tela fora deste treino. */
   var NAV = [
     { id: "home", rot: "Home", ic: "home", url: "/home" },
+    { id: "feed", rot: "Feed", ic: "news", url: "/feed", off: true },
+    { id: "oferta", rot: "Oferta de Alunos", ic: "userplus", url: "/oferta-alunos", off: true },
+    { id: "transferencia", rot: "Transferência de Alunos", ic: "swap", url: "/transferencia-alunos", off: true },
     { id: "agenda", rot: "Agenda do Professor", ic: "cal", url: "/agenda-professor" },
-    { id: "historico", rot: "Histórico do Aluno", ic: "users", url: "/perfil-alunos" },
-    { id: "aulas", rot: "Aulas e Reposições", ic: "clip", url: "/lancamento-aulas" },
+    { id: "historico", rot: "Histórico do Aluno", ic: "users", url: "/professor" },
+    { id: "aulas", rot: "Aulas e Reposições", ic: "clip", sub: [
+      { rot: "Lançamento de Aulas", act: "irAulas", v: "lancamento" },
+      { rot: "Reposições", act: "irAulas", v: "reposicoes" }
+    ] },
     { id: "materiais", rot: "Materiais", ic: "book", url: "/modules", off: true },
-    { id: "ranking", rot: "Ranking", ic: "trophy", url: "/ranking-ligas", off: true },
-    { id: "financeira", rot: "Financeira", ic: "wallet", url: "/financeira" }
+    { id: "ranking", rot: "Ranking", ic: "trophy", sub: [
+      { rot: "Ranking de Ligas", act: "rota", v: "ranking", url: "/ranking-ligas", off: true }
+    ] },
+    { id: "financeira", rot: "Financeira", ic: "wallet", url: "/financeira" },
+    { id: "histAulas", rot: "Histórico", ic: "scroll", sub: [
+      { rot: "Histórico de Aulas", act: "rota", v: "histAulas", url: "/historico-aulas", off: true }
+    ] }
   ];
   function rotaURL() {
     if (S.rota === "aulas") return S.aba === "reposicoes" ? "/reposicoes" : S.aba === "pendencias" ? "/pendencias" : "/lancamento-aulas";
-    for (var i = 0; i < NAV.length; i++) if (NAV[i].id === S.rota) return NAV[i].url;
+    for (var i = 0; i < NAV.length; i++) {
+      if (NAV[i].id === S.rota && NAV[i].url) return NAV[i].url;
+      var sub = NAV[i].sub || [];
+      for (var j = 0; j < sub.length; j++) if (sub[j].v === S.rota && sub[j].url) return sub[j].url;
+    }
     return "/home";
+  }
+  function navAtivo(n) {
+    if (n.id === S.rota) return true;
+    return (n.sub || []).some(function (s) { return s.act === "rota" && s.v === S.rota; });
   }
   function htmlJanela() {
     var king = S.tab === "king";
@@ -1174,11 +1212,19 @@ table.t .r{text-align:right}
   function htmlKing() {
     var np = pendencias().length;
     var nav = NAV.map(function (n) {
-      return '<button class="nav-it' + (n.off ? " off" : "") + '" id="nav-' + n.id + '" data-act="rota" data-v="' + n.id + '"' + (S.rota === n.id ? ' aria-current="page"' : "") + ">" + ic(n.ic, 15) + "<span>" + n.rot + "</span>" + (n.id === "aulas" && np ? '<span class="nb">' + np + "</span>" : "") + "</button>";
+      var cur = navAtivo(n) ? ' aria-current="page"' : "";
+      if (!n.sub) return '<button class="nav-it' + (n.off ? " off" : "") + '" id="nav-' + n.id + '" data-act="rota" data-v="' + n.id + '"' + cur + ">" + ic(n.ic, 15) + "<span>" + n.rot + "</span></button>";
+      var aberto = S.menu === n.id;
+      return '<div class="nav-dd"><button class="nav-it" id="nav-' + n.id + '" data-act="menu" data-v="' + n.id + '" aria-haspopup="true" aria-expanded="' + aberto + '"' + cur + ">" + ic(n.ic, 15) + "<span>" + n.rot + "</span>" + ic("chev", 13).replace('class="ic"', 'class="ic chev"') + "</button>" +
+        (aberto ? '<div class="dd" role="menu">' + n.sub.map(function (s) {
+          var on = s.act === "irAulas" ? S.rota === "aulas" && S.aba === s.v : S.rota === s.v;
+          return '<button class="nav-it' + (s.off ? " off" : "") + '" role="menuitem" id="nav-' + n.id + "-" + s.v + '" data-act="' + s.act + '" data-v="' + s.v + '"' + (on ? ' aria-current="page"' : "") + ">" + esc(s.rot) + "</button>";
+        }).join("") + "</div>" : "") + "</div>";
     }).join("");
     var pg = S.rota === "home" ? pgHome() : S.rota === "agenda" ? pgAgenda() : S.rota === "historico" ? pgHist() : S.rota === "aulas" ? pgAulas() : S.rota === "financeira" ? pgFin() : pgOff();
-    return '<div class="kms-head"><span class="kms-logo">King of Languages</span><span class="kms-tag">Plataforma do professor</span><div class="kms-user">' + ic("bell", 16) + '<span class="av">VC</span></div></div>' +
-      '<div class="kms-body"><nav class="kms-nav" aria-label="Menu da plataforma">' + nav + '</nav><main class="kms-main">' + pg + "</main></div>";
+    var pend = '<button class="kms-ico" id="hd-pend" data-act="irAulas" data-v="pendencias" aria-label="' + (np ? np + (np > 1 ? " pendências" : " pendência") + " de aula" : "Sem pendências de aula") + '">' + ic("clip", 15) + (np ? '<span class="nb">' + np + "</span>" : "") + "</button>";
+    return '<div class="kms-head"><span class="kms-logo">King of Languages</span><span class="kms-tag">Plataforma do professor</span><div class="kms-user">' + pend + '<span class="kms-ico" aria-hidden="true">' + ic("bell", 15) + '</span><span class="av">VC</span></div></div>' +
+      '<nav class="kms-nav" aria-label="Menu da plataforma">' + nav + '</nav><div class="kms-body"><main class="kms-main">' + pg + "</main></div>";
   }
 
   /* Home */
@@ -1429,11 +1475,17 @@ table.t .r{text-align:right}
     return '<div class="pg-h"><div><h3>Financeira</h3><div class="pg-sub">Estimativa, resumo financeiro, autorização e notas fiscais</div></div><div class="est"><span class="eyebrow">' + (fechou ? "Outubro fechado" : "Estimativa de outubro") + '</span><b>' + brl(tot) + "</b></div></div>" + aut + tabela + nf;
   }
 
+  var OFF = {
+    feed: ["Feed", "Na plataforma real, aqui ficam todos os avisos e notícias da escola. Dá para filtrar, curtir e salvar para ler depois."],
+    oferta: ["Oferta de Alunos", "Na plataforma real, aqui ficam os alunos que a escola oferece para os seus horários livres. Recusar aqui é livre: o aluno volta para a lista e outro professor pode pegar."],
+    transferencia: ["Transferência de Alunos", "Na plataforma real, é aqui que você pede a transferência de um aluno seu para outro professor (busque o aluno e clique em Transferir) e acompanha o pedido."],
+    materiais: ["Materiais", "Na plataforma real, aqui fica o Now We're Talking: mais de 440 aulas prontas, por nível, com modo apresentação e as Instruções da Aula. Ao apresentar no Meet, compartilhe só a guia do material — nunca a tela inteira, porque as instruções são só para você."],
+    ranking: ["Ranking de Ligas", "Na plataforma real, aqui ficam seu XP, sua patente e sua liga. Você ganha XP lançando as aulas em dia, cumprindo o checklist e com boas avaliações dos alunos; pendência de lançamento em aberto tira XP todo dia."],
+    histAulas: ["Histórico de Aulas", "Na plataforma real, aqui ficam as aulas de cada aluno, mês a mês, com o tipo de cada aula e quando ela aconteceu."]
+  };
   function pgOff() {
-    var mat = S.rota === "materiais";
-    return '<div class="pg-h"><div><h3>' + (mat ? "Materiais" : "Ranking") + '</h3><div class="pg-sub">' + ic("lock", 12) + " Fora deste treino</div></div></div><p class=\"off-pg\">" + (mat
-      ? "Na plataforma real, aqui fica o Now We're Talking: mais de 440 aulas prontas, por nível, com modo apresentação e as Instruções da Aula. Ao apresentar no Meet, compartilhe só a guia do material — nunca a tela inteira, porque as instruções são só para você."
-      : "Na plataforma real, aqui ficam seu XP, sua patente e sua liga. Você ganha XP lançando as aulas em dia, cumprindo o checklist e com boas avaliações dos alunos; pendência de lançamento em aberto tira XP todo dia.") + "</p>";
+    var o = OFF[S.rota] || OFF.materiais;
+    return '<div class="pg-h"><div><h3>' + o[0] + '</h3><div class="pg-sub">' + ic("lock", 12) + " Fora deste treino</div></div></div><p class=\"off-pg\">" + o[1] + "</p>";
   }
 
   /* WhatsApp */
@@ -1497,6 +1549,7 @@ table.t .r{text-align:right}
   };
   A.verSol = function () { S.verSol = !S.verSol; if (S.verSol) S.res[S.m].revelou = true; };
   A.tab = function (d) { S.tab = d.v; S.picker = null; };
+  A.menu = function (d) { S.menu = S.menu === d.v ? null : d.v; };
   A.rota = function (d) { S.rota = d.v; S.tab = "king"; S.picker = null; S.repoForm = null; };
   A.irAulas = function (d) { S.rota = "aulas"; S.aba = d.v; };
   A.aba = function (d) { S.aba = d.v; S.picker = null; };
@@ -1510,7 +1563,7 @@ table.t .r{text-align:right}
     sucesso("home", "Contrato aceito", "O Felipe entrou na sua agenda. Agora, o contato: ele ainda não sabe quem vai ser o professor dele.");
   };
   A.recusar = function () {
-    erro("home", "Por que recusar?", "Você tem os horários livres e consegue começar na data do contrato. Recusar é para quando você não consegue cumprir a data de início, os dias ou o horário — e negar o recebimento tranca a sua agenda até a coordenação destravar.");
+    erro("home", "Por que recusar?", "Você tem os horários livres e consegue começar na data do contrato. Recusar é para quando você não consegue cumprir a data de início, os dias ou o horário. Negar contratos seguidos sem motivo trava a sua agenda.");
   };
 
   A.print = function () {
@@ -1676,12 +1729,16 @@ table.t .r{text-align:right}
 
   app.addEventListener("click", function (e) {
     var el = e.target.closest("[data-act]");
-    if (!el || el.disabled || !app.contains(el)) return;
+    if (!el || el.disabled || !app.contains(el)) { if (S.menu) { S.menu = null; render(); } return; }
     var fn = A[el.dataset.act]; if (!fn) return;
+    if (el.dataset.act !== "menu") S.menu = null;
     S.fb = null; S.toast = null;
     fn(el.dataset, el);
     checar();
     render();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && S.menu) { S.menu = null; render(); }
   });
   app.addEventListener("change", function (e) {
     var el = e.target, h = el.dataset && el.dataset.chg;
