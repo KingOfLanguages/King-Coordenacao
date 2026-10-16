@@ -169,6 +169,8 @@ export type ProfessorSessao = {
   status: string
   data_inicio: string | null
   coordenador_id: string | null
+  /** Membro do King's Circle (20260802): os portais dão as boas-vindas VIP. */
+  kings_circle: boolean
   escopo: EscopoSessao
 }
 
@@ -230,7 +232,7 @@ export async function resolverSessao(
 
   const { data: p } = await admin
     .from('professores')
-    .select('id, nome, status, data_inicio, coordenador_id')
+    .select('id, nome, status, data_inicio, coordenador_id, kings_circle')
     .eq('id', sess.professor_id)
     .maybeSingle()
 

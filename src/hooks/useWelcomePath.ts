@@ -139,7 +139,8 @@ export type DispensaPortal = { em: string; motivo: string | null }
 export type PrimeiraReuniao = { coordenador: string | null; link: string | null }
 
 export type TrilhaPortal = {
-  professor: ProfessorPortal & { dataInicio: string | null }
+  /** `kingsCircle` desde 20260802: membro recebe as boas-vindas VIP. */
+  professor: ProfessorPortal & { dataInicio: string | null; kingsCircle?: boolean }
   etapas: EtapaTrilha[]
   /** Ausente se a função do servidor for de antes do prazo. */
   jornada?: JornadaPortal | null

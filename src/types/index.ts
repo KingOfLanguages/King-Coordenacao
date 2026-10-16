@@ -53,6 +53,10 @@ export interface Professor {
   dados_atualizados: boolean | null
   /** nivel_recomendado_alunos como vem da API — vocabulário diferente do curado. */
   nivel_recomendado_alunos_raw: string | null
+  /** Membro do King's Circle, a comunidade oficial de professores (20260802). */
+  kings_circle: boolean
+  /** Quando o selo foi ligado/desligado pela última vez (gatilho). */
+  kings_circle_em: string | null
   created_at: string
 }
 

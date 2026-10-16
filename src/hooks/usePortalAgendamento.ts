@@ -15,7 +15,8 @@ export type AvisoAgendamentoRecente = {
 }
 
 export type PortalLookupResult = {
-  professor: { id: string; nome: string }
+  /** `kingsCircle` desde 20260802: membro recebe as boas-vindas VIP. */
+  professor: { id: string; nome: string; kingsCircle?: boolean }
   coordenador: { id: string; nome: string } | null
   opcoes: {
     primeira_reuniao: OpcaoLink

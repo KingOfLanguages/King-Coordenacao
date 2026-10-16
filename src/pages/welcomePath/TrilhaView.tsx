@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { dataBR, diasAte, fmtDuracao } from '@/lib/formato'
 import type { DispensaPortal, EtapaTrilha, JornadaPortal, PrimeiraReuniao } from '@/hooks/useWelcomePath'
 import { ContadorTrilha, PainelBloqueio, PainelConclusao } from './JornadaViews'
+import { SeloKingsCircle } from '@/components/professores/KingsCircle'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A trilha: a lista de etapas com o estado de cada uma. Metáfora de caminho —
@@ -78,9 +79,11 @@ function LinhaMeta({ etapa }: { etapa: EtapaTrilha }) {
 }
 
 export function TrilhaView({
-  nome, etapas, onAbrir, onSair, jornada, offsetMs = 0, primeiraReuniao, onExpirar, dispensa,
+  nome, kingsCircle = false, etapas, onAbrir, onSair, jornada, offsetMs = 0, primeiraReuniao, onExpirar, dispensa,
 }: {
   nome: string
+  /** Membro do King's Circle (20260802): selo VIP ao lado do título. */
+  kingsCircle?: boolean
   etapas: EtapaTrilha[]
   onAbrir: (etapaId: string) => void
   /** Sem ele, não mostra o "Sair deste dispositivo" (visão da coordenação). */
@@ -122,10 +125,13 @@ export function TrilhaView({
       /* Cabeçalho com o progresso */
       <header className="space-y-4">
         <div className="space-y-1.5">
-          <span className="label-micro flex items-center gap-1.5 text-accentBlue">
-            <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
-            Welcome Path
-          </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="label-micro flex items-center gap-1.5 text-accentBlue">
+              <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
+              Welcome Path
+            </span>
+            {kingsCircle && <SeloKingsCircle />}
+          </div>
           <h1 className="text-[1.85rem] font-bold tracking-[-0.03em] leading-tight text-ink">
             {tudoFeito ? `Trilha concluída, ${primeiroNome}!` : `Olá, ${primeiroNome}`}
           </h1>

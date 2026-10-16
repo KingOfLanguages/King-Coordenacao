@@ -9,7 +9,8 @@ import { lerToken, gravarToken, limparToken } from '@/lib/portalSession'
 // oficial. A sessão resultante vale nos 4 portais.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ProfessorPortal = { id: string; nome: string }
+/** `kingsCircle` vem só onde o portal dá as boas-vindas VIP (trilha, agendamento). */
+export type ProfessorPortal = { id: string; nome: string; kingsCircle?: boolean }
 
 export type SolicitarCodigoInput = {
   email?: string

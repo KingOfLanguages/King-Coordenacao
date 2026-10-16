@@ -1,13 +1,15 @@
 import { CalendarPlus, MessageCircle, Users, Sparkles, ArrowRight, Handshake, MessagesSquare, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AvisoAgendamentoRecente } from '@/pages/agendamentos/AvisoAgendamentoRecente'
+import { SeloKingsCircle } from '@/components/professores/KingsCircle'
 import type { PortalLookupResult } from '@/hooks/usePortalAgendamento'
 
 export function OpcoesPortal({
-  professorNome, resultado, onEscolherGrupo, carregandoGrupo,
+  professorNome, kingsCircle, resultado, onEscolherGrupo, carregandoGrupo,
   pendingDeclarar, onDeclararNaoFez,
 }: {
   professorNome: string
+  kingsCircle: boolean
   resultado: PortalLookupResult
   onEscolherGrupo: () => void
   carregandoGrupo: boolean
@@ -63,10 +65,13 @@ export function OpcoesPortal({
   return (
     <div className="w-full max-w-md space-y-7 animate-fade-up">
       <div className="space-y-2">
-        <span className="label-micro flex items-center gap-1.5 text-accentBlue">
-          <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
-          Portal de agendamento
-        </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="label-micro flex items-center gap-1.5 text-accentBlue">
+            <span className="h-1.5 w-1.5 rounded-full bg-accentBlue" />
+            Portal de agendamento
+          </span>
+          {kingsCircle && <SeloKingsCircle />}
+        </div>
         <h1 className="text-[1.7rem] font-bold tracking-[-0.03em] text-ink leading-none">
           Olá, {professorNome}!
         </h1>

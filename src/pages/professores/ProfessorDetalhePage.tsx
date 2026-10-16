@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useConcluirAcompanhamentoPausa } from '@/hooks/useProfessores'
+import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useConcluirAcompanhamentoPausa, useDefinirKingsCircle } from '@/hooks/useProfessores'
 import { useEncerrarPausa } from '@/hooks/usePausas'
 import { usePendenciaHistorico, usePendenciaLogs } from '@/hooks/usePendencias'
 import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms, type ProfessorCicloVidaRow } from '@/hooks/useProfessorAcompanhamento'
@@ -53,6 +53,7 @@ import type { StatusProfessor } from '@/types'
 import { Abas } from '@/components/ui/abas'
 import { useAbaUrl } from '@/hooks/useAbaUrl'
 import { VereditoConfiabilidade } from '@/components/professores/VereditoConfiabilidade'
+import { BotaoKingsCircle, SeloKingsCircle } from '@/components/professores/KingsCircle'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -134,6 +135,7 @@ export function ProfessorDetalhePage() {
   // um UPDATE direto seria revertido pelo próprio trigger).
   const encerrarPausa = useEncerrarPausa()
   const concluirAcompPausa = useConcluirAcompanhamentoPausa()
+  const definirKingsCircle = useDefinirKingsCircle()
   const resolverObservacao = useResolverObservacao()
   const { profile } = useAuth()
   const { data: grupos = [] } = useGrupos()
@@ -247,6 +249,7 @@ export function ProfessorDetalhePage() {
         <div className="flex-1 min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-semibold tracking-tight text-ink">{professor.nome}</h1>
+            {professor.kings_circle && <SeloKingsCircle desde={professor.kings_circle_em} />}
             <PrioridadeBadge professor={professor} />
             {emMesAnalise && (
               <button
@@ -453,6 +456,21 @@ export function ProfessorDetalhePage() {
             >
               <AlertTriangle className="h-3.5 w-3.5" />Mês de Análise
             </Button>
+          )}
+          {podeEditar && (
+            <BotaoKingsCircle
+              ativo={!!professor.kings_circle}
+              pendente={definirKingsCircle.isPending}
+              onAlternar={() => {
+                const ativo = !professor.kings_circle
+                definirKingsCircle.mutate({ id: professor.id, ativo }, {
+                  onSuccess: () => toast.success(ativo
+                    ? "Selo do King's Circle ativado. O professor vai ver as boas-vindas nos portais."
+                    : "Selo do King's Circle desativado."),
+                  onError: e => toast.error(e instanceof Error ? e.message : "Erro ao mudar o King's Circle."),
+                })
+              }}
+            />
           )}
           {podeEditar && !saidaAberta && professor.status !== 'desligado' && (
             <Button

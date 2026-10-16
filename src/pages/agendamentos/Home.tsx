@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { AvisoErro, FundoPortal } from '@/components/portal/PortalUI'
+import { BoasVindasKingsCircle } from '@/components/portal/BoasVindasKingsCircle'
 import { sessaoRecusada } from '@/lib/invocarFuncao'
 import {
   lerTokenAgendamento, gravarTokenAgendamento, limparTokenAgendamento,
@@ -114,6 +115,7 @@ export function Home() {
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-surface-app flex items-center justify-center p-6">
       <FundoPortal />
+      {token && <BoasVindasKingsCircle professor={opcoes.data?.professor} />}
 
       <div className="relative z-10 flex items-center justify-center w-full">
         {!token && <IdentificacaoAgendamento onEntrar={entrar} />}
@@ -125,6 +127,7 @@ export function Home() {
             <div className="flex w-full flex-col items-center gap-4">
               <OpcoesPortal
                 professorNome={resultado.professor.nome}
+                kingsCircle={!!resultado.professor.kingsCircle}
                 resultado={resultado}
                 onEscolherGrupo={handleEscolherGrupo}
                 carregandoGrupo={teacherLookup.isPending}

@@ -179,6 +179,29 @@ export function useConcluirAcompanhamentoPausa() {
   })
 }
 
+/** Liga/desliga o selo do King's Circle (20260802). Quem mexeu e quando, o
+ *  gatilho carimba. */
+export function useDefinirKingsCircle() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ativo }: { id: string; ativo: boolean }) => {
+      const { data, error } = await supabase
+        .from('professores')
+        .update({ kings_circle: ativo })
+        .eq('id', id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error("Nada foi atualizado — sem permissão para mexer no King's Circle.")
+      }
+    },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['professores'] })
+      queryClient.invalidateQueries({ queryKey: ['professores', id] })
+    },
+  })
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 export function useCriarProfessor() {

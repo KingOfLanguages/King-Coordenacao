@@ -134,9 +134,11 @@ serve(async (req) => {
   // "início/data" do cadastro (senão "Você é Fulano - inicio 18/09?" confunde e
   // ele desiste — barrado na prática). O id é o que segue nos próximos passos.
   const nomeExibicao = semSufixoInicio(professor.nome)
+  // `kingsCircle`: a tela recebe o membro do King's Circle com as boas-vindas VIP.
+  const professorTela = { id: professor.id, nome: nomeExibicao, kingsCircle: professor.kings_circle === true }
 
   if (!professor.coordenador_id) {
-    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: professorTela, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 3. Coordenador responsável e seus links ──────────────────────────────────
@@ -147,7 +149,7 @@ serve(async (req) => {
     .maybeSingle()
 
   if (!coordenador) {
-    return json({ professor: { id: professor.id, nome: nomeExibicao }, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json({ professor: professorTela, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
   }
 
   // ── 4. Já teve reunião realizada? ────────────────────────────────────────────
@@ -251,7 +253,7 @@ serve(async (req) => {
   }
 
   return json({
-    professor: { id: professor.id, nome: nomeExibicao },
+    professor: professorTela,
     coordenador: { id: coordenador.id, nome: coordenador.nome },
     opcoes: {
       primeira_reuniao: {

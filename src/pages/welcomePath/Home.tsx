@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { GraduationCap } from 'lucide-react'
 import { FundoPortal } from '@/components/portal/PortalUI'
 import { IdentificacaoPortal } from '@/components/portal/IdentificacaoPortal'
+import { BoasVindasKingsCircle } from '@/components/portal/BoasVindasKingsCircle'
 import { usePortalSessao } from '@/hooks/usePortalIdentidade'
 import { useTrilha } from '@/hooks/useWelcomePath'
 import { sessaoRecusada } from '@/lib/invocarFuncao'
@@ -85,6 +86,7 @@ export function Home() {
     const offsetMs = jornada ? new Date(jornada.agora).getTime() - trilha.dataUpdatedAt : 0
     return (
       <Moldura larga>
+        <BoasVindasKingsCircle professor={trilha.data?.professor} />
         {carregando ? (
           <p className="py-16 text-center text-[13px] text-ink-muted">Carregando sua trilha…</p>
         ) : etapaAberta ? (
@@ -104,6 +106,7 @@ export function Home() {
         ) : trilha.data ? (
           <TrilhaView
             nome={trilha.data.professor.nome}
+            kingsCircle={!!trilha.data.professor.kingsCircle}
             etapas={trilha.data.etapas}
             onAbrir={abrirEtapa}
             onSair={sair}

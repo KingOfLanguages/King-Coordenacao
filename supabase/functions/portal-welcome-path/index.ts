@@ -281,7 +281,7 @@ serve(async (req) => {
   if (!prof) return json({ error: MSG_SESSAO }, 401)
 
   if (acao === 'sessao') {
-    return json({ professor: { id: prof.id, nome: semSufixoInicio(prof.nome) } })
+    return json({ professor: { id: prof.id, nome: semSufixoInicio(prof.nome), kingsCircle: prof.kings_circle === true } })
   }
 
   // ── Batida de tempo: caminho curto ────────────────────────────────────────
@@ -309,7 +309,10 @@ serve(async (req) => {
   if (acao === 'trilha') {
     const { etapas, bloqueada } = aplicarPrazo(await carregarTrilha(admin, prof, !!dispensa), jornada)
     return json({
-      professor: { id: prof.id, nome: semSufixoInicio(prof.nome), dataInicio: prof.data_inicio },
+      professor: {
+        id: prof.id, nome: semSufixoInicio(prof.nome), dataInicio: prof.data_inicio,
+        kingsCircle: prof.kings_circle === true,
+      },
       etapas,
       // `agora` deixa o contador do navegador acertar o relógio pelo servidor:
       // celular com hora errada não ganha nem perde prazo.
