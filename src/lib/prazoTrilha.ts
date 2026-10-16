@@ -58,9 +58,10 @@ export function dataHoraBR(iso: string): string {
   return `${v('weekday')}, ${v('day')}/${v('month')} às ${v('hour')}:${v('minute')}`
 }
 
-/** Onde o professor está, na visão da tela de controle. Ordem = urgência. */
+/** Onde o professor está, na visão da tela de controle. Ordem = urgência.
+ *  `dispensado`: a coordenação tirou a trilha dele (migration 20260800). */
 export type SituacaoTrilha =
-  | 'bloqueado' | 'acabando' | 'falta_reuniao' | 'nao_acessou' | 'andamento' | 'finalizado'
+  | 'bloqueado' | 'acabando' | 'falta_reuniao' | 'nao_acessou' | 'andamento' | 'finalizado' | 'dispensado'
 
 type CamposSituacao = {
   primeiro_acesso_em: string | null
@@ -68,12 +69,14 @@ type CamposSituacao = {
   concluida_em: string | null
   so_falta_revisao: boolean
   primeira_reuniao_em: string | null
+  dispensado_em: string | null
 }
 
 /** Mesma regra do bloqueio da Edge Function: prazo vencido trava, a não ser
  *  que tudo o que falta esteja esperando revisão da coordenação. */
 export function situacaoTrilha(l: CamposSituacao, agora: number): SituacaoTrilha {
   if (l.concluida_em) return l.primeira_reuniao_em ? 'finalizado' : 'falta_reuniao'
+  if (l.dispensado_em) return 'dispensado'
   if (!l.primeiro_acesso_em || !l.prazo_em) return 'nao_acessou'
   const restante = new Date(l.prazo_em).getTime() - agora
   if (restante <= 0) return l.so_falta_revisao ? 'andamento' : 'bloqueado'

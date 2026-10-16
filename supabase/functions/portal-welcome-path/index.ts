@@ -16,7 +16,7 @@
 //   POST /functions/v1/portal-welcome-path   { "acao": "…", … }
 //
 //   sessao      { token }                    → { professor }
-//   trilha      { token }                    → { professor, etapas[], jornada, primeiraReuniao }
+//   trilha      { token }                    → { professor, etapas[], jornada, primeiraReuniao, dispensa }
 //   etapa       { token, etapaId }           → { etapa, blocos[], questoes[], progresso }
 //   iniciar     { token, etapaId }           → { ok: true }
 //   tempo       { token, etapaId, segundos } → { ok: true }   (caminho curto, sem trilha)
@@ -34,6 +34,11 @@
 // concluídas continuam abertas para revisão. Exceção: se tudo o que falta já
 // foi enviado e só espera revisão da coordenação, não trava — a demora não é
 // do professor.
+//
+// ── Dispensa (2026-10-15) ────────────────────────────────────────────────────
+// A coordenação pode dispensar um professor da trilha (`welcome_path_dispensas`,
+// migration 20260800). Dispensado não liga o relógio — nem toca o de quem já
+// tinha aberto — e todas as etapas ficam abertas para consulta, sem ordem.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -91,7 +96,8 @@ type ProgressoRow = {
   observacao: string | null; liberada_manualmente: boolean; revisao_pendente: boolean
 }
 
-async function carregarTrilha(admin: Admin, prof: ProfRow) {
+/** `livre` (professor dispensado): nenhuma etapa espera a anterior nem a data. */
+async function carregarTrilha(admin: Admin, prof: ProfRow, livre = false) {
   const { data: etapasRaw } = await admin
     .from('welcome_path_etapas')
     .select('id, ordem, titulo, descricao, ativa, obrigatoria, nota_minima, prazo_dias, liberacao_dia, notas_coordenacao, minutos_estimados')
@@ -115,11 +121,11 @@ async function carregarTrilha(admin: Admin, prof: ProfRow) {
     const p = porEtapa.get(e.id) ?? null
     const anterior = i > 0 ? porEtapa.get(etapas[i - 1].id) : null
 
-    const liberadaPorOrdem = i === 0 || !!anterior?.concluida_em || !!p?.liberada_manualmente
+    const liberadaPorOrdem = livre || i === 0 || !!anterior?.concluida_em || !!p?.liberada_manualmente
     // Sem data_inicio no cadastro não dá para calcular a janela — não trancamos
     // o professor por causa de um dado que falta no cadastro dele.
     const liberadaPorData =
-      e.liberacao_dia == null || dias == null || dias + 1 >= e.liberacao_dia
+      livre || e.liberacao_dia == null || dias == null || dias + 1 >= e.liberacao_dia
 
     const estado: 'concluida' | 'liberada' | 'bloqueada' = p?.concluida_em
       ? 'concluida'
@@ -165,6 +171,18 @@ async function abrirJornada(admin: Admin, professorId: string): Promise<JornadaR
   const { data, error } = await admin.rpc('wp_abrir_jornada', { p_professor_id: professorId })
   if (error) return null
   return data as JornadaRow
+}
+
+type DispensaRow = { created_at: string; motivo: string | null }
+
+/** A coordenação dispensou este professor da trilha? */
+async function buscarDispensa(admin: Admin, professorId: string): Promise<DispensaRow | null> {
+  const { data } = await admin
+    .from('welcome_path_dispensas')
+    .select('created_at, motivo')
+    .eq('professor_id', professorId)
+    .maybeSingle()
+  return (data as DispensaRow | null) ?? null
 }
 
 /** Aplica o prazo sobre a trilha calculada. `toleranciaMs` empurra o fim do
@@ -283,11 +301,13 @@ serve(async (req) => {
     return json({ ok: true })
   }
 
-  // A 1ª carga da trilha é o "1º acesso" que liga o relógio de 120h.
-  const jornada = await abrirJornada(admin, prof.id)
+  // A 1ª carga da trilha é o "1º acesso" que liga o relógio de 120h — menos
+  // para quem a coordenação dispensou: esse não tem relógio nem ordem.
+  const dispensa = await buscarDispensa(admin, prof.id)
+  const jornada = dispensa ? null : await abrirJornada(admin, prof.id)
 
   if (acao === 'trilha') {
-    const { etapas, bloqueada } = aplicarPrazo(await carregarTrilha(admin, prof), jornada)
+    const { etapas, bloqueada } = aplicarPrazo(await carregarTrilha(admin, prof, !!dispensa), jornada)
     return json({
       professor: { id: prof.id, nome: semSufixoInicio(prof.nome), dataInicio: prof.data_inicio },
       etapas,
@@ -304,6 +324,7 @@ serve(async (req) => {
       primeiraReuniao: jornada?.concluida_em
         ? await linkPrimeiraReuniao(admin, prof.coordenador_id)
         : null,
+      dispensa: dispensa && { em: dispensa.created_at, motivo: dispensa.motivo },
     })
   }
 
@@ -313,7 +334,7 @@ serve(async (req) => {
 
   // Anotação não faz a trilha andar: fica liberada mesmo com o prazo esgotado.
   const tolerancia = acao === 'responder' ? TOLERANCIA_ENVIO_MS : 0
-  const { etapas: trilha } = aplicarPrazo(await carregarTrilha(admin, prof), acao === 'observacao' ? null : jornada, tolerancia)
+  const { etapas: trilha } = aplicarPrazo(await carregarTrilha(admin, prof, !!dispensa), acao === 'observacao' ? null : jornada, tolerancia)
   const etapaEstado = trilha.find(e => e.id === etapaId)
   if (!etapaEstado) return json({ error: 'Etapa não encontrada.' }, 404)
 

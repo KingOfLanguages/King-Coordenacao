@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Check, Clock3, Lock, Unlock, RotateCcw, MessageSquareText, X,
+  Check, Clock3, Lock, Unlock, RotateCcw, MessageSquareText, X, UserMinus, Undo2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -14,7 +14,7 @@ import { canEdit } from '@/lib/permissions'
 import { dataHoraBR, fmtHaQuanto, fmtRestante, fmtRestanteCurto } from '@/lib/prazoTrilha'
 import {
   useRespostasProfessor, useLiberarEtapa, useResetarEtapa, useRevisarResposta,
-  useDesbloqueiosProfessor, useDesbloquearPrazo,
+  useDesbloqueiosProfessor, useDesbloquearPrazo, useDispensarTrilha, useCancelarDispensa,
   type EtapaAdmin, type RespostaAdmin,
 } from '@/hooks/useWelcomePathAdmin'
 import { ChipSituacao, type LinhaTrilha } from './WelcomePathTab'
@@ -26,6 +26,8 @@ import { ChipSituacao, type LinhaTrilha } from './WelcomePathTab'
 //
 // É aqui que a dissertativa vira nota: enquanto ninguém revisa, a etapa fica
 // pendurada em `revisao_pendente` e o professor não destrava a próxima.
+//
+// E é aqui que a coordenação dispensa alguém da trilha (migration 20260800).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DIA_MS = 86_400_000
@@ -40,8 +42,11 @@ function SecaoPrazo({ linha, agora }: { linha: LinhaTrilha; agora: number }) {
   const desbloquear = useDesbloquearPrazo()
   const [dias, setDias] = useState(2)
   const [obs, setObs] = useState('')
+  const dispensado = !!linha.dispensado_em
 
   if (!linha.primeiro_acesso_em || !linha.prazo_em) {
+    // Dispensado sem nunca ter aberto: não há prazo nenhum, a seção da dispensa explica.
+    if (dispensado) return null
     return (
       <div className="rounded-xl border border-line-soft bg-surface-subtle px-4 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
         Ainda não abriu a trilha. Os 5 dias de prazo começam a contar no primeiro acesso.
@@ -112,7 +117,7 @@ function SecaoPrazo({ linha, agora }: { linha: LinhaTrilha; agora: number }) {
         )}
       </ol>
 
-      {!linha.concluida_em && podeDesbloquear && (
+      {!linha.concluida_em && !dispensado && podeDesbloquear && (
         <div className="space-y-2.5 border-t border-line-soft pt-3">
           <p className="text-[12px] font-semibold text-ink">
             {restante > 0 ? 'Dar mais prazo' : 'Desbloquear a trilha'}
@@ -149,6 +154,117 @@ function SecaoPrazo({ linha, agora }: { linha: LinhaTrilha; agora: number }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Dispensar da trilha (ou desfazer). Quem já concluiu não tem o que dispensar. */
+function SecaoDispensa({ linha }: { linha: LinhaTrilha }) {
+  const { profile } = useAuth()
+  const podeEditar = canEdit(profile)
+  const dispensar = useDispensarTrilha()
+  const cancelar = useCancelarDispensa()
+  const [abrindo, setAbrindo] = useState(false)
+  const [motivo, setMotivo] = useState('')
+
+  if (linha.concluida_em) return null
+
+  if (linha.dispensado_em) {
+    return (
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line-soft bg-surface-subtle px-4 py-3">
+        <div className="min-w-0 space-y-0.5 text-[12.5px]">
+          <p className="flex items-center gap-1.5 font-medium text-ink">
+            <UserMinus className="h-3.5 w-3.5 text-ink-muted" /> Dispensado da trilha
+            <span className="font-normal text-ink-muted">
+              · {dataHoraBR(linha.dispensado_em)}{linha.dispensado_por && ` · por ${linha.dispensado_por}`}
+            </span>
+          </p>
+          {linha.motivo_dispensa && <p className="text-ink-secondary">“{linha.motivo_dispensa}”</p>}
+          <p className="text-[11.5px] text-ink-muted">
+            No portal, ele vê o aviso da dispensa e pode consultar o conteúdo sem prazo.
+          </p>
+        </div>
+        {podeEditar && (
+          <Button
+            size="sm" variant="outline"
+            className="btn-press h-8 gap-1.5 border-line text-[12px]"
+            disabled={cancelar.isPending}
+            onClick={() => {
+              const prazo = linha.primeiro_acesso_em
+                ? 'com o prazo que ele já tinha (se tiver vencido, desbloqueie aqui)'
+                : 'e os 5 dias de prazo começam no próximo acesso'
+              if (!confirm(`Desfazer a dispensa de ${linha.nome}? A trilha volta a valer para ele, ${prazo}.`)) return
+              cancelar.mutate(linha.professor_id, {
+                onSuccess: () => toast.success('Dispensa desfeita: a trilha volta a valer'),
+                onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível desfazer.'),
+              })
+            }}
+          >
+            <Undo2 className="h-3.5 w-3.5" /> Desfazer dispensa
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  if (!podeEditar) return null
+
+  if (!abrindo) {
+    return (
+      <div className="flex justify-end">
+        <Button
+          size="sm" variant="outline"
+          className="btn-press h-8 gap-1.5 border-line text-[12px]"
+          onClick={() => setAbrindo(true)}
+        >
+          <UserMinus className="h-3.5 w-3.5" /> Dispensar da trilha
+        </Button>
+      </div>
+    )
+  }
+
+  function confirmar() {
+    dispensar.mutate(
+      { professorId: linha.professor_id, motivo },
+      {
+        onSuccess: () => {
+          setAbrindo(false)
+          setMotivo('')
+          toast.success(`${linha.nome.split(' ')[0]} foi dispensado da trilha`)
+        },
+        onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível dispensar.'),
+      },
+    )
+  }
+
+  return (
+    <div className="space-y-2.5 rounded-xl border border-line-soft px-4 py-3.5">
+      <p className="text-[12px] font-semibold text-ink">Dispensar {linha.nome.split(' ')[0]} da trilha</p>
+      <p className="text-[12px] leading-relaxed text-ink-muted">
+        Ele não precisa fazer o Welcome Path: sai da conta de pendentes desta tela e, no portal, vê o aviso da
+        dispensa, com o conteúdo aberto para consulta, sem prazo. Dá para desfazer depois.
+      </p>
+      <input
+        value={motivo}
+        onChange={e => setMotivo(e.target.value)}
+        maxLength={300}
+        placeholder="Motivo (opcional): ex. voltou para a King, já foi treinado…"
+        className="h-9 w-full rounded-xl border border-line-soft bg-surface-canvas px-3 text-[12.5px] text-ink
+                   placeholder:text-ink-subtle focus:border-accentBlue focus:outline-none focus:ring-2 focus:ring-accentBlue-soft"
+      />
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm" variant="outline"
+          className="btn-press h-8 border-line text-[12px]"
+          disabled={dispensar.isPending}
+          onClick={() => { setAbrindo(false); setMotivo('') }}
+        >
+          Cancelar
+        </Button>
+        <Button size="sm" className="btn-press h-8 gap-1.5 text-[12px]" disabled={dispensar.isPending} onClick={confirmar}>
+          <UserMinus className="h-3.5 w-3.5" /> {dispensar.isPending ? 'Salvando…' : 'Confirmar dispensa'}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -390,12 +506,14 @@ export function ProfessorTrilhaDialog({
         </div>
 
         <SecaoPrazo linha={linha} agora={agora} />
+        <SecaoDispensa linha={linha} />
 
         <ul className="space-y-2">
           {etapas.map((etapa, i) => {
             const p = linha.porEtapa.get(etapa.id)
             const anterior = i > 0 ? linha.porEtapa.get(etapas[i - 1].id) : null
-            const destravada = i === 0 || !!anterior?.concluida_em || !!p?.liberada_manualmente
+            // Dispensado vê tudo aberto no portal, sem ordem (portal-welcome-path).
+            const destravada = !!linha.dispensado_em || i === 0 || !!anterior?.concluida_em || !!p?.liberada_manualmente
             const aberta = expandida === etapa.id
 
             return (

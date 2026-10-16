@@ -131,6 +131,10 @@ export type JornadaPortal = {
   agora: string
 }
 
+/** A coordenação dispensou o professor da trilha (migration 20260800): sem
+ *  relógio e com todas as etapas abertas para consulta. */
+export type DispensaPortal = { em: string; motivo: string | null }
+
 /** Link da 1ª reunião com a coordenação, que aparece nos parabéns. */
 export type PrimeiraReuniao = { coordenador: string | null; link: string | null }
 
@@ -140,6 +144,7 @@ export type TrilhaPortal = {
   /** Ausente se a função do servidor for de antes do prazo. */
   jornada?: JornadaPortal | null
   primeiraReuniao?: PrimeiraReuniao | null
+  dispensa?: DispensaPortal | null
 }
 
 // ─── Trilha e etapa ───────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
-import { Check, Lock, Play, RotateCw, CalendarClock, Clock3, LogOut } from 'lucide-react'
+import { Check, Lock, Play, RotateCw, CalendarClock, Clock3, LogOut, BadgeCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { dataBR, diasAte, fmtDuracao } from '@/lib/formato'
-import type { EtapaTrilha, JornadaPortal, PrimeiraReuniao } from '@/hooks/useWelcomePath'
+import type { DispensaPortal, EtapaTrilha, JornadaPortal, PrimeiraReuniao } from '@/hooks/useWelcomePath'
 import { ContadorTrilha, PainelBloqueio, PainelConclusao } from './JornadaViews'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ function LinhaMeta({ etapa }: { etapa: EtapaTrilha }) {
 }
 
 export function TrilhaView({
-  nome, etapas, onAbrir, onSair, jornada, offsetMs = 0, primeiraReuniao, onExpirar,
+  nome, etapas, onAbrir, onSair, jornada, offsetMs = 0, primeiraReuniao, onExpirar, dispensa,
 }: {
   nome: string
   etapas: EtapaTrilha[]
@@ -92,6 +92,8 @@ export function TrilhaView({
   offsetMs?: number
   primeiraReuniao?: PrimeiraReuniao | null
   onExpirar?: () => void
+  /** Dispensado pela coordenação: aviso no topo, sem relógio. */
+  dispensa?: DispensaPortal | null
 }) {
   const concluidas = etapas.filter(e => e.estado === 'concluida').length
   const total = etapas.length
@@ -130,11 +132,23 @@ export function TrilhaView({
           <p className="text-[14px] leading-relaxed text-ink-muted">
             {tudoFeito
               ? 'Você passou por todas as etapas do onboarding. Pode voltar aqui quando quiser para revisar o conteúdo.'
-              : jornada
+              : dispensa
+                ? 'Sua trilha de boas-vindas à King, aberta para você consultar quando quiser.'
+                : jornada
                 ? 'Sua trilha de boas-vindas à King. Cada etapa libera a próxima, e você tem 5 dias desde o primeiro acesso para concluir todas.'
                 : 'Sua trilha de boas-vindas à King. Cada etapa libera a próxima — faça no seu ritmo.'}
           </p>
         </div>
+
+        {dispensa && !tudoFeito && (
+          <div className="flex items-start gap-3 rounded-2xl border border-aviso-infoBd bg-aviso-infoBg px-4 py-3.5">
+            <BadgeCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-aviso-infoFg" />
+            <p className="text-[13px] leading-relaxed text-aviso-infoFg">
+              <span className="font-semibold">A coordenação dispensou você da trilha.</span>{' '}
+              Você não precisa concluir as etapas. O conteúdo continua aberto para consulta, sem prazo e em qualquer ordem.
+            </p>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border border-line-soft bg-surface-canvas px-5 py-4">
           {jornada && !tudoFeito && (

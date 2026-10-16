@@ -447,6 +447,10 @@ export type AcompanhamentoTrilha = {
   so_falta_revisao: boolean
   primeira_reuniao_em: string | null
   reuniao_marcada_em: string | null
+  /** Dispensa da trilha (migration 20260800): quando, nome de quem fez e o motivo. */
+  dispensado_em: string | null
+  dispensado_por: string | null
+  motivo_dispensa: string | null
 }
 
 export function useAcompanhamentoTrilha() {
@@ -512,6 +516,34 @@ export function useDesbloquearPrazo() {
       })
       if (error) throw new Error(error.message)
       return data as string
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
+  })
+}
+
+/** Dispensa o professor da trilha: sai da conta de pendentes e, no portal, o
+ *  conteúdo fica aberto para consulta, sem relógio. */
+export function useDispensarTrilha() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (v: { professorId: string; motivo?: string }) => {
+      const { error } = await supabase.rpc('wp_dispensar_trilha', {
+        p_professor_id: v.professorId,
+        p_motivo: v.motivo ?? null,
+      })
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
+  })
+}
+
+/** Desfaz a dispensa: o professor volta a ter a trilha (e o relógio, no próximo acesso). */
+export function useCancelarDispensa() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (professorId: string) => {
+      const { error } = await supabase.rpc('wp_cancelar_dispensa', { p_professor_id: professorId })
+      if (error) throw new Error(error.message)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
   })

@@ -42,7 +42,11 @@ const SITUACAO: Record<SituacaoTrilha, { label: string; cls: string; peso: numbe
   nao_acessou:   { label: 'Não acessou',      cls: 'bg-surface-subtle text-ink-muted',    peso: 3 },
   andamento:     { label: 'Em andamento',     cls: 'bg-accentBlue-soft text-accentBlue',  peso: 4 },
   finalizado:    { label: 'Finalizado',       cls: 'bg-aviso-okBg text-aviso-okFg',       peso: 5 },
+  dispensado:    { label: 'Dispensado',       cls: 'bg-surface-subtle text-ink-secondary', peso: 6 },
 }
+
+/** Fora da conta de "em aberto": já resolvidos, de um jeito ou de outro. */
+const FECHADAS: SituacaoTrilha[] = ['finalizado', 'dispensado']
 
 function norm(s: string): string {
   return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
@@ -73,6 +77,13 @@ export function ChipSituacao({ situacao }: { situacao: SituacaoTrilha }) {
 
 /** A coluna "Prazo": o que importa sobre o relógio em cada situação. */
 function TextoPrazo({ l, agora }: { l: LinhaTrilha; agora: number }) {
+  if (l.situacao === 'dispensado' && l.dispensado_em) {
+    return (
+      <span className="text-ink-muted" title={l.motivo_dispensa ?? undefined}>
+        dispensado em {dataBR(l.dispensado_em.slice(0, 10))}{l.dispensado_por && ` por ${l.dispensado_por.split(' ')[0]}`}
+      </span>
+    )
+  }
   if (l.situacao === 'nao_acessou') {
     // Mexeu na trilha antes de 07/10/2026, quando ainda não havia relógio.
     if (l.tempo_segundos > 0 || l.etapas_concluidas > 0) {
@@ -191,17 +202,18 @@ export function WelcomePathTab() {
   const contagem = useMemo(() => {
     const c: Record<Filtro, number> = {
       abertos: 0, todos: escopo.length,
-      bloqueado: 0, acabando: 0, falta_reuniao: 0, nao_acessou: 0, andamento: 0, finalizado: 0,
+      bloqueado: 0, acabando: 0, falta_reuniao: 0, nao_acessou: 0, andamento: 0, finalizado: 0, dispensado: 0,
     }
     for (const l of escopo) {
       c[l.situacao]++
-      if (l.situacao !== 'finalizado') c.abertos++
+      if (!FECHADAS.includes(l.situacao)) c.abertos++
     }
     return c
   }, [escopo])
 
   const numeros = useMemo(() => {
-    const abriram = escopo.filter(l => l.primeiro_acesso_em)
+    // Dispensado não conta: a trilha deixou de valer para ele.
+    const abriram = escopo.filter(l => l.primeiro_acesso_em && l.situacao !== 'dispensado')
     const concluiram = abriram.filter(l => l.concluida_em)
     const tempos = concluiram.map(l => new Date(l.concluida_em!).getTime() - new Date(l.primeiro_acesso_em!).getTime())
     return {
@@ -219,7 +231,7 @@ export function WelcomePathTab() {
   const visiveis = useMemo(() => {
     const q = norm(busca)
     return escopo
-      .filter(l => filtro === 'todos' || (filtro === 'abertos' ? l.situacao !== 'finalizado' : l.situacao === filtro))
+      .filter(l => filtro === 'todos' || (filtro === 'abertos' ? !FECHADAS.includes(l.situacao) : l.situacao === filtro))
       .filter(l => q.length === 0 || norm(l.nome).includes(q))
       .sort((a, b) => {
         const pa = SITUACAO[a.situacao].peso, pb = SITUACAO[b.situacao].peso
@@ -239,6 +251,7 @@ export function WelcomePathTab() {
     { id: 'nao_acessou',   label: 'Não acessaram' },
     { id: 'falta_reuniao', label: 'Falta 1ª reunião' },
     { id: 'finalizado',    label: 'Finalizados' },
+    { id: 'dispensado',    label: 'Dispensados' },
     { id: 'todos',         label: 'Todos' },
   ]
 
@@ -257,6 +270,9 @@ export function WelcomePathTab() {
       'Concluiu em': l.concluida_em ? dataHoraBR(l.concluida_em) : '',
       '1ª reunião': l.primeira_reuniao_em ? `feita ${dataBR(l.primeira_reuniao_em)}` : l.reuniao_marcada_em ? `marcada ${dataHoraBR(l.reuniao_marcada_em)}` : '',
       'Tempo de estudo': fmtDuracao(l.tempo_segundos),
+      Dispensa: l.dispensado_em
+        ? [dataBR(l.dispensado_em.slice(0, 10)), l.dispensado_por && `por ${l.dispensado_por}`, l.motivo_dispensa].filter(Boolean).join(' · ')
+        : '',
       Telefone: l.telefone ?? '',
     }))
     const ws = XLSX.utils.json_to_sheet(dados)
@@ -487,7 +503,8 @@ export function WelcomePathTab() {
       )}
 
       <p className="text-[11.5px] text-ink-muted">
-        Clique no professor para ver as etapas e as respostas, liberar ou zerar uma etapa e desbloquear o prazo.
+        Clique no professor para ver as etapas e as respostas, liberar ou zerar uma etapa, desbloquear o prazo ou
+        dispensar da trilha.
       </p>
 
       {linhaAberta && (

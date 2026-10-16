@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { GraduationCap } from 'lucide-react'
 import { FundoPortal } from '@/components/portal/PortalUI'
 import { IdentificacaoPortal } from '@/components/portal/IdentificacaoPortal'
@@ -15,11 +16,22 @@ import { EtapaView } from './EtapaView'
 // oficial e a sessão vale para os portais do professor. Aqui a
 // jornada dura dias, então a sessão fica guardada no dispositivo (validade
 // deslizante de 14 dias) e as visitas seguintes caem direto na trilha.
+//
+// A etapa aberta mora no endereço (/welcome-path?etapa=<id>), cada uma numa
+// entrada do histórico: o "voltar" do navegador fecha a etapa e cai na lista,
+// em vez de sair da trilha para o site anterior (pedido do João, 15/10/2026).
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Marca, no histórico, a entrada da etapa que a própria trilha empilhou —
+ *  aí o botão Voltar da tela pode simplesmente desempilhar. */
+type EstadoHistorico = { daTrilha?: boolean } | null
 
 export function Home() {
   const { token, entrar, sair: sairSessao, invalidar } = usePortalSessao()
-  const [etapaAberta, setEtapaAberta] = useState<string | null>(null)
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const etapaAberta = token ? params.get('etapa') : null
 
   const trilha = useTrilha(token)
 
@@ -27,8 +39,41 @@ export function Home() {
   // limpa e cai na identificação, sem tela de erro para o professor.
   if (token && trilha.isError && sessaoRecusada(trilha.error)) invalidar()
 
+  // Entrou direto numa etapa (link colado, favorito): põe a lista embaixo dela
+  // no histórico, senão o primeiro "voltar" já sairia da trilha. Uma vez só
+  // (o ref segura o efeito dobrado do StrictMode). Recarregar a página mantém
+  // o `state` do histórico, então quem recarrega dentro da etapa não passa aqui.
+  const ajustouEntrada = useRef(false)
+  useEffect(() => {
+    if (ajustouEntrada.current) return
+    ajustouEntrada.current = true
+    const id = params.get('etapa')
+    if (!id || (location.state as EstadoHistorico)?.daTrilha) return
+    navigate('/welcome-path', { replace: true })
+    navigate(`/welcome-path?etapa=${encodeURIComponent(id)}`, { state: { daTrilha: true } })
+  }, [params, location.state, navigate])
+
+  // Saiu de uma etapa (botão da tela ou do navegador): recarrega a trilha — a
+  // etapa pode ter concluído a trilha, ou o prazo pode ter acabado enquanto ele
+  // estudava.
+  const recarregar = trilha.refetch
+  const etapaAntes = useRef(etapaAberta)
+  useEffect(() => {
+    if (etapaAntes.current && !etapaAberta) void recarregar()
+    etapaAntes.current = etapaAberta
+  }, [etapaAberta, recarregar])
+
+  function abrirEtapa(id: string) {
+    navigate(`/welcome-path?etapa=${encodeURIComponent(id)}`, { state: { daTrilha: true } })
+  }
+
+  function voltarParaTrilha() {
+    if ((location.state as EstadoHistorico)?.daTrilha) navigate(-1)
+    else navigate('/welcome-path', { replace: true })
+  }
+
   function sair() {
-    setEtapaAberta(null)
+    if (etapaAberta) navigate('/welcome-path', { replace: true })
     void sairSessao()
   }
 
@@ -38,7 +83,6 @@ export function Home() {
     const jornada = trilha.data?.jornada ?? null
     // Hora do servidor − hora do navegador no instante em que a trilha chegou.
     const offsetMs = jornada ? new Date(jornada.agora).getTime() - trilha.dataUpdatedAt : 0
-    const recarregar = () => { void trilha.refetch() }
     return (
       <Moldura larga>
         {carregando ? (
@@ -47,9 +91,7 @@ export function Home() {
           <EtapaView
             token={token}
             etapaId={etapaAberta}
-            // Volta sempre com a trilha recarregada: a etapa pode ter concluído
-            // a trilha, ou o prazo pode ter acabado enquanto ele estudava.
-            onVoltar={() => { setEtapaAberta(null); recarregar() }}
+            onVoltar={voltarParaTrilha}
             numero={(trilha.data?.etapas.findIndex(e => e.id === etapaAberta) ?? -1) + 1}
             totalEtapas={trilha.data?.etapas.length ?? 0}
             etapasConcluidas={trilha.data?.etapas.filter(e => e.estado === 'concluida').length ?? 0}
@@ -63,12 +105,13 @@ export function Home() {
           <TrilhaView
             nome={trilha.data.professor.nome}
             etapas={trilha.data.etapas}
-            onAbrir={setEtapaAberta}
+            onAbrir={abrirEtapa}
             onSair={sair}
             jornada={jornada}
             offsetMs={offsetMs}
             primeiraReuniao={trilha.data.primeiraReuniao}
-            onExpirar={recarregar}
+            onExpirar={() => { void recarregar() }}
+            dispensa={trilha.data.dispensa}
           />
         ) : null}
       </Moldura>
