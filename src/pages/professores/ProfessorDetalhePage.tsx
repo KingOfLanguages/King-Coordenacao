@@ -26,6 +26,7 @@ import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
 import { canEdit, canAddInfo } from '@/lib/permissions'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
+import { PerfilProfessorSection } from '@/components/professores/PerfilProfessorSection'
 import { StatusBadge } from '@/components/professores/StatusBadge'
 import { NovaObservacaoDialog } from '@/components/professores/NovaObservacaoDialog'
 import { ObservacaoSnapshotDetalhe } from '@/components/professores/ObservacaoSnapshotDetalhe'
@@ -114,8 +115,8 @@ const FILTROS: { value: ObsFiltro; label: string }[] = [
 // A ficha tinha 11 blocos empilhados numa página só (1.800 linhas de rolagem).
 // Em 2026-09 virou abas; o cabeçalho (nome, contadores, grupo, ações) fica
 // sempre visível em cima.
-type AbaProfessor = 'geral' | 'reunioes' | 'alunos' | 'pendencias' | 'ocorrencias'
-const ABAS_PROFESSOR: readonly AbaProfessor[] = ['geral', 'reunioes', 'alunos', 'pendencias', 'ocorrencias']
+type AbaProfessor = 'geral' | 'perfil' | 'reunioes' | 'alunos' | 'pendencias' | 'ocorrencias'
+const ABAS_PROFESSOR: readonly AbaProfessor[] = ['geral', 'perfil', 'reunioes', 'alunos', 'pendencias', 'ocorrencias']
 
 export function ProfessorDetalhePage() {
   const { id }     = useParams<{ id: string }>()
@@ -517,6 +518,7 @@ export function ProfessorDetalhePage() {
         onChange={setAba}
         abas={[
           { id: 'geral', label: 'Visão geral' },
+          { id: 'perfil', label: 'Perfil' },
           { id: 'reunioes', label: 'Reuniões e observações', n: reunioes.length + observacoes.length },
           { id: 'alunos', label: 'Alunos', n: alunosCount },
           { id: 'pendencias', label: 'Pendências' },
@@ -536,6 +538,9 @@ export function ProfessorDetalhePage() {
           alunos={acompanhamentoData.alunos}
         />
       )}
+
+      {/* ── Perfil do onboarding do King: preferências, como dá aula, formação ── */}
+      {aba === 'perfil' && <PerfilProfessorSection professorId={professor.id} />}
 
       {/* ── Permanência do aluno com o professor ── */}
       {aba === 'alunos' && temPermanencia && (

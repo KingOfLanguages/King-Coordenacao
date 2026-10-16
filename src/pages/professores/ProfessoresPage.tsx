@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, AlertCircle, CalendarDays, PauseCircle, Plus, X, User } from 'lucide-react'
+import { Search, AlertCircle, CalendarDays, PauseCircle, Plus, X, User, Baby } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -14,10 +14,17 @@ import { diasAte } from '@/hooks/usePausas'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
+import { FiltroPreferencias } from '@/components/professores/FiltroPreferencias'
+import {
+  usePerfisProfessores, passaCriancas, passaPreferencias,
+  type FiltroCriancas, type SelecaoPreferencias,
+} from '@/hooks/usePerfilProfessor'
+import { useAbaUrl } from '@/hooks/useAbaUrl'
 import { cn, tempoDeCasaLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
 const TODOS = 'todos'
+const FILTROS_CRIANCAS: readonly FiltroCriancas[] = ['todos', 'sim', 'nao', 'sem']
 
 export function ProfessoresPage() {
   const { data: professores, isLoading }  = useProfessoresComContadores()
@@ -28,21 +35,38 @@ export function ProfessoresPage() {
   const [grupoFiltro, setGrupoFiltro]     = useState<string>(TODOS)
   const [coordFiltro, setCoordFiltro]     = useState<string>(TODOS)
   const [dialogOpen, setDialogOpen]       = useState(false)
+  // Perfil do onboarding do King. Se a consulta falhar, a barra some e a lista segue normal.
+  const { data: perfis, isLoading: carregandoPerfis } = usePerfisProfessores()
+  // Na URL (?criancas=sim) para a equipe poder mandar o link já filtrado.
+  const [criancas, setCriancas]           = useAbaUrl<FiltroCriancas>(FILTROS_CRIANCAS, 'todos', 'criancas')
+  const [selecao, setSelecao]             = useState<SelecaoPreferencias>({})
   const navigate = useNavigate()
 
-  const filtrados = useMemo(() =>
+  const ativosBase = useMemo(() =>
     (professores ?? []).filter(p =>
       p.nome.toLowerCase().includes(busca.toLowerCase()) &&
       (grupoFiltro === TODOS || p.grupo_id === grupoFiltro) &&
       (coordFiltro === TODOS || p.coordenador_id === coordFiltro)
     ), [professores, busca, grupoFiltro, coordFiltro])
 
-  const emPausaFiltrados = useMemo(() =>
+  const emPausaBase = useMemo(() =>
     emPausa.filter(p =>
       p.nome.toLowerCase().includes(busca.toLowerCase()) &&
       (grupoFiltro === TODOS || p.grupo_id === grupoFiltro) &&
       (coordFiltro === TODOS || p.coordenador_id === coordFiltro)
     ), [emPausa, busca, grupoFiltro, coordFiltro])
+
+  const perfisDaLista = useMemo(() =>
+    perfis ? [...ativosBase, ...emPausaBase].map(p => perfis.get(p.id)) : [],
+    [perfis, ativosBase, emPausaBase])
+
+  const filtroPerfilAtivo = criancas !== 'todos' || Object.values(selecao).some(v => v?.length)
+  const filtrados = useMemo(() =>
+    perfis ? ativosBase.filter(p => passaCriancas(perfis.get(p.id), criancas) && passaPreferencias(perfis.get(p.id), selecao)) : ativosBase,
+    [perfis, ativosBase, criancas, selecao])
+  const emPausaFiltrados = useMemo(() =>
+    perfis ? emPausaBase.filter(p => passaCriancas(perfis.get(p.id), criancas) && passaPreferencias(perfis.get(p.id), selecao)) : emPausaBase,
+    [perfis, emPausaBase, criancas, selecao])
 
   const emMonitoramento = filtrados.filter(p => p.monitoramento)
   const demais          = filtrados.filter(p => !p.monitoramento)
@@ -117,10 +141,22 @@ export function ProfessoresPage() {
         </div>
       </header>
 
-      {isLoading ? (
+      {perfis && (
+        <FiltroPreferencias
+          perfis={perfisDaLista}
+          criancas={criancas}
+          onCriancas={setCriancas}
+          selecao={selecao}
+          onSelecao={setSelecao}
+        />
+      )}
+
+      {isLoading || (filtroPerfilAtivo && carregandoPerfis) ? (
         <SkeletonGrid />
       ) : filtrados.length === 0 && emPausaFiltrados.length === 0 ? (
-        <EmptyState onNovo={() => setDialogOpen(true)} />
+        filtroPerfilAtivo
+          ? <SemResultadoPerfil onLimpar={() => { setCriancas('todos'); setSelecao({}) }} />
+          : <EmptyState onNovo={() => setDialogOpen(true)} />
       ) : (
         <>
           {emMonitoramento.length > 0 && (
@@ -130,7 +166,7 @@ export function ProfessoresPage() {
               tone="danger"
             >
               {emMonitoramento.map(p => (
-                <CardProfessor key={p.id} professor={p} onClick={() => navigate(`/professores/${p.id}`)} emphasis />
+                <CardProfessor key={p.id} professor={p} onClick={() => navigate(`/professores/${p.id}`)} emphasis criancas={perfis?.get(p.id)?.atende_criancas === true} />
               ))}
             </Section>
           )}
@@ -138,7 +174,7 @@ export function ProfessoresPage() {
           {demais.length > 0 && (
             <Section label="Todos">
               {demais.map(p => (
-                <CardProfessor key={p.id} professor={p} onClick={() => navigate(`/professores/${p.id}`)} />
+                <CardProfessor key={p.id} professor={p} onClick={() => navigate(`/professores/${p.id}`)} criancas={perfis?.get(p.id)?.atende_criancas === true} />
               ))}
             </Section>
           )}
@@ -157,6 +193,7 @@ export function ProfessoresPage() {
                   professor={p}
                   onClick={() => navigate(`/professores/${p.id}`)}
                   pausa={p._pausa}
+                  criancas={perfis?.get(p.id)?.atende_criancas === true}
                 />
               ))}
             </Section>
@@ -295,11 +332,13 @@ function Section({
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 function CardProfessor({
-  professor, onClick, emphasis, pausa,
+  professor, onClick, emphasis, pausa, criancas,
 }: {
   professor: ProfessorComContadores
   onClick: () => void
   emphasis?: boolean
+  /** Marcou Crianças no público, no onboarding do King. */
+  criancas?: boolean
   /** Dados da pausa vigente — presente só nos cards da seção "Em pausa". */
   pausa?: { motivo: string; data_inicio: string; data_fim: string } | null
 }) {
@@ -351,8 +390,13 @@ function CardProfessor({
       )}
 
       {/* Grupo + coordenador */}
-      {(professor.grupo?.nome || professor.coordenador?.nome) && (
+      {(professor.grupo?.nome || professor.coordenador?.nome || criancas) && (
         <div className="flex flex-wrap items-center gap-1.5">
+          {criancas && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-aviso-infoBg px-2 py-0.5 text-[11px] font-medium text-aviso-infoFg">
+              <Baby className="h-3 w-3" />Crianças
+            </span>
+          )}
           {professor.grupo?.nome && (
             <span className="inline-flex items-center rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
               {professor.grupo.nome}
@@ -404,6 +448,21 @@ function SkeletonGrid() {
           <div className="h-3 w-1/3 bg-surface-subtle rounded" />
         </div>
       ))}
+    </div>
+  )
+}
+
+function SemResultadoPerfil({ onLimpar }: { onLimpar: () => void }) {
+  return (
+    <div className="card-surface p-12 text-center space-y-3">
+      <div className="mx-auto h-10 w-10 rounded-full bg-surface-subtle text-ink-muted flex items-center justify-center">
+        <Search className="h-4 w-4" />
+      </div>
+      <p className="text-[14px] font-medium text-ink">Nenhum professor com essas preferências</p>
+      <p className="text-[13px] text-ink-muted">Tire alguma preferência ou limpe os filtros.</p>
+      <Button size="sm" variant="outline" onClick={onLimpar} className="btn-press border-line text-ink-secondary gap-1.5 mx-auto">
+        <X className="h-3.5 w-3.5" /> Limpar filtros
+      </Button>
     </div>
   )
 }
