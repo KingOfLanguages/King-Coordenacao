@@ -262,7 +262,7 @@ export function IdentificacaoPortal({
               </h1>
               <p className="text-[13px] leading-relaxed text-ink-muted">
                 Se encontramos seu cadastro, mandamos um código de 6 números para o
-                e-mail registrado na King. Ele vale por 10 minutos — olhe também a caixa de spam.
+                e-mail registrado na King. Ele vale por 10 minutos.
               </p>
             </div>
           </div>
@@ -295,18 +295,28 @@ export function IdentificacaoPortal({
                   Entrar
                 </BotaoPrimario>
               )}
+              {/* O servidor responde "enviado" mesmo sem cadastro (item 8 do
+                  pentest): professor novo que tenta antes do sync trazer o
+                  cadastro (até 1 h) fica sem e-mail e sem nenhum erro na tela. */}
+              <p className="rounded-xl bg-surface-subtle px-3.5 py-3 text-[12px] leading-relaxed text-ink-muted">
+                Se o código não chegar em 10 minutos, olhe o spam. Se não estiver lá, espere
+                1 hora e tente de novo. Se continuar sem chegar,{' '}
+                <button
+                  type="button"
+                  onClick={() => setStep({ tipo: 'contato' })}
+                  className="font-medium text-ink-secondary underline underline-offset-2 hover:text-ink"
+                >
+                  fale com a coordenação
+                </button>.
+              </p>
               {!step.expirado && (
                 <button type="button" onClick={reenviar} disabled={solicitar.isPending} className={linkDiscreto}>
                   Não chegou? Enviar outro código
                 </button>
               )}
-              {step.via === 'email' ? (
+              {step.via === 'email' && (
                 <button type="button" onClick={irParaNome} className={linkDiscreto}>
                   Não chegou nada? Entrar com o nome completo
-                </button>
-              ) : (
-                <button type="button" onClick={() => setStep({ tipo: 'contato' })} className={linkDiscreto}>
-                  Não chegou nada? Falar com a coordenação
                 </button>
               )}
               <button type="button" onClick={recomecar} className={linkDiscreto}>
