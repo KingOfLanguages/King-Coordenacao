@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { dataBR, diasAte, fmtDuracao } from '@/lib/formato'
 import type { DispensaPortal, EtapaTrilha, JornadaPortal, PrimeiraReuniao } from '@/hooks/useWelcomePath'
 import { ContadorTrilha, PainelBloqueio, PainelConclusao } from './JornadaViews'
+import { ParaTerAMao } from './ParaTerAMao'
 import { SeloKingsCircle } from '@/components/professores/KingsCircle'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ function LinhaMeta({ etapa }: { etapa: EtapaTrilha }) {
 
 export function TrilhaView({
   nome, kingsCircle = false, etapas, onAbrir, onSair, jornada, offsetMs = 0, primeiraReuniao, onExpirar, dispensa,
+  onBaixarMapa,
 }: {
   nome: string
   /** Membro do King's Circle (20260802): selo VIP ao lado do título. */
@@ -97,6 +99,9 @@ export function TrilhaView({
   onExpirar?: () => void
   /** Dispensado pela coordenação: aviso no topo, sem relógio. */
   dispensa?: DispensaPortal | null
+  /** Pede o link assinado do MAPA e baixa. Sem ele (visão da coordenação), o
+   *  botão aparece desligado. */
+  onBaixarMapa?: () => Promise<void>
 }) {
   const concluidas = etapas.filter(e => e.estado === 'concluida').length
   const total = etapas.length
@@ -178,6 +183,8 @@ export function TrilhaView({
         </div>
       </header>
       )}
+
+      <ParaTerAMao onBaixarMapa={onBaixarMapa} />
 
       {/* Etapas */}
       <ol className="relative space-y-2.5">

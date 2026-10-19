@@ -23,6 +23,7 @@
 //   responder   { token, etapaId, respostas[] }
 //                 → { nota, aprovado, notaMinima, revisaoPendente, resultado[] }
 //   observacao  { token, etapaId, texto }    → { ok: true }
+//   mapa        { token }                    → { url }   (link assinado do MAPA em PDF)
 //
 // Escreve com a service_role: `welcome_path_progresso` e `_respostas` não têm
 // policy de INSERT/UPDATE (mesmo desenho de `pausas`).
@@ -59,6 +60,14 @@ const TENTATIVAS_MAX = 20
 const TEXTO_MAX = 5000
 /** Quem estava no meio do quiz quando o relógio zerou ainda consegue enviar. */
 const TOLERANCIA_ENVIO_MS = 15 * 60_000
+/** MAPA em PDF (19/10/2026). Bucket PRIVADO (migration 20260804): o PDF não
+ *  tem endereço público; cada clique ganha um link assinado de 10 min. Para
+ *  trocar a versão, suba o PDF novo por cima do mesmo caminho. */
+const DOCS_BUCKET = 'welcome-path-docs'
+const MAPA_CAMINHO = 'mapa/MAPA.pdf'
+const MAPA_NOME_ARQUIVO = 'MAPA-King-of-Languages.pdf'
+const MAPA_VALIDADE_S = 600
+
 const MSG_PRAZO =
   'Seu prazo para concluir a trilha terminou. Fale com o suporte ao professor pelo WhatsApp para pedir o desbloqueio.'
 
@@ -299,6 +308,18 @@ serve(async (req) => {
       })
     }
     return json({ ok: true })
+  }
+
+  // Baixar o MAPA não é "acessar a trilha": fica antes do relógio de 120h.
+  if (acao === 'mapa') {
+    const { data, error } = await admin.storage
+      .from(DOCS_BUCKET)
+      .createSignedUrl(MAPA_CAMINHO, MAPA_VALIDADE_S, { download: MAPA_NOME_ARQUIVO })
+    if (error || !data?.signedUrl) {
+      console.error('[portal-welcome-path] MAPA indisponível:', error?.message)
+      return json({ error: 'O MAPA não está disponível agora. Tente de novo em instantes.' }, 503)
+    }
+    return json({ url: data.signedUrl })
   }
 
   // A 1ª carga da trilha é o "1º acesso" que liga o relógio de 120h — menos

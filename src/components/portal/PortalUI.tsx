@@ -11,7 +11,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { COORD_TELEFONE, COORD_WHATSAPP_NUM } from './contato'
+import { COORD_HORARIO, COORD_TELEFONE, COORD_WHATSAPP_NUM } from './contato'
 
 export function CabecalhoPortal({
   titulo, descricao, icone: Icone,
@@ -113,5 +113,18 @@ export function BotaoWhatsApp({ children, mensagem }: { children?: React.ReactNo
       <MessageCircle className="h-4 w-4" />
       {children ?? `Falar com a coordenação (${COORD_TELEFONE})`}
     </a>
+  )
+}
+
+/** O número escrito, não só o botão: o professor anota, salva no celular ou
+ *  chama de outro aparelho. Pedido do João em 19/10/2026. */
+export function NumeroCoordenacao({ className }: { className?: string }) {
+  return (
+    <div className={cn('space-y-0.5', className)}>
+      <p className="select-all text-[17px] font-semibold tabular-nums tracking-[-0.01em] text-ink">
+        {COORD_TELEFONE}
+      </p>
+      <p className="text-[12px] text-ink-muted">WhatsApp da coordenação, {COORD_HORARIO}</p>
+    </div>
   )
 }

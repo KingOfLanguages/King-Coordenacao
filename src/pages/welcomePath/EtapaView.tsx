@@ -5,7 +5,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { dataBR, fmtDuracao } from '@/lib/formato'
-import { BotaoWhatsApp } from '@/components/portal/PortalUI'
+import { BotaoWhatsApp, NumeroCoordenacao } from '@/components/portal/PortalUI'
 import {
   useEtapa, useIniciarEtapa, useRegistrarTempo, useResponderEtapa, useSalvarObservacao, registrarTempoAoSair,
   type RespostaEnviada, type ResultadoEnvio, type QuestaoEtapa, type MinhaResposta,
@@ -332,6 +332,7 @@ export function EtapaView({
             <p className="text-[12px] leading-relaxed text-ink-muted">
               Travou em algo ou tem uma dúvida? A coordenação responde rápido.
             </p>
+            <NumeroCoordenacao />
             <BotaoWhatsApp>Falar com a coordenação</BotaoWhatsApp>
           </div>
         </>

@@ -4,3 +4,5 @@
  *  desativados (/pausa, /transferencia). */
 export const COORD_WHATSAPP_NUM = '5511913027763'
 export const COORD_TELEFONE     = '+55 11 91302-7763'
+/** Mesmo horário da etapa "A King por dentro" e do guia do professor novo. */
+export const COORD_HORARIO      = 'das 9h às 18h'

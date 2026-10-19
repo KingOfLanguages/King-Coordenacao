@@ -5,7 +5,7 @@ import { FundoPortal } from '@/components/portal/PortalUI'
 import { IdentificacaoPortal } from '@/components/portal/IdentificacaoPortal'
 import { BoasVindasKingsCircle } from '@/components/portal/BoasVindasKingsCircle'
 import { usePortalSessao } from '@/hooks/usePortalIdentidade'
-import { useTrilha } from '@/hooks/useWelcomePath'
+import { baixarMapa, useTrilha } from '@/hooks/useWelcomePath'
 import { sessaoRecusada } from '@/lib/invocarFuncao'
 import { TrilhaView } from './TrilhaView'
 import { EtapaView } from './EtapaView'
@@ -115,6 +115,7 @@ export function Home() {
             primeiraReuniao={trilha.data.primeiraReuniao}
             onExpirar={() => { void recarregar() }}
             dispensa={trilha.data.dispensa}
+            onBaixarMapa={() => baixarMapa(token)}
           />
         ) : null}
       </Moldura>

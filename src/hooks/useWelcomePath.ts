@@ -176,6 +176,19 @@ export function useEtapa(token: string | null, etapaId: string | null) {
 
 // ─── Ações ────────────────────────────────────────────────────────────────────
 
+/** Link assinado do MAPA em PDF (vale 10 min e já vem como download). O
+ *  navegador baixa pelo link de uma âncora: `window.open` depois de um `await`
+ *  cai no bloqueador de pop-up. */
+export async function baixarMapa(token: string) {
+  const { url } = await invocar<{ url: string }>({ acao: 'mapa', token })
+  const a = document.createElement('a')
+  a.href = url
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 export function useIniciarEtapa() {
   return useMutation({
     mutationFn: (v: { token: string; etapaId: string }) =>
