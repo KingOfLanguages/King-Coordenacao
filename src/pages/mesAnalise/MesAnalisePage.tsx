@@ -17,6 +17,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { Abas } from '@/components/ui/abas'
+import { baixarXlsx, diaXlsx, type LinhaXlsx } from '@/lib/exportarXlsx'
+import { BotaoExportar } from '@/components/acompanhamento/BotaoExportar'
 
 type Aba = 'pendentes' | 'concluidos' | 'sugestoes'
 
@@ -95,6 +97,57 @@ export function MesAnalisePage({ embutido = false }: { embutido?: boolean }) {
     return m
   }, [incidentes])
 
+  // Exporta a aba aberta, com a busca aplicada (Sugestões não tem busca).
+  const totalExportar = aba === 'sugestoes' ? (sugestoesData?.sugestoes.length ?? 0) : listaFiltrada.length
+  async function exportar() {
+    const qtdAlunos = (id: string | null) => (id ? alunosPorProfessor.get(id)?.total ?? 0 : null)
+    const linhas: LinhaXlsx[] = aba === 'sugestoes'
+      ? (sugestoesData?.sugestoes ?? []).map(s => ({
+          Professor: s.professor_nome,
+          Nível: nivelLabel[s.nivel],
+          Incidentes: s.totalCount,
+          Score: s.score,
+          'Por tipo': s.porTipo.map(t => `${t.tipo} ×${t.quantidade}`).join(', '),
+          'Último incidente': diaXlsx(s.ultimoIncidenteEm),
+          Alunos: qtdAlunos(s.professor_id),
+        }))
+      : listaFiltrada.map(i => ({
+          Professor: i.teacher_name,
+          Responsável: i.coordinator,
+          Urgência: i.urgency,
+          'Aberto em': diaXlsx(i.created_at),
+          'Dias desde a abertura': diasDesde(i.created_at),
+          ...(aba === 'pendentes'
+            ? { Prazo: statusPrazo(i.created_at).vencido ? 'Vencido' : 'No prazo' }
+            : { 'Resolvido em': diaXlsx(i.resolved_at), Resultado: i.solution }),
+          Descrição: i.description,
+          Alunos: qtdAlunos(i.professor_id),
+          'Vezes em Mês de Análise': i.professor_id ? recorrenciaPorProfessor.get(i.professor_id) ?? 1 : null,
+        }))
+    const nomeAba = { pendentes: 'Pendentes', concluidos: 'Concluídos', sugestoes: 'Sugestões' }[aba]
+    await baixarXlsx({
+      arquivo: `mes-de-analise-${aba}`,
+      aba: `Mês de Análise - ${nomeAba}`,
+      linhas,
+      sobre: [
+        ['Tela', `Acompanhamento › Mês de Análise › ${nomeAba}`],
+        ['Linhas', aba === 'sugestoes' ? `${linhas.length} professores sugeridos` : `${linhas.length} de ${listaBase.length} ${nomeAba.toLowerCase()}`],
+        ...(aba !== 'sugestoes' && termo ? [['Filtro', `Busca: "${busca.trim()}"`] as [string, string]] : []),
+        ...(aba === 'sugestoes'
+          ? [
+              ['Quem entra', `Professores com incidentes dos tipos ${MES_ANALISE_TRIGGER_TYPES.filter(t => t !== 'No-Show').join(', ')}, fora de Mês de Análise.`],
+              ['Score', 'No-show (falta do professor na 1ª aula) e Reclamação contam em dobro.'],
+              ['Nível', 'Pelo score: Crítico = 5+ · Alerta = 3–4 · Observação = 2.'],
+              ['Alunos', 'Alunos vinculados ao professor no King hoje (roster do sync).'],
+            ] as [string, string][]
+          : [
+              ['Prazo', 'Mês de Análise dura 30 dias a partir da abertura; depois disso, vencido.'],
+              ['Alunos', 'Alunos vinculados ao professor no King hoje (roster do sync).'],
+            ] as [string, string][]),
+      ],
+    })
+  }
+
   function abrirColocarManual() {
     setColocarPreset({})
     setColocarAberto(true)
@@ -117,15 +170,21 @@ export function MesAnalisePage({ embutido = false }: { embutido?: boolean }) {
           {!embutido && <h1 className="text-2xl font-semibold tracking-tight text-ink">Mês de Análise</h1>}
           <p className="text-[13px] text-ink-muted">Acompanhamento de 30 dias, integrado ao King Nexus.</p>
         </div>
-        {podeEditar && (
-          <Button
-            size="sm"
-            className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
-            onClick={abrirColocarManual}
-          >
-            <Plus className="h-3.5 w-3.5" />Colocar em Mês de Análise
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <BotaoExportar
+            total={(aba === 'sugestoes' ? carregandoSugestoes : isLoading) ? 0 : totalExportar}
+            onExportar={exportar}
+          />
+          {podeEditar && (
+            <Button
+              size="sm"
+              className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
+              onClick={abrirColocarManual}
+            >
+              <Plus className="h-3.5 w-3.5" />Colocar em Mês de Análise
+            </Button>
+          )}
+        </div>
       </header>
 
       {/* Stats */}

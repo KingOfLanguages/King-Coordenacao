@@ -13,7 +13,9 @@ import { useProblemasAbertos, type ProfessorComProblema } from '@/hooks/useObser
 import { ESTAGIO, ORDEM_ESTAGIOS, mensagemDoEstagio } from '@/lib/centralPendencias'
 import { scoreVisual } from '@/lib/score'
 import { SCORE_BUCKETS, bucketFor } from '@/hooks/useDashboardGeral'
-import { NIVEIS_ORDEM, nivelInfo, INFORME_JANELA } from '@/lib/prioridade'
+import { NIVEIS_ORDEM, nivelInfo, INFORME_JANELA, REINCIDENCIA_MIN } from '@/lib/prioridade'
+import { baixarXlsx, diaXlsx, type LinhaXlsx } from '@/lib/exportarXlsx'
+import { BotaoExportar } from '@/components/acompanhamento/BotaoExportar'
 import { useFiltrosFavoritos } from '@/hooks/useFiltrosFavoritos'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
@@ -109,6 +111,19 @@ const MIN_DIAS_OPTS = [
 const SIL_OPTS = [
   { value: 'todos', label: 'Qualquer' }, { value: 'sem', label: 'Sem pendência' },
   ...ORDEM_ESTAGIOS.map(n => ({ value: String(n), label: `${n}. ${ESTAGIO[n].titulo}` })),
+]
+const NIVEL_OPTS = NIVEIS_ORDEM.map(id => ({ value: id, label: nivelInfo(id).label }))
+const BLOQ_OPTS = [
+  { value: 'todos', label: 'Bloqueio: todos' }, { value: 'sim', label: 'Bloqueados' }, { value: 'nao', label: 'Não bloqueados' },
+]
+const RECENTE_OPTS = [
+  { value: 'todos', label: 'Reunião: qualquer' },
+  { value: 'com', label: `Reunião ≤ ${RECENTE_DIAS}d` },
+  { value: '7', label: 'Sem reunião há 7+ dias' },
+  { value: '14', label: 'Sem reunião há 14+ dias' },
+  { value: 'sem', label: `Sem reunião há ${RECENTE_DIAS}+ dias` },
+  { value: '60', label: 'Sem reunião há 60+ dias' },
+  { value: 'nunca', label: 'Nunca teve reunião' },
 ]
 /** Favoritos salvos antes da régua única usavam os estágios locais. */
 const ESTAGIO_LEGADO: Record<string, string> = { alerta: '1', aviso_saida: '2', reuniao: '3' }
@@ -209,6 +224,67 @@ function construirGrupos(rows: PainelProfessor[], modo: AgruparPor): Grupo[] {
   return [...mapa.values()].sort((a, b) => a.ordem - b.ordem || a.label.localeCompare(b.label))
 }
 
+// ─── Exportar Excel ───────────────────────────────────────────────────────────
+
+/** Os filtros ativos com os nomes da tela, para a aba "Sobre" da planilha. */
+function descreverFiltros(f: Filtros, nomeGrupo: string | undefined, rotuloCard: string | undefined): string[] {
+  const rotulo = (opts: { value: string; label: string }[], v: string) => opts.find(o => o.value === v)?.label ?? v
+  const out: string[] = []
+  if (f.quick !== 'todos') out.push(`Card: ${rotuloCard ?? f.quick}`)
+  if (f.busca.trim()) out.push(`Busca: "${f.busca.trim()}"`)
+  if (f.grupoId !== 'todos') out.push(`Coordenação: ${nomeGrupo ?? f.grupoId}`)
+  if (f.nivel !== 'todos') out.push(`Atenção: ${rotulo(NIVEL_OPTS, f.nivel)}`)
+  if (f.faixaScore !== 'todos') out.push(`Faixa de score: ${f.faixaScore}`)
+  if (f.minPendencias !== '0') out.push(`Pendências: ${rotulo(MIN_PEND_OPTS, f.minPendencias)}`)
+  if (f.minDias !== '0') out.push(`Dias: ${rotulo(MIN_DIAS_OPTS, f.minDias)}`)
+  if (f.silStatus !== 'todos') out.push(`Estágio: ${rotulo(SIL_OPTS, ESTAGIO_LEGADO[f.silStatus] ?? f.silStatus)}`)
+  if (f.bloqueado !== 'todos') out.push(rotulo(BLOQ_OPTS, f.bloqueado))
+  if (f.recente !== 'todos') out.push(rotulo(RECENTE_OPTS, f.recente))
+  if (f.email !== 'todos') out.push(`E-mail: ${FAIXA_EMAIL.find(e => e.id === f.email)?.label ?? f.email}`)
+  return out
+}
+
+/** Uma linha da planilha. `carencia` só vem para quem pode enviar e-mail — os outros não veem as colunas de e-mail na tela. */
+function linhaXlsx(r: PainelProfessor, carencia: Map<string, CarenciaEmail> | null): LinhaXlsx {
+  const c = carencia?.get(r.professor_id)
+  return {
+    Professor: r.nome,
+    Coordenação: r.grupo_nome,
+    Coordenador: r.coordenador_nome,
+    ...(carencia && {
+      'E-mail': r.email,
+      'Pode receber e-mail': !r.email ? 'Sem e-mail' : c ? `Não (${CARENCIA_EMAIL_DIAS} dias)` : 'Sim',
+      'E-mail libera em': c ? diaXlsx(c.libera_em) : null,
+    }),
+    Score: r.score_atual,
+    'Faixa de score': r.score_atual != null ? bucketFor(r.score_atual)?.label : null,
+    'Aulas pendentes': r.aulas_pendentes_qtd,
+    'Dias sem lançar': r.dias_pendente,
+    Atenção: r.nivel.label,
+    'Índice de atenção (pontos)': Math.round(r.prioridade),
+    'Estágio da régua': r.estagio ? `${r.estagio}. ${ESTAGIO[r.estagio].titulo}` : 'Sem pendência',
+    'Mensagem do estágio enviada': r.estagio ? r.contatado : null,
+    Regularizou: r.regularizado,
+    'Agenda bloqueada': r.agenda_bloqueada,
+    'Bloqueado p/ novos alunos': r.elegivel_alocacao === false,
+    'Avaliar Mês de Análise': r.estagio === 3 && !r.regularizado,
+    'Último acompanhamento': r.data_ultima_reuniao ? diaXlsx(r.data_ultima_reuniao) : 'nunca',
+    'Dias sem reunião': r.dias_sem_reuniao,
+    [`Informes (${INFORME_JANELA}d)`]: r.informes_recentes,
+    'Informe reincidente': r.informe_reincidente,
+    'Pausa vencida (dias)': r.pausa_vencida_dias,
+  }
+}
+
+const DEFINICOES_XLSX: [string, string][] = [
+  ['Quem entra', 'Professores ativos, mais os pausados cujo contato de encerramento da pausa venceu.'],
+  ['Atenção', 'Índice de atenção: score baixo + aulas pendentes (quantidade × dias) + informes recentes. Maior = mais urgente.'],
+  ['Dias sem lançar', 'Dias corridos desde a aula pendente mais antiga.'],
+  ['Estágio da régua', 'Régua do King: 2 dias = Lembrete · 3–4 dias = Bloqueio · 5+ dias = Reunião.'],
+  ['Último acompanhamento', 'Última reunião com a coordenação marcada como realizada. "nunca" = nenhuma registrada.'],
+  [`Informes (${INFORME_JANELA}d)`, `Informes dos últimos ${INFORME_JANELA} dias. Reincidente = ${REINCIDENCIA_MIN} ou mais na mesma categoria.`],
+]
+
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export function IndiceAtencao() {
@@ -296,6 +372,22 @@ export function IndiceAtencao() {
     }
   }
 
+  // Exporta o que a tabela mostra: filtro e ordem da tela, sem o agrupamento.
+  async function exportar() {
+    const filtros = descreverFiltros(f, grupos.find(g => g.id === f.grupoId)?.nome, cards.find(c => c.id === f.quick)?.label)
+    await baixarXlsx({
+      arquivo: 'indice-de-atencao',
+      aba: 'Índice de atenção',
+      linhas: ordenados.map(r => linhaXlsx(r, podeEmail ? carencia : null)),
+      sobre: [
+        ['Tela', 'Acompanhamento › Índice de atenção'],
+        ['Linhas', `${ordenados.length} de ${rows.length} professores, na ordem da tela`],
+        ...(filtros.length ? filtros : ['nenhum']).map((t): [string, string] => ['Filtro', t]),
+        ...DEFINICOES_XLSX,
+      ],
+    })
+  }
+
   return (
     <div className="space-y-5">
       <p className="text-[13px] text-ink-muted -mt-1">
@@ -349,7 +441,7 @@ export function IndiceAtencao() {
           <FiltroSelect
             valor={f.nivel}
             onChange={v => setF(s => ({ ...s, nivel: v }))}
-            opcoes={[{ value: 'todos', label: 'Toda atenção' }, ...NIVEIS_ORDEM.map(id => ({ value: id, label: nivelInfo(id).label }))]}
+            opcoes={[{ value: 'todos', label: 'Toda atenção' }, ...NIVEL_OPTS]}
           />
           <FiltroSelect
             valor={f.faixaScore}
@@ -359,24 +451,8 @@ export function IndiceAtencao() {
           <FiltroSelect valor={f.minPendencias} onChange={v => setF(s => ({ ...s, minPendencias: v }))} opcoes={MIN_PEND_OPTS} prefixo="Pendências" />
           <FiltroSelect valor={f.minDias} onChange={v => setF(s => ({ ...s, minDias: v }))} opcoes={MIN_DIAS_OPTS} prefixo="Dias" />
           <FiltroSelect valor={ESTAGIO_LEGADO[f.silStatus] ?? f.silStatus} onChange={v => setF(s => ({ ...s, silStatus: v }))} opcoes={SIL_OPTS} prefixo="Estágio" />
-          <FiltroSelect
-            valor={f.bloqueado}
-            onChange={v => setF(s => ({ ...s, bloqueado: v }))}
-            opcoes={[{ value: 'todos', label: 'Bloqueio: todos' }, { value: 'sim', label: 'Bloqueados' }, { value: 'nao', label: 'Não bloqueados' }]}
-          />
-          <FiltroSelect
-            valor={f.recente}
-            onChange={v => setF(s => ({ ...s, recente: v }))}
-            opcoes={[
-              { value: 'todos', label: 'Reunião: qualquer' },
-              { value: 'com', label: `Reunião ≤ ${RECENTE_DIAS}d` },
-              { value: '7', label: 'Sem reunião há 7+ dias' },
-              { value: '14', label: 'Sem reunião há 14+ dias' },
-              { value: 'sem', label: `Sem reunião há ${RECENTE_DIAS}+ dias` },
-              { value: '60', label: 'Sem reunião há 60+ dias' },
-              { value: 'nunca', label: 'Nunca teve reunião' },
-            ]}
-          />
+          <FiltroSelect valor={f.bloqueado} onChange={v => setF(s => ({ ...s, bloqueado: v }))} opcoes={BLOQ_OPTS} />
+          <FiltroSelect valor={f.recente} onChange={v => setF(s => ({ ...s, recente: v }))} opcoes={RECENTE_OPTS} />
           <FiltroSelect
             valor={f.agrupar}
             onChange={v => setF(s => ({ ...s, agrupar: v as AgruparPor }))}
@@ -440,6 +516,7 @@ export function IndiceAtencao() {
         <p className="text-[12px] text-ink-muted tabular-nums mr-auto">
           {ordenados.length} de {rows.length} professores
         </p>
+        <BotaoExportar total={isLoading ? 0 : ordenados.length} onExportar={exportar} className="py-1 text-[12px]" />
         {podeEmail && (
           <>
             <button

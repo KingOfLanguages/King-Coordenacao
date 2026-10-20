@@ -27,6 +27,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { canEdit } from '@/lib/permissions'
 import { cn, whatsappLink } from '@/lib/utils'
 import { Abas } from '@/components/ui/abas'
+import { baixarXlsx, dataHoraXlsx, diaXlsx, type LinhaXlsx } from '@/lib/exportarXlsx'
+import { BotaoExportar } from '@/components/acompanhamento/BotaoExportar'
 
 type Aba = 'todos' | EstagioNum
 type Vista = 'fila' | 'bloqueadas'
@@ -65,6 +67,38 @@ function semanaLabel(iso: string): string {
 }
 
 const zeroContagem = (): Record<Aba, number> => ({ todos: 0, 1: 0, 2: 0, 3: 0 })
+
+function linhaXlsx(ep: PendenciaFila): LinhaXlsx {
+  return {
+    Professor: ep.nome,
+    'ID no King': ep.id_Professor,
+    Coordenação: ep.grupo_nome,
+    Coordenador: ep.coordenador_nome,
+    Telefone: ep.professor_telefone,
+    'Em pausa': ep.professor_status === 'pausa',
+    Estágio: `${ep.estagio}. ${ESTAGIO[ep.estagio].titulo}`,
+    Alunos: ep.qtdAlunos,
+    'Aulas pendentes': ep.aulasPendentes,
+    'Severidade (Nexus)': severidadeLabel(ep.severidadeNx),
+    'Dias sem lançar': ep.dias,
+    'Na fila desde': diaXlsx(ep.abertoEm),
+    'Agenda bloqueada': ep.agendaBloqueada,
+    'Liberação manual exigida': podeLiberar(ep),
+    Regularizou: ep.regularizado,
+    'Situação no quadro': ep.agendaBloqueada ? COLS_BLOQ.find(c => c.match(ep))?.titulo : null,
+    'Contatado no estágio atual': jaContatado(ep),
+    'Última mensagem em': dataHoraXlsx(ep.ultimaMensagemEm),
+    'Última mensagem (estágio)': ep.ultimaMensagemEstagio ? `${ep.ultimaMensagemEstagio}ª` : null,
+  }
+}
+
+const DEFINICOES_XLSX: [string, string][] = [
+  ['Quem entra', 'Professores na régua de pendências do King agora (aula sem lançar).'],
+  ['Estágio', 'Régua do King: 2 dias = Lembrete · 3–4 dias = Bloqueio da agenda · 5+ dias = Reunião (risco de encerramento).'],
+  ['Dias sem lançar', 'Dias desde a aula pendente mais antiga, contados pelo motor do King (~1×/dia).'],
+  ['Contatado no estágio atual', 'A mensagem do estágio em que o professor está hoje já foi registrada.'],
+  ['Liberação manual exigida', 'Estágio 3, ou agenda que a API marcou para liberar à mão.'],
+]
 
 /** `embutido`: aba de /acompanhamento (sem título nem margens de página). */
 export function CentralPendenciasPage({ embutido = false }: { embutido?: boolean }) {
@@ -120,6 +154,34 @@ export function CentralPendenciasPage({ embutido = false }: { embutido?: boolean
     ...ORDEM_ESTAGIOS.map(n => ({ id: n as Aba, label: `${n}. ${ESTAGIO[n].titulo}` })),
   ]
 
+  // Exporta a vista aberta: a fila com os filtros, ou o quadro de agendas bloqueadas.
+  const paraExportar = useMemo(
+    () => vista === 'fila' ? lista : baseGrupo.filter(ep => ep.agendaBloqueada),
+    [vista, lista, baseGrupo],
+  )
+  async function exportar() {
+    const nomeGrupo = grupos.find(g => g.id === grupoFiltro)?.nome
+    const filtros = vista === 'fila'
+      ? [
+          aba !== TODOS && `Estágio: ${aba}. ${ESTAGIO[aba].titulo}`,
+          busca.trim() && `Busca: "${busca.trim()}"`,
+          nomeGrupo && `Coordenação: ${nomeGrupo}`,
+          mostrarContatados ? 'Inclui já contatados' : 'Sem os já contatados no estágio atual',
+        ]
+      : [nomeGrupo && `Coordenação: ${nomeGrupo}`]
+    await baixarXlsx({
+      arquivo: vista === 'fila' ? 'pendencias-do-king' : 'agendas-bloqueadas',
+      aba: vista === 'fila' ? 'Pendências do King' : 'Agendas bloqueadas',
+      linhas: paraExportar.map(linhaXlsx),
+      sobre: [
+        ['Tela', `Acompanhamento › Pendências do King › ${vista === 'fila' ? 'Fila' : 'Agendas bloqueadas'}`],
+        ['Linhas', `${paraExportar.length} de ${fila.length} professores na régua`],
+        ...filtros.filter((t): t is string => !!t).map((t): [string, string] => ['Filtro', t]),
+        ...DEFINICOES_XLSX,
+      ],
+    })
+  }
+
   return (
     <div className={embutido ? 'space-y-5' : 'px-6 py-6 space-y-5 max-w-[1400px] mx-auto'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -141,14 +203,17 @@ export function CentralPendenciasPage({ embutido = false }: { embutido?: boolean
           </p>
         </div>
 
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="btn-press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-canvas px-3 py-1.5 text-[12.5px] font-medium text-ink-secondary hover:text-ink transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
-          Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <BotaoExportar total={isLoading ? 0 : paraExportar.length} onExportar={exportar} />
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="btn-press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-canvas px-3 py-1.5 text-[12.5px] font-medium text-ink-secondary hover:text-ink transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
+            Atualizar
+          </button>
+        </div>
       </header>
 
       {/* ── Alternância: fila operacional × board de agendas bloqueadas ── */}
