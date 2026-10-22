@@ -297,10 +297,12 @@ export function IdentificacaoPortal({
               )}
               {/* O servidor responde "enviado" mesmo sem cadastro (item 8 do
                   pentest): professor novo que tenta antes do sync trazer o
-                  cadastro (até 1 h) fica sem e-mail e sem nenhum erro na tela. */}
+                  cadastro fica sem e-mail e sem nenhum erro na tela. Desde
+                  22/10 o sync busca os novos de 5 em 5 min (era de hora em hora). */}
               <p className="rounded-xl bg-surface-subtle px-3.5 py-3 text-[12px] leading-relaxed text-ink-muted">
-                Se o código não chegar em 10 minutos, olhe o spam. Se não estiver lá, espere
-                1 hora e tente de novo. Se continuar sem chegar,{' '}
+                Se o código não chegar em alguns minutos, olhe o spam. Acabou de criar seu login
+                na King? Seu cadastro chega aqui em até 10 minutos: espere e peça outro código.
+                Se continuar sem chegar,{' '}
                 <button
                   type="button"
                   onClick={() => setStep({ tipo: 'contato' })}

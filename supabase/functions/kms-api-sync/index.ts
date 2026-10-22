@@ -24,10 +24,13 @@
 //                                leve, exceto a das 03:00 (ver JANELA_CICLO_DIAS)
 //     {"completa":true}        → rodada de ativos completa, fora de hora
 //     {"tipo":"desligados"}    → nova rodada de DESLIGADOS (cron de terça e sexta)
+//     {"tipo":"novos"}         → SÓ o passo dos novos, fora de rodada (cron de
+//                                5 em 5 min; ver soNovos)
 //     {"rodada_id":"<uuid>"}   → próxima parte (a própria função se chama)
 //     {"retomar":"<uuid>"}     → retoma rodada que parou (cron vigia)
 //   A resposta é 202 na hora; o trabalho segue em segundo plano
-//   (EdgeRuntime.waitUntil) e o resultado fica em kms_sync_rodadas.
+//   (EdgeRuntime.waitUntil) e o resultado fica em kms_sync_rodadas. O "novos"
+//   é a exceção: não abre rodada, e quem ele traz só aparece no log.
 //
 //   Rodada de ativos, nesta ordem:
 //     a. passo dos novos — consulta os IDs logo acima do maior kms_id que já
@@ -962,6 +965,43 @@ async function decidirRodadaCompleta(admin: Admin, pedida: boolean): Promise<boo
   return !data?.length
 }
 
+/** Rodada com sinal de vida há menos disto conta como viva para o soNovos. */
+const NOVOS_RODADA_VIVA_MIN = 3
+
+/** Só o passo dos novos, fora de rodada (desde 22/10/2026). Professor que
+ *  acabou de criar o login na King chegava ao KTM só na rodada de hora em hora,
+ *  e até lá o portal não achava o cadastro: o código de acesso da trilha não
+ *  saía (parecer do RH). Não grava em kms_sync_rodadas, então vigia, aviso da
+ *  tela Hoje e rodada de ativos não mudam. Com uma rodada de ativos viva, pula:
+ *  ela começa pelos novos, e a próxima batida pega quem entrou depois. */
+async function soNovos(admin: Admin): Promise<Response> {
+  const vivaDesde = new Date(Date.now() - NOVOS_RODADA_VIVA_MIN * 60_000).toISOString()
+  const { data: viva, error } = await admin
+    .from('kms_sync_rodadas')
+    .select('id')
+    .eq('tipo', 'ativos')
+    .eq('status', 'rodando')
+    .gte('ultima_atividade_em', vivaDesde)
+    .limit(1)
+  if (error) return json({ error: error.message }, 500)
+  if (viva?.length) return json({ ignorada: true, motivo: 'rodada de ativos em andamento' }, 200)
+
+  // Login + 5 consultas passam dos 5 s em que o pg_net desiste da resposta
+  // (medido em 22/10: 5,2 s): o trabalho segue em segundo plano, como a rodada.
+  EdgeRuntime.waitUntil((async () => {
+    try {
+      const baseUrl = Deno.env.get('KMS_API_BASE_URL')!
+      const token = await login(baseUrl, Deno.env.get('KMS_API_EMAIL')!, Deno.env.get('KMS_API_PASSWORD')!)
+      const novos = await passoDosNovos(admin, baseUrl, token, agora())
+      // Log só quando alguém chega: são 264 chamadas por dia na cota de logs.
+      if (novos.ids.length) console.log(`[kms-api-sync] novos: ${novos.ids.join(', ')} (${novos.criados} criados)`)
+    } catch (err) {
+      console.error('[kms-api-sync] novos:', msg(err))
+    }
+  })())
+  return json({ novos: 'em andamento' }, 202)
+}
+
 /** Erro fora do previsto (login, banco, próxima parte): anota na rodada e deixa
  *  ela 'rodando' sem sinal de vida — o vigia retoma em até ~13 min. */
 async function registrarFalhaInesperada(admin: Admin, rodadaId: string, dono: string, err: unknown): Promise<void> {
@@ -991,6 +1031,9 @@ serve(async (req) => {
   }
 
   const admin = novoAdmin()
+
+  // Antes de tudo que mexe em rodada: o "novos" não interrompe nem abre nenhuma.
+  if (corpo.tipo === 'novos') return await soNovos(admin)
 
   const dono = crypto.randomUUID()
   const retomada = Boolean(corpo.retomar)
