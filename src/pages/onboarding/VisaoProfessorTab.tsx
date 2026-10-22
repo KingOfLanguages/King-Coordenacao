@@ -5,7 +5,7 @@ import { linkWelcomePathPublico } from '@/lib/portal'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLinksCoordenador } from '@/hooks/useMeusLinksAgendamento'
 import { TrilhaView } from '@/pages/welcomePath/TrilhaView'
-import { EtapaLayout } from '@/pages/welcomePath/EtapaView'
+import { EtapaLayout, type ProximaEtapa } from '@/pages/welcomePath/EtapaView'
 import { useQuizEtapa } from '@/pages/welcomePath/useQuizEtapa'
 import {
   useEtapasAdmin, useBlocosAdmin, useQuestoesAdmin, type EtapaAdmin, type QuestaoAdmin,
@@ -104,14 +104,21 @@ export function VisaoProfessorTab() {
 
   const etapa = etapas.find(e => e.id === aberta)
   if (etapa) {
+    const i = etapas.indexOf(etapa)
+    const seguinte = etapas[i + 1]
     return (
       <div className="flex justify-center">
         <EtapaPrevia
           key={`${etapa.id}-${rodada}`}
           etapa={etapa}
-          numero={etapas.indexOf(etapa) + 1}
+          numero={i + 1}
           desativada={!etapa.ativa}
           totalEtapas={etapas.length}
+          // Aqui tudo está liberado, então o atalho do fim leva sempre à seguinte.
+          proxima={seguinte
+            ? { id: seguinte.id, titulo: seguinte.titulo, estado: 'liberada', motivoBloqueio: null, abreEm: null, numero: i + 2 }
+            : null}
+          onAbrirProxima={id => { setAberta(id); window.scrollTo({ top: 0 }) }}
           onVoltar={() => { setAberta(null); window.scrollTo({ top: 0 }) }}
           onRefazer={() => setRodada(r => r + 1)}
         />
@@ -204,12 +211,14 @@ function corrigir(questoes: QuestaoAdmin[], respostas: RespostaEnviada[], notaMi
 }
 
 function EtapaPrevia({
-  etapa, numero, desativada, totalEtapas, onVoltar, onRefazer,
+  etapa, numero, desativada, totalEtapas, proxima, onAbrirProxima, onVoltar, onRefazer,
 }: {
   etapa: EtapaAdmin
   numero: number
   desativada: boolean
   totalEtapas: number
+  proxima: ProximaEtapa | null
+  onAbrirProxima: (id: string) => void
   onVoltar: () => void
   onRefazer: () => void
 }) {
@@ -254,6 +263,8 @@ function EtapaPrevia({
       enviando={false}
       erroEnvio={null}
       onVoltar={onVoltar}
+      proxima={proxima}
+      onAbrirProxima={onAbrirProxima}
       aviso={<FaixaPrevia texto={desativada
         ? 'Esta etapa está desativada: o professor ainda não a vê. Aqui ela aparece como vai ficar, com as práticas funcionando.'
         : 'Esta é a etapa como o professor vê, com as práticas funcionando.'} />}

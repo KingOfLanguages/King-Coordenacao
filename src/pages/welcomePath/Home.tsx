@@ -68,6 +68,13 @@ export function Home() {
     navigate(`/welcome-path?etapa=${encodeURIComponent(id)}`, { state: { daTrilha: true } })
   }
 
+  /** Da etapa direto para a seguinte: troca a entrada do histórico em vez de
+   *  empilhar, para o "voltar" continuar caindo na lista. */
+  function irParaProxima(id: string) {
+    navigate(`/welcome-path?etapa=${encodeURIComponent(id)}`, { replace: true, state: { daTrilha: true } })
+    window.scrollTo({ top: 0 })
+  }
+
   function voltarParaTrilha() {
     if ((location.state as EstadoHistorico)?.daTrilha) navigate(-1)
     else navigate('/welcome-path', { replace: true })
@@ -84,20 +91,28 @@ export function Home() {
     const jornada = trilha.data?.jornada ?? null
     // Hora do servidor − hora do navegador no instante em que a trilha chegou.
     const offsetMs = jornada ? new Date(jornada.agora).getTime() - trilha.dataUpdatedAt : 0
+    const etapas = trilha.data?.etapas ?? []
+    const idx = etapas.findIndex(e => e.id === etapaAberta)
+    const seguinte = idx >= 0 ? etapas[idx + 1] : undefined
     return (
       <Moldura larga>
         <BoasVindasKingsCircle professor={trilha.data?.professor} />
         {carregando ? (
           <p className="py-16 text-center text-[13px] text-ink-muted">Carregando sua trilha…</p>
         ) : etapaAberta ? (
+          // A chave remonta a etapa ao seguir para a próxima: sem ela, a nova
+          // herdaria o quiz da anterior e não seria marcada como iniciada.
           <EtapaView
+            key={etapaAberta}
             token={token}
             etapaId={etapaAberta}
             onVoltar={voltarParaTrilha}
-            numero={(trilha.data?.etapas.findIndex(e => e.id === etapaAberta) ?? -1) + 1}
-            totalEtapas={trilha.data?.etapas.length ?? 0}
-            etapasConcluidas={trilha.data?.etapas.filter(e => e.estado === 'concluida').length ?? 0}
+            numero={idx + 1}
+            totalEtapas={etapas.length}
+            etapasConcluidas={etapas.filter(e => e.estado === 'concluida').length}
             prazo={jornada && !jornada.concluidaEm ? { prazoEm: jornada.prazoEm, offsetMs } : null}
+            proxima={seguinte ? { ...seguinte, numero: idx + 2 } : null}
+            onAbrirProxima={irParaProxima}
           />
         ) : trilha.isError ? (
           <p className="py-16 text-center text-[13px] text-ink-muted">

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowLeft, CheckCircle2, Info, NotebookPen, Clock3, CalendarClock, Repeat2, LifeBuoy,
+  ArrowLeft, ArrowRight, CheckCircle2, Info, NotebookPen, Clock3, CalendarClock, Repeat2, LifeBuoy,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,7 +9,7 @@ import { BotaoWhatsApp, NumeroCoordenacao } from '@/components/portal/PortalUI'
 import {
   useEtapa, useIniciarEtapa, useRegistrarTempo, useResponderEtapa, useSalvarObservacao, registrarTempoAoSair,
   type RespostaEnviada, type ResultadoEnvio, type QuestaoEtapa, type MinhaResposta,
-  type EtapaDetalhe, type BlocoEtapa,
+  type EtapaDetalhe, type BlocoEtapa, type EtapaTrilha,
 } from '@/hooks/useWelcomePath'
 import { BlocoView } from './Blocos'
 import { QuestaoView, PainelResultado, BotoesQuiz } from './Quiz'
@@ -40,6 +40,12 @@ const MIN_ENVIO_AO_ESCONDER = 30
 // loop ("Too many re-renders").
 const SEM_QUESTOES: QuestaoEtapa[] = []
 const SEM_RESPOSTAS: MinhaResposta[] = []
+
+/** A etapa seguinte da trilha, para o atalho do fim da etapa (pedido do RH,
+ *  22/10/2026): quem termina segue direto, sem voltar à lista. */
+export type ProximaEtapa = Pick<EtapaTrilha, 'id' | 'titulo' | 'estado' | 'motivoBloqueio' | 'abreEm'> & {
+  numero: number
+}
 
 function useBatidaDeTempo(token: string, etapaId: string) {
   // `mutate` do TanStack Query é estável entre renders, então serve de dep do
@@ -182,6 +188,37 @@ function MetaChip({ icone: Icone, children }: { icone: LucideIcon; children: Rea
   )
 }
 
+/** Fim da etapa: segue para a próxima sem voltar à lista. Bloqueada pela
+ *  anterior não mostra nada: logo depois de aprovar, a trilha ainda está
+ *  recarregando, e o botão aparece sozinho quando ela chega liberada. */
+function AtalhoProxima({ proxima, onAbrir }: { proxima: ProximaEtapa; onAbrir: () => void }) {
+  if (proxima.estado === 'bloqueada') {
+    if (proxima.motivoBloqueio !== 'data' || !proxima.abreEm) return null
+    return (
+      <p className="flex items-center gap-2 rounded-2xl border border-line-soft bg-surface-subtle/60 px-4 py-3.5 text-[12.5px] leading-relaxed text-ink-secondary">
+        <CalendarClock className="h-4 w-4 flex-shrink-0 text-ink-muted" />
+        A próxima etapa, {proxima.titulo}, abre em {dataBR(proxima.abreEm)}.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line-soft bg-surface-canvas px-4 py-3.5">
+      <div className="min-w-0">
+        <p className="label-micro text-ink-muted">Próxima etapa · {String(proxima.numero).padStart(2, '0')}</p>
+        <p className="mt-0.5 text-[13.5px] font-semibold text-ink">{proxima.titulo}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onAbrir}
+        className="btn-press flex h-10 items-center gap-1.5 rounded-full bg-ink px-5 text-[13px] font-medium text-ink-inverse hover:bg-ink/90"
+      >
+        Ir para a próxima etapa <ArrowRight className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
 function ObservacaoPessoal({
   token, etapaId, inicial,
 }: {
@@ -236,7 +273,7 @@ function ObservacaoPessoal({
 }
 
 export function EtapaView({
-  token, etapaId, onVoltar, numero, totalEtapas, etapasConcluidas, prazo,
+  token, etapaId, onVoltar, numero, totalEtapas, etapasConcluidas, prazo, proxima, onAbrirProxima,
 }: {
   token: string
   etapaId: string
@@ -247,6 +284,8 @@ export function EtapaView({
   etapasConcluidas: number
   /** Prazo da trilha para o contador do cabeçalho; null depois de concluir. */
   prazo?: { prazoEm: string; offsetMs: number } | null
+  proxima?: ProximaEtapa | null
+  onAbrirProxima?: (id: string) => void
 }) {
   const { data, isLoading, error } = useEtapa(token, etapaId)
   const iniciar  = useIniciarEtapa()
@@ -319,6 +358,8 @@ export function EtapaView({
       enviando={responder.isPending}
       erroEnvio={erroEnvio}
       onVoltar={onVoltar}
+      proxima={proxima}
+      onAbrirProxima={onAbrirProxima}
       metaExtra={prazo ? <ChipPrazo prazoEm={prazo.prazoEm} offsetMs={prazo.offsetMs} /> : null}
       trilho={
         <>
@@ -348,6 +389,7 @@ export function EtapaView({
 export function EtapaLayout({
   etapa, blocos, questoes, progresso, numero, totalEtapas, etapasConcluidas, quiz,
   enviando, erroEnvio, onVoltar, trilho, aviso, aposQuestao, metaExtra,
+  proxima, onAbrirProxima,
 }: {
   etapa: EtapaDetalhe['etapa']
   blocos: BlocoEtapa[]
@@ -369,10 +411,20 @@ export function EtapaLayout({
   aposQuestao?: (q: QuestaoEtapa) => ReactNode
   /** Chip a mais no cabeçalho (o contador do prazo da trilha, no portal). */
   metaExtra?: ReactNode
+  /** Etapa seguinte; sem ela (última etapa), não há atalho. */
+  proxima?: ProximaEtapa | null
+  onAbrirProxima?: (id: string) => void
 }) {
   const concluida = !!progresso.concluidaEm
   const pctTrilha = totalEtapas > 0 ? Math.round((etapasConcluidas / totalEtapas) * 100) : 0
   const vazia = blocos.length === 0 && questoes.length === 0
+
+  // Etapa feita (agora ou numa visita anterior) leva direto à seguinte. A só de
+  // conteúdo não tem o que aprovar, então o atalho vale desde o começo.
+  const feita = concluida || !!quiz.envio?.aprovado || questoes.length === 0
+  const atalho = feita && proxima && onAbrirProxima
+    ? <AtalhoProxima proxima={proxima} onAbrir={() => onAbrirProxima(proxima.id)} />
+    : null
 
   // Questões ancoradas a um bloco aparecem logo depois dele; as soltas, no fim.
   // A numeração segue a ordem global, para o professor não ver "1, 1, 2".
@@ -517,6 +569,7 @@ export function EtapaLayout({
                   {blocos.length === 0 && (
                     <p className="text-[13px] text-ink-muted">Esta etapa é só de atividade — responda abaixo.</p>
                   )}
+                  {questoes.length === 0 && atalho}
                 </div>
               </Zona>
 
@@ -543,6 +596,8 @@ export function EtapaLayout({
                         {erroEnvio}
                       </div>
                     )}
+
+                    {atalho}
 
                     <BotoesQuiz quiz={quiz} enviando={enviando} />
                   </div>

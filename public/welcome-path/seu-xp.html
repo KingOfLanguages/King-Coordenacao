@@ -192,25 +192,41 @@
   };
 
   /* ═════════ 4. A virada do mês ═════════ */
+  /* Revisada em 22/10 pelo parecer do RH: os prêmios ficam à vista na própria
+     atividade (antes só na tabela da seção 1), a cena deixa claro que não se
+     soma XP de aula e a alternativa errada de presença dá a conta certa
+     (8 × 50 = 1.420; a antiga "1.620" não saía de conta nenhuma). */
+  var PREMIOS = [
+    ["Por aluno que fechou o mês com 80% ou mais de presença", 50],
+    ["Por aluno que continua ativo no fim do mês", 40],
+    ["Mês inteiro sem nenhuma falta sua", 200],
+    ["Mais um mês de casa", 500]
+  ];
   var virada = {
     tag: "Pratique",
     titulo: "A virada do mês",
-    instrucao: "Os prêmios do mês e o fechamento das Ligas acontecem na virada. Faça as contas.",
+    instrucao: "Os prêmios do mês e o fechamento das Ligas acontecem na virada. Use a tabela e faça as contas.",
     progresso: function (s, a) { return ["fecha", "sobe", "teto"].filter(a.qOk).length + " de 3"; },
     completa: function (s, a) { return ["fecha", "sobe", "teto"].every(a.qOk); },
     fecho: "Os maiores ganhos são mensais e por aluno: mês de casa, mês sem falta, alunos assíduos e alunos que continuam. No longo prazo, retenção e presença é o que mais move o seu XP.",
     corpo: function (s, a) {
-      return '<div class="cena"><b>Último dia do mês.</b><ul><li>Você tem 8 alunos ativos.</li><li>6 deles fecharam o mês com 80% ou mais de presença.</li><li>Você lançou aulas e não faltou nenhuma vez.</li><li>Você segue ativo na King.</li></ul></div>' +
+      return '<div class="cena"><b>Último dia do mês.</b><ul><li>Você tem 8 alunos ativos.</li><li>6 deles fecharam o mês com 80% ou mais de presença.</li><li>Você não faltou nenhuma vez no mês (e lançou aulas, o que o mês sem falta exige).</li><li>Você segue ativo na King.</li></ul></div>' +
+        '<div class="tk-wrap"><table class="tab-xp"><thead><tr><th>O que entra na virada</th><th style="text-align:right">XP</th></tr></thead><tbody>' +
+        PREMIOS.map(function (p) {
+          return "<tr><td>" + esc(p[0]) + '</td><td class="v pos">' + fmt(p[1]) + "</td></tr>";
+        }).join("") +
+        '<tr class="mult"><td colspan="2">Os multiplicadores não valem para os prêmios do mês, e o XP das aulas já entrou no dia de cada uma.</td></tr></tbody></table></div>' +
         '<div style="display:grid;gap:18px">' + a.q("fecha") + a.q("sobe") + a.q("teto") + "</div>";
     },
     perguntas: {
       fecha: {
-        pergunta: "Quanto XP entra na virada do mês?",
+        pergunta: "Quanto XP de prêmios do mês entra na virada?",
         opcoes: [
-          { t: "700 XP", porque: "Faltaram os prêmios por aluno: +50 por aluno com 80% ou mais de presença e +40 por aluno ativo." },
-          { t: "820 XP", porque: "Faltou o mês de casa: +500 a cada mês que você fecha ativo na King." },
+          { t: "700 XP", porque: "Faltaram os prêmios por aluno: 6 × 50 pela presença e 8 × 40 pelos alunos ativos. Com eles: 300 + 320 + 200 + 500 = 1.320." },
+          { t: "820 XP", porque: "Faltou o mês de casa: +500 a cada mês que você fecha ativo na King. 300 + 320 + 200 + 500 = 1.320." },
           { t: "1.320 XP", ok: true, porque: "6 × 50 (presença) + 8 × 40 (alunos ativos) + 200 (mês sem falta) + 500 (mês de casa) = 1.320 XP." },
-          { t: "1.620 XP", porque: "O +50 de presença vale só para os 6 alunos com 80% ou mais, não para os 8." }
+          { t: "1.420 XP", porque: "O +50 de presença vale só para os 6 alunos com 80% ou mais: 6 × 50 = 300, e não 8 × 50 = 400." },
+          { t: "1.452 XP", porque: "Os multiplicadores não valem para os prêmios do mês: o ×1,1 dos 8 alunos fica de fora, e a conta para em 1.320." }
         ]
       },
       sobe: {
