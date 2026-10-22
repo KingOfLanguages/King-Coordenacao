@@ -45,6 +45,8 @@ const SEM_RESPOSTAS: MinhaResposta[] = []
  *  22/10/2026): quem termina segue direto, sem voltar à lista. */
 export type ProximaEtapa = Pick<EtapaTrilha, 'id' | 'titulo' | 'estado' | 'motivoBloqueio' | 'abreEm'> & {
   numero: number
+  /** A trilha está recarregando: o estado pode ainda ser o de antes da aprovação. */
+  atualizando?: boolean
 }
 
 function useBatidaDeTempo(token: string, etapaId: string) {
@@ -188,11 +190,14 @@ function MetaChip({ icone: Icone, children }: { icone: LucideIcon; children: Rea
   )
 }
 
-/** Fim da etapa: segue para a próxima sem voltar à lista. Bloqueada pela
- *  anterior não mostra nada: logo depois de aprovar, a trilha ainda está
- *  recarregando, e o botão aparece sozinho quando ela chega liberada. */
+/** Fim da etapa: segue para a próxima sem voltar à lista. Logo depois de
+ *  aprovar, a trilha ainda está recarregando e a próxima vem como bloqueada
+ *  pela anterior: avisa que está liberando, e o botão aparece quando ela chega. */
 function AtalhoProxima({ proxima, onAbrir }: { proxima: ProximaEtapa; onAbrir: () => void }) {
   if (proxima.estado === 'bloqueada') {
+    if (proxima.motivoBloqueio === 'anterior' && proxima.atualizando) {
+      return <p className="px-1 text-[12.5px] text-ink-muted">Liberando a próxima etapa…</p>
+    }
     if (proxima.motivoBloqueio !== 'data' || !proxima.abreEm) return null
     return (
       <p className="flex items-center gap-2 rounded-2xl border border-line-soft bg-surface-subtle/60 px-4 py-3.5 text-[12.5px] leading-relaxed text-ink-secondary">

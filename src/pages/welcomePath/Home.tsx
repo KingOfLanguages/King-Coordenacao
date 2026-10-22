@@ -111,7 +111,7 @@ export function Home() {
             totalEtapas={etapas.length}
             etapasConcluidas={etapas.filter(e => e.estado === 'concluida').length}
             prazo={jornada && !jornada.concluidaEm ? { prazoEm: jornada.prazoEm, offsetMs } : null}
-            proxima={seguinte ? { ...seguinte, numero: idx + 2 } : null}
+            proxima={seguinte ? { ...seguinte, numero: idx + 2, atualizando: trilha.isFetching } : null}
             onAbrirProxima={irParaProxima}
           />
         ) : trilha.isError ? (

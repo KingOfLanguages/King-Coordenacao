@@ -91,7 +91,8 @@
   };
 
   /* ═════════ 2. Multiplicadores ═════════ */
-  var FAIXAS = [{ v: "1", r: "Até 6", m: 1 }, { v: "2", r: "7 a 10", m: 1.1 }, { v: "3", r: "11 a 15", m: 1.2 }, { v: "4", r: "16 a 20", m: 1.3 }, { v: "5", r: "21 ou mais", m: 1.4 }];
+  var FAIXAS = [{ v: "1", r: "Até 6", m: 1, ate: 6 }, { v: "2", r: "7 a 10", m: 1.1, ate: 10 }, { v: "3", r: "11 a 15", m: 1.2, ate: 15 }, { v: "4", r: "16 a 20", m: 1.3, ate: 20 }, { v: "5", r: "21 ou mais", m: 1.4, ate: Infinity }];
+  function multAlunos(n) { return FAIXAS.filter(function (f) { return n <= f.ate; })[0].m; }
   var SEQ = [{ v: "1", r: "Menos de 7 dias", m: 1 }, { v: "2", r: "7 dias ou mais", m: 1.2 }, { v: "3", r: "30 dias ou mais", m: 1.5 }];
   var ACOES = [
     { t: "Aula lançada no dia", xp: 10, turbo: true },
@@ -137,7 +138,7 @@
           { t: "10 XP", porque: "10 é a base. Com 12 alunos entra o ×1,2, e com 30 dias seguidos, o ×1,5." },
           { t: "12 XP", porque: "Esse é só o bônus dos alunos (×1,2). A sequência de 30 dias multiplica de novo, por 1,5." },
           { t: "18 XP", ok: true, porque: "10 × 1,2 pelos 12 alunos × 1,5 pelos 30 dias = 18 XP, pelo mesmo trabalho." },
-          { t: "27 XP", porque: "Os bônus multiplicam a base de 10: 10 × 1,2 × 1,5 = 18." }
+          { t: "27 XP", porque: "Os bônus se multiplicam, não se somam: 10 × 1,2 × 1,5 = 18, e não 10 × (1,2 + 1,5) = 27." }
         ]
       },
       pend: {
@@ -192,16 +193,39 @@
   };
 
   /* ═════════ 4. A virada do mês ═════════ */
-  /* Revisada em 22/10 pelo parecer do RH: os prêmios ficam à vista na própria
-     atividade (antes só na tabela da seção 1), a cena deixa claro que não se
-     soma XP de aula e a alternativa errada de presença dá a conta certa
-     (8 × 50 = 1.420; a antiga "1.620" não saía de conta nenhuma). */
+  /* Revisada em 22/10 pelo parecer do RH: a alternativa "1.620" não saía de
+     conta nenhuma e os prêmios só apareciam na tabela da seção 1. Agora os
+     prêmios ficam à vista aqui, e as alternativas de "fecha" saem das mesmas
+     constantes da tabela e da cena: cada errada é um engano com nome (esqueceu
+     um prêmio, deu presença a todos, aplicou o multiplicador) e o número dela é
+     calculado. Mudou um valor, as contas acompanham. */
+  var PREMIO = { presenca: 50, ativo: 40, semFalta: 200, casa: 500 };
+  var CENA = { ativos: 8, assiduos: 6 };
   var PREMIOS = [
-    ["Por aluno que fechou o mês com 80% ou mais de presença", 50],
-    ["Por aluno que continua ativo no fim do mês", 40],
-    ["Mês inteiro sem nenhuma falta sua", 200],
-    ["Mais um mês de casa", 500]
+    ["Por aluno que fechou o mês com 80% ou mais de presença", PREMIO.presenca],
+    ["Por aluno que continua ativo no fim do mês", PREMIO.ativo],
+    ["Mês inteiro sem nenhuma falta sua", PREMIO.semFalta],
+    ["Mais um mês de casa", PREMIO.casa]
   ];
+  function n(v) { return v.toLocaleString("pt-BR"); }
+  var porPresenca = CENA.assiduos * PREMIO.presenca, porAtivo = CENA.ativos * PREMIO.ativo;
+  var CERTO = porPresenca + porAtivo + PREMIO.semFalta + PREMIO.casa;
+  var SOMA = n(porPresenca) + " + " + n(porAtivo) + " + " + n(PREMIO.semFalta) + " + " + n(PREMIO.casa) + " = " + n(CERTO) + ".";
+  var MULT_CENA = multAlunos(CENA.ativos);
+  var FECHA = [
+    { v: PREMIO.semFalta + PREMIO.casa,
+      porque: "Faltaram os prêmios por aluno: " + CENA.assiduos + " × " + PREMIO.presenca + " pela presença e " + CENA.ativos + " × " + PREMIO.ativo + " pelos alunos ativos. " + SOMA },
+    { v: CERTO - PREMIO.casa,
+      porque: "Faltou o mês de casa: +" + PREMIO.casa + " a cada mês que você fecha ativo na King. " + SOMA },
+    { v: CERTO, ok: true,
+      porque: CENA.assiduos + " × " + PREMIO.presenca + " (presença) + " + CENA.ativos + " × " + PREMIO.ativo + " (alunos ativos) + " + PREMIO.semFalta + " (mês sem falta) + " + PREMIO.casa + " (mês de casa) = " + n(CERTO) + " XP." },
+    { v: CERTO + (CENA.ativos - CENA.assiduos) * PREMIO.presenca,
+      porque: "O +" + PREMIO.presenca + " de presença vale só para os " + CENA.assiduos + " alunos com 80% ou mais: " + CENA.assiduos + " × " + PREMIO.presenca + " = " + n(porPresenca) + ", e não " + CENA.ativos + " × " + PREMIO.presenca + " = " + n(CENA.ativos * PREMIO.presenca) + ". " + SOMA },
+    // Arredonda antes do teto, como em multiplica: 1320 × 1,1 dá 1452,0000000000002.
+    { v: Math.ceil(Math.round(CERTO * MULT_CENA * 1000) / 1000),
+      porque: "Os multiplicadores não valem para os prêmios do mês: o ×" + n(MULT_CENA) + " dos " + CENA.ativos + " alunos fica de fora. " + SOMA }
+  ].sort(function (x, y) { return x.v - y.v; });
+  if (FECHA.some(function (o, i) { return i && o.v === FECHA[i - 1].v; })) console.error("seu-xp: alternativas da virada com o mesmo valor");
   var virada = {
     tag: "Pratique",
     titulo: "A virada do mês",
@@ -210,7 +234,7 @@
     completa: function (s, a) { return ["fecha", "sobe", "teto"].every(a.qOk); },
     fecho: "Os maiores ganhos são mensais e por aluno: mês de casa, mês sem falta, alunos assíduos e alunos que continuam. No longo prazo, retenção e presença é o que mais move o seu XP.",
     corpo: function (s, a) {
-      return '<div class="cena"><b>Último dia do mês.</b><ul><li>Você tem 8 alunos ativos.</li><li>6 deles fecharam o mês com 80% ou mais de presença.</li><li>Você não faltou nenhuma vez no mês (e lançou aulas, o que o mês sem falta exige).</li><li>Você segue ativo na King.</li></ul></div>' +
+      return '<div class="cena"><b>Último dia do mês.</b><ul><li>Você tem ' + CENA.ativos + " alunos ativos.</li><li>" + CENA.assiduos + " deles fecharam o mês com 80% ou mais de presença.</li><li>Você não faltou nenhuma vez no mês (e lançou aulas, o que o mês sem falta exige).</li><li>Você segue ativo na King.</li></ul></div>" +
         '<div class="tk-wrap"><table class="tab-xp"><thead><tr><th>O que entra na virada</th><th style="text-align:right">XP</th></tr></thead><tbody>' +
         PREMIOS.map(function (p) {
           return "<tr><td>" + esc(p[0]) + '</td><td class="v pos">' + fmt(p[1]) + "</td></tr>";
@@ -221,13 +245,7 @@
     perguntas: {
       fecha: {
         pergunta: "Quanto XP de prêmios do mês entra na virada?",
-        opcoes: [
-          { t: "700 XP", porque: "Faltaram os prêmios por aluno: 6 × 50 pela presença e 8 × 40 pelos alunos ativos. Com eles: 300 + 320 + 200 + 500 = 1.320." },
-          { t: "820 XP", porque: "Faltou o mês de casa: +500 a cada mês que você fecha ativo na King. 300 + 320 + 200 + 500 = 1.320." },
-          { t: "1.320 XP", ok: true, porque: "6 × 50 (presença) + 8 × 40 (alunos ativos) + 200 (mês sem falta) + 500 (mês de casa) = 1.320 XP." },
-          { t: "1.420 XP", porque: "O +50 de presença vale só para os 6 alunos com 80% ou mais: 6 × 50 = 300, e não 8 × 50 = 400." },
-          { t: "1.452 XP", porque: "Os multiplicadores não valem para os prêmios do mês: o ×1,1 dos 8 alunos fica de fora, e a conta para em 1.320." }
-        ]
+        opcoes: FECHA.map(function (o) { return { t: n(o.v) + " XP", ok: o.ok, porque: o.porque }; })
       },
       sobe: {
         pergunta: "Você está na Prata, fez 3.900 XP no mês e ficou em 7º. O que acontece na virada?",
