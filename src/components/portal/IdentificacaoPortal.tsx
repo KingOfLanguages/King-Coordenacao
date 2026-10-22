@@ -298,12 +298,13 @@ export function IdentificacaoPortal({
               {/* O servidor responde "enviado" mesmo sem cadastro (item 8 do
                   pentest): professor novo que tenta antes do sync trazer o
                   cadastro fica sem e-mail e sem nenhum erro na tela. Desde
-                  22/10 o sync busca os novos de 5 em 5 min e, quando o cadastro
-                  chega, o KTM manda o convite da trilha (função convite-trilha). */}
+                  22/10 o sync busca os novos de 5 em 5 min. O convite da trilha
+                  por e-mail (função convite-trilha) está PAUSADO desde 22/10,
+                  então o texto não promete o convite. */}
               <p className="rounded-xl bg-surface-subtle px-3.5 py-3 text-[12px] leading-relaxed text-ink-muted">
                 Se o código não chegar em alguns minutos, olhe o spam. Acabou de criar seu login
-                na King? Espere o e-mail &ldquo;Sua trilha de boas-vindas está pronta&rdquo;, que chega
-                em até 10 minutos, e peça o código depois dele. Se continuar sem chegar,{' '}
+                na King? Seu cadastro chega aqui em até 10 minutos: espere e peça outro código.
+                Se continuar sem chegar,{' '}
                 <button
                   type="button"
                   onClick={() => setStep({ tipo: 'contato' })}
