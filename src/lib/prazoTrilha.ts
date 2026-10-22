@@ -59,11 +59,14 @@ export function dataHoraBR(iso: string): string {
 }
 
 /** Onde o professor está, na visão da tela de controle. Ordem = urgência.
- *  `dispensado`: a coordenação tirou a trilha dele (migration 20260800). */
+ *  `dispensado`: a coordenação tirou a trilha dele (migration 20260800).
+ *  `sem_convite` / `convidado`: ainda não abriu, sem ou com o e-mail do convite
+ *  (desde 22/10/2026 o convite sai pelo botão da área, migration 20260810). */
 export type SituacaoTrilha =
-  | 'bloqueado' | 'acabando' | 'falta_reuniao' | 'nao_acessou' | 'andamento' | 'finalizado' | 'dispensado'
+  | 'bloqueado' | 'acabando' | 'falta_reuniao' | 'sem_convite' | 'convidado' | 'andamento' | 'finalizado' | 'dispensado'
 
 type CamposSituacao = {
+  convite_em: string | null
   primeiro_acesso_em: string | null
   prazo_em: string | null
   concluida_em: string | null
@@ -77,7 +80,7 @@ type CamposSituacao = {
 export function situacaoTrilha(l: CamposSituacao, agora: number): SituacaoTrilha {
   if (l.concluida_em) return l.primeira_reuniao_em ? 'finalizado' : 'falta_reuniao'
   if (l.dispensado_em) return 'dispensado'
-  if (!l.primeiro_acesso_em || !l.prazo_em) return 'nao_acessou'
+  if (!l.primeiro_acesso_em || !l.prazo_em) return l.convite_em ? 'convidado' : 'sem_convite'
   const restante = new Date(l.prazo_em).getTime() - agora
   if (restante <= 0) return l.so_falta_revisao ? 'andamento' : 'bloqueado'
   if (restante <= ULTIMAS_HORAS_MS) return 'acabando'

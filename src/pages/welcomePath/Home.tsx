@@ -6,9 +6,10 @@ import { IdentificacaoPortal } from '@/components/portal/IdentificacaoPortal'
 import { BoasVindasKingsCircle } from '@/components/portal/BoasVindasKingsCircle'
 import { usePortalSessao } from '@/hooks/usePortalIdentidade'
 import { baixarMapa, useTrilha } from '@/hooks/useWelcomePath'
-import { sessaoRecusada } from '@/lib/invocarFuncao'
+import { ErroFuncao, sessaoRecusada } from '@/lib/invocarFuncao'
 import { TrilhaView } from './TrilhaView'
 import { EtapaView } from './EtapaView'
+import { PainelNaoLiberada } from './JornadaViews'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Portal público do Welcome Path (/welcome-path).
@@ -86,6 +87,18 @@ export function Home() {
   }
 
   // ── Já identificado ────────────────────────────────────────────────────────
+  // Fora do grupo liberado (22/10/2026): nem a lista nem a etapa abrem.
+  const naoLiberada = trilha.error instanceof ErroFuncao && trilha.error.corpo?.codigo === 'nao_liberada'
+    ? trilha.error.corpo as { professor?: { nome?: string } }
+    : null
+  if (token && naoLiberada) {
+    return (
+      <Moldura>
+        <PainelNaoLiberada nome={naoLiberada.professor?.nome ?? null} onSair={sair} />
+      </Moldura>
+    )
+  }
+
   if (token) {
     const carregando = trilha.isLoading
     const jornada = trilha.data?.jornada ?? null

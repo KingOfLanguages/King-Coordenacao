@@ -13,7 +13,7 @@ import type { Profile } from '@/types'
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Sujeitos configuráveis. Admin fica de fora de propósito: tem acesso a tudo. */
-export type PermSubject = 'coordenacao' | 'lider' | 'suporte' | 'suporte_aluno' | 'comercial'
+export type PermSubject = 'coordenacao' | 'lider' | 'suporte' | 'suporte_aluno' | 'comercial' | 'rh'
 
 export const PERM_SUBJECTS: { key: PermSubject; label: string }[] = [
   { key: 'coordenacao',   label: 'Coordenação' },
@@ -21,6 +21,7 @@ export const PERM_SUBJECTS: { key: PermSubject; label: string }[] = [
   { key: 'suporte',       label: 'Suporte' },
   { key: 'suporte_aluno', label: 'Suporte · Aluno' },
   { key: 'comercial',     label: 'Comercial' },
+  { key: 'rh',            label: 'RH' },
 ]
 
 const SUBJECT_SET = new Set<string>(PERM_SUBJECTS.map(s => s.key))
@@ -75,12 +76,17 @@ export const PAGES: PageDef[] = [
 
   // ── Professores ──
   { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
-  { key: 'onboarding',      path: '/onboarding',     label: 'Onboarding',           section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte'] },
   { key: 'suporte-reunioes', path: '/reunioes?aba=buscar', label: 'Reuniões › Buscar por professor', section: 'Reuniões', nav: false, defaultRoles: ['suporte'] },
   // Tela do setor Comercial ("esse teacher é confiável?"). É a ÚNICA página do
   // cargo comercial — mexer aqui tira o chão dele; coordenação/líder ganham junto
   // porque a mesma leitura serve pra decidir alocação.
   { key: 'confiabilidade',  path: '/confiabilidade', label: 'Confiabilidade do Professor', section: 'Professores', nav: true, defaultRoles: ['comercial', 'coordenacao', 'lider'] },
+
+  // ── Welcome Path ──
+  // Área própria da trilha desde 22/10/2026 (era a tela Onboarding, cuja aba
+  // Mensagens foi aposentada). É a ÚNICA página do cargo RH; o que ele pode
+  // fazer lá é o mesmo que o suporte (pode_gerir_welcome_path, mig 20260810).
+  { key: 'welcome-path',    path: '/trilha',         label: 'Welcome Path',         section: 'Welcome Path', nav: true, defaultRoles: ['coordenacao', 'suporte', 'rh'] },
 
   // ── Acompanhamento ──
   // Uma tela, três abas (2026-09). 'acompanhamento' é a aba Índice de atenção e
@@ -137,6 +143,7 @@ export function subjectsOf(profile: Profile | null): { admin: boolean; subjects:
   if (profile.role === 'suporte')       subjects.add('suporte')
   if (profile.role === 'suporte_aluno') subjects.add('suporte_aluno')
   if (profile.role === 'comercial')     subjects.add('comercial')
+  if (profile.role === 'rh')            subjects.add('rh')
   if (profile.is_lider === true)        subjects.add('lider')
   return { admin, subjects }
 }

@@ -40,6 +40,13 @@
 // A coordenação pode dispensar um professor da trilha (`welcome_path_dispensas`,
 // migration 20260800). Dispensado não liga o relógio — nem toca o de quem já
 // tinha aberto — e todas as etapas ficam abertas para consulta, sem ordem.
+//
+// ── Só liberados (2026-10-22) ────────────────────────────────────────────────
+// Enquanto o RH testa a trilha com um grupo pequeno, só entra quem foi liberado
+// na tela (`welcome_path_liberacoes`, migration 20260810) ou dispensado. Os
+// outros entram com o código, mas recebem 403 `codigo: nao_liberada` e o portal
+// mostra o aviso com o WhatsApp. A regra mora em `wp_trilha_liberada()`, que
+// também olha a chave do modo: virando para "todos", o gate some.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -320,6 +327,18 @@ serve(async (req) => {
       return json({ error: 'O MAPA não está disponível agora. Tente de novo em instantes.' }, 503)
     }
     return json({ url: data.signedUrl })
+  }
+
+  // Antes do relógio: quem não foi liberado não abre a jornada. Na dúvida
+  // (erro na consulta), fecha.
+  const { data: liberada, error: errLib } = await admin.rpc('wp_trilha_liberada', { p_professor_id: prof.id })
+  if (errLib) console.error('[portal-welcome-path] wp_trilha_liberada:', errLib.message)
+  if (liberada !== true) {
+    return json({
+      error: 'Sua trilha de boas-vindas ainda não foi aberta.',
+      codigo: 'nao_liberada',
+      professor: { nome: semSufixoInicio(prof.nome) },
+    }, 403)
   }
 
   // A 1ª carga da trilha é o "1º acesso" que liga o relógio de 120h — menos

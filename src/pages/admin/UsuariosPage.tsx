@@ -23,6 +23,8 @@ const ROLES: { value: RoleUsuario; label: string }[] = [
   { value: 'suporte',       label: 'Suporte' },
   { value: 'suporte_aluno', label: 'Suporte · Aluno' },
   { value: 'comercial',     label: 'Comercial' },
+  // Desde 22/10/2026: só a área do Welcome Path (grupo de controle da trilha).
+  { value: 'rh',            label: 'RH' },
 ]
 
 /**

@@ -48,7 +48,7 @@ export function useQuizEtapa({
 
   // Sincroniza quando o servidor traz respostas novas (ex.: a coordenação
   // revisou a dissertativa e a query revalidou) — ajuste-de-estado-em-render,
-  // o mesmo padrão sem effect já usado em OnboardingPage.
+  // sem effect.
   const [respostasAnteriores, setRespostasAnteriores] = useState(minhasRespostas)
   if (minhasRespostas !== respostasAnteriores) {
     setRespostasAnteriores(minhasRespostas)

@@ -34,6 +34,13 @@ export function canEdit(perfil?: PerfilComoAdmin): boolean {
       || ehAdmin(perfil)
 }
 
+/** Cuidar de quem faz o Welcome Path: liberar, convidar, desbloquear, dispensar,
+ *  corrigir dissertativa. Quem edita mais o RH (22/10/2026), que só tem a área da
+ *  trilha. Espelha pode_gerir_welcome_path() (migration 20260810). */
+export function podeGerirTrilha(perfil?: PerfilComoAdmin): boolean {
+  return canEdit(perfil) || perfil?.role === 'rh'
+}
+
 /** Excluir registros permanentemente. */
 export function canDelete(perfil?: PerfilComoAdmin): boolean {
   return ehAdmin(perfil)

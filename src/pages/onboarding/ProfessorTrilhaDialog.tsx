@@ -1,43 +1,110 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
-  Check, Clock3, Lock, Unlock, RotateCcw, MessageSquareText, X, UserMinus, Undo2,
+  Check, Clock3, Lock, Unlock, RotateCcw, MessageSquareText, X, UserMinus, Undo2, Send, UserX,
+  ExternalLink, MessageCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { dataBR, fmtDuracao } from '@/lib/formato'
 import { useAuth } from '@/contexts/AuthContext'
-import { canEdit } from '@/lib/permissions'
+import { podeGerirTrilha } from '@/lib/permissions'
+import { useCanView } from '@/hooks/usePagePermissions'
 import { dataHoraBR, fmtHaQuanto, fmtRestante, fmtRestanteCurto } from '@/lib/prazoTrilha'
 import {
   useRespostasProfessor, useLiberarEtapa, useResetarEtapa, useRevisarResposta,
   useDesbloqueiosProfessor, useDesbloquearPrazo, useDispensarTrilha, useCancelarDispensa,
+  useConvidarTrilha, useRetirarLiberacao,
   type EtapaAdmin, type RespostaAdmin,
 } from '@/hooks/useWelcomePathAdmin'
-import { ChipSituacao, type LinhaTrilha } from './WelcomePathTab'
+import type { LinhaTrilha } from './trilhaComum'
+import { ChipSituacao, PontosEtapas } from './TrilhaUI'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Detalhe de um professor na trilha: o prazo (com o desbloqueio), e etapa a
-// etapa as respostas que ele deu e as ações da coordenação (liberar fora de
-// ordem, resetar, corrigir dissertativa).
+// Painel de um professor na trilha, aberto ao lado da lista (até 22/10/2026 era
+// uma janela no meio da tela, que escondia a lista). De cima para baixo:
+//
+//   linha do tempo  liberado → convite → 1º acesso → desbloqueios → prazo →
+//                   conclusão → 1ª reunião, com o convite e o desbloqueio ali
+//   etapas          as respostas de cada uma e as ações (liberar fora de
+//                   ordem, zerar, corrigir dissertativa)
+//   dispensar / tirar da trilha
 //
 // É aqui que a dissertativa vira nota: enquanto ninguém revisa, a etapa fica
 // pendurada em `revisao_pendente` e o professor não destrava a próxima.
 //
-// E é aqui que a coordenação dispensa alguém da trilha (migration 20260800).
+// Quem pode agir: podeGerirTrilha — coordenação, suporte, admin e, desde
+// 22/10/2026, o RH (espelha pode_gerir_welcome_path, migration 20260810).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DIA_MS = 86_400_000
 /** Opções do desbloqueio; a decisão (João, 07/10) foi o suporte escolher, com 2 sugerido. */
 const OPCOES_DIAS = [1, 2, 3, 5]
 
+/** Começo da linha do tempo: a liberação e o convite, com o botão do convite. */
+function SecaoAcesso({ linha }: { linha: LinhaTrilha }) {
+  const { profile } = useAuth()
+  const podeGerir = podeGerirTrilha(profile)
+  const convidar = useConvidarTrilha()
+  // Quem já abriu não precisa de convite; quem foi dispensado também não.
+  const cabeConvite = !linha.primeiro_acesso_em && !linha.dispensado_em
+
+  return (
+    <div className="space-y-3 rounded-xl border border-line-soft px-4 py-3.5">
+      <ol className="space-y-2.5 text-[12.5px]">
+        <Marco
+          titulo="Liberado"
+          quando={linha.liberado_em ? dataHoraBR(linha.liberado_em) : 'trilha aberta a todos'}
+          detalhe={[
+            linha.liberado_por && `por ${linha.liberado_por}`,
+            linha.rotulo && `turma “${linha.rotulo}”`,
+          ].filter(Boolean).join(' · ') || undefined}
+          tom={linha.liberado_em ? 'ok' : undefined}
+        />
+        <Marco
+          titulo="Convite por e-mail"
+          quando={linha.convite_em ? dataHoraBR(linha.convite_em) : 'não enviado'}
+          detalhe={linha.convite_em
+            ? [linha.convite_manual ? `por ${linha.convite_por ?? '—'}` : 'automático, antes da pausa de 22/10', linha.email && `para ${linha.email}`].filter(Boolean).join(' · ')
+            : linha.email ? `vai para ${linha.email}` : 'sem e-mail no cadastro'}
+          tom={linha.convite_em ? 'ok' : undefined}
+        />
+      </ol>
+      {cabeConvite && podeGerir && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3">
+          <p className="text-[11.5px] text-ink-muted">
+            O e-mail traz o link da trilha e explica a entrada com o código.
+          </p>
+          <Button
+            size="sm"
+            variant={linha.convite_em ? 'outline' : 'default'}
+            className="btn-press h-8 gap-1.5 text-[12px]"
+            disabled={convidar.isPending || !linha.email}
+            onClick={() => {
+              if (linha.convite_em && !confirm(`Mandar o convite de novo para ${linha.email}?`)) return
+              convidar.mutate(linha.professor_id, {
+                onSuccess: r => toast.success(`Convite enviado para ${r.para}`),
+                onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível enviar o convite.'),
+              })
+            }}
+          >
+            <Send className="h-3.5 w-3.5" />
+            {convidar.isPending ? 'Enviando…' : linha.convite_em ? 'Reenviar convite' : 'Enviar convite'}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Linha do tempo do prazo + desbloqueio. */
 function SecaoPrazo({ linha, agora }: { linha: LinhaTrilha; agora: number }) {
   const { profile } = useAuth()
-  const podeDesbloquear = canEdit(profile)
+  const podeDesbloquear = podeGerirTrilha(profile)
   const { data: historico = [] } = useDesbloqueiosProfessor(linha.professor_id)
   const desbloquear = useDesbloquearPrazo()
   const [dias, setDias] = useState(2)
@@ -161,7 +228,7 @@ function SecaoPrazo({ linha, agora }: { linha: LinhaTrilha; agora: number }) {
 /** Dispensar da trilha (ou desfazer). Quem já concluiu não tem o que dispensar. */
 function SecaoDispensa({ linha }: { linha: LinhaTrilha }) {
   const { profile } = useAuth()
-  const podeEditar = canEdit(profile)
+  const podeEditar = podeGerirTrilha(profile)
   const dispensar = useDispensarTrilha()
   const cancelar = useCancelarDispensa()
   const [abrindo, setAbrindo] = useState(false)
@@ -471,42 +538,111 @@ function DetalheEtapa({ linha, etapa }: { linha: LinhaTrilha; etapa: EtapaAdmin 
   )
 }
 
+/** Tirar da trilha (desfaz a liberação). O progresso fica guardado. */
+function SecaoRetirar({ linha, onRetirado }: { linha: LinhaTrilha; onRetirado: () => void }) {
+  const { profile } = useAuth()
+  const retirar = useRetirarLiberacao()
+  if (!linha.liberado_em || !podeGerirTrilha(profile)) return null
+
+  return (
+    <div className="flex justify-end">
+      <Button
+        size="sm" variant="outline"
+        className="btn-press h-8 gap-1.5 border-line text-[12px]"
+        disabled={retirar.isPending}
+        onClick={() => {
+          const progresso = linha.primeiro_acesso_em
+            ? ' O progresso fica guardado e volta se ele for liberado de novo.'
+            : ''
+          if (!confirm(`Tirar ${linha.nome} da trilha? Ele deixa de entrar no portal.${progresso}`)) return
+          retirar.mutate(linha.professor_id, {
+            onSuccess: () => {
+              toast.success(`${linha.nome.split(' ')[0]} saiu da trilha`)
+              onRetirado()
+            },
+            onError: e => toast.error(e instanceof Error ? e.message : 'Não foi possível tirar da trilha.'),
+          })
+        }}
+      >
+        <UserX className="h-3.5 w-3.5" /> Tirar da trilha
+      </Button>
+    </div>
+  )
+}
+
 export function ProfessorTrilhaDialog({
-  linha, etapas, agora, onFechar,
+  linha, etapas, agora, onFechar, etapaInicial,
 }: {
   linha: LinhaTrilha
   etapas: EtapaAdmin[]
   agora: number
   onFechar: () => void
+  /** Abre com esta etapa expandida (vindo da fila de Revisões). */
+  etapaInicial?: string | null
 }) {
-  const [expandida, setExpandida] = useState<string | null>(null)
+  const [expandida, setExpandida] = useState<string | null>(etapaInicial ?? null)
+  // Vindo da fila de Revisões, a etapa está lá embaixo: rola até ela uma vez.
+  const etapaAlvo = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    if (etapaInicial) etapaAlvo.current?.scrollIntoView({ block: 'start' })
+  }, [etapaInicial])
   const liberar = useLiberarEtapa()
   const resetar = useResetarEtapa()
+  const { canView } = useCanView()
 
   return (
     <Dialog open onOpenChange={aberto => { if (!aberto) onFechar() }}>
-      {/* sm:max-w-* e não max-w-*: o DialogContent embute `sm:max-w-sm`, e o
-          tailwind-merge não trata prefixos diferentes como conflito — sem o
-          `sm:` aqui, o dialog encolhe para 384px a partir de 640px de tela. */}
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
+      {/* Painel lateral: preso à direita, altura toda. As classes sobrescrevem
+          as do DialogContent (centro da tela); `sm:max-w-*` e não `max-w-*`,
+          porque ele embute `sm:max-w-sm` e o tailwind-merge não trata prefixos
+          diferentes como conflito. */}
+      <DialogContent
+        className="left-auto right-0 top-0 h-[100dvh] max-h-none max-w-full translate-x-0 translate-y-0 content-start
+                   gap-4 rounded-none p-5 sm:max-w-[600px] sm:rounded-l-2xl"
+      >
+        <DialogHeader className="space-y-1.5 pr-8">
           <DialogTitle className="flex flex-wrap items-center gap-2 text-[15px]">
             {linha.nome} <ChipSituacao situacao={linha.situacao} />
           </DialogTitle>
+          <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-ink-muted">
+            {(linha.grupo || linha.coordenador) && (
+              <span>{[linha.grupo, linha.coordenador].filter(Boolean).join(' · ')}</span>
+            )}
+            {linha.data_inicio && <span>entra na King em {dataBR(linha.data_inicio)}</span>}
+            {linha.rotulo && <span>turma {linha.rotulo}</span>}
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-muted">
-          {linha.data_inicio && <span>Entrou na King: {dataBR(linha.data_inicio)}</span>}
-          {(linha.grupo || linha.coordenador) && (
-            <span>Coordenação: {[linha.grupo, linha.coordenador].filter(Boolean).join(' · ')}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {canView('professores') && (
+            <Button asChild size="sm" variant="outline" className="btn-press h-8 gap-1.5 border-line text-[12px]">
+              <Link to={`/professores/${linha.professor_id}`}>
+                <ExternalLink className="h-3.5 w-3.5" /> Abrir ficha
+              </Link>
+            </Button>
           )}
-          <span>{linha.etapas_concluidas} de {linha.etapas_obrigatorias} etapas</span>
-          {linha.nota_media != null && <span>Nota média: {Math.round(Number(linha.nota_media))}%</span>}
-          <span>Tempo de estudo: {fmtDuracao(linha.tempo_segundos)}</span>
+          {linha.telefone && (
+            <Button asChild size="sm" variant="outline" className="btn-press h-8 gap-1.5 border-line text-[12px]">
+              <a href={`https://wa.me/${linha.telefone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+              </a>
+            </Button>
+          )}
         </div>
 
+        {(linha.primeiro_acesso_em || linha.porEtapa.size > 0) && (
+          <div className="space-y-1.5 rounded-xl border border-line-soft px-4 py-3">
+            <PontosEtapas l={linha} ativas={etapas} />
+            <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-muted">
+              <span>{linha.etapas_concluidas} de {linha.etapas_obrigatorias} etapas</span>
+              {linha.nota_media != null && <span>nota média {Math.round(Number(linha.nota_media))}%</span>}
+              <span>{fmtDuracao(linha.tempo_segundos)} de estudo</span>
+            </p>
+          </div>
+        )}
+
+        <SecaoAcesso linha={linha} />
         <SecaoPrazo linha={linha} agora={agora} />
-        <SecaoDispensa linha={linha} />
 
         <ul className="space-y-2">
           {etapas.map((etapa, i) => {
@@ -517,7 +653,7 @@ export function ProfessorTrilhaDialog({
             const aberta = expandida === etapa.id
 
             return (
-              <li key={etapa.id} className="rounded-xl border border-line-soft">
+              <li key={etapa.id} ref={etapa.id === etapaInicial ? etapaAlvo : undefined} className="scroll-mt-4 rounded-xl border border-line-soft">
                 <button
                   type="button"
                   onClick={() => setExpandida(aberta ? null : etapa.id)}
@@ -618,6 +754,11 @@ export function ProfessorTrilhaDialog({
             )
           })}
         </ul>
+
+        <div className="space-y-2 border-t border-line-soft pt-4">
+          <SecaoDispensa linha={linha} />
+          <SecaoRetirar linha={linha} onRetirado={onFechar} />
+        </div>
       </DialogContent>
     </Dialog>
   )

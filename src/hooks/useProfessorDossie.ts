@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O resto do que o KTM sabe sobre um professor e que a tela dele não mostrava:
-// pausas, convocações, tarefas, onboarding, trilha, mensagem do dia, e-mails
+// pausas, convocações, tarefas, trilha (e se foi liberado nela), mensagem do dia, e-mails
 // disparados — e a série histórica da avaliação de alunos.
 //
 // A extensão do Meet já montava esse dossiê (extension/src/background), mas
@@ -88,13 +88,11 @@ export interface TarefaResumo {
   created_at: string
 }
 
-export interface OnboardingResumo {
-  data_inicio: string | null
-  /** 7 posições: 0 vazio, 1 agendado, 2 enviado. */
-  dias: number[] | null
-  observacao: string | null
-  tag_texto: string | null
-  tag_cor: string | null
+/** Liberado para o Welcome Path (migration 20260810). Substituiu o resumo do
+ *  checklist de Mensagens, aposentado em 22/10/2026. */
+export interface LiberacaoTrilhaResumo {
+  rotulo: string | null
+  created_at: string
 }
 
 export interface WelcomePathResumo {
@@ -115,7 +113,7 @@ export interface ProfessorSituacao {
   pausas: PausaResumo[]
   convocacoes: ConvocacaoResumo[]
   tarefas: TarefaResumo[]
-  onboarding: OnboardingResumo | null
+  liberacaoTrilha: LiberacaoTrilhaResumo | null
   welcomePath: WelcomePathResumo | null
   /** Está na lista de mensagens do dia de alguém, hoje? */
   contatoHoje: { enviado: boolean } | null
@@ -132,7 +130,7 @@ export function useProfessorSituacao(professorId?: string, incidenteIds: string[
     queryFn: async (): Promise<ProfessorSituacao> => {
       const hojeISO = new Date().toLocaleDateString('en-CA')
 
-      const [pausas, convocacoes, tarefas, onboarding, wpProgresso, wpTotal, contato, emails] = await Promise.all([
+      const [pausas, convocacoes, tarefas, liberacaoTrilha, wpProgresso, wpTotal, contato, emails] = await Promise.all([
         tolerante<PausaResumo[]>(
           supabase
             .from('pausas')
@@ -163,10 +161,10 @@ export function useProfessorSituacao(professorId?: string, incidenteIds: string[
               [],
             )
           : Promise.resolve<TarefaResumo[]>([]),
-        tolerante<OnboardingResumo | null>(
+        tolerante<LiberacaoTrilhaResumo | null>(
           supabase
-            .from('onboarding_professores')
-            .select('data_inicio, dias, observacao, tag_texto, tag_cor')
+            .from('welcome_path_liberacoes')
+            .select('rotulo, created_at')
             .eq('professor_id', professorId!)
             .maybeSingle(),
           null,
@@ -218,7 +216,7 @@ export function useProfessorSituacao(professorId?: string, incidenteIds: string[
         pausas,
         convocacoes,
         tarefas,
-        onboarding,
+        liberacaoTrilha,
         welcomePath,
         contatoHoje: contato[0] ? { enviado: contato[0].enviado } : null,
         emails,

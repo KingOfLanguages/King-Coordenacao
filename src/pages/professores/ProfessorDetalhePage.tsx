@@ -1378,15 +1378,13 @@ function SituacaoSection({ situacao }: { situacao: ProfessorSituacao }) {
 
   const pausaVigente     = situacao.pausas.find(p => p.ativada_em && !p.encerrada_em) ?? null
   const tarefasAbertas   = situacao.tarefas.filter(t => t.status !== 'concluido')
-  const onboarding       = situacao.onboarding
+  const liberacao        = situacao.liberacaoTrilha
   const wp               = situacao.welcomePath
   const ultimoEmail      = situacao.emails[0] ?? null
 
   const temAlgo = situacao.pausas.length || situacao.convocacoes.length || situacao.tarefas.length
-    || onboarding || wp || situacao.contatoHoje || ultimoEmail
+    || liberacao || wp || situacao.contatoHoje || ultimoEmail
   if (!temAlgo) return null
-
-  const enviadosOnboarding = onboarding?.dias?.filter(d => d === 2).length ?? 0
 
   return (
     <section className="card-surface p-5 space-y-4">
@@ -1440,17 +1438,17 @@ function SituacaoSection({ situacao }: { situacao: ProfessorSituacao }) {
           )}
         </div>
 
-        {/* Trilha / onboarding */}
+        {/* Welcome Path: liberado (grupo do RH, 22/10/2026) e o progresso */}
         <div className="bg-surface-canvas p-3.5 space-y-1">
-          <p className="text-[11px] text-ink-muted">Boas-vindas</p>
-          {onboarding ? (
-            <p className="text-[13px] text-ink tabular-nums">
-              {enviadosOnboarding}/7 mensagens
+          <p className="text-[11px] text-ink-muted">Welcome Path</p>
+          {liberacao ? (
+            <p className="text-[13px] text-ink">
+              Liberado{liberacao.rotulo && <span className="text-ink-muted"> · {liberacao.rotulo}</span>}
             </p>
           ) : (
-            <p className="text-[13px] text-ink-muted">Fora do onboarding</p>
+            <p className="text-[13px] text-ink-muted">Fora da trilha</p>
           )}
-          {wp && (
+          {wp && (wp.concluidas > 0 || wp.revisaoPendente > 0 || liberacao) && (
             <p className="text-[11px] text-ink-subtle tabular-nums">
               Trilha {wp.concluidas}/{wp.total}
               {wp.revisaoPendente > 0 && ` · ${wp.revisaoPendente} p/ revisar`}
@@ -1565,12 +1563,6 @@ function SituacaoSection({ situacao }: { situacao: ProfessorSituacao }) {
             </div>
           )}
         </div>
-      )}
-
-      {onboarding?.observacao && (
-        <p className="text-[11px] text-ink-muted leading-relaxed">
-          <span className="text-ink-subtle">Onboarding: </span>{onboarding.observacao}
-        </p>
       )}
     </section>
   )

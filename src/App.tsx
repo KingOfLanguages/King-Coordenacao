@@ -29,7 +29,7 @@ import { ConfiguracoesPage } from '@/pages/admin/ConfiguracoesPage'
 import { Home as AgendamentoPage } from '@/pages/agendamentos/Home'
 import { PortalDesativado } from '@/pages/PortalDesativado'
 import { Home as WelcomePathPage } from '@/pages/welcomePath/Home'
-import { OnboardingPage } from '@/pages/onboarding/OnboardingPage'
+import { TrilhaPage } from '@/pages/onboarding/TrilhaPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -176,11 +176,13 @@ export default function App() {
               } />
               {/* "Reclamações por Aluno" virou a visão "Por aluno" de Incidentes. */}
               <Route path="/alunos" element={<Redirecionar para="/incidentes" params={{ visao: 'alunos' }} />} />
-              <Route path="/onboarding" element={
-                <ProtectedRoute page="onboarding">
-                  <OnboardingPage />
+              <Route path="/trilha" element={
+                <ProtectedRoute page="welcome-path">
+                  <TrilhaPage />
                 </ProtectedRoute>
               } />
+              {/* Era a tela Onboarding (Mensagens + trilha) até 22/10/2026. */}
+              <Route path="/onboarding" element={<Redirecionar para="/trilha" />} />
               {/* Solicitações (Pausas | Transferências) saiu em 2026-10-14 junto com
                   os formulários públicos. Avisos antigos do sino ainda apontam
                   para estas rotas: caem na tela Hoje. */}

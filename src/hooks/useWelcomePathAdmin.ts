@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
+import { invocarFuncao } from '@/lib/invocarFuncao'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lado da COORDENAÇÃO do Welcome Path — dentro do app, com sessão do Supabase.
@@ -421,9 +422,10 @@ export function useRespostasProfessor(professorId: string | null, etapaId: strin
 // ─── Prazo e acompanhamento (migration 20260794) ──────────────────────────────
 
 /** Uma linha por professor no acompanhamento da trilha — `wp_acompanhamento()`.
- *  Quem entra: ativo que entrou na King desde 07/10/2026 ou que já abriu a
- *  trilha. A situação (bloqueado, acabando…) é decidida na tela, porque depende
- *  do relógio de quem olha. */
+ *  Quem entra: no modo "só liberados" (22/10/2026, migration 20260810), quem
+ *  foi liberado ou dispensado; no modo "todos", também o ativo que entrou na
+ *  King desde 07/10/2026 ou que já abriu a trilha. A situação (bloqueado,
+ *  acabando…) é decidida na tela, porque depende do relógio de quem olha. */
 export type AcompanhamentoTrilha = {
   professor_id: string
   nome: string
@@ -451,6 +453,20 @@ export type AcompanhamentoTrilha = {
   dispensado_em: string | null
   dispensado_por: string | null
   motivo_dispensa: string | null
+  /** Liberação e convite (migration 20260810). */
+  email: string | null
+  liberado_em: string | null
+  /** Nome de quem liberou. */
+  liberado_por: string | null
+  /** Turma da liberação, ex. "Piloto RH". */
+  rotulo: string | null
+  /** Último convite por e-mail (pela tela ou pelo cron de 22/10). */
+  convite_em: string | null
+  /** O último convite saiu pelo botão da tela (senão, foi o automático). */
+  convite_manual: boolean
+  convite_por: string | null
+  /** Etapas com dissertativa esperando nota. */
+  revisoes_pendentes: number
 }
 
 export function useAcompanhamentoTrilha() {
@@ -464,6 +480,111 @@ export function useAcompanhamentoTrilha() {
       if (error) throw error
       return (data ?? []) as AcompanhamentoTrilha[]
     },
+  })
+}
+
+// ─── Quem faz a trilha (migration 20260810) ──────────────────────────────────
+
+/** A chave do modo de acesso: só liberados (o grupo do RH) ou todos. */
+export type ConfigTrilha = {
+  so_liberados: boolean
+  alterado_por: string | null
+  alterado_em: string
+  alterado_por_nome: string | null
+}
+
+export function useConfigTrilha() {
+  return useQuery({
+    queryKey: ['wp-admin', 'config'],
+    queryFn: async (): Promise<ConfigTrilha> => {
+      const { data, error } = await supabase
+        .from('welcome_path_config')
+        .select('so_liberados, alterado_por, alterado_em')
+        .maybeSingle()
+      if (error) throw error
+      // Sem a linha, o servidor trata como restrito (wp_trilha_liberada).
+      const cfg = data ?? { so_liberados: true, alterado_por: null, alterado_em: '' }
+      let nome: string | null = null
+      if (cfg.alterado_por) {
+        const { data: p } = await supabase.from('perfis_publicos').select('nome').eq('id', cfg.alterado_por).maybeSingle()
+        nome = (p as { nome: string } | null)?.nome ?? null
+      }
+      return { ...cfg, alterado_por_nome: nome }
+    },
+  })
+}
+
+export function useDefinirAcesso() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (soLiberados: boolean) => {
+      const { error } = await supabase.rpc('wp_definir_acesso', { p_so_liberados: soLiberados })
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
+  })
+}
+
+/** Ativo que ainda não foi liberado. Sem busca: os que chegaram nos últimos 30 dias. */
+export type CandidatoTrilha = {
+  professor_id: string
+  nome: string
+  email: string | null
+  data_inicio: string | null
+  grupo: string | null
+  chegou_em: string | null
+  convite_em: string | null
+  abriu_trilha: boolean
+}
+
+export function useCandidatosTrilha(busca: string) {
+  const termo = busca.trim()
+  return useQuery({
+    queryKey: ['wp-admin', 'candidatos', termo],
+    // Busca de 1 letra varre a base inteira sem ajudar ninguém.
+    enabled: termo.length !== 1,
+    placeholderData: prev => prev,
+    queryFn: async (): Promise<CandidatoTrilha[]> => {
+      const { data, error } = await supabase.rpc('wp_candidatos_trilha', { p_busca: termo || null })
+      if (error) throw error
+      return (data ?? []) as CandidatoTrilha[]
+    },
+  })
+}
+
+export function useLiberarProfessores() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (v: { ids: string[]; rotulo: string }) => {
+      const { data, error } = await supabase.rpc('wp_liberar_professores', {
+        p_ids: v.ids,
+        p_rotulo: v.rotulo.trim() || null,
+      })
+      if (error) throw new Error(error.message)
+      return data as number
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
+  })
+}
+
+export function useRetirarLiberacao() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (professorId: string) => {
+      const { error } = await supabase.rpc('wp_retirar_liberacao', { p_professor_id: professorId })
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
+  })
+}
+
+/** Manda (ou reenvia) o convite da trilha por e-mail — função convite-trilha. */
+export function useConvidarTrilha() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (professorId: string) =>
+      invocarFuncao<{ enviado: boolean; para: string; em: string }>('convite-trilha', { professorId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wp-admin'] }),
   })
 }
 

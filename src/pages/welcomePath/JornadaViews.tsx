@@ -15,6 +15,7 @@ import type { EtapaTrilha, JornadaPortal, PrimeiraReuniao } from '@/hooks/useWel
 //   ChipPrazo        o mesmo contador, curto, no cabeçalho de cada etapa
 //   PainelBloqueio   prazo esgotado: progresso guardado + WhatsApp
 //   PainelConclusao  "Congratulations…" + agendar a 1ª reunião
+//   PainelNaoLiberada  professor fora do grupo liberado (22/10/2026)
 //
 // `offsetMs` = hora do servidor − hora do navegador, medida quando a trilha
 // chegou. Somar ao Date.now() faz o contador seguir o relógio do servidor, que
@@ -151,6 +152,45 @@ export function PainelBloqueio({
           <BotaoWhatsApp mensagem={mensagemDesbloqueio(nome, parou, etapas.length)}>
             Pedir desbloqueio no WhatsApp
           </BotaoWhatsApp>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** Trilha não liberada para este professor (grupo de controle do RH,
+ *  22/10/2026): o portal responde 403 `nao_liberada` antes de ligar o relógio. */
+export function PainelNaoLiberada({ nome, onSair }: { nome: string | null; onSair: () => void }) {
+  const primeiro = nome?.split(' ')[0]
+  return (
+    <section className="w-full max-w-md overflow-hidden rounded-3xl border border-line-soft bg-surface-canvas shadow-card">
+      <div className="space-y-4 px-6 py-6 sm:px-7">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-subtle text-ink-secondary">
+          <Hourglass className="h-5 w-5" />
+        </span>
+        <div className="space-y-1.5">
+          <h1 className="text-[1.6rem] font-bold leading-tight tracking-[-0.03em] text-ink">
+            {primeiro ? `${primeiro}, sua trilha ainda não foi aberta` : 'Sua trilha ainda não foi aberta'}
+          </h1>
+          <p className="text-[14px] leading-relaxed text-ink-muted">
+            A trilha de boas-vindas está sendo liberada aos poucos. Quando chegar a sua vez, você recebe
+            um e-mail com o convite e entra por aqui com o mesmo endereço.
+          </p>
+        </div>
+        <p className="text-[13.5px] leading-relaxed text-ink-secondary">
+          Ficou com dúvida? Fale com o suporte ao professor pelo WhatsApp.
+        </p>
+        <div className="space-y-2 sm:max-w-xs">
+          <BotaoWhatsApp mensagem={`Olá! Sou ${nome ?? 'professor(a) novo(a)'} e tentei entrar no Welcome Path, mas a trilha ainda não foi aberta para mim.`}>
+            Falar com o suporte
+          </BotaoWhatsApp>
+          <button
+            type="button"
+            onClick={onSair}
+            className="btn-press w-full py-1.5 text-[12.5px] text-ink-muted underline-offset-2 hover:text-ink-secondary hover:underline"
+          >
+            Entrar com outro e-mail
+          </button>
         </div>
       </div>
     </section>

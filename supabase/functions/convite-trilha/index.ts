@@ -1,19 +1,24 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function: convite-trilha
 //
-// Convida o professor novo para a trilha de boas-vindas assim que o cadastro
-// dele chega ao KTM (22/10/2026, parecer do RH). Antes, ele recebia o login da
-// King e ia direto à trilha; se chegasse antes do sync, o portal respondia
-// "enviado" com a isca e o código nunca vinha. Agora o sinal de que dá para
-// entrar é este e-mail, que só sai quando o cadastro já está aqui.
+// Convida o professor para a trilha de boas-vindas. Dois caminhos:
 //
-// Quem recebe: convites_trilha_pendentes() (migration 20260806). O cron
-// king-convite-trilha só chama esta função quando há alguém pendente.
+//   pela tela (22/10/2026, grupo de controle do RH)
+//     POST { professorId } com a sessão de quem está logado. Só passa quem
+//     pode_gerir_welcome_path(), e só para professor liberado
+//     (wp_trilha_liberada, migration 20260810). Pode reenviar, com 10 min de
+//     intervalo para um clique duplo não virar dois e-mails. Cada envio fica em
+//     welcome_path_convites, com quem mandou.
 //
-// Um e-mail por professor: antes de mandar, reserva somando 1 em
-// convite_trilha_tentativas (só se ninguém mexeu desde a leitura); depois do
-// Brevo aceitar, grava convite_trilha_em. Falhou, a próxima batida tenta de novo,
-// até 3 vezes. Não grava em email_disparos (ver a migration).
+//   pelo cron (o original, 20260806/20260807; PAUSADO desde 22/10, 20260808)
+//     POST {} com a chave de serviço. Manda para convites_trilha_pendentes():
+//     professor novo, nos últimos 3 dias, ainda sem convite e — desde a
+//     20260810 — liberado, se a trilha estiver no modo restrito. Um e-mail por
+//     professor: reserva somando 1 em convite_trilha_tentativas, grava
+//     convite_trilha_em depois que o Brevo aceita; até 3 tentativas.
+//
+// Nenhum dos dois grava em email_disparos (ver a 20260806): o convite não pode
+// travar a carência de 15 dias do convite da 1ª reunião.
 //
 // Os fatos do texto (código de 6 números, 5 dias do 1º acesso) se repetem no
 // guia do RH (docs/welcome-path) e no portal: mudou um, mude os três.
@@ -23,16 +28,19 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { semSufixoInicio } from '../_shared/portal.ts'
+import { jsonPara, preflight, semSufixoInicio } from '../_shared/portal.ts'
 
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://projeto-king-coord.vercel.app'
 const LINK_TRILHA = `${APP_URL}/welcome-path`
 
 type Pendente = { id: string; nome: string; email: string; tentativas: number }
 
-function json(corpo: unknown, status: number): Response {
-  return new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } })
-}
+/** Reenvio pela tela: menos que isso desde o último convite é clique duplo. */
+const INTERVALO_REENVIO_MS = 10 * 60_000
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+// deno-lint-ignore no-explicit-any
+type Admin = any
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -92,13 +100,106 @@ function htmlConvite(nome: string, email: string): string {
 </html>`
 }
 
+/** Manda o e-mail pelo Brevo. Devolve o erro, ou null se foi aceito. */
+async function enviarConvite(brevoKey: string, nome: string, email: string): Promise<string | null> {
+  const primeiroNome = semSufixoInicio(nome).split(' ')[0] || 'professor(a)'
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({
+      sender: {
+        name:  Deno.env.get('BREVO_FROM_NAME')  ?? 'KOL - King Of Languages',
+        email: Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking.agenda@gmail.com',
+      },
+      to:          [{ email, name: primeiroNome }],
+      subject:     'Sua trilha de boas-vindas à King está pronta',
+      htmlContent: htmlConvite(primeiroNome, email),
+    }),
+  })
+  if (!res.ok) return `Brevo ${res.status}: ${(await res.text()).slice(0, 200)}`
+  await res.body?.cancel()
+  return null
+}
+
+/** Papel do JWT que chegou. A assinatura já foi conferida pela plataforma
+ *  (verify_jwt), então ler o papel do payload é seguro. */
+function papelDoToken(req: Request): string | null {
+  const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+  const payload = token.split('.')[1]
+  if (!payload) return null
+  try {
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(b64 + '='.repeat((4 - b64.length % 4) % 4))).role ?? null
+  } catch {
+    return null
+  }
+}
+
+// ─── Pela tela: um professor, quem está logado manda ─────────────────────────
+async function convidarPelaTela(req: Request, admin: Admin, brevoKey: string, professorId: string): Promise<Response> {
+  const json = jsonPara(req)
+
+  const userClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+  })
+  const { data: { user } } = await userClient.auth.getUser()
+  if (!user) return json({ error: 'Entre na plataforma de novo para mandar o convite.' }, 401)
+  const { data: pode } = await userClient.rpc('pode_gerir_welcome_path')
+  if (pode !== true) return json({ error: 'Sem permissão para convidar para a trilha.' }, 403)
+
+  const { data: prof } = await admin
+    .from('professores')
+    .select('id, nome, email, status, convite_trilha_em')
+    .eq('id', professorId)
+    .maybeSingle()
+  if (!prof || prof.status !== 'ativo') return json({ error: 'Professor não encontrado entre os ativos.' }, 404)
+  const email = (prof.email ?? '').trim()
+  if (!EMAIL_RE.test(email)) return json({ error: 'Este professor não tem e-mail válido no cadastro.' }, 422)
+
+  const { data: liberada } = await admin.rpc('wp_trilha_liberada', { p_professor_id: prof.id })
+  if (liberada !== true) return json({ error: 'Libere o professor na trilha antes de convidar.' }, 409)
+
+  if (prof.convite_trilha_em && Date.now() - new Date(prof.convite_trilha_em).getTime() < INTERVALO_REENVIO_MS) {
+    return json({ error: 'O convite acabou de ir para este professor. Espere uns minutos para reenviar.' }, 429)
+  }
+
+  const erro = await enviarConvite(brevoKey, prof.nome, email)
+  if (erro) {
+    console.error(`[convite-trilha] tela ${prof.id}: ${erro}`)
+    return json({ error: 'O serviço de e-mail recusou o envio agora. Tente de novo em instantes.' }, 502)
+  }
+
+  const agora = new Date().toISOString()
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    admin.from('welcome_path_convites').insert({ professor_id: prof.id, enviado_por: user.id, email }),
+    admin.from('professores').update({ convite_trilha_em: agora }).eq('id', prof.id),
+  ])
+  if (e1 || e2) console.error(`[convite-trilha] tela ${prof.id}: enviado, mas não gravou: ${e1?.message ?? e2?.message}`)
+  console.log(`[convite-trilha] convite pela tela para ${prof.id}`)
+  return json({ enviado: true, para: email, em: agora })
+}
+
 serve(async (req) => {
-  if (req.method !== 'POST') return json({ error: 'Método não permitido.' }, 405)
+  if (req.method === 'OPTIONS') return preflight(req)
+  if (req.method !== 'POST') return jsonPara(req)({ error: 'Método não permitido.' }, 405)
 
   const brevoKey = Deno.env.get('BREVO_API_KEY')
-  if (!brevoKey) return json({ error: 'BREVO_API_KEY ausente.' }, 503)
+  if (!brevoKey) return jsonPara(req)({ error: 'BREVO_API_KEY ausente.' }, 503)
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
+  let body: Record<string, unknown> = {}
+  try { body = await req.json() } catch { /* o cron manda {} */ }
+  if (typeof body.professorId === 'string' && body.professorId) {
+    return convidarPelaTela(req, admin, brevoKey, body.professorId)
+  }
+
+  // ─── Pelo cron: só com a chave de serviço ──────────────────────────────────
+  // A chave pública do site também passa no verify_jwt; sem esta trava,
+  // qualquer um disparava a fila.
+  const json = jsonPara(req)
+  if (papelDoToken(req) !== 'service_role') return json({ error: 'Informe o professor.' }, 400)
+
   const { data, error } = await admin.rpc('convites_trilha_pendentes')
   if (error) return json({ error: error.message }, 500)
 
@@ -118,28 +219,12 @@ serve(async (req) => {
     if (resErr) { falhas.push({ id: p.id, erro: resErr.message }); continue }
     if (!reservado) continue
 
-    const primeiroNome = semSufixoInicio(p.nome).split(' ')[0] || 'professor(a)'
-    const email = p.email.trim()
-    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        sender: {
-          name:  Deno.env.get('BREVO_FROM_NAME')  ?? 'KOL - King Of Languages',
-          email: Deno.env.get('BREVO_FROM_EMAIL') ?? 'coordenacaoking.agenda@gmail.com',
-        },
-        to:          [{ email, name: primeiroNome }],
-        subject:     'Sua trilha de boas-vindas à King está pronta',
-        htmlContent: htmlConvite(primeiroNome, email),
-      }),
-    })
-    if (!res.ok) {
-      const erro = `Brevo ${res.status}: ${(await res.text()).slice(0, 200)}`
+    const erro = await enviarConvite(brevoKey, p.nome, p.email.trim())
+    if (erro) {
       console.error(`[convite-trilha] ${p.id}: ${erro}`)
       falhas.push({ id: p.id, erro })
       continue
     }
-    await res.body?.cancel()
 
     const { error: okErr } = await admin
       .from('professores')

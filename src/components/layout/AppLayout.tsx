@@ -30,7 +30,8 @@ const NAV: NavNode[] = [
   { kind: 'link', pageKey: 'minha-area' },       // Para fazer | Projetos (era Tarefas + Projetos + Minha Área)
   { kind: 'link', pageKey: 'reunioes-dia' },     // Agenda | Buscar | Configurar agendas
   { kind: 'link', pageKey: 'acompanhamento' },   // Índice de atenção | Pendências | Mês de Análise
-  { kind: 'group', label: 'Professores', pageKeys: ['professores', 'onboarding', 'confiabilidade'] },
+  { kind: 'group', label: 'Professores', pageKeys: ['professores', 'confiabilidade'] },
+  { kind: 'link', pageKey: 'welcome-path' },     // Professores | Acesso | Revisões | Conteúdo | Visão | Painel
   { kind: 'link', pageKey: 'incidentes' },       // Lista | Por aluno | Calendário
   { kind: 'link', pageKey: 'dashboard' },        // Coordenação | Geral | Turnover & Retenção
 ]
@@ -52,6 +53,7 @@ function roleLabel(role?: string, isLider?: boolean) {
     case 'suporte':       return 'Suporte'
     case 'suporte_aluno': return isLider ? 'Suporte · Aluno · Líder' : 'Suporte · Aluno'
     case 'comercial':     return 'Comercial'
+    case 'rh':            return 'RH'
     default:              return '—'
   }
 }
