@@ -24,7 +24,7 @@ import { PainelTrilhaTab } from './PainelTrilhaTab'
 //
 // Era a tela /onboarding, que juntava a trilha com o checklist de Mensagens da
 // coordenação. O checklist foi aposentado e a trilha ganhou item próprio no
-// menu — é a única tela do cargo RH.
+// menu — é a tela principal do cargo RH (que também consulta Professores).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Aba = 'professores' | 'acesso' | 'revisoes' | 'conteudo' | 'visao' | 'painel'

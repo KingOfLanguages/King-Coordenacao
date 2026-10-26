@@ -24,7 +24,7 @@ import { MES_ANALISE_PROBLEM_TYPE } from '@/hooks/useMesAnalise'
 import { useResolverObservacao, type ObservacaoSnapshot } from '@/hooks/useObservacoes'
 import { useGrupos } from '@/hooks/useGrupos'
 import { useAuth } from '@/contexts/AuthContext'
-import { canEdit, canAddInfo } from '@/lib/permissions'
+import { canEdit, canAddInfo, podeVerPendenciasKing } from '@/lib/permissions'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { PerfilProfessorSection } from '@/components/professores/PerfilProfessorSection'
 import { StatusBadge } from '@/components/professores/StatusBadge'
@@ -118,6 +118,8 @@ const FILTROS: { value: ObsFiltro; label: string }[] = [
 // sempre visível em cima.
 type AbaProfessor = 'geral' | 'perfil' | 'reunioes' | 'alunos' | 'pendencias' | 'ocorrencias'
 const ABAS_PROFESSOR: readonly AbaProfessor[] = ['geral', 'perfil', 'reunioes', 'alunos', 'pendencias', 'ocorrencias']
+/** Para quem a função pendencias-lancamento recusa (o RH, desde 26/10/2026). */
+const ABAS_SEM_PENDENCIAS = ABAS_PROFESSOR.filter(a => a !== 'pendencias')
 
 export function ProfessorDetalhePage() {
   const { id }     = useParams<{ id: string }>()
@@ -141,6 +143,7 @@ export function ProfessorDetalhePage() {
   const { data: grupos = [] } = useGrupos()
   const podeEditar = canEdit(profile)
   const podeRegistrar = canAddInfo(profile)
+  const vePendencias = podeVerPendenciasKing(profile)
   const [obsAberta, setObsAberta] = useState(false)
   const [obsFiltro, setObsFiltro] = useState<ObsFiltro>('todos')
   const [colocarMesAnaliseAberto, setColocarMesAnaliseAberto] = useState(false)
@@ -152,7 +155,7 @@ export function ProfessorDetalhePage() {
   const [reunioesExpandidas, setReunioesExpandidas] = useState(false)
   const [registrarSaidaAberto, setRegistrarSaidaAberto] = useState(false)
   const [saidaDetalheAberto, setSaidaDetalheAberto] = useState(false)
-  const [aba, setAba] = useAbaUrl<AbaProfessor>(ABAS_PROFESSOR, 'geral')
+  const [aba, setAba] = useAbaUrl<AbaProfessor>(vePendencias ? ABAS_PROFESSOR : ABAS_SEM_PENDENCIAS, 'geral')
   // Saída de professor (20260797): só coordenação, suporte e admin leem.
   const { data: saidas = [] } = useSaidasDoProfessor(id, podeEditar)
 
@@ -507,26 +510,32 @@ export function ProfessorDetalhePage() {
               <CheckCircle2 className="h-3.5 w-3.5" />Concluir acompanhamento
             </Button>
           )}
-          <Button
-            variant="outline" size="sm"
-            className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
-            onClick={() => atualizarMonitoramento.mutate({
-              id: professor.id,
-              monitoramento: !professor.monitoramento,
-            })}
-          >
-            {professor.monitoramento
-              ? <><EyeOff className="h-3.5 w-3.5" />Sair do monitoramento</>
-              : <><Eye className="h-3.5 w-3.5" />Monitoramento</>
-            }
-          </Button>
-          <Button
-            size="sm"
-            className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
-            onClick={() => setObsAberta(true)}
-          >
-            <Plus className="h-3.5 w-3.5" />Observação
-          </Button>
+          {/* Os dois gravam direto na tabela: sem a trava, quem só consulta (o
+              RH, desde 26/10/2026) via o botão e a escrita falhava na RLS. */}
+          {podeEditar && (
+            <Button
+              variant="outline" size="sm"
+              className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
+              onClick={() => atualizarMonitoramento.mutate({
+                id: professor.id,
+                monitoramento: !professor.monitoramento,
+              })}
+            >
+              {professor.monitoramento
+                ? <><EyeOff className="h-3.5 w-3.5" />Sair do monitoramento</>
+                : <><Eye className="h-3.5 w-3.5" />Monitoramento</>
+              }
+            </Button>
+          )}
+          {podeRegistrar && (
+            <Button
+              size="sm"
+              className="btn-press bg-accentBlue hover:bg-accentBlue-hov text-white gap-1.5"
+              onClick={() => setObsAberta(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />Observação
+            </Button>
+          )}
         </div>
       </div>
 
@@ -539,7 +548,7 @@ export function ProfessorDetalhePage() {
           { id: 'perfil', label: 'Perfil' },
           { id: 'reunioes', label: 'Reuniões e observações', n: reunioes.length + observacoes.length },
           { id: 'alunos', label: 'Alunos', n: alunosCount },
-          { id: 'pendencias', label: 'Pendências' },
+          ...(vePendencias ? [{ id: 'pendencias' as const, label: 'Pendências' }] : []),
           { id: 'ocorrencias', label: 'Ocorrências', n: nexusData?.incidentes.length ?? 0 },
         ]}
       />

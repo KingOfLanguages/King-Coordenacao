@@ -46,8 +46,9 @@ const queryClient = new QueryClient({
 // Home: manda o usuário pra primeira página que ele pode ver, segundo o controle
 // de acesso configurável. Prioriza "Hoje" (o que pede ação no dia), depois
 // Dashboard, Professores e o resto — assim ninguém cai numa rota bloqueada (o
-// que causaria loop de redirect).
-const LANDING_PRIORITY = ['hoje', 'dashboard', 'professores', 'suporte-reunioes', 'minha-area', 'confiabilidade']
+// que causaria loop de redirect). O Welcome Path vem antes de Professores
+// para o RH, que vê as duas, cair na trilha (a tela dele).
+const LANDING_PRIORITY = ['hoje', 'dashboard', 'welcome-path', 'professores', 'suporte-reunioes', 'minha-area', 'confiabilidade']
 
 function IndexRedirect() {
   const { profile, loading } = useAuth()

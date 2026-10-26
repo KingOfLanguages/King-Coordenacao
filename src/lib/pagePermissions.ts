@@ -75,7 +75,9 @@ export const PAGES: PageDef[] = [
   { key: 'retencao',        path: '/dashboard?aba=retencao', label: 'Dashboard › Turnover & Retenção', section: 'Dashboard', nav: false, defaultRoles: ['coordenacao', 'lider'] },
 
   // ── Professores ──
-  { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno'] },
+  // O RH consulta professores desde 26/10/2026, só leitura: as ações da ficha
+  // pedem canEdit/canAddInfo, que não o incluem, e a RLS de escrita também não.
+  { key: 'professores',     path: '/professores',    label: 'Professores',          section: 'Professores', nav: true,  defaultRoles: ['coordenacao', 'suporte', 'suporte_aluno', 'rh'] },
   { key: 'suporte-reunioes', path: '/reunioes?aba=buscar', label: 'Reuniões › Buscar por professor', section: 'Reuniões', nav: false, defaultRoles: ['suporte'] },
   // Tela do setor Comercial ("esse teacher é confiável?"). É a ÚNICA página do
   // cargo comercial — mexer aqui tira o chão dele; coordenação/líder ganham junto
@@ -84,8 +86,9 @@ export const PAGES: PageDef[] = [
 
   // ── Welcome Path ──
   // Área própria da trilha desde 22/10/2026 (era a tela Onboarding, cuja aba
-  // Mensagens foi aposentada). É a ÚNICA página do cargo RH; o que ele pode
-  // fazer lá é o mesmo que o suporte (pode_gerir_welcome_path, mig 20260810).
+  // Mensagens foi aposentada). É a tela principal do cargo RH (que também
+  // consulta Professores); o que ele pode fazer aqui é o mesmo que o suporte
+  // (pode_gerir_welcome_path, mig 20260810).
   { key: 'welcome-path',    path: '/trilha',         label: 'Welcome Path',         section: 'Welcome Path', nav: true, defaultRoles: ['coordenacao', 'suporte', 'rh'] },
 
   // ── Acompanhamento ──

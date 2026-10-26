@@ -35,10 +35,19 @@ export function canEdit(perfil?: PerfilComoAdmin): boolean {
 }
 
 /** Cuidar de quem faz o Welcome Path: liberar, convidar, desbloquear, dispensar,
- *  corrigir dissertativa. Quem edita mais o RH (22/10/2026), que só tem a área da
- *  trilha. Espelha pode_gerir_welcome_path() (migration 20260810). */
+ *  corrigir dissertativa. Quem edita mais o RH (22/10/2026), que fora da trilha só
+ *  consulta. Espelha pode_gerir_welcome_path() (migration 20260810). */
 export function podeGerirTrilha(perfil?: PerfilComoAdmin): boolean {
   return canEdit(perfil) || perfil?.role === 'rh'
+}
+
+/** Ver as pendências de lançamento do King. A função pendencias-lancamento
+ *  confere a mesma lista e responde 403 para o resto (ex.: RH). */
+export function podeVerPendenciasKing(perfil?: PerfilComoAdmin): boolean {
+  return perfil?.role === 'coordenacao'
+      || perfil?.role === 'suporte'
+      || perfil?.role === 'suporte_aluno'
+      || ehAdmin(perfil)
 }
 
 /** Excluir registros permanentemente. */
