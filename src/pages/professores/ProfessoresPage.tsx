@@ -15,7 +15,7 @@ import { useGrupos } from '@/hooks/useGrupos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { PrioridadeBadge } from '@/components/professores/PrioridadeBadge'
 import { FiltroPreferencias } from '@/components/professores/FiltroPreferencias'
-import { EmblemaKingsCircle } from '@/components/professores/KingsCircle'
+import { MedalhaKingsCircle } from '@/components/professores/KingsCircle'
 import {
   usePerfisProfessores, passaCriancas, passaPreferencias,
   type FiltroCriancas, type SelecaoPreferencias,
@@ -361,11 +361,7 @@ function CardProfessor({
     >
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium text-[14px] text-ink leading-tight truncate flex-1">{professor.nome}</p>
-        {professor.kings_circle && (
-          <span title="Membro do King's Circle" className="flex-shrink-0">
-            <EmblemaKingsCircle className="h-5 w-5" />
-          </span>
-        )}
+        {professor.kings_circle && <MedalhaKingsCircle />}
         <PrioridadeBadge professor={professor} />
       </div>
 
