@@ -57,6 +57,8 @@ export interface Professor {
   kings_circle: boolean
   /** Quando o selo foi ligado/desligado pela última vez (gatilho). */
   kings_circle_em: string | null
+  /** Conta de teste: fora das contas de score — Dashboard Geral e ranking (20260811). */
+  conta_teste: boolean
   created_at: string
 }
 

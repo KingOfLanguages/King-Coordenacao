@@ -4,14 +4,14 @@ import {
   ArrowLeft, Plus, Eye, EyeOff, AlertTriangle, Pencil, Trash2, FileWarning,
   CalendarDays, Clock, DollarSign, Users, User, MapPin, GraduationCap,
   PlayCircle, CheckCircle2, MessageCircle, Mail, Lock, Hourglass, BadgeCheck,
-  Ban, Star, RefreshCw, LogOut,
+  Ban, Star, RefreshCw, LogOut, FlaskConical,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useConcluirAcompanhamentoPausa, useDefinirKingsCircle } from '@/hooks/useProfessores'
+import { useProfessor, useAtualizarMonitoramento, useAtualizarGrupoProfessor, useConcluirAcompanhamentoPausa, useDefinirKingsCircle, useDefinirContaTeste } from '@/hooks/useProfessores'
 import { useEncerrarPausa } from '@/hooks/usePausas'
 import { usePendenciaHistorico, usePendenciaLogs } from '@/hooks/usePendencias'
 import { useProfessorAcompanhamento, faixaCls, type ProfessorAcompanhamento, type ProfessorScoreHistoricoRow, type ProfessorAlunoKms, type ProfessorCicloVidaRow } from '@/hooks/useProfessorAcompanhamento'
@@ -138,6 +138,7 @@ export function ProfessorDetalhePage() {
   const encerrarPausa = useEncerrarPausa()
   const concluirAcompPausa = useConcluirAcompanhamentoPausa()
   const definirKingsCircle = useDefinirKingsCircle()
+  const definirContaTeste = useDefinirContaTeste()
   const resolverObservacao = useResolverObservacao()
   const { profile } = useAuth()
   const { data: grupos = [] } = useGrupos()
@@ -343,6 +344,15 @@ export function ProfessorDetalhePage() {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] pt-0.5">
             <StatusProfessorChip status={professor.status} />
 
+            {professor.conta_teste && (
+              <span
+                title="Conta de teste: não entra no score do Dashboard Geral nem no ranking"
+                className="inline-flex items-center gap-1 rounded-full bg-surface-subtle text-ink-secondary px-2 py-0.5 text-[11px] font-medium"
+              >
+                <FlaskConical className="h-3 w-3" />Conta de teste · fora do score
+              </span>
+            )}
+
             {professor.status_manual && professor.despausado_em && professor.status !== 'pausa' && (
               <span
                 title={`Tirado da pausa em ${new Date(professor.despausado_em).toLocaleDateString('pt-BR')}`}
@@ -474,6 +484,30 @@ export function ProfessorDetalhePage() {
                 })
               }}
             />
+          )}
+          {podeEditar && (
+            <Button
+              variant="outline" size="sm"
+              role="switch"
+              aria-checked={professor.conta_teste}
+              disabled={definirContaTeste.isPending}
+              title={professor.conta_teste
+                ? 'Voltar a contar no score do Dashboard Geral e no ranking'
+                : 'Marcar como conta de teste: sai do score do Dashboard Geral e do ranking'}
+              className="btn-press border-line text-ink-secondary hover:text-ink gap-1.5"
+              onClick={() => {
+                const ativo = !professor.conta_teste
+                definirContaTeste.mutate({ id: professor.id, ativo }, {
+                  onSuccess: () => toast.success(ativo
+                    ? 'Marcada como conta de teste. Saiu do score do Dashboard Geral e do ranking.'
+                    : 'Marca de teste retirada. A conta volta a entrar no score.'),
+                  onError: e => toast.error(e instanceof Error ? e.message : 'Erro ao mudar a marca de conta de teste.'),
+                })
+              }}
+            >
+              <FlaskConical className="h-3.5 w-3.5" />
+              {professor.conta_teste ? 'Não é teste' : 'Conta de teste'}
+            </Button>
           )}
           {podeEditar && !saidaAberta && professor.status !== 'desligado' && (
             <Button

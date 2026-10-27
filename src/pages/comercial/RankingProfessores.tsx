@@ -86,7 +86,7 @@ export function RankingProfessores({ onSelecionar }: { onSelecionar: (id: string
         <div className="space-y-0.5">
           <h2 className="text-[17px] font-semibold tracking-tight text-ink">Ranking de professores</h2>
           <p className="text-[12px] text-ink-muted">
-            {filtrados.length} professores ativos · score do King, incidentes dos últimos {data.janelaDias} dias,
+            {filtrados.length} professores ativos (sem contas de teste) · score do King, incidentes dos últimos {data.janelaDias} dias,
             carteira de alunos e tempo de casa
           </p>
         </div>

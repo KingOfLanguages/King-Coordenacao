@@ -202,6 +202,31 @@ export function useDefinirKingsCircle() {
   })
 }
 
+/** Liga/desliga a marca de conta de teste (20260811): quem tem a marca sai do
+ *  Dashboard Geral e do ranking. */
+export function useDefinirContaTeste() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ativo }: { id: string; ativo: boolean }) => {
+      const { data, error } = await supabase
+        .from('professores')
+        .update({ conta_teste: ativo })
+        .eq('id', id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('Nada foi atualizado — sem permissão para marcar conta de teste.')
+      }
+    },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['professores'] })
+      queryClient.invalidateQueries({ queryKey: ['professores', id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-geral'] })
+      queryClient.invalidateQueries({ queryKey: ['ranking-professores'] })
+    },
+  })
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 export function useCriarProfessor() {

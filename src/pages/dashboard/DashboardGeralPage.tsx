@@ -361,6 +361,7 @@ export function DashboardGeralPage({ embutido = false }: { embutido?: boolean })
         <p className={cn('text-[13px] text-ink-muted', !embutido && 'mt-1.5')}>
           Visão consolidada de <b className="font-semibold text-ink-secondary">{resumo.totalGrupos} {resumo.totalGrupos === 1 ? 'coordenação' : 'coordenações'}</b>
           {' · '}<b className="font-semibold text-ink-secondary tabular-nums">{resumo.professoresAtivos} professores ativos</b>
+          {' · '}contas de teste ficam fora
         </p>
       </div>
 

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, AlertCircle, CalendarDays, PauseCircle, Plus, X, User, Baby } from 'lucide-react'
+import { Search, AlertCircle, CalendarDays, PauseCircle, Plus, X, User, Baby, FlaskConical } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -362,6 +362,14 @@ function CardProfessor({
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium text-[14px] text-ink leading-tight truncate flex-1">{professor.nome}</p>
         {professor.kings_circle && <MedalhaKingsCircle />}
+        {professor.conta_teste && (
+          <span
+            title="Conta de teste: fora do score do Dashboard Geral e do ranking"
+            className="inline-flex flex-none items-center gap-1 rounded-full bg-surface-subtle text-ink-muted px-1.5 py-0.5 text-[10.5px] font-medium"
+          >
+            <FlaskConical className="h-3 w-3" />Teste
+          </span>
+        )}
         <PrioridadeBadge professor={professor} />
       </div>
 
