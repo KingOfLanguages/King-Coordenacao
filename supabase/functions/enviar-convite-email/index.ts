@@ -17,10 +17,11 @@
 //   - O destino NUNCA vem do client: é resolvido no servidor a partir do
 //     contato_id → professores.email (mesmo campo do send-reminders).
 //
-// Carência de 15 dias (migration 20260787): quem recebeu e-mail nos últimos 15
-// dias não recebe outro — o WhatsApp da mesma linha segue livre. Todo envio
-// daqui grava em email_disparos (origem 'mensagens_do_dia'), que é de onde a
-// carência é contada; fora do limite de 200/dia do sistema de disparo.
+// Quem não pode receber (email_trava, migrations 20260787 e 20260813): quem
+// teve reunião nos últimos 30 dias ou recebeu e-mail nos últimos 15 não recebe
+// outro — o WhatsApp da mesma linha segue livre. Todo envio daqui grava em
+// email_disparos (origem 'mensagens_do_dia'), que é de onde os 15 dias são
+// contados; fora do limite de 200/dia do sistema de disparo.
 //
 // Secrets: BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME (mesmos das outras fns)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,19 +162,22 @@ serve(async (req) => {
 
   if (!email) return json({ error: 'Este professor não tem e-mail cadastrado.' }, 422)
 
-  // ── 3b. Carência de 15 dias (falha fechada, igual ao enviar-email-massa) ─────
+  // ── 3b. Carência: reunião em 30 dias ou e-mail em 15 (falha fechada, igual ao
+  //        enviar-email-massa) ─────────────────────────────────────────────────
   const { data: carencia, error: carErr } = await admin
-    .rpc('email_carencia', { p_professor_ids: [contato.professor_id] })
+    .rpc('email_trava', { p_professor_ids: [contato.professor_id] })
   if (carErr) {
     console.error('[enviar-convite-email] erro ao conferir carência:', carErr.message)
-    return json({ error: 'Não consegui conferir o último e-mail deste professor — nada foi enviado. Tente de novo.' }, 503)
+    return json({ error: 'Não consegui conferir se este professor pode receber e-mail agora — nada foi enviado. Tente de novo.' }, 503)
   }
-  const emCarencia = (carencia ?? [])[0] as { ultimo_envio: string; libera_em: string } | undefined
+  const emCarencia = (carencia ?? [])[0] as {
+    ultimo_envio: string | null; ultima_reuniao: string | null; libera_em: string; motivo: 'email' | 'reuniao'
+  } | undefined
 
   // O convite saiu DEPOIS que o professor entrou na lista (um disparo em massa,
   // de qualquer coordenador): o contato do dia já está feito. Marca e avisa, em
   // vez de devolver erro — a tela pode estar aberta desde antes do disparo.
-  if (emCarencia && new Date(emCarencia.ultimo_envio) >= new Date(contato.created_at as string)) {
+  if (emCarencia?.ultimo_envio && new Date(emCarencia.ultimo_envio) >= new Date(contato.created_at as string)) {
     const { error: markErr } = await admin
       .from('contatos_diarios')
       .update({ enviado: true, enviado_em: emCarencia.ultimo_envio })
@@ -185,11 +189,13 @@ serve(async (req) => {
 
   if (emCarencia) {
     const fmt = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
-    const recebeu = fmt(new Date(emCarencia.ultimo_envio))
+    const porque = emCarencia.motivo === 'reuniao' && emCarencia.ultima_reuniao
+      ? `teve reunião em ${fmt(new Date(`${emCarencia.ultima_reuniao}T12:00:00-03:00`))}`
+      : `recebeu e-mail em ${fmt(new Date(emCarencia.ultimo_envio!))}`
     const libera  = fmt(new Date(`${emCarencia.libera_em}T12:00:00-03:00`))
-    console.log(`[enviar-convite-email] ⏸ ${nome}: em carência até ${emCarencia.libera_em}`)
+    console.log(`[enviar-convite-email] ⏸ ${nome}: em carência (${emCarencia.motivo}) até ${emCarencia.libera_em}`)
     return json({
-      error: `${nome} recebeu e-mail em ${recebeu}. O próximo e-mail fica liberado em ${libera} — até lá, só pelo WhatsApp.`,
+      error: `${nome} ${porque}. O próximo e-mail fica liberado em ${libera} — até lá, só pelo WhatsApp.`,
       libera_em: emCarencia.libera_em,
     }, 409)
   }

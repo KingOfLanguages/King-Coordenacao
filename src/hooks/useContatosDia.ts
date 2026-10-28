@@ -113,7 +113,8 @@ export function useMarcarContato() {
  * Envia por e-mail o mesmo texto do contato do dia (Edge Function
  * `enviar-convite-email`). O destino é resolvido no servidor a partir do
  * contato; em caso de sucesso o contato já volta marcado como enviado. Quem
- * recebeu e-mail nos últimos 15 dias é recusado pelo servidor (carência).
+ * teve reunião nos últimos 30 dias ou recebeu e-mail nos últimos 15 é recusado
+ * pelo servidor (carência).
  */
 export function useEnviarConvite() {
   const queryClient = useQueryClient()

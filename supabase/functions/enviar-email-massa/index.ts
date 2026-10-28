@@ -22,9 +22,10 @@
 //   - O e-mail de destino NUNCA vem do client: é resolvido no servidor a partir
 //     do professor_id → professores.email (mesmo campo do send-reminders).
 //
-// Carência de 15 dias (migration 20260787): quem recebeu e-mail nos últimos 15
-// dias fica de fora, nos dois modos — "Personalizada" também é convite na
-// prática. A tela já não deixa selecionar, mas quem decide é este passo.
+// Quem não pode receber (email_trava, migrations 20260787 e 20260813): quem
+// teve reunião nos últimos 30 dias ou recebeu e-mail nos últimos 15 fica de
+// fora, nos dois modos — "Personalizada" também é convite na prática. A tela já
+// não deixa selecionar, mas quem decide é este passo.
 //
 // Secrets: BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME (mesmos das outras fns)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,14 +117,14 @@ interface ResultadoDisparo {
   libera_em?: string
 }
 
-/** Hoje + n dias, em São Paulo (YYYY-MM-DD) — mesma conta do email_carencia(). */
+/** Hoje + n dias, em São Paulo (YYYY-MM-DD) — mesma conta do email_trava(). */
 function diaMais(n: number): string {
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
   const d = new Date(`${hoje}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + n)
   return d.toISOString().slice(0, 10)
 }
-const CARENCIA_DIAS = 15   // espelha email_carencia() — só p/ o caso "mesmo e-mail no mesmo lote"
+const CARENCIA_DIAS = 15   // espelha email_trava() — só p/ o caso "mesmo e-mail no mesmo lote"
 
 /** Quem ainda recebe e-mail da coordenação. Fora daqui (hoje só 'desligado') o
  *  vínculo com a escola acabou — mandar convocação é constrangedor pra pessoa e
@@ -208,13 +209,13 @@ serve(async (req) => {
     status: p.status as string | null,
   })
 
-  // ── 3b. Carência: quem recebeu e-mail nos últimos 15 dias ────────────────────
+  // ── 3b. Carência: reunião nos últimos 30 dias ou e-mail nos últimos 15 ───────
   // Falha fechada: sem saber quem está em carência, não manda nada — mandar
   // "no escuro" é exatamente o flood que a trava existe para evitar.
-  const { data: carencia, error: carErr } = await admin.rpc('email_carencia', { p_professor_ids: ids })
+  const { data: carencia, error: carErr } = await admin.rpc('email_trava', { p_professor_ids: ids })
   if (carErr) {
     console.error('[enviar-email-massa] erro ao conferir carência:', carErr.message)
-    return json({ error: 'Não consegui conferir quem recebeu e-mail nos últimos 15 dias — nada foi enviado. Tente de novo.' }, 503)
+    return json({ error: 'Não consegui conferir quem pode receber e-mail agora — nada foi enviado. Tente de novo.' }, 503)
   }
   const liberaPor = new Map<string, string>()
   for (const c of (carencia ?? []) as { professor_id: string; libera_em: string }[]) {

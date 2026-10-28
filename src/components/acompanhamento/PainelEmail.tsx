@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import type { PainelProfessor } from '@/hooks/usePainelProfessores'
 import {
-  useEnviarEmailMassa, useHistoricoDisparos, useEmailQuotaHoje, diaMes, CARENCIA_EMAIL_DIAS, REGRA_CARENCIA,
+  useEnviarEmailMassa, useHistoricoDisparos, useEmailQuotaHoje, diaMes, REGRA_CARENCIA,
   type MensagemAlvo, type RespostaDisparo, type DisparoRegistro, type QuotaHoje,
 } from '@/hooks/useEnviarEmailMassa'
 import {
@@ -53,7 +53,7 @@ interface Props {
   destinatarios: PainelProfessor[]
   /** Selecionados sem e-mail cadastrado (serão ignorados). */
   semEmail: number
-  /** Selecionados em carência de e-mail — receberam nos últimos 15 dias (ignorados). */
+  /** Selecionados que não podem receber agora — reunião nos últimos 30 dias ou e-mail nos últimos 15 (ignorados). */
   emCarencia: number
   /** Enviou: o Índice limpa a seleção. */
   onEnviado: () => void
@@ -115,7 +115,7 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
       } else {
         toast.warning(
           `${res.enviados} enviado(s), ${res.falhas} falha(s), ${res.sem_email} sem e-mail` +
-          (carencia > 0 ? `, ${carencia} não podiam receber (${CARENCIA_EMAIL_DIAS} dias).` : '.'),
+          (carencia > 0 ? `, ${carencia} não podiam receber agora.` : '.'),
         )
       }
     } catch (e) {
@@ -159,8 +159,8 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
             <p className="flex items-start gap-2 rounded-lg border border-aviso-warnBd bg-aviso-warnBg px-3 py-2 text-[11.5px] leading-snug text-aviso-warnFg">
               <Clock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
               <span>
-                <strong className="font-semibold">Regra dos {CARENCIA_EMAIL_DIAS} dias.</strong> {REGRA_CARENCIA} Quem não pode
-                receber já fica fora da seleção — a coluna E-mail do Índice mostra quando cada um libera.
+                <strong className="font-semibold">Quem pode receber.</strong> {REGRA_CARENCIA} Quem não pode
+                receber já fica fora da seleção — a coluna E-mail do Índice mostra o motivo e quando cada um libera.
               </span>
             </p>
 
@@ -260,7 +260,7 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
             {emCarencia > 0 && (
               <p className="flex items-start gap-1.5 text-[11.5px] text-aviso-warnFg">
                 <Clock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                {emCarencia} selecionado(s) não podem receber e-mail agora (receberam nos últimos {CARENCIA_EMAIL_DIAS} dias) — ficam de fora.
+                {emCarencia} selecionado(s) não podem receber e-mail agora (reunião ou e-mail recente) — ficam de fora.
               </p>
             )}
 
@@ -290,7 +290,7 @@ export function PainelEmail({ aberto, onFechar, destinatarios, semEmail, emCaren
               {modo === 'convocacao' ? 'Convocação padrão' : 'Mensagem personalizada'} para{' '}
               <strong className="text-ink">{destinatarios.length}</strong> professor(es) com e-mail.
               {semEmail > 0 && <> {semEmail} sem e-mail serão ignorados.</>}
-              {emCarencia > 0 && <> {emCarencia} que não podem receber ({CARENCIA_EMAIL_DIAS} dias) ficam de fora.</>}
+              {emCarencia > 0 && <> {emCarencia} que não podem receber agora ficam de fora.</>}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg bg-surface-subtle p-3 space-y-1">
@@ -389,7 +389,7 @@ function PainelResultado({ resultado, onFechar }: { resultado: RespostaDisparo; 
     { label: 'Falhas', valor: resultado.falhas, tone: resultado.falhas > 0 ? 'high' as const : 'neutral' as const },
     { label: 'Sem e-mail', valor: resultado.sem_email, tone: resultado.sem_email > 0 ? 'high' as const : 'neutral' as const },
     ...((resultado.inativos ?? 0) > 0 ? [{ label: 'Inativos', valor: resultado.inativos, tone: 'high' as const }] : []),
-    ...((resultado.em_carencia ?? 0) > 0 ? [{ label: `Não podiam (${CARENCIA_EMAIL_DIAS}d)`, valor: resultado.em_carencia, tone: 'neutral' as const }] : []),
+    ...((resultado.em_carencia ?? 0) > 0 ? [{ label: 'Não podiam', valor: resultado.em_carencia, tone: 'neutral' as const }] : []),
   ]
   return (
     <div className="rounded-lg border border-line-soft p-3 space-y-3">

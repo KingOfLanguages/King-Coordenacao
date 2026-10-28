@@ -24,9 +24,9 @@ import {
 // do topo da lista Para fazer da Minha Área. Mesmas regras e mesma mensagem;
 // o layout virou linhas, e o bloco se recolhe sozinho quando a lista acaba.
 //
-// Carência de e-mail (15 dias): a lista normal já não traz quem recebeu e-mail
-// nesse prazo; nas linhas de pendência, que continuam entrando, o botão de
-// e-mail fica travado e o WhatsApp segue livre. Quem recebe convite por um
+// Carência de e-mail (reunião nos últimos 30 dias ou e-mail nos últimos 15): a
+// lista normal já não traz esses professores; nas linhas de pendência, que
+// continuam entrando, o botão de e-mail fica travado e o WhatsApp segue livre. Quem recebe convite por um
 // disparo em massa depois de entrar na lista sai marcado como enviado.
 // ─────────────────────────────────────────────────────────────────────────────
 

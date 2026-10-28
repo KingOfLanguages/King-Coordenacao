@@ -24,7 +24,8 @@ import { cn } from '@/lib/utils'
 import { useCanView } from '@/hooks/usePagePermissions'
 import { PainelEmail } from '@/components/acompanhamento/PainelEmail'
 import {
-  useEmailCarencia, textoCarencia, diaMes, quandoLibera, REGRA_CARENCIA, CARENCIA_EMAIL_DIAS, type CarenciaEmail,
+  useEmailCarencia, textoCarencia, motivoCarencia, diaMes, quandoLibera, REGRA_CARENCIA,
+  CARENCIA_EMAIL_DIAS, CARENCIA_REUNIAO_DIAS, type CarenciaEmail,
 } from '@/hooks/useEnviarEmailMassa'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,8 +36,9 @@ import {
 //
 // Desde 2026-09 é também daqui que sai e-mail: a antiga página /emails
 // repetia esta mesma lista com os mesmos filtros. Marca os professores, abre o
-// painel lateral e envia. Quem recebeu e-mail nos últimos 15 dias não pode ser
-// marcado (carência — migration 20260787), e isso fica explícito em três
+// painel lateral e envia. Quem teve reunião nos últimos 30 dias ou recebeu
+// e-mail nos últimos 15 não pode ser marcado (carência — migrations 20260787 e
+// 20260813), e isso fica explícito em três
 // lugares: a faixa "Quem pode receber e-mail" (que também filtra), a coluna
 // E-mail de cada linha e o painel de envio.
 //
@@ -253,7 +255,7 @@ function linhaXlsx(r: PainelProfessor, carencia: Map<string, CarenciaEmail> | nu
     Coordenador: r.coordenador_nome,
     ...(carencia && {
       'E-mail': r.email,
-      'Pode receber e-mail': !r.email ? 'Sem e-mail' : c ? `Não (${CARENCIA_EMAIL_DIAS} dias)` : 'Sim',
+      'Pode receber e-mail': !r.email ? 'Sem e-mail' : c ? `Não (${motivoCarencia(c)})` : 'Sim',
       'E-mail libera em': c ? diaXlsx(c.libera_em) : null,
     }),
     Score: r.score_atual,
@@ -336,7 +338,7 @@ export function IndiceAtencao() {
   const nColunas = N_COLUNAS + (podeEmail ? 2 : 0)   // + caixinha + coluna E-mail
 
   // Seleção para e-mail: opera no filtro inteiro, não só no que está na tela.
-  // Apto = tem e-mail e não está em carência (recebeu nos últimos 15 dias).
+  // Apto = tem e-mail e não está em carência (reunião em 30 dias, e-mail em 15).
   const porId = useMemo(() => new Map(rows.map(r => [r.professor_id, r])), [rows])
   const filtradosAptos = useMemo(
     () => ordenados.filter(r => !!r.email && !carencia.has(r.professor_id)),
@@ -502,7 +504,7 @@ export function IndiceAtencao() {
         </div>
       </div>
 
-      {/* Quem pode receber e-mail agora (regra dos 15 dias) — também filtra */}
+      {/* Quem pode receber e-mail agora (reunião em 30 dias, e-mail em 15) — também filtra */}
       {podeEmail && (
         <FaixaEmail
           contagem={contagemEmail}
@@ -905,7 +907,7 @@ function PainelRow({ r, podeAgir, selecao }: {
         {r.grupo_nome && <div className="text-[11px] text-ink-muted mt-0.5">{r.grupo_nome}</div>}
       </td>
 
-      {/* E-mail: pode ou não pode receber agora (regra dos 15 dias) */}
+      {/* E-mail: pode ou não pode receber agora (reunião em 30 dias, e-mail em 15) */}
       {selecao && (
         <td className="px-3 py-2.5 whitespace-nowrap">
           <CelulaEmail temEmail={!!r.email} carencia={selecao.carencia} />
@@ -1035,12 +1037,12 @@ const FAIXA_EMAIL: {
   {
     id: 'pode', label: 'Podem receber', icone: CheckCircle2,
     cls: 'bg-urg-lowBg text-urg-lowFg', ativoCls: 'ring-2 ring-urg-lowFg/50',
-    title: `Têm e-mail e não receberam nenhum nos últimos ${CARENCIA_EMAIL_DIAS} dias.`,
+    title: `Têm e-mail, sem reunião nos últimos ${CARENCIA_REUNIAO_DIAS} dias e sem e-mail nos últimos ${CARENCIA_EMAIL_DIAS}.`,
   },
   {
-    id: 'nao_pode', label: `Não podem (${CARENCIA_EMAIL_DIAS} dias)`, icone: Clock,
+    id: 'nao_pode', label: 'Não podem agora', icone: Clock,
     cls: 'bg-aviso-warnBg text-aviso-warnFg', ativoCls: 'ring-2 ring-aviso-warnBd',
-    title: `Receberam e-mail nos últimos ${CARENCIA_EMAIL_DIAS} dias. A coluna E-mail mostra quando cada um libera.`,
+    title: `Tiveram reunião nos últimos ${CARENCIA_REUNIAO_DIAS} dias ou receberam e-mail nos últimos ${CARENCIA_EMAIL_DIAS}. A coluna E-mail mostra o motivo e quando cada um libera.`,
   },
   {
     id: 'sem', label: 'Sem e-mail', icone: MailX,
@@ -1105,7 +1107,7 @@ function CelulaEmail({ temEmail, carencia }: { temEmail: boolean; carencia?: Car
         <Clock className="h-3 w-3" /> Não pode receber
       </span>
       <div className="mt-0.5 text-[11px] text-ink-muted tabular-nums">
-        recebeu {diaMes(carencia.ultimo_envio)} · libera {diaMes(carencia.libera_em)} ({quandoLibera(carencia.libera_em)})
+        {motivoCarencia(carencia)} · libera {diaMes(carencia.libera_em)} ({quandoLibera(carencia.libera_em)})
       </div>
     </div>
   )

@@ -13,7 +13,8 @@ import { supabase } from '@/lib/supabase'
 // 'inativo' = a Edge Function barrou no envio porque o professor já não está
 // ativo/pausado. A lista da tela só traz ativos, mas o status pode virar entre
 // carregar a página e clicar em enviar — quem decide é o servidor.
-// 'carencia' = recebeu e-mail nos últimos 15 dias (ver useEmailCarencia).
+// 'carencia' = teve reunião nos últimos 30 dias ou recebeu e-mail nos últimos
+// 15 (ver useEmailCarencia).
 export type StatusDisparo = 'enviado' | 'falha' | 'sem_email' | 'inativo' | 'carencia'
 
 export interface MensagemAlvo {
@@ -81,18 +82,21 @@ export function useEnviarEmailMassa() {
   })
 }
 
-// ─── Carência de 15 dias ──────────────────────────────────────────────────────
+// ─── Carência: 30 dias da reunião, 15 do último e-mail ───────────────────────
 
-/** Espelha a função email_carencia() do banco (migration 20260787) — aqui só
- *  para o texto da tela. Quem manda é o banco. */
+/** Espelham a função email_trava() do banco (migrations 20260787 e 20260813) —
+ *  aqui só para o texto da tela. Quem manda é o banco. */
+export const CARENCIA_REUNIAO_DIAS = 30
 export const CARENCIA_EMAIL_DIAS = 15
 
 export interface CarenciaEmail {
-  ultimo_envio: string   // ISO do último e-mail recebido
-  libera_em: string      // YYYY-MM-DD — primeiro dia em que pode receber de novo
+  ultimo_envio: string | null     // ISO do último e-mail, se foi nos últimos 15 dias
+  ultima_reuniao: string | null   // YYYY-MM-DD da última reunião, se foi nos últimos 30 dias
+  libera_em: string               // YYYY-MM-DD — primeiro dia em que pode receber de novo
+  motivo: 'reuniao' | 'email'     // o que segura até libera_em
 }
 
-/** Professores que receberam e-mail nos últimos 15 dias, por professor_id.
+/** Professores que não podem receber e-mail agora, por professor_id.
  *  Tolerante: se a consulta falhar, volta vazio — as Edge Functions barram de
  *  qualquer jeito, a tela só deixa de avisar antes. */
 export function useEmailCarencia(enabled = true) {
@@ -100,11 +104,13 @@ export function useEmailCarencia(enabled = true) {
     queryKey: ['email-carencia'],
     enabled,
     queryFn: async (): Promise<Map<string, CarenciaEmail>> => {
-      const { data, error } = await supabase.rpc('email_carencia')
+      const { data, error } = await supabase.rpc('email_trava')
       if (error) return new Map()
       return new Map(
         ((data ?? []) as ({ professor_id: string } & CarenciaEmail)[])
-          .map(c => [c.professor_id, { ultimo_envio: c.ultimo_envio, libera_em: c.libera_em }]),
+          .map(c => [c.professor_id, {
+            ultimo_envio: c.ultimo_envio, ultima_reuniao: c.ultima_reuniao, libera_em: c.libera_em, motivo: c.motivo,
+          }]),
       )
     },
     staleTime: 60_000,
@@ -118,9 +124,20 @@ export function diaMes(isoOuDia: string): string {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
+/** O motivo, curto: "reunião 20/10" ou "recebeu 21/10". */
+export function motivoCarencia(c: CarenciaEmail): string {
+  if (c.motivo === 'reuniao' && c.ultima_reuniao) return `reunião ${diaMes(c.ultima_reuniao)}`
+  return c.ultimo_envio ? `recebeu ${diaMes(c.ultimo_envio)}` : 'reunião recente'
+}
+
 /** Texto único de "por que não dá para mandar e-mail" (tooltip e avisos). */
 export function textoCarencia(c: CarenciaEmail): string {
-  return `Não pode receber e-mail: recebeu um em ${diaMes(c.ultimo_envio)} e só volta a poder em ${diaMes(c.libera_em)} (regra dos ${CARENCIA_EMAIL_DIAS} dias).`
+  const porque = c.motivo === 'reuniao' && c.ultima_reuniao
+    ? `teve reunião em ${diaMes(c.ultima_reuniao)} (regra dos ${CARENCIA_REUNIAO_DIAS} dias)`
+    : c.ultimo_envio
+      ? `recebeu um em ${diaMes(c.ultimo_envio)} (regra dos ${CARENCIA_EMAIL_DIAS} dias)`
+      : 'teve reunião recente'
+  return `Não pode receber e-mail: ${porque}. Só volta a poder em ${diaMes(c.libera_em)}.`
 }
 
 /** Dias corridos até poder receber de novo (0 = já hoje). */
@@ -139,7 +156,7 @@ export function quandoLibera(liberaEm: string): string {
 
 /** A regra, numa frase — a mesma em todas as telas de envio. */
 export const REGRA_CARENCIA =
-  `Quem recebeu e-mail da coordenação nos últimos ${CARENCIA_EMAIL_DIAS} dias não pode receber outro até completar os ${CARENCIA_EMAIL_DIAS} dias.`
+  `Quem teve reunião nos últimos ${CARENCIA_REUNIAO_DIAS} dias ou recebeu e-mail da coordenação nos últimos ${CARENCIA_EMAIL_DIAS} não pode receber e-mail nenhum (convocação ou personalizada) até o prazo acabar.`
 
 // ─── Contador diário (limite auto-imposto de 200/dia) ────────────────────────
 
