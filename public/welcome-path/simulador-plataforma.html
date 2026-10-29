@@ -27,6 +27,7 @@
        recebe  { tipo:"ktm-tema", tema:"light"|"dark" }
        envia   { tipo:"ktm-embed-altura", altura:<px> }
        envia   { tipo:"ktm-embed-rolar" }   → o pai rola até o topo do iframe
+       envia   { tipo:"ktm-embed-rolar", y:<px> } → o pai centraliza esse ponto
      A origem aqui é opaca (sandbox sem allow-same-origin): o pai valida por
      event.source. Sem allow-modals, então nada de alert/confirm.
 
@@ -281,6 +282,9 @@ textarea{min-height:66px; resize:vertical; line-height:1.45}
 .pk-h .fechar{margin-left:auto}
 .pk-tab{border:1px solid var(--border-default); background:var(--bg-canvas); border-radius:7px; padding:4px 10px; font:500 12px Geist,sans-serif; cursor:pointer; color:var(--fg-secondary)}
 .pk-tab[aria-selected="true"]{border-color:var(--accent); color:var(--accent)}
+.pk-nota{display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; background:var(--info-bg); color:var(--info-fg); border:1px solid var(--info-bd); border-radius:9px; padding:8px 10px; font-size:12px; line-height:1.5; margin-bottom:9px}
+.pk-nota span{flex:1 1 220px}
+.pk-nota .ic{margin-top:2px}
 .files{display:grid; grid-template-columns:repeat(auto-fill,minmax(122px,1fr)); gap:8px}
 .file{border:1px solid var(--border-soft); background:var(--bg-canvas); border-radius:9px; padding:6px; cursor:pointer; text-align:left; font:inherit}
 .file:hover{border-color:var(--accent)}
@@ -384,7 +388,7 @@ table.t .r{text-align:right}
 .comp-f{display:flex; justify-content:flex-end; margin-top:9px}
 .wa-off{font-size:12px; color:var(--fg-muted); text-align:center; padding:4px}
 .wa-vazio{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--wa-meta); font-size:13px; padding:40px 16px; text-align:center}
-.toast{margin:8px 12px 0; align-self:center; display:flex; gap:7px; align-items:center; background:var(--bg-canvas); color:var(--fg-secondary); border:1px solid var(--border-soft); border-radius:8px; padding:6px 11px; font-size:12px; box-shadow:var(--shadow-card)}
+.toast{margin:8px 12px 0; align-self:center; display:flex; flex-wrap:wrap; justify-content:center; gap:7px; align-items:center; background:var(--bg-canvas); color:var(--fg-secondary); border:1px solid var(--border-soft); border-radius:8px; padding:6px 11px; font-size:12px; box-shadow:var(--shadow-card)}
 .toast b{font-family:"Geist Mono",monospace; font-weight:500}
 
 @media (max-width:640px){
@@ -855,7 +859,7 @@ table.t .r{text-align:right}
       alunos: JSON.parse(JSON.stringify(ALUNOS)),
       lancados: {}, drafts: {}, prints: [], msgs: [],
       reposicoes: JSON.parse(JSON.stringify(REPOS_INI)),
-      picker: null, pasta: "img", montagem: {}, repoForm: null,
+      picker: null, pasta: "img", voltar: null, foco: null, montagem: {}, repoForm: null,
       hist: { aberto: null, nivel: "", modulo: "", mais: null },
       conferi: false, autorizado: false, nfEscolhido: null, nfLancada: false,
       res: MISSOES.map(function () { return { erros: 0, dicas: 0, revelou: false, pts: 0 }; }),
@@ -893,7 +897,7 @@ table.t .r{text-align:right}
   function iniciaMissao(i) {
     var m = MISSOES[i];
     S.m = i; S.obj = {}; S.narr = []; S.fb = null; S.toast = null; S.dica = false; S.verSol = false;
-    S.picker = null; S.repoForm = null; S.hist = { aberto: null, nivel: "", modulo: "", mais: null };
+    S.picker = null; S.voltar = null; S.repoForm = null; S.hist = { aberto: null, nivel: "", modulo: "", mais: null };
     S.now = D(m.inicio); S.dataLanc = ymd(S.now); S.agendaSeg = segundaDe(S.now);
     S.tab = m.abre.tab; if (m.abre.rota) S.rota = m.abre.rota; if (m.abre.aba) S.aba = m.abre.aba;
     S.chat = m.abre.chat === undefined ? S.chat : m.abre.chat;
@@ -1073,16 +1077,23 @@ table.t .r{text-align:right}
   function fld(label, inner) { return '<div class="fld"><span class="lb">' + label + "</span>" + inner + "</div>"; }
   function chipTC(tc) { return '<span class="st ' + TC_COR[tc] + '" title="' + esc(TC[tc]) + '">' + TC_CURTO[tc] + "</span>"; }
 
+  // Arquivo do computador não entra, de propósito: nada sai do treino, e print
+  // de conversa de verdade não pode parar no banco. A nota diz isso e leva o
+  // professor até a conversa certa (29/10: uma professora travou aqui).
   function pickerHTML() {
-    var p = S.pasta;
+    var p = S.pasta, alvo = S.picker.alvo;
+    var aluno = alvo.indexOf("print:") === 0 ? primeiro(chatDef(alvo.slice(6).split("|")[0]).nome) : null;
     var fs = arquivos().filter(function (f) { return p === "img" ? f.tipo === "img" : f.tipo === "pdf"; });
     var lista = fs.length ? '<div class="files">' + fs.map(function (f) {
-      return '<button class="file" data-act="escolherArq" data-v="' + f.id + '" title="' + esc(f.nome) + '">' + thumb(f) + '<div class="fname">' + esc(f.nome) + "</div></button>";
+      return '<button class="file" data-act="escolherArq" data-v="' + f.id + '" id="arq-' + f.id + '" title="' + esc(f.nome) + '">' + thumb(f) + '<div class="fname">' + esc(f.nome) + "</div></button>";
     }).join("") + "</div>" : '<p class="help">Nenhum arquivo nesta pasta.' + (p === "img" ? " Os prints que você tira no WhatsApp caem aqui." : "") + "</p>";
+    var nota = '<div class="pk-nota">' + ic("alert", 14) + "<span><b>Isto é um treino:</b> arquivo do seu computador não entra aqui, e nada é enviado. " +
+      (aluno ? "O print vem do WhatsApp do simulador: abra a conversa com " + esc(aluno) + ", toque em <b>Tirar print</b> e ele cai em Imagens." : "Os arquivos do treino já estão nas pastas.") + "</span>" +
+      (aluno ? '<button class="btn btn-sm" data-act="irPrint" id="btn-ir-print">' + ic("camera", 13) + " Abrir a conversa com " + esc(aluno) + "</button>" : "") + "</div>";
     return '<div class="picker" role="dialog" aria-label="Abrir arquivo"><div class="pk-h"><b>Abrir arquivo</b>' +
       '<button class="pk-tab" data-act="pasta" data-v="img" aria-selected="' + (p === "img") + '">' + ic("img", 12) + " Imagens</button>" +
       '<button class="pk-tab" data-act="pasta" data-v="doc" aria-selected="' + (p === "doc") + '">' + ic("file", 12) + " Documentos</button>" +
-      '<button class="btn btn-sm fechar" data-act="fecharPicker">Cancelar</button></div>' + lista + "</div>";
+      '<button class="btn btn-sm fechar" data-act="fecharPicker">Cancelar</button></div>' + nota + lista + "</div>";
   }
   function thumb(f) {
     if (f.tipo === "pdf") return '<div class="thumb thumb-pdf">' + ic("file", 24) + "<span>PDF</span></div>";
@@ -1103,7 +1114,7 @@ table.t .r{text-align:right}
       '<li><span class="n">2</span><span>Errou? A plataforma explica a regra e você tenta de novo. Cada missão vale 100 pontos; <b>erros e dicas descontam</b>. Depois de 2 erros, dá para ver a solução.</span></li>' +
       '<li><span class="n">3</span><span>Leva de 20 a 30 minutos. <b>O progresso não fica salvo</b>: se recarregar a página, o simulador recomeça.</span></li>' +
       "</ol>" +
-      '<div class="novo">' + ic("alert", 16) + "<span><b>Novo no lançamento de aulas:</b> em toda falta sem direito a reposição, a plataforma agora pede o print da conversa entre você e o aluno. O simulador já funciona assim.</span></div>" +
+      '<div class="novo">' + ic("alert", 16) + "<span><b>Novo no lançamento de aulas:</b> em toda falta sem direito a reposição, a plataforma agora pede o print da conversa entre você e o aluno. O simulador já funciona assim: o print você tira no WhatsApp do treino, no botão <b>Tirar print</b>. Arquivo do seu computador não entra aqui.</span></div>" +
       '<div class="missoes-prev">' + MISSOES.map(function (m, i) { return "<div><b>" + pad(i + 1) + "</b>" + esc(m.titulo) + "</div>"; }).join("") + "</div>" +
       '<button class="btn btn-pri" data-act="comecar" id="btn-comecar">Começar a missão 1 ' + ic("arrow", 14) + "</button></section>";
   }
@@ -1508,7 +1519,8 @@ table.t .r{text-align:right}
     });
     if (!ms.length) out = '<div class="daysep">Nenhuma mensagem ainda</div>';
     return '<div class="wa-ch"><button class="wa-back" data-act="chat" data-v="" aria-label="Voltar para as conversas">' + ic("back", 18) + '</button><span class="wa-av sm" style="background:' + ch.cor + '">' + (ch.grupo ? ic("crown", 14) : ini(ch.nome)) + '</span><div class="wa-chn"><b>' + esc(ch.nome) + "</b><span>" + (ch.grupo ? "Coordenação e professores" : "online") + '</span></div><button class="btn btn-sm" data-act="print" id="btn-print">' + ic("camera", 14) + " Tirar print</button></div>" +
-      (S.toast ? '<div class="toast" role="status">' + ic("img", 13) + " Print salvo em Imagens: <b>" + esc(S.toast) + "</b></div>" : "") +
+      (S.toast ? '<div class="toast" role="status">' + ic("img", 13) + " Print salvo em Imagens: <b>" + esc(S.toast) + "</b>" +
+        (S.voltar ? '<button class="btn btn-sm" data-act="voltarAnexar" id="btn-voltar-anexar">Voltar e anexar ' + ic("arrow", 13) + "</button>" : "") + "</div>" : "") +
       '<div class="wa-msgs">' + out + "</div>" + fbHTML("wa") + '<div class="wa-comp">' + composer(c) + "</div>";
   }
   function composer(c) {
@@ -1643,6 +1655,19 @@ table.t .r{text-align:right}
     S.picker = null;
   };
   A.tiraPrint = function (d) { draftK(d.k).print = null; };
+  // Atalho da nota do seletor: vai até a conversa e, depois do print, volta
+  // para o mesmo lançamento com o seletor aberto.
+  A.irPrint = function () {
+    if (!S.picker) return;
+    S.voltar = S.picker.alvo; S.picker = null;
+    S.tab = "whats"; S.chat = S.voltar.slice(6).split("|")[0]; S.foco = "btn-print";
+  };
+  A.voltarAnexar = function () {
+    var alvo = S.voltar; if (!alvo) return;
+    S.voltar = null; S.tab = "king"; S.rota = "aulas"; S.aba = "lancamento"; S.dataLanc = alvo.slice(6).split("|")[1];
+    S.picker = { alvo: alvo }; S.pasta = "img";
+    if (S.prints.length) S.foco = "arq-" + S.prints[S.prints.length - 1].id;
+  };
   A.salvarLanc = function () {
     var ls = linhasDoDia(S.dataLanc).filter(function (l) { return estadoLinha(l) === "lancar"; });
     if (!ls.length) return;
@@ -1724,7 +1749,12 @@ table.t .r{text-align:right}
       var el = document.getElementById(foco.id);
       if (el) { el.focus({ preventScroll: true }); try { if (foco.s != null) el.setSelectionRange(foco.s, foco.e); } catch (_) {} }
     }
+    // A altura vai antes: o pai precisa do iframe já do tamanho novo para rolar.
     avisaAltura();
+    if (S.foco) {
+      var alvoFoco = document.getElementById(S.foco); S.foco = null;
+      if (alvoFoco) { alvoFoco.focus({ preventScroll: true }); rolarAte(alvoFoco.closest(".picker") || alvoFoco); }
+    }
   }
 
   app.addEventListener("click", function (e) {
@@ -1763,6 +1793,12 @@ table.t .r{text-align:right}
   }
   function rolarParaTopo() {
     try { parent.postMessage({ tipo: "ktm-embed-rolar" }, "*"); } catch (_) {}
+  }
+  // Aberto direto, o scrollIntoView basta; dentro da trilha, quem rola é o pai.
+  function rolarAte(el) {
+    el.scrollIntoView({ block: "nearest" });
+    var r = el.getBoundingClientRect();
+    try { parent.postMessage({ tipo: "ktm-embed-rolar", y: Math.round(r.top + window.scrollY + r.height / 2) }, "*"); } catch (_) {}
   }
   function aplicaTema(t) {
     if (t !== "dark" && t !== "light") return;

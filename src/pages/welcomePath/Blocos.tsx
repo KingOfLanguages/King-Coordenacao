@@ -217,13 +217,27 @@ function BlocoEmbed({ bloco }: { bloco: BlocoEtapa }) {
   useEffect(() => {
     function aoReceber(e: MessageEvent) {
       if (e.source !== ref.current?.contentWindow) return
-      const d = e.data as { tipo?: unknown; altura?: unknown } | null
+      const d = e.data as { tipo?: unknown; altura?: unknown; y?: unknown } | null
       if (!d) return
       // A página troca de "tela" inteira (o simulador ao mudar de missão) e o
       // leitor ficaria parado no meio dela. Só o pai consegue rolar a etapa.
       if (d.tipo === 'ktm-embed-rolar') {
-        const suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ref.current?.scrollIntoView({ behavior: suave ? 'smooth' : 'auto', block: 'start' })
+        const el = ref.current
+        if (!el) return
+        const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+        // Com `y`, o alvo é um ponto de dentro da página (o simulador ao trocar
+        // de aba). Um marcador nesse ponto deixa o navegador achar a caixa que
+        // rola: a janela no portal, o <main> no KTM. O limite é o da altura, e
+        // não a altura de agora: a nova pode ainda não ter sido aplicada.
+        if (typeof d.y === 'number' && el.parentElement) {
+          const marca = document.createElement('div')
+          marca.style.cssText = `position:absolute;left:0;width:1px;height:1px;margin:0;top:${el.offsetTop + Math.min(Math.max(0, d.y), 8000)}px`
+          el.parentElement.append(marca)
+          marca.scrollIntoView({ behavior, block: 'center' })
+          setTimeout(() => marca.remove(), 1500)
+          return
+        }
+        el.scrollIntoView({ behavior, block: 'start' })
         return
       }
       if (d.tipo !== 'ktm-embed-altura' || typeof d.altura !== 'number') return
@@ -245,7 +259,7 @@ function BlocoEmbed({ bloco }: { bloco: BlocoEtapa }) {
   }
 
   return (
-    <section className="space-y-2.5">
+    <section className="relative space-y-2.5">
       {bloco.titulo && (
         <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{bloco.titulo}</h3>
       )}
