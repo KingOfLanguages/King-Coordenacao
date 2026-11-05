@@ -14,6 +14,15 @@ export type AvisoAgendamentoRecente = {
   janela: { min: number; max: number }
 }
 
+/** Cobertura vigente (20260814): o coordenador titular está ausente e outro
+ *  coordenador atende o grupo. Os links em `opcoes` já são os do substituto —
+ *  isto aqui é só pra tela dizer com quem o professor vai falar e até quando. */
+export type CoberturaPortal = {
+  substituto: { id: string; nome: string | null }
+  /** Último dia da cobertura, inclusive (YYYY-MM-DD). */
+  fim: string
+}
+
 export type PortalLookupResult = {
   /** `kingsCircle` desde 20260802: membro recebe as boas-vindas VIP. */
   professor: { id: string; nome: string; kingsCircle?: boolean }
@@ -24,6 +33,8 @@ export type PortalLookupResult = {
     reuniao_grupo: OpcaoGrupo
   }
   avisoAgendamentoRecente: AvisoAgendamentoRecente | null
+  /** Ausente se a function do servidor for de antes da 20260814. */
+  cobertura?: CoberturaPortal | null
 }
 
 /**

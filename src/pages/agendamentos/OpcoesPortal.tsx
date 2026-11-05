@@ -1,8 +1,9 @@
-import { CalendarPlus, MessageCircle, Users, Sparkles, ArrowRight, Handshake, MessagesSquare, Zap } from 'lucide-react'
+import { CalendarPlus, MessageCircle, Users, Sparkles, ArrowRight, Handshake, MessagesSquare, Zap, UserRoundCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { dataBR } from '@/lib/formato'
 import { AvisoAgendamentoRecente } from '@/pages/agendamentos/AvisoAgendamentoRecente'
 import { SeloKingsCircle } from '@/components/professores/KingsCircle'
-import type { PortalLookupResult } from '@/hooks/usePortalAgendamento'
+import type { CoberturaPortal, PortalLookupResult } from '@/hooks/usePortalAgendamento'
 
 export function OpcoesPortal({
   professorNome, kingsCircle, resultado, onEscolherGrupo, carregandoGrupo,
@@ -22,6 +23,9 @@ export function OpcoesPortal({
   // Já cumpriu o acompanhamento do mês. Não muda o que ele PODE fazer — só como
   // a opção individual é apresentada (conversa extra, e não o acompanhamento).
   const aviso = resultado.avisoAgendamentoRecente
+  // Coordenador titular ausente: os links já vêm do substituto, aqui só avisamos
+  // com quem ele vai falar — senão ele acha que caiu na agenda errada e desiste.
+  const cobertura = resultado.cobertura ?? null
 
   const cardGrupo = reuniao_grupo.elegivel && (
     reuniao_grupo.recomendada ? (
@@ -80,6 +84,8 @@ export function OpcoesPortal({
         </p>
       </div>
 
+      {cobertura && <AvisoCobertura cobertura={cobertura} />}
+
       {aviso && (
         <AvisoAgendamentoRecente
           aviso={aviso}
@@ -119,6 +125,34 @@ export function OpcoesPortal({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Aviso de cobertura ───────────────────────────────────────────────────────
+// O professor abre o portal esperando a agenda do coordenador dele. Se cair na
+// de outra pessoa sem explicação, ele fecha a tela achando que é erro. A faixa
+// diz quem atende e até quando — e que é só este período.
+
+function AvisoCobertura({ cobertura }: { cobertura: CoberturaPortal }) {
+  const nome = cobertura.substituto.nome?.trim()
+
+  return (
+    <div className="rounded-2xl border border-line-soft bg-surface-subtle/70 px-5 py-4 animate-fade-up">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface-canvas text-ink-secondary">
+          <UserRoundCheck className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0 space-y-1">
+          <p className="text-[13.5px] font-semibold leading-tight text-ink">
+            {nome ? `${nome} está atendendo seu grupo` : 'Outro coordenador está atendendo seu grupo'}
+          </p>
+          <p className="text-[12.5px] leading-relaxed text-ink-muted">
+            Seu coordenador está ausente até {dataBR(cobertura.fim)}. Pode agendar normalmente —
+            os horários abaixo são da agenda de quem está cobrindo.
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

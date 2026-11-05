@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Hourglass, Lock, CalendarCheck2, ArrowUpRight, PartyPopper } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { dataBR } from '@/lib/formato'
 import { useAgora } from '@/hooks/useAgora'
 import { BotaoWhatsApp } from '@/components/portal/PortalUI'
 import {
@@ -199,7 +200,10 @@ export function PainelNaoLiberada({ nome, onSair }: { nome: string | null; onSai
 
 export function PainelConclusao({ primeiraReuniao }: { primeiraReuniao: PrimeiraReuniao | null | undefined }) {
   const link = primeiraReuniao?.link ?? null
+  // Em período de cobertura (20260814) `coordenador` já é quem vai atender; a
+  // linha extra explica a troca pra ele não achar que caiu na agenda errada.
   const coordenador = primeiraReuniao?.coordenador ?? null
+  const cobertura = primeiraReuniao?.cobertura ?? null
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-line-soft bg-surface-canvas shadow-card">
@@ -231,6 +235,13 @@ export function PainelConclusao({ primeiraReuniao }: { primeiraReuniao: Primeira
                 Para liberar sua agenda e começar a receber alunos, agende agora sua primeira reunião
                 com a coordenação de professores.
               </p>
+              {cobertura && (
+                <p className="text-[12.5px] leading-relaxed text-ink-muted">
+                  {cobertura.titular
+                    ? `${cobertura.titular} está ausente até ${dataBR(cobertura.fim)} — quem atende você neste período é ${coordenador ?? 'outro coordenador'}.`
+                    : `Seu coordenador está ausente até ${dataBR(cobertura.fim)} — quem atende você neste período é ${coordenador ?? 'outro coordenador'}.`}
+                </p>
+              )}
             </div>
           </div>
 

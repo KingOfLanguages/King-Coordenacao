@@ -21,6 +21,7 @@ import { useGrupos } from '@/hooks/useGrupos'
 import { useCoordenadores } from '@/hooks/useAcompanhamento'
 import { useAuth } from '@/contexts/AuthContext'
 import { MeusLinksAgendamentoCard } from '@/pages/admin/MeusLinksAgendamentoCard'
+import { CoberturaAgendamentoCard } from '@/pages/admin/CoberturaAgendamentoCard'
 import { SemanaCoordenadoresCard } from '@/pages/admin/SemanaCoordenadoresCard'
 import { linkAgendamentoPublico } from '@/lib/portal'
 import { cn } from '@/lib/utils'
@@ -67,6 +68,8 @@ export function AgendasPage({ embutido = false }: { embutido?: boolean }) {
       <LinkPublicoCard />
 
       <MeusLinksAgendamentoCard />
+
+      <CoberturaAgendamentoCard />
 
       <NovaAgendaCard />
 

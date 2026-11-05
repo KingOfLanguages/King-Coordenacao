@@ -136,7 +136,13 @@ export type JornadaPortal = {
 export type DispensaPortal = { em: string; motivo: string | null }
 
 /** Link da 1ª reunião com a coordenação, que aparece nos parabéns. */
-export type PrimeiraReuniao = { coordenador: string | null; link: string | null }
+export type PrimeiraReuniao = {
+  /** Quem vai atender: o coordenador do professor ou, em período de cobertura, o substituto. */
+  coordenador: string | null
+  link: string | null
+  /** Preenchido só quando o titular está ausente (20260814). */
+  cobertura?: { titular: string | null; fim: string } | null
+}
 
 export type TrilhaPortal = {
   /** `kingsCircle` desde 20260802: membro recebe as boas-vindas VIP. */

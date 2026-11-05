@@ -53,7 +53,7 @@ import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 import {
-  jsonPara, preflight, resolverSessao, semSufixoInicio, textoLimpo,
+  jsonPara, preflight, resolverSessao, semSufixoInicio, textoLimpo, coberturaVigente,
   type ProfessorSessao, MSG_SESSAO,
 } from '../_shared/portal.ts'
 
@@ -221,15 +221,32 @@ function aplicarPrazo(etapas: EtapaEstado[], jornada: JornadaRow | null, toleran
 }
 
 /** Link de 1ª reunião (Koalendar) do coordenador do professor — o mesmo que o
- *  /agendar oferece na opção "1ª reunião". */
+ *  /agendar oferece na opção "1ª reunião".
+ *
+ *  Se o coordenador titular está num período de cobertura (20260814), devolve o
+ *  nome e o link de QUEM ESTÁ ATENDENDO, mais `cobertura` pra tela explicar a
+ *  troca. Substituto sem link cadastrado volta pro link do titular. */
 async function linkPrimeiraReuniao(admin: Admin, coordenadorId: string | null) {
-  if (!coordenadorId) return { coordenador: null, link: null }
+  if (!coordenadorId) return { coordenador: null, link: null, cobertura: null }
   const { data } = await admin
     .from('profiles')
     .select('nome, koalendar_link')
     .eq('id', coordenadorId)
     .maybeSingle()
-  return { coordenador: (data?.nome as string | null) ?? null, link: (data?.koalendar_link as string | null) ?? null }
+
+  const titular = (data?.nome as string | null) ?? null
+  const linkTitular = (data?.koalendar_link as string | null) ?? null
+
+  const cob = await coberturaVigente(admin, coordenadorId)
+  if (cob?.koalendarLink) {
+    return {
+      coordenador: cob.substitutoNome,
+      link: cob.koalendarLink,
+      cobertura: { titular, fim: cob.fim },
+    }
+  }
+
+  return { coordenador: titular, link: linkTitular, cobertura: null }
 }
 
 /** Garante a linha de progresso (professor × etapa) e devolve o estado atual. */

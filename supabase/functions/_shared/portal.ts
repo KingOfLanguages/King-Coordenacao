@@ -253,3 +253,75 @@ export async function encerrarSessao(admin: Admin, token: unknown): Promise<void
 
 export const MSG_SESSAO = 'Sua sessão expirou. Entre de novo com o código enviado ao seu e-mail.'
 export const MSG_SESSAO_AGENDAMENTO = 'Sua sessão expirou. Informe de novo seu e-mail ou nome completo.'
+
+// ─── Cobertura de agendamento (férias do coordenador) ─────────────────────────
+// Ver migration 20260814_cobertura_agendamento. Quando o coordenador do
+// professor está num período de cobertura, o agendamento INDIVIDUAL aponta
+// pros links do substituto; nada mais muda (grupo, KPIs e pendências seguem
+// com a coordenação titular).
+
+export type CoberturaAgendamento = {
+  titularId: string
+  substitutoId: string
+  substitutoNome: string | null
+  /** Último dia da ausência, inclusive (YYYY-MM-DD). */
+  fim: string
+  koalendarLink: string | null
+  googleAppointmentLink: string | null
+}
+
+/** Data civil de São Paulo (YYYY-MM-DD) — a cobertura é por dia, não por hora. */
+export function hojeBR(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+}
+
+/** Cobertura vigente HOJE do coordenador informado, com os links de quem está
+ *  atendendo. `null` quando não há cobertura — e também quando a tabela ainda
+ *  não existe no banco (migration não aplicada), caso em que o portal segue
+ *  com o comportamento antigo em vez de quebrar.
+ *
+ *  Um salto só, de propósito: se o substituto também estiver coberto, não
+ *  encadeia (A→B→A viraria laço). */
+export async function coberturaVigente(
+  admin: Admin, coordenadorId: string | null,
+): Promise<CoberturaAgendamento | null> {
+  if (!coordenadorId) return null
+  const hoje = hojeBR()
+
+  const { data: cob } = await admin
+    .from('coordenacao_coberturas')
+    .select('substituto_id, fim')
+    .eq('coordenador_ausente_id', coordenadorId)
+    .is('encerrada_em', null)
+    .lte('inicio', hoje)
+    .gte('fim', hoje)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!cob?.substituto_id) return null
+
+  const { data: sub } = await admin
+    .from('profiles')
+    .select('id, nome, koalendar_link, google_appointment_link')
+    .eq('id', cob.substituto_id)
+    .maybeSingle()
+
+  if (!sub) return null
+
+  // Link em branco conta como não cadastrado: quem chama cai de volta no link
+  // do titular em vez de mandar o professor pra uma URL vazia.
+  const link = (v: unknown): string | null => {
+    const s = typeof v === 'string' ? v.trim() : ''
+    return s || null
+  }
+
+  return {
+    titularId: coordenadorId,
+    substitutoId: sub.id as string,
+    substitutoNome: (sub.nome as string | null) ?? null,
+    fim: cob.fim as string,
+    koalendarLink: link(sub.koalendar_link),
+    googleAppointmentLink: link(sub.google_appointment_link),
+  }
+}

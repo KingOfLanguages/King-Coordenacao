@@ -50,6 +50,14 @@
 // A reunião em GRUPO não passa por aqui: ela tem regra própria (score >= 1300 e
 // 2 meses de casa) e independe de quando foi a última reunião.
 //
+// ── Cobertura de agendamento (20260814) ─────────────────────────────────────
+// Quando o coordenador do professor está num período de cobertura (férias,
+// licença), as opções individuais apontam para os links de QUEM ESTÁ COBRINDO,
+// e a resposta traz `cobertura` pra tela dizer quem vai atender e até quando.
+// `coordenador` continua sendo o titular — a coordenação do professor não muda,
+// e nem os KPIs, as pendências ou as telas internas. Um link que o substituto
+// não cadastrou cai de volta no do titular, pra tela nunca ficar sem opção.
+//
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
 //   Body: { "token": "<sessão do portal-identidade>" }  → 401 sem sessão válida
@@ -70,6 +78,7 @@
 //       proximaDataSugerida: string, // ISO — última data + 30 dias (início da janela)
 //       janela: { min: number, max: number }, // 30-30 (mensal) ou 30-60 (flexível, >90 dias de casa)
 //     } | null,
+//     cobertura: { substituto: { id, nome }, fim: string } | null, // fim = último dia, YYYY-MM-DD
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -77,7 +86,7 @@ import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 import {
-  jsonPara, preflight, resolverSessao, semSufixoInicio, MSG_SESSAO,
+  jsonPara, preflight, resolverSessao, semSufixoInicio, coberturaVigente, MSG_SESSAO,
 } from '../_shared/portal.ts'
 
 const SCORE_MINIMO_GRUPO = 1300
@@ -106,6 +115,11 @@ const OPCOES_VAZIAS = {
   primeira_reuniao: { elegivel: false, link: null },
   acompanhamento:   { elegivel: false, link: null },
   reuniao_grupo:    { elegivel: false, recomendada: false },
+}
+
+/** Resposta sem nenhuma opção — usada nos cortes antes de resolver o coordenador. */
+function semOpcoes(professorTela: unknown) {
+  return { professor: professorTela, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null, cobertura: null }
 }
 
 serve(async (req) => {
@@ -138,7 +152,7 @@ serve(async (req) => {
   const professorTela = { id: professor.id, nome: nomeExibicao, kingsCircle: professor.kings_circle === true }
 
   if (!professor.coordenador_id) {
-    return json({ professor: professorTela, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json(semOpcoes(professorTela))
   }
 
   // ── 3. Coordenador responsável e seus links ──────────────────────────────────
@@ -149,8 +163,17 @@ serve(async (req) => {
     .maybeSingle()
 
   if (!coordenador) {
-    return json({ professor: professorTela, coordenador: null, opcoes: OPCOES_VAZIAS, avisoAgendamentoRecente: null })
+    return json(semOpcoes(professorTela))
   }
+
+  // ── 3b. Cobertura: coordenador ausente, outro atende (20260814) ──────────────
+  // Só os LINKS mudam. `coordenador` na resposta continua sendo o titular (é a
+  // coordenação do professor, que não muda); quem vai atender vai em `cobertura`.
+  // Link que o substituto não cadastrou cai de volta no do titular — melhor um
+  // horário no calendário errado do que a tela sem nenhuma opção.
+  const cobertura = await coberturaVigente(admin, coordenador.id)
+  const linkPrimeiraReuniao = cobertura?.koalendarLink ?? coordenador.koalendar_link
+  const linkAcompanhamento  = cobertura?.googleAppointmentLink ?? coordenador.google_appointment_link
 
   // ── 4. Já teve reunião realizada? ────────────────────────────────────────────
   const { count: reunioesRealizadas } = await admin
@@ -174,9 +197,9 @@ serve(async (req) => {
   const concluiuTrilha = !!jornadaTrilha?.concluida_em
   const recemChegado = (dias != null && dias >= 0 && dias <= DIAS_JANELA_PRIMEIRA_REUNIAO) || concluiuTrilha
 
-  const primeiraReuniaoElegivel = recemChegado && !teveReuniaoRealizada && !!coordenador.koalendar_link
+  const primeiraReuniaoElegivel = recemChegado && !teveReuniaoRealizada && !!linkPrimeiraReuniao
   // Todo mundo que não se enquadra na 1ª reunião cai aqui — nunca deixa o professor sem nenhuma opção.
-  const acompanhamentoElegivel  = !(recemChegado && !teveReuniaoRealizada) && !!coordenador.google_appointment_link
+  const acompanhamentoElegivel  = !(recemChegado && !teveReuniaoRealizada) && !!linkAcompanhamento
 
   // ── 6. Score de elegibilidade para reunião em grupo ──────────────────────────
   const { data: acompanhamento } = await admin
@@ -258,11 +281,11 @@ serve(async (req) => {
     opcoes: {
       primeira_reuniao: {
         elegivel: primeiraReuniaoElegivel,
-        link: primeiraReuniaoElegivel ? coordenador.koalendar_link : null,
+        link: primeiraReuniaoElegivel ? linkPrimeiraReuniao : null,
       },
       acompanhamento: {
         elegivel: acompanhamentoElegivel,
-        link: acompanhamentoElegivel ? coordenador.google_appointment_link : null,
+        link: acompanhamentoElegivel ? linkAcompanhamento : null,
       },
       reuniao_grupo: {
         elegivel: elegivelGrupo,
@@ -270,5 +293,8 @@ serve(async (req) => {
       },
     },
     avisoAgendamentoRecente,
+    cobertura: cobertura
+      ? { substituto: { id: cobertura.substitutoId, nome: cobertura.substitutoNome }, fim: cobertura.fim }
+      : null,
   })
 })
