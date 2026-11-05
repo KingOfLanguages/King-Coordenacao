@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- `perfis_publicos` volta a ser SÓ LEITURA  ← NÃO APLICADA EM PRODUÇÃO AINDA
+-- `perfis_publicos` volta a ser SÓ LEITURA  ← aplicada em produção em 05/11/2026
 --
 -- Achado em 05/11/2026 conferindo os privilégios da 20260814, que copiou o
 -- padrão desta view. Vale desde a 20260742.
