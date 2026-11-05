@@ -204,6 +204,19 @@ export function PainelConclusao({ primeiraReuniao }: { primeiraReuniao: Primeira
   // linha extra explica a troca pra ele não achar que caiu na agenda errada.
   const coordenador = primeiraReuniao?.coordenador ?? null
   const cobertura = primeiraReuniao?.cobertura ?? null
+  // Cobertura com mais de um atendendo (20260816): um botão por agenda, e ele
+  // marca com quem tiver horário. A function antiga manda só `link`.
+  const agendas = primeiraReuniao?.agendas?.length
+    ? primeiraReuniao.agendas
+    : (link ? [{ coordenador, link }] : [])
+  const quemAtende = agendas
+    .map(a => a.coordenador?.trim())
+    .filter((n): n is string => !!n)
+  const atendentes = quemAtende.length === 0
+    ? 'outro coordenador'
+    : quemAtende.length === 1
+    ? quemAtende[0]
+    : `${quemAtende.slice(0, -1).join(', ')} e ${quemAtende[quemAtende.length - 1]}`
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-line-soft bg-surface-canvas shadow-card">
@@ -238,14 +251,30 @@ export function PainelConclusao({ primeiraReuniao }: { primeiraReuniao: Primeira
               {cobertura && (
                 <p className="text-[12.5px] leading-relaxed text-ink-muted">
                   {cobertura.titular
-                    ? `${cobertura.titular} está ausente até ${dataBR(cobertura.fim)} — quem atende você neste período é ${coordenador ?? 'outro coordenador'}.`
-                    : `Seu coordenador está ausente até ${dataBR(cobertura.fim)} — quem atende você neste período é ${coordenador ?? 'outro coordenador'}.`}
+                    ? `${cobertura.titular} está ausente até ${dataBR(cobertura.fim)} — quem atende você neste período é ${atendentes}.`
+                    : `Seu coordenador está ausente até ${dataBR(cobertura.fim)} — quem atende você neste período é ${atendentes}.`}
+                  {agendas.length > 1 && ' Escolha a agenda de quem tiver o melhor horário pra você.'}
                 </p>
               )}
             </div>
           </div>
 
-          {link ? (
+          {agendas.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-2 pl-8">
+              {agendas.map((a, i) => (
+                <a
+                  key={a.coordenador ?? i}
+                  href={a.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-press inline-flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-[13.5px] font-medium text-ink-inverse hover:bg-ink/90"
+                >
+                  {a.coordenador ? `Agendar com ${a.coordenador}` : 'Agendar minha primeira reunião'}
+                  <ArrowUpRight className="h-4 w-4" />
+                </a>
+              ))}
+            </div>
+          ) : link ? (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-8">
               <a
                 href={link}

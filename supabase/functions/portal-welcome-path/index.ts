@@ -220,14 +220,18 @@ function aplicarPrazo(etapas: EtapaEstado[], jornada: JornadaRow | null, toleran
   }
 }
 
-/** Link de 1ª reunião (Koalendar) do coordenador do professor — o mesmo que o
- *  /agendar oferece na opção "1ª reunião".
+/** Agendas de 1ª reunião (Koalendar) que a tela de parabéns oferece — as mesmas
+ *  que o /agendar mostra na opção "1ª reunião".
  *
- *  Se o coordenador titular está num período de cobertura (20260814), devolve o
- *  nome e o link de QUEM ESTÁ ATENDENDO, mais `cobertura` pra tela explicar a
- *  troca. Substituto sem link cadastrado volta pro link do titular. */
+ *  Fora de cobertura, é a agenda do coordenador do professor. Em período de
+ *  cobertura (20260814) é a de CADA coordenador que está atendendo: desde a
+ *  20260816 mais de um pode cobrir a mesma ausência, então a tela mostra um
+ *  botão por agenda e `cobertura` explica a troca.
+ *
+ *  `coordenador` e `link` são a primeira agenda, mantidos pra aba já aberta com
+ *  o JS antigo seguir funcionando. */
 async function linkPrimeiraReuniao(admin: Admin, coordenadorId: string | null) {
-  if (!coordenadorId) return { coordenador: null, link: null, cobertura: null }
+  if (!coordenadorId) return { coordenador: null, link: null, cobertura: null, agendas: [] }
   const { data } = await admin
     .from('profiles')
     .select('nome, koalendar_link')
@@ -235,18 +239,28 @@ async function linkPrimeiraReuniao(admin: Admin, coordenadorId: string | null) {
     .maybeSingle()
 
   const titular = (data?.nome as string | null) ?? null
-  const linkTitular = (data?.koalendar_link as string | null) ?? null
+  const bruto = data?.koalendar_link
+  const linkTitular = typeof bruto === 'string' && bruto.trim() ? bruto.trim() : null
 
   const cob = await coberturaVigente(admin, coordenadorId)
-  if (cob?.koalendarLink) {
+  const cobrindo = (cob?.substitutos ?? []).filter(s => !!s.koalendarLink)
+
+  if (cob && cobrindo.length > 0) {
+    const agendas = cobrindo.map(s => ({ coordenador: s.nome, link: s.koalendarLink as string }))
     return {
-      coordenador: cob.substitutoNome,
-      link: cob.koalendarLink,
+      coordenador: agendas[0].coordenador,
+      link: agendas[0].link,
       cobertura: { titular, fim: cob.fim },
+      agendas,
     }
   }
 
-  return { coordenador: titular, link: linkTitular, cobertura: null }
+  // Sem cobertura — ou com cobertura em que ninguém cadastrou o Koalendar, caso
+  // em que sobra a agenda do titular. Aqui `cobertura` fica nulo de propósito:
+  // dizer "ele está ausente" e oferecer só a agenda dele seria contraditório, e
+  // o card de Configurar agendas já avisa o coordenador desse link faltando.
+  const agendas = linkTitular ? [{ coordenador: titular, link: linkTitular }] : []
+  return { coordenador: titular, link: linkTitular, cobertura: null, agendas }
 }
 
 /** Garante a linha de progresso (professor × etapa) e devolve o estado atual. */

@@ -81,7 +81,10 @@ export function useCoordenadoresAgendamento() {
 
 export type NovaCobertura = {
   coordenadorAusenteId: string
-  substitutoId: string
+  /** Um ou mais coordenadores atendendo o mesmo período — desde a 20260816. A
+   *  coordenação é em três, então quando um viaja os outros dois dividem o
+   *  grupo dele e o professor marca na agenda de quem tiver horário. */
+  substitutoIds: string[]
   inicio: string
   fim: string
   motivo?: string | null
@@ -93,14 +96,23 @@ export function useCriarCobertura() {
 
   return useMutation({
     mutationFn: async (input: NovaCobertura) => {
-      const { error } = await supabase.from('coordenacao_coberturas').insert({
-        coordenador_ausente_id: input.coordenadorAusenteId,
-        substituto_id:          input.substitutoId,
-        inicio:                 input.inicio,
-        fim:                    input.fim,
-        motivo:                 input.motivo?.trim() || null,
-        criado_por:             profile?.id ?? null,
-      })
+      const ids = [...new Set(input.substitutoIds)].filter(Boolean)
+      if (ids.length === 0) {
+        throw new Error('Escolha pelo menos um coordenador para atender no período.')
+      }
+      // Uma linha por par (ausente, substituto). Insert único de propósito: se o
+      // trigger recusar qualquer uma delas, nenhuma entra — melhor erro na cara
+      // do que meia cobertura ativa, com um grupo achando que está coberto.
+      const { error } = await supabase.from('coordenacao_coberturas').insert(
+        ids.map(substitutoId => ({
+          coordenador_ausente_id: input.coordenadorAusenteId,
+          substituto_id:          substitutoId,
+          inicio:                 input.inicio,
+          fim:                    input.fim,
+          motivo:                 input.motivo?.trim() || null,
+          criado_por:             profile?.id ?? null,
+        })),
+      )
       if (error) throw error
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: CHAVE }) },
@@ -109,6 +121,11 @@ export function useCriarCobertura() {
 
 /** Encerra (voltou mais cedo) ou cancela (nem começou) — nos dois casos a linha
  *  fica no histórico com `encerrada_em` preenchido e deixa de valer na hora.
+ *
+ *  Aceita uma linha ou várias: com mais de um coordenador cobrindo a mesma
+ *  ausência (20260816), "Encerrar todas" manda os ids do grupo de uma vez, e o
+ *  ✕ de um nome manda só o dele.
+ *
  *  `.select()` é obrigatório: sem ele, um UPDATE barrado pela RLS volta sem erro
  *  nenhum e a tela mostraria "encerrada" sem nada ter mudado. */
 export function useEncerrarCobertura() {
@@ -116,11 +133,13 @@ export function useEncerrarCobertura() {
   const { profile } = useAuth()
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (ids: string | string[]) => {
+      const lista = (Array.isArray(ids) ? ids : [ids]).filter(Boolean)
+      if (lista.length === 0) return
       const { data, error } = await supabase
         .from('coordenacao_coberturas')
         .update({ encerrada_em: new Date().toISOString(), encerrada_por: profile?.id ?? null })
-        .eq('id', id)
+        .in('id', lista)
         .select('id')
       if (error) throw error
       if (!data?.length) {

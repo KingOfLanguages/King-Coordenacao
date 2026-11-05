@@ -142,6 +142,10 @@ export type PrimeiraReuniao = {
   link: string | null
   /** Preenchido só quando o titular está ausente (20260814). */
   cobertura?: { titular: string | null; fim: string } | null
+  /** Uma agenda por coordenador atendendo — mais de uma quando a ausência tem
+   *  vários substitutos (20260816). `coordenador`/`link` são a primeira delas;
+   *  ausente se a function do servidor for anterior. */
+  agendas?: { coordenador: string | null; link: string }[]
 }
 
 export type TrilhaPortal = {

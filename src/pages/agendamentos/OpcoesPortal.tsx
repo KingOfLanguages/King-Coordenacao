@@ -3,7 +3,15 @@ import { cn } from '@/lib/utils'
 import { dataBR } from '@/lib/formato'
 import { AvisoAgendamentoRecente } from '@/pages/agendamentos/AvisoAgendamentoRecente'
 import { SeloKingsCircle } from '@/components/professores/KingsCircle'
-import type { CoberturaPortal, PortalLookupResult } from '@/hooks/usePortalAgendamento'
+import type { AgendaOpcao, CoberturaPortal, OpcaoLink, PortalLookupResult } from '@/hooks/usePortalAgendamento'
+
+/** Agendas de uma opção: uma por coordenador que atende. A function de antes da
+ *  20260816 só mandava `link`, então aí cai pra uma agenda sem nome — a tela
+ *  segue funcionando com o servidor antigo. */
+function agendasDe(opcao: OpcaoLink): AgendaOpcao[] {
+  if (opcao.agendas?.length) return opcao.agendas
+  return opcao.link ? [{ coordenador: { id: '', nome: null }, link: opcao.link }] : []
+}
 
 export function OpcoesPortal({
   professorNome, kingsCircle, resultado, onEscolherGrupo, carregandoGrupo,
@@ -23,9 +31,14 @@ export function OpcoesPortal({
   // Já cumpriu o acompanhamento do mês. Não muda o que ele PODE fazer — só como
   // a opção individual é apresentada (conversa extra, e não o acompanhamento).
   const aviso = resultado.avisoAgendamentoRecente
-  // Coordenador titular ausente: os links já vêm do substituto, aqui só avisamos
-  // com quem ele vai falar — senão ele acha que caiu na agenda errada e desiste.
+  // Coordenador titular ausente: as agendas já vêm de quem está cobrindo, aqui
+  // só avisamos com quem ele vai falar — senão ele acha que caiu na agenda
+  // errada e desiste.
   const cobertura = resultado.cobertura ?? null
+  // Em cobertura com mais de um atendendo (20260816), cada tipo de reunião tem
+  // uma agenda por coordenador e o professor marca onde tiver horário.
+  const agendasPrimeira = primeira_reuniao.elegivel ? agendasDe(primeira_reuniao) : []
+  const agendasAcompanhamento = acompanhamento.elegivel ? agendasDe(acompanhamento) : []
 
   const cardGrupo = reuniao_grupo.elegivel && (
     reuniao_grupo.recomendada ? (
@@ -48,22 +61,35 @@ export function OpcoesPortal({
     )
   )
 
-  const cardAcompanhamento = acompanhamento.elegivel && acompanhamento.link && (
-    <OpcaoCard
-      key="acompanhamento"
-      icone={<MessageCircle className="h-[18px] w-[18px]" />}
-      titulo={aviso ? 'Conversar com a Coordenação' : 'Reunião de Acompanhamento'}
-      descricao={
-        aviso
-          ? 'Um horário extra com seu coordenador pra tirar uma dúvida ou resolver alguma coisa — fora do acompanhamento do mês, que você já fez.'
-          : professorDestaque
-          ? 'Prefere conversar individualmente? Essa opção continua disponível, mas o formato em grupo é o mais indicado pra quem está no seu momento.'
-          : 'Um horário com seu coordenador pra compartilhar desafios, tirar dúvidas e acompanhar sua evolução.'
-      }
-      href={acompanhamento.link}
-      secundaria={professorDestaque}
-      indice={1}
-    />
+  const tituloAcompanhamento = aviso ? 'Conversar com a Coordenação' : 'Reunião de Acompanhamento'
+  const descricaoAcompanhamento = aviso
+    ? 'Um horário extra com seu coordenador pra tirar uma dúvida ou resolver alguma coisa — fora do acompanhamento do mês, que você já fez.'
+    : professorDestaque
+    ? 'Prefere conversar individualmente? Essa opção continua disponível, mas o formato em grupo é o mais indicado pra quem está no seu momento.'
+    : 'Um horário com seu coordenador pra compartilhar desafios, tirar dúvidas e acompanhar sua evolução.'
+
+  const cardAcompanhamento = agendasAcompanhamento.length > 0 && (
+    agendasAcompanhamento.length === 1 ? (
+      <OpcaoCard
+        key="acompanhamento"
+        icone={<MessageCircle className="h-[18px] w-[18px]" />}
+        titulo={tituloAcompanhamento}
+        descricao={descricaoAcompanhamento}
+        href={agendasAcompanhamento[0].link}
+        secundaria={professorDestaque}
+        indice={1}
+      />
+    ) : (
+      <CardComAgendas
+        key="acompanhamento"
+        icone={<MessageCircle className="h-[18px] w-[18px]" />}
+        titulo={tituloAcompanhamento}
+        descricao={descricaoAcompanhamento}
+        agendas={agendasAcompanhamento}
+        secundaria={professorDestaque}
+        indice={1}
+      />
+    )
   )
 
   return (
@@ -102,12 +128,21 @@ export function OpcoesPortal({
         </div>
       ) : (
         <div className="space-y-3">
-          {primeira_reuniao.elegivel && primeira_reuniao.link && (
+          {agendasPrimeira.length === 1 && (
             <OpcaoCard
               icone={<CalendarPlus className="h-[18px] w-[18px]" />}
               titulo="Primeira reunião com a Coordenação"
               descricao="Sua conversa inicial pra conhecer melhor nosso acompanhamento, tirar dúvidas e começar sua jornada na King."
-              href={primeira_reuniao.link}
+              href={agendasPrimeira[0].link}
+              indice={0}
+            />
+          )}
+          {agendasPrimeira.length > 1 && (
+            <CardComAgendas
+              icone={<CalendarPlus className="h-[18px] w-[18px]" />}
+              titulo="Primeira reunião com a Coordenação"
+              descricao="Sua conversa inicial pra conhecer melhor nosso acompanhamento, tirar dúvidas e começar sua jornada na King."
+              agendas={agendasPrimeira}
               indice={0}
             />
           )}
@@ -135,7 +170,17 @@ export function OpcoesPortal({
 // diz quem atende e até quando — e que é só este período.
 
 function AvisoCobertura({ cobertura }: { cobertura: CoberturaPortal }) {
-  const nome = cobertura.substituto.nome?.trim()
+  // `substitutos` é da 20260816; antes vinha só `substituto`.
+  const nomes = (cobertura.substitutos?.length ? cobertura.substitutos : [cobertura.substituto])
+    .map(s => s?.nome?.trim())
+    .filter((n): n is string => !!n)
+
+  const varios = nomes.length > 1
+  const titulo = nomes.length === 0
+    ? 'Outro coordenador está atendendo seu grupo'
+    : varios
+    ? `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]} estão atendendo seu grupo`
+    : `${nomes[0]} está atendendo seu grupo`
 
   return (
     <div className="rounded-2xl border border-line-soft bg-surface-subtle/70 px-5 py-4 animate-fade-up">
@@ -144,14 +189,75 @@ function AvisoCobertura({ cobertura }: { cobertura: CoberturaPortal }) {
           <UserRoundCheck className="h-[18px] w-[18px]" />
         </span>
         <div className="min-w-0 space-y-1">
-          <p className="text-[13.5px] font-semibold leading-tight text-ink">
-            {nome ? `${nome} está atendendo seu grupo` : 'Outro coordenador está atendendo seu grupo'}
-          </p>
+          <p className="text-[13.5px] font-semibold leading-tight text-ink">{titulo}</p>
           <p className="text-[12.5px] leading-relaxed text-ink-muted">
             Seu coordenador está ausente até {dataBR(cobertura.fim)}. Pode agendar normalmente —
-            os horários abaixo são da agenda de quem está cobrindo.
+            {varios
+              ? ' escolha abaixo a agenda de quem tiver o melhor horário pra você.'
+              : ' os horários abaixo são da agenda de quem está cobrindo.'}
           </p>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Card com várias agendas ─────────────────────────────────────────────────
+// Mesmo tipo de reunião, mais de um coordenador atendendo (cobertura com dois).
+// Repetir o card inteiro pra cada um deixaria a mesma descrição duas vezes na
+// tela; aqui a explicação aparece uma vez e cada agenda vira um botão.
+
+function CardComAgendas({
+  icone, titulo, descricao, agendas, secundaria, indice,
+}: {
+  icone: React.ReactNode
+  titulo: string
+  descricao: string
+  agendas: AgendaOpcao[]
+  secundaria?: boolean
+  indice: number
+}) {
+  const style = { animationDelay: `${indice * 70 + 60}ms`, animationFillMode: 'both' as const }
+
+  return (
+    <div
+      style={style}
+      className={cn(
+        'animate-fade-up rounded-2xl border p-4',
+        secundaria ? 'border-line-soft bg-surface-subtle' : 'border-line-soft bg-surface-canvas',
+      )}
+    >
+      <div className="flex items-start gap-3.5">
+        <span className={cn(
+          'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl',
+          secundaria ? 'bg-surface-subtle text-ink-subtle' : 'bg-accentBlue-soft text-accentBlue',
+        )}>
+          {icone}
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className={cn(
+            'text-[14.5px] font-semibold leading-tight',
+            secundaria ? 'text-ink-muted' : 'text-ink',
+          )}>{titulo}</p>
+          <p className="text-[12.5px] leading-relaxed text-ink-muted">{descricao}</p>
+        </div>
+      </div>
+
+      <div className="mt-3.5 space-y-2">
+        {agendas.map((a, i) => (
+          <a
+            key={a.coordenador.id || `${i}`}
+            href={a.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-press group flex items-center justify-between gap-2 rounded-xl border border-line-soft bg-surface-subtle px-3.5 py-2.5 hover:border-[rgba(42,92,255,0.4)] hover:bg-surface-canvas"
+          >
+            <span className="min-w-0 truncate text-[13px] font-medium text-ink">
+              {a.coordenador.nome ? `Agenda de ${a.coordenador.nome}` : 'Ver horários'}
+            </span>
+            <ArrowRight className="h-4 w-4 flex-shrink-0 text-ink-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-accentBlue" />
+          </a>
+        ))}
       </div>
     </div>
   )

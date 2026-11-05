@@ -50,13 +50,23 @@
 // A reunião em GRUPO não passa por aqui: ela tem regra própria (score >= 1300 e
 // 2 meses de casa) e independe de quando foi a última reunião.
 //
-// ── Cobertura de agendamento (20260814) ─────────────────────────────────────
+// ── Cobertura de agendamento (20260814, vários substitutos na 20260816) ─────
 // Quando o coordenador do professor está num período de cobertura (férias,
 // licença), as opções individuais apontam para os links de QUEM ESTÁ COBRINDO,
 // e a resposta traz `cobertura` pra tela dizer quem vai atender e até quando.
 // `coordenador` continua sendo o titular — a coordenação do professor não muda,
-// e nem os KPIs, as pendências ou as telas internas. Um link que o substituto
-// não cadastrou cai de volta no do titular, pra tela nunca ficar sem opção.
+// e nem os KPIs, as pendências ou as telas internas.
+//
+// Mais de um coordenador pode cobrir a mesma ausência (a coordenação é em três:
+// quando um viaja, os outros dois dividem o grupo dele). Por isso cada opção
+// individual traz `agendas`: uma entrada por coordenador que atende, com o link
+// dele. A tela mostra um card por entrada e o professor marca com quem tiver
+// horário. Fora de cobertura, `agendas` tem só o titular.
+//
+// Fallback de link que o substituto não cadastrou: se NENHUM dos que cobrem tem
+// o link daquele tipo, cai no link do titular — melhor um horário no calendário
+// errado do que a tela sem nenhuma opção. Mas tendo pelo menos um com o link, só
+// os que têm aparecem: a agenda de quem viajou ninguém vai atender.
 //
 // ── Contrato ─────────────────────────────────────────────────────────────────
 //   POST /functions/v1/portal-agendamento-lookup
@@ -66,10 +76,12 @@
 //     professor:   { id, nome },
 //     coordenador: { id, nome } | null,
 //     opcoes: {
-//       primeira_reuniao: { elegivel: boolean, link: string | null },
-//       acompanhamento:   { elegivel: boolean, link: string | null },
+//       primeira_reuniao: { elegivel, link, agendas: Agenda[] },
+//       acompanhamento:   { elegivel, link, agendas: Agenda[] },
 //       reuniao_grupo:    { elegivel: boolean, recomendada: boolean },
 //     },
+//     // Agenda = { coordenador: { id, nome }, link }. `link` segue sendo o da
+//     // primeira agenda, pra aba já aberta com o JS antigo não quebrar.
 //     avisoAgendamentoRecente: {
 //       reuniaoProfessorId: string,
 //       data: string,             // data da última reunião vinculada (ISO)
@@ -78,7 +90,11 @@
 //       proximaDataSugerida: string, // ISO — última data + 30 dias (início da janela)
 //       janela: { min: number, max: number }, // 30-30 (mensal) ou 30-60 (flexível, >90 dias de casa)
 //     } | null,
-//     cobertura: { substituto: { id, nome }, fim: string } | null, // fim = último dia, YYYY-MM-DD
+//     cobertura: {
+//       substitutos: { id, nome }[],   // todos os que atendem no período
+//       substituto:  { id, nome },     // = substitutos[0], mantido por compatibilidade
+//       fim: string,                   // último dia, YYYY-MM-DD
+//     } | null,
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -112,9 +128,27 @@ function diasDesde(dataIso: string | null): number | null {
 const diasDeCasa = diasDesde
 
 const OPCOES_VAZIAS = {
-  primeira_reuniao: { elegivel: false, link: null },
-  acompanhamento:   { elegivel: false, link: null },
+  primeira_reuniao: { elegivel: false, link: null, agendas: [] },
+  acompanhamento:   { elegivel: false, link: null, agendas: [] },
   reuniao_grupo:    { elegivel: false, recomendada: false },
+}
+
+/** Link em branco ou só com espaço conta como não cadastrado. */
+function limpo(v: unknown): string | null {
+  const s = typeof v === 'string' ? v.trim() : ''
+  return s || null
+}
+
+type Atendente = { id: string; nome: string | null; link: string | null }
+type Agenda    = { coordenador: { id: string; nome: string | null }; link: string }
+
+/** Agendas oferecidas pra um tipo de reunião: uma por coordenador que atende e
+ *  tem o link cadastrado. Se nenhum tem, cai na agenda do titular (que está
+ *  ausente, mas é melhor que a tela sem opção). */
+function montarAgendas(titular: Atendente, atendentes: Atendente[]): Agenda[] {
+  const comLink = atendentes.filter(a => !!a.link)
+  const escolhidos = comLink.length > 0 ? comLink : (titular.link ? [titular] : [])
+  return escolhidos.map(a => ({ coordenador: { id: a.id, nome: a.nome }, link: a.link as string }))
 }
 
 /** Resposta sem nenhuma opção — usada nos cortes antes de resolver o coordenador. */
@@ -166,14 +200,22 @@ serve(async (req) => {
     return json(semOpcoes(professorTela))
   }
 
-  // ── 3b. Cobertura: coordenador ausente, outro atende (20260814) ──────────────
-  // Só os LINKS mudam. `coordenador` na resposta continua sendo o titular (é a
-  // coordenação do professor, que não muda); quem vai atender vai em `cobertura`.
-  // Link que o substituto não cadastrou cai de volta no do titular — melhor um
-  // horário no calendário errado do que a tela sem nenhuma opção.
+  // ── 3b. Cobertura: coordenador ausente, outros atendem (20260814/20260816) ──
+  // Só as AGENDAS mudam. `coordenador` na resposta continua sendo o titular (é a
+  // coordenação do professor, que não muda); quem vai atender vai em `cobertura`
+  // e em `agendas`, uma entrada por coordenador que está cobrindo.
   const cobertura = await coberturaVigente(admin, coordenador.id)
-  const linkPrimeiraReuniao = cobertura?.koalendarLink ?? coordenador.koalendar_link
-  const linkAcompanhamento  = cobertura?.googleAppointmentLink ?? coordenador.google_appointment_link
+  const titularNome = (coordenador.nome as string | null) ?? null
+  const titularPrimeira: Atendente = { id: coordenador.id, nome: titularNome, link: limpo(coordenador.koalendar_link) }
+  const titularAcomp:    Atendente = { id: coordenador.id, nome: titularNome, link: limpo(coordenador.google_appointment_link) }
+
+  const agendasPrimeira = montarAgendas(titularPrimeira, cobertura
+    ? cobertura.substitutos.map(s => ({ id: s.id, nome: s.nome, link: s.koalendarLink }))
+    : [titularPrimeira])
+
+  const agendasAcompanhamento = montarAgendas(titularAcomp, cobertura
+    ? cobertura.substitutos.map(s => ({ id: s.id, nome: s.nome, link: s.googleAppointmentLink }))
+    : [titularAcomp])
 
   // ── 4. Já teve reunião realizada? ────────────────────────────────────────────
   const { count: reunioesRealizadas } = await admin
@@ -197,9 +239,9 @@ serve(async (req) => {
   const concluiuTrilha = !!jornadaTrilha?.concluida_em
   const recemChegado = (dias != null && dias >= 0 && dias <= DIAS_JANELA_PRIMEIRA_REUNIAO) || concluiuTrilha
 
-  const primeiraReuniaoElegivel = recemChegado && !teveReuniaoRealizada && !!linkPrimeiraReuniao
+  const primeiraReuniaoElegivel = recemChegado && !teveReuniaoRealizada && agendasPrimeira.length > 0
   // Todo mundo que não se enquadra na 1ª reunião cai aqui — nunca deixa o professor sem nenhuma opção.
-  const acompanhamentoElegivel  = !(recemChegado && !teveReuniaoRealizada) && !!linkAcompanhamento
+  const acompanhamentoElegivel  = !(recemChegado && !teveReuniaoRealizada) && agendasAcompanhamento.length > 0
 
   // ── 6. Score de elegibilidade para reunião em grupo ──────────────────────────
   const { data: acompanhamento } = await admin
@@ -281,11 +323,14 @@ serve(async (req) => {
     opcoes: {
       primeira_reuniao: {
         elegivel: primeiraReuniaoElegivel,
-        link: primeiraReuniaoElegivel ? linkPrimeiraReuniao : null,
+        // `link` = a primeira agenda: aba já aberta com o JS antigo segue funcionando.
+        link: primeiraReuniaoElegivel ? (agendasPrimeira[0]?.link ?? null) : null,
+        agendas: primeiraReuniaoElegivel ? agendasPrimeira : [],
       },
       acompanhamento: {
         elegivel: acompanhamentoElegivel,
-        link: acompanhamentoElegivel ? linkAcompanhamento : null,
+        link: acompanhamentoElegivel ? (agendasAcompanhamento[0]?.link ?? null) : null,
+        agendas: acompanhamentoElegivel ? agendasAcompanhamento : [],
       },
       reuniao_grupo: {
         elegivel: elegivelGrupo,
@@ -293,8 +338,13 @@ serve(async (req) => {
       },
     },
     avisoAgendamentoRecente,
-    cobertura: cobertura
-      ? { substituto: { id: cobertura.substitutoId, nome: cobertura.substitutoNome }, fim: cobertura.fim }
+    cobertura: cobertura && cobertura.substitutos.length > 0
+      ? {
+          substitutos: cobertura.substitutos.map(s => ({ id: s.id, nome: s.nome })),
+          // Mantido por compatibilidade com o JS antigo, que lê cobertura.substituto.
+          substituto: { id: cobertura.substitutos[0].id, nome: cobertura.substitutos[0].nome },
+          fim: cobertura.fim,
+        }
       : null,
   })
 })
